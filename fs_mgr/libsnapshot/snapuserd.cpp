@@ -47,6 +47,9 @@ bool Snapuserd::InitializeWorkers() {
 
         worker_threads_.push_back(std::move(wt));
     }
+
+    read_ahead_thread_ = std::make_unique<ReadAheadThread>(cow_device_, backing_store_device_,
+                                                           misc_name_, GetSharedPtr());
     return true;
 }
 
@@ -54,7 +57,11 @@ bool Snapuserd::CommitMerge(int num_merge_ops) {
     struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
     ch->num_merge_ops += num_merge_ops;
 
-    // Sync the first 4k block
+    if (read_ahead_feature_ && read_ahead_ops_.size() > 0) {
+        struct BufferState* ra_state = GetBufferState();
+        ra_state->read_ahead_state = kCowReadAheadInProgress;
+    }
+
     int ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
     if (ret < 0) {
         PLOG(ERROR) << "msync header failed: " << ret;
@@ -65,6 +72,174 @@ bool Snapuserd::CommitMerge(int num_merge_ops) {
 
     return true;
 }
+
+void Snapuserd::PrepareReadAhead() {
+    if (!read_ahead_feature_) {
+        return;
+    }
+
+    struct BufferState* ra_state = GetBufferState();
+    // Check if the data has to be re-constructed from COW device
+    if (ra_state->read_ahead_state == kCowReadAheadDone) {
+        populate_data_from_cow_ = true;
+    } else {
+        populate_data_from_cow_ = false;
+    }
+
+    StartReadAhead();
+}
+
+bool Snapuserd::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t block, void* buffer) {
+    CHECK(lock->owns_lock());
+    std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
+
+    // This will be true only for IO's generated as part of reading a root
+    // filesystem. IO's related to merge should always be in read-ahead cache.
+    if (it == read_ahead_buffer_map_.end()) {
+        return false;
+    }
+
+    // Theoretically, we can send the data back from the read-ahead buffer
+    // all the way to the kernel without memcpy. However, if the IO is
+    // un-aligned, the wrapper function will need to touch the read-ahead
+    // buffers and transitions will be bit more complicated.
+    memcpy(buffer, it->second, BLOCK_SZ);
+    return true;
+}
+
+// ========== State transition functions for read-ahead operations ===========
+
+bool Snapuserd::GetReadAheadPopulatedBuffer(uint64_t block, void* buffer) {
+    if (!read_ahead_feature_) {
+        return false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        if (io_state_ == READ_AHEAD_IO_TRANSITION::READ_AHEAD_FAILURE) {
+            return false;
+        }
+
+        if (io_state_ == READ_AHEAD_IO_TRANSITION::IO_IN_PROGRESS) {
+            return GetRABuffer(&lock, block, buffer);
+        }
+    }
+
+    {
+        // Read-ahead thread IO is in-progress. Wait for it to complete
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!(io_state_ == READ_AHEAD_IO_TRANSITION::READ_AHEAD_FAILURE ||
+                 io_state_ == READ_AHEAD_IO_TRANSITION::IO_IN_PROGRESS)) {
+            cv.wait(lock);
+        }
+
+        return GetRABuffer(&lock, block, buffer);
+    }
+}
+
+// This is invoked by read-ahead thread waiting for merge IO's
+// to complete
+bool Snapuserd::WaitForMergeToComplete() {
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!(io_state_ == READ_AHEAD_IO_TRANSITION::READ_AHEAD_BEGIN ||
+                 io_state_ == READ_AHEAD_IO_TRANSITION::IO_TERMINATED)) {
+            cv.wait(lock);
+        }
+
+        if (io_state_ == READ_AHEAD_IO_TRANSITION::IO_TERMINATED) {
+            return false;
+        }
+
+        io_state_ = READ_AHEAD_IO_TRANSITION::READ_AHEAD_IN_PROGRESS;
+        return true;
+    }
+}
+
+// This is invoked during the launch of worker threads. We wait
+// for read-ahead thread to by fully up before worker threads
+// are launched; else we will have a race between worker threads
+// and read-ahead thread specifically during re-construction.
+bool Snapuserd::WaitForReadAheadToStart() {
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!(io_state_ == READ_AHEAD_IO_TRANSITION::IO_IN_PROGRESS ||
+                 io_state_ == READ_AHEAD_IO_TRANSITION::READ_AHEAD_FAILURE)) {
+            cv.wait(lock);
+        }
+
+        if (io_state_ == READ_AHEAD_IO_TRANSITION::READ_AHEAD_FAILURE) {
+            return false;
+        }
+
+        return true;
+    }
+}
+
+// Invoked by worker threads when a sequence of merge operation
+// is complete notifying read-ahead thread to make forward
+// progress.
+void Snapuserd::StartReadAhead() {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        io_state_ = READ_AHEAD_IO_TRANSITION::READ_AHEAD_BEGIN;
+    }
+
+    cv.notify_one();
+}
+
+void Snapuserd::MergeCompleted() {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        io_state_ = READ_AHEAD_IO_TRANSITION::IO_TERMINATED;
+    }
+
+    cv.notify_one();
+}
+
+bool Snapuserd::ReadAheadIOCompleted() {
+    // Flush the entire buffer region
+    int ret = msync(mapped_addr_, total_mapped_addr_length_, MS_SYNC);
+    if (ret < 0) {
+        PLOG(ERROR) << "msync failed after ReadAheadIOCompleted: " << ret;
+        return false;
+    }
+
+    // Metadata and data are synced. Now, update the state.
+    // We need to update the state after flushing data; if there is a crash
+    // when read-ahead IO is in progress, the state of data in the COW file
+    // is unknown. kCowReadAheadDone acts as a checkpoint wherein the data
+    // in the scratch space is good and during next reboot, read-ahead thread
+    // can safely re-construct the data.
+    struct BufferState* ra_state = GetBufferState();
+    ra_state->read_ahead_state = kCowReadAheadDone;
+
+    ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
+    if (ret < 0) {
+        PLOG(ERROR) << "msync failed to flush Readahead completion state...";
+        return false;
+    }
+
+    // Notify the worker threads
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        io_state_ = READ_AHEAD_IO_TRANSITION::IO_IN_PROGRESS;
+    }
+
+    cv.notify_all();
+    return true;
+}
+
+void Snapuserd::ReadAheadIOFailed() {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        io_state_ = READ_AHEAD_IO_TRANSITION::READ_AHEAD_FAILURE;
+    }
+
+    cv.notify_all();
+}
+
+//========== End of state transition functions ====================
 
 bool Snapuserd::IsChunkIdMetadata(chunk_t chunk) {
     uint32_t stride = exceptions_per_area_ + 1;
@@ -257,13 +432,16 @@ bool Snapuserd::ReadMetadata() {
         data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
     }
 
+    int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     std::optional<chunk_t> prev_id = {};
     std::map<uint64_t, const CowOperation*> map;
     std::set<uint64_t> dest_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
-    SNAP_LOG(INFO) << " Processing copy-ops at Area: " << vec_.size()
-                   << " Number of replace/zero ops completed in this area: " << num_ops
-                   << " Pending copy ops for this area: " << pending_copy_ops;
+    uint64_t total_copy_ops = reader_->total_copy_ops();
+
+    SNAP_LOG(DEBUG) << " Processing copy-ops at Area: " << vec_.size()
+                    << " Number of replace/zero ops completed in this area: " << num_ops
+                    << " Pending copy ops for this area: " << pending_copy_ops;
     while (!cowop_riter_->Done()) {
         do {
             const CowOperation* cow_op = &cowop_riter_->Get();
@@ -425,6 +603,9 @@ bool Snapuserd::ReadMetadata() {
             offset += sizeof(struct disk_exception);
             num_ops += 1;
             copy_ops++;
+            if (read_ahead_feature_) {
+                read_ahead_ops_.push_back(it->second);
+            }
 
             SNAP_LOG(DEBUG) << num_ops << ":"
                             << " Copy-op: "
@@ -452,6 +633,15 @@ bool Snapuserd::ReadMetadata() {
             }
 
             data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
+            total_copy_ops -= 1;
+            /*
+             * Split the number of ops based on the size of read-ahead buffer
+             * region. We need to ensure that kernel doesn't issue IO on blocks
+             * which are not read by the read-ahead thread.
+             */
+            if (read_ahead_feature_ && (total_copy_ops % num_ra_ops_per_iter == 0)) {
+                data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
+            }
         }
         map.clear();
         dest_blocks.clear();
@@ -469,6 +659,7 @@ bool Snapuserd::ReadMetadata() {
 
     chunk_vec_.shrink_to_fit();
     vec_.shrink_to_fit();
+    read_ahead_ops_.shrink_to_fit();
 
     // Sort the vector based on sectors as we need this during un-aligned access
     std::sort(chunk_vec_.begin(), chunk_vec_.end(), compare);
@@ -483,6 +674,8 @@ bool Snapuserd::ReadMetadata() {
     // Total number of sectors required for creating dm-user device
     num_sectors_ = ChunkToSector(data_chunk_id);
     merge_initiated_ = false;
+    PrepareReadAhead();
+
     return true;
 }
 
@@ -490,8 +683,15 @@ bool Snapuserd::MmapMetadata() {
     CowHeader header;
     reader_->GetHeader(&header);
 
-    // mmap the first 4k page
-    total_mapped_addr_length_ = BLOCK_SZ;
+    if (header.major_version >= 2 && header.buffer_size > 0) {
+        total_mapped_addr_length_ = header.header_size + BUFFER_REGION_DEFAULT_SIZE;
+        read_ahead_feature_ = true;
+    } else {
+        // mmap the first 4k page - older COW format
+        total_mapped_addr_length_ = BLOCK_SZ;
+        read_ahead_feature_ = false;
+    }
+
     mapped_addr_ = mmap(NULL, total_mapped_addr_length_, PROT_READ | PROT_WRITE, MAP_SHARED,
                         cow_fd_.get(), 0);
     if (mapped_addr_ == MAP_FAILED) {
@@ -529,11 +729,26 @@ bool Snapuserd::InitCowDevice() {
 }
 
 /*
- * Entry point to launch worker threads
+ * Entry point to launch threads
  */
 bool Snapuserd::Start() {
     std::vector<std::future<bool>> threads;
+    std::future<bool> ra_thread;
+    bool rathread = (read_ahead_feature_ && (read_ahead_ops_.size() > 0));
 
+    // Start the read-ahead thread and wait
+    // for it as the data has to be re-constructed
+    // from COW device.
+    if (rathread) {
+        ra_thread = std::async(std::launch::async, &ReadAheadThread::RunThread,
+                               read_ahead_thread_.get());
+        if (!WaitForReadAheadToStart()) {
+            SNAP_LOG(ERROR) << "Failed to start Read-ahead thread...";
+            return false;
+        }
+    }
+
+    // Launch worker threads
     for (int i = 0; i < worker_threads_.size(); i++) {
         threads.emplace_back(
                 std::async(std::launch::async, &WorkerThread::RunThread, worker_threads_[i].get()));
@@ -544,7 +759,68 @@ bool Snapuserd::Start() {
         ret = t.get() && ret;
     }
 
+    if (rathread) {
+        // Notify the read-ahead thread that all worker threads
+        // are done. We need this explicit notification when
+        // there is an IO failure or there was a switch
+        // of dm-user table; thus, forcing the read-ahead
+        // thread to wake up.
+        MergeCompleted();
+        ret = ret && ra_thread.get();
+    }
+
     return ret;
+}
+
+uint64_t Snapuserd::GetBufferMetadataOffset() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    size_t size = header.header_size + sizeof(BufferState);
+    return size;
+}
+
+/*
+ * Metadata for read-ahead is 16 bytes. For a 2 MB region, we will
+ * end up with 8k (2 PAGE) worth of metadata. Thus, a 2MB buffer
+ * region is split into:
+ *
+ * 1: 8k metadata
+ *
+ */
+size_t Snapuserd::GetBufferMetadataSize() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    size_t metadata_bytes = (header.buffer_size * sizeof(struct ScratchMetadata)) / BLOCK_SZ;
+    return metadata_bytes;
+}
+
+size_t Snapuserd::GetBufferDataOffset() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    return (header.header_size + GetBufferMetadataSize());
+}
+
+/*
+ * (2MB - 8K = 2088960 bytes) will be the buffer region to hold the data.
+ */
+size_t Snapuserd::GetBufferDataSize() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    size_t size = header.buffer_size - GetBufferMetadataSize();
+    return size;
+}
+
+struct BufferState* Snapuserd::GetBufferState() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    struct BufferState* ra_state =
+            reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);
+    return ra_state;
 }
 
 }  // namespace snapshot
