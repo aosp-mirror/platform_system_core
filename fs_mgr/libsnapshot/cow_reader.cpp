@@ -94,11 +94,6 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                    << "Expected: " << kCowMagicNumber;
         return false;
     }
-    if (header_.header_size != sizeof(CowHeader)) {
-        LOG(ERROR) << "Header size unknown, read " << header_.header_size << ", expected "
-                   << sizeof(CowHeader);
-        return false;
-    }
     if (header_.footer_size != sizeof(CowFooter)) {
         LOG(ERROR) << "Footer size unknown, read " << header_.footer_size << ", expected "
                    << sizeof(CowFooter);
@@ -123,8 +118,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         return false;
     }
 
-    if ((header_.major_version != kCowVersionMajor) ||
-        (header_.minor_version != kCowVersionMinor)) {
+    if ((header_.major_version > kCowVersionMajor) || (header_.minor_version != kCowVersionMinor)) {
         LOG(ERROR) << "Header version mismatch";
         LOG(ERROR) << "Major version: " << header_.major_version
                    << "Expected: " << kCowVersionMajor;
@@ -137,10 +131,25 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
 }
 
 bool CowReader::ParseOps(std::optional<uint64_t> label) {
-    uint64_t pos = lseek(fd_.get(), sizeof(header_), SEEK_SET);
-    if (pos != sizeof(header_)) {
-        PLOG(ERROR) << "lseek ops failed";
-        return false;
+    uint64_t pos;
+
+    // Skip the scratch space
+    if (header_.major_version >= 2 && (header_.buffer_size > 0)) {
+        LOG(DEBUG) << " Scratch space found of size: " << header_.buffer_size;
+        size_t init_offset = header_.header_size + header_.buffer_size;
+        pos = lseek(fd_.get(), init_offset, SEEK_SET);
+        if (pos != init_offset) {
+            PLOG(ERROR) << "lseek ops failed";
+            return false;
+        }
+    } else {
+        pos = lseek(fd_.get(), header_.header_size, SEEK_SET);
+        if (pos != header_.header_size) {
+            PLOG(ERROR) << "lseek ops failed";
+            return false;
+        }
+        // Reading a v1 version of COW which doesn't have buffer_size.
+        header_.buffer_size = 0;
     }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
@@ -470,7 +479,7 @@ std::unique_ptr<ICowOpReverseIter> CowReader::GetRevOpIter() {
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
-    if (offset < sizeof(header_) || offset >= fd_size_ - sizeof(CowFooter) || len >= fd_size_ ||
+    if (offset < header_.header_size || offset >= fd_size_ - sizeof(CowFooter) || len >= fd_size_ ||
         offset + len > fd_size_ - sizeof(CowFooter)) {
         LOG(ERROR) << "invalid data offset: " << offset << ", " << len << " bytes";
         return false;

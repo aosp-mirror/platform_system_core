@@ -21,10 +21,13 @@ namespace android {
 namespace snapshot {
 
 static constexpr uint64_t kCowMagicNumber = 0x436f77634f572121ULL;
-static constexpr uint32_t kCowVersionMajor = 1;
+static constexpr uint32_t kCowVersionMajor = 2;
 static constexpr uint32_t kCowVersionMinor = 0;
 
 static constexpr uint32_t kCowVersionManifest = 1;
+
+static constexpr uint32_t BLOCK_SZ = 4096;
+static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
 
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
@@ -70,6 +73,9 @@ struct CowHeader {
 
     // Tracks merge operations completed
     uint64_t num_merge_ops;
+
+    // Scratch space used during merge
+    uint32_t buffer_size;
 } __attribute__((packed));
 
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
@@ -150,6 +156,9 @@ struct CowFooter {
     CowFooterOperation op;
     CowFooterData data;
 } __attribute__((packed));
+
+// 2MB Scratch space used for read-ahead
+static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 
 std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
 

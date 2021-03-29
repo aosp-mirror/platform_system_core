@@ -36,6 +36,8 @@ struct CowOptions {
 
     // Number of CowOperations in a cluster. 0 for no clustering. Cannot be 1.
     uint32_t cluster_ops = 200;
+
+    bool scratch_space = false;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges

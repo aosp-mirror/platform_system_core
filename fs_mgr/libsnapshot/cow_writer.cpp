@@ -94,6 +94,7 @@ void CowWriter::SetupHeaders() {
     header_.block_size = options_.block_size;
     header_.num_merge_ops = 0;
     header_.cluster_ops = options_.cluster_ops;
+    header_.buffer_size = 0;
     footer_ = {};
     footer_.op.data_length = 64;
     footer_.op.type = kCowFooterOp;
@@ -166,7 +167,7 @@ bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) 
 }
 
 void CowWriter::InitPos() {
-    next_op_pos_ = sizeof(header_);
+    next_op_pos_ = sizeof(header_) + header_.buffer_size;
     cluster_size_ = header_.cluster_ops * sizeof(CowOperation);
     if (header_.cluster_ops) {
         next_data_pos_ = next_op_pos_ + cluster_size_;
@@ -190,6 +191,10 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        header_.buffer_size = BUFFER_REGION_DEFAULT_SIZE;
+    }
+
     // Headers are not complete, but this ensures the file is at the right
     // position.
     if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
@@ -197,7 +202,27 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        // Initialize the scratch space
+        std::string data(header_.buffer_size, 0);
+        if (!android::base::WriteFully(fd_, data.data(), header_.buffer_size)) {
+            PLOG(ERROR) << "writing scratch space failed";
+            return false;
+        }
+    }
+
+    if (!Sync()) {
+        LOG(ERROR) << "Header sync failed";
+        return false;
+    }
+
+    if (lseek(fd_.get(), sizeof(header_) + header_.buffer_size, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+
     InitPos();
+
     return true;
 }
 

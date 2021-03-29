@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <libsnapshot/cow_format.h>
 #include <libsnapshot/snapshot.h>
 
 #include <fcntl.h>
@@ -327,6 +328,7 @@ class SnapshotTest : public ::testing::Test {
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
         dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         auto group = dynamic_partition_metadata->add_groups();
         group->set_name("group");
@@ -841,6 +843,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
         dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         // Create a fake update package metadata.
         // Not using full name "system", "vendor", "product" because these names collide with the
