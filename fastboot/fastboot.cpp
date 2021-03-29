@@ -1007,6 +1007,11 @@ static bool has_vbmeta_partition() {
            fb->GetVar("partition-type:vbmeta_b", &partition_type) == fastboot::SUCCESS;
 }
 
+static bool is_logical(const std::string& partition) {
+    std::string value;
+    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
+}
+
 static std::string fb_fix_numeric_var(std::string var) {
     // Some bootloaders (angler, for example), send spurious leading whitespace.
     var = android::base::Trim(var);
@@ -1019,12 +1024,18 @@ static std::string fb_fix_numeric_var(std::string var) {
 static uint64_t get_partition_size(const std::string& partition) {
     std::string partition_size_str;
     if (fb->GetVar("partition-size:" + partition, &partition_size_str) != fastboot::SUCCESS) {
+        if (!is_logical(partition)) {
+            return 0;
+        }
         die("cannot get partition size for %s", partition.c_str());
     }
 
     partition_size_str = fb_fix_numeric_var(partition_size_str);
     uint64_t partition_size;
     if (!android::base::ParseUint(partition_size_str, &partition_size)) {
+        if (!is_logical(partition)) {
+            return 0;
+        }
         die("Couldn't parse partition size '%s'.", partition_size_str.c_str());
     }
     return partition_size;
@@ -1035,16 +1046,6 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
         return;
     }
 
-    // If overflows and negative, it should be < buf->sz.
-    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
-
-    if (partition_size == buf->sz) {
-        return;
-    }
-    if (partition_size < buf->sz) {
-        die("boot partition is smaller than boot image");
-    }
-
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
         die("Failed reading from boot");
@@ -1053,6 +1054,15 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
     if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
         return;
+    }
+    // If overflows and negative, it should be < buf->sz.
+    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
+
+    if (partition_size == buf->sz) {
+        return;
+    }
+    if (partition_size < buf->sz) {
+        die("boot partition is smaller than boot image");
     }
 
     unique_fd fd(make_temporary_fd("boot rewriting"));
@@ -1248,11 +1258,6 @@ static void do_for_partitions(const std::string& part, const std::string& slot,
     } else {
         do_for_partition(part, slot, func, force_slot);
     }
-}
-
-static bool is_logical(const std::string& partition) {
-    std::string value;
-    return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
 static bool is_retrofit_device() {
