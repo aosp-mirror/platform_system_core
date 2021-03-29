@@ -51,20 +51,17 @@ bool Snapuserd::InitializeWorkers() {
 }
 
 bool Snapuserd::CommitMerge(int num_merge_ops) {
-    {
-        std::lock_guard<std::mutex> lock(lock_);
-        CowHeader header;
+    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
+    ch->num_merge_ops += num_merge_ops;
 
-        reader_->GetHeader(&header);
-        header.num_merge_ops += num_merge_ops;
-        reader_->UpdateMergeProgress(num_merge_ops);
-        if (!writer_->CommitMerge(num_merge_ops)) {
-            SNAP_LOG(ERROR) << "CommitMerge failed... merged_ops_cur_iter: " << num_merge_ops
-                            << " Total-merged-ops: " << header.num_merge_ops;
-            return false;
-        }
-        merge_initiated_ = true;
+    // Sync the first 4k block
+    int ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
+    if (ret < 0) {
+        PLOG(ERROR) << "msync header failed: " << ret;
+        return false;
     }
+
+    merge_initiated_ = true;
 
     return true;
 }
@@ -93,9 +90,9 @@ void Snapuserd::CheckMergeCompletionStatus() {
         return;
     }
 
-    CowHeader header;
-    reader_->GetHeader(&header);
-    SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << header.num_merge_ops
+    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
+
+    SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << ch->num_merge_ops
                    << " Total-data-ops: " << reader_->total_data_ops();
 }
 
@@ -175,8 +172,10 @@ bool Snapuserd::ReadMetadata() {
     reader_->InitializeMerge();
     SNAP_LOG(DEBUG) << "Merge-ops: " << header.num_merge_ops;
 
-    writer_ = std::make_unique<CowWriter>(options);
-    writer_->InitializeMerge(cow_fd_.get(), &header);
+    if (!MmapMetadata()) {
+        SNAP_LOG(ERROR) << "mmap failed";
+        return false;
+    }
 
     // Initialize the iterator for reading metadata
     cowop_riter_ = reader_->GetRevOpIter();
@@ -485,6 +484,29 @@ bool Snapuserd::ReadMetadata() {
     num_sectors_ = ChunkToSector(data_chunk_id);
     merge_initiated_ = false;
     return true;
+}
+
+bool Snapuserd::MmapMetadata() {
+    CowHeader header;
+    reader_->GetHeader(&header);
+
+    // mmap the first 4k page
+    total_mapped_addr_length_ = BLOCK_SZ;
+    mapped_addr_ = mmap(NULL, total_mapped_addr_length_, PROT_READ | PROT_WRITE, MAP_SHARED,
+                        cow_fd_.get(), 0);
+    if (mapped_addr_ == MAP_FAILED) {
+        SNAP_LOG(ERROR) << "mmap metadata failed";
+        return false;
+    }
+
+    return true;
+}
+
+void Snapuserd::UnmapBufferRegion() {
+    int ret = munmap(mapped_addr_, total_mapped_addr_length_);
+    if (ret < 0) {
+        SNAP_PLOG(ERROR) << "munmap failed";
+    }
 }
 
 void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,

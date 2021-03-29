@@ -613,10 +613,19 @@ bool WorkerThread::DmuserReadRequest() {
             }
         }
 
+        // Just return the header if it is an error
+        if (header->type == DM_USER_RESP_ERROR) {
+            ret = 0;
+        }
+
         // Daemon will not be terminated if there is any error. We will
         // just send the error back to dm-user.
         if (!WriteDmUserPayload(ret)) {
             return false;
+        }
+
+        if (header->type == DM_USER_RESP_ERROR) {
+            break;
         }
 
         remaining_size -= ret;

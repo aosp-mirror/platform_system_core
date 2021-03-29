@@ -139,12 +139,6 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     return true;
 }
 
-void CowWriter::InitializeMerge(borrowed_fd fd, CowHeader* header) {
-    fd_ = fd;
-    memcpy(&header_, header, sizeof(CowHeader));
-    merge_in_progress_ = true;
-}
-
 bool CowWriter::Initialize(unique_fd&& fd) {
     owned_fd_ = std::move(fd);
     return Initialize(borrowed_fd{owned_fd_});
@@ -515,24 +509,6 @@ bool CowWriter::Sync() {
         return false;
     }
     return true;
-}
-
-bool CowWriter::CommitMerge(int merged_ops) {
-    CHECK(merge_in_progress_);
-    header_.num_merge_ops += merged_ops;
-
-    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-
-    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&header_),
-                                   sizeof(header_))) {
-        PLOG(ERROR) << "WriteFully failed";
-        return false;
-    }
-
-    return Sync();
 }
 
 bool CowWriter::Truncate(off_t length) {

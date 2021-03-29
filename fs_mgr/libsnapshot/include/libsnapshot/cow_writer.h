@@ -100,9 +100,6 @@ class CowWriter : public ICowWriter {
     bool InitializeAppend(android::base::unique_fd&&, uint64_t label);
     bool InitializeAppend(android::base::borrowed_fd fd, uint64_t label);
 
-    void InitializeMerge(android::base::borrowed_fd fd, CowHeader* header);
-    bool CommitMerge(int merged_ops);
-
     bool Finalize() override;
 
     uint64_t GetCowSize() override;

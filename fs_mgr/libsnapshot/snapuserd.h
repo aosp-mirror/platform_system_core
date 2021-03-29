@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 
 #include <bitset>
 #include <csignal>
@@ -173,9 +174,10 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
         return p1.first < p2.first;
     }
 
-  private:
-    std::vector<std::unique_ptr<WorkerThread>> worker_threads_;
+    void UnmapBufferRegion();
+    bool MmapMetadata();
 
+  private:
     bool IsChunkIdMetadata(chunk_t chunk);
     chunk_t GetNextAllocatableChunkId(chunk_t chunk_id);
 
@@ -197,7 +199,6 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     std::unique_ptr<ICowOpIter> cowop_iter_;
     std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
-    std::unique_ptr<CowWriter> writer_;
 
     // Vector of disk exception which is a
     // mapping of old-chunk to new-chunk
@@ -209,6 +210,10 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
 
     std::mutex lock_;
 
+    void* mapped_addr_;
+    size_t total_mapped_addr_length_;
+
+    std::vector<std::unique_ptr<WorkerThread>> worker_threads_;
     bool merge_initiated_ = false;
     bool attached_ = false;
 };
