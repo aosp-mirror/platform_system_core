@@ -96,7 +96,7 @@ static std::string get_wchan_data(pid_t pid) {
 
   if (std::string str = data.str(); !str.empty()) {
     buffer << "\n----- Waiting Channels: pid " << pid << " at " << get_timestamp() << " -----\n"
-           << "Cmd line: " << get_process_name(pid) << "\n";
+           << "Cmd line: " << android::base::Join(get_command_line(pid), " ") << "\n";
     buffer << "\n" << str << "\n";
     buffer << "----- end " << std::to_string(pid) << " -----\n";
     buffer << "\n";
