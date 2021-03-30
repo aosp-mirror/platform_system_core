@@ -821,6 +821,9 @@ on post-fs-data
     mkdir /data/ss 0700 system system encryption=Require
 
     mkdir /data/system 0775 system system encryption=Require
+    mkdir /data/system/environ 0700 system system
+    # b/183861600 attempt to fix selinux label before running derive_classpath service
+    restorecon /data/system/environ
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
@@ -885,7 +888,6 @@ on post-fs-data
     perform_apex_config
 
     # Define and export *CLASSPATH variables
-    mkdir /data/system/environ 0700 system system
     # Must start before 'odsign', as odsign depends on *CLASSPATH variables
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
