@@ -887,12 +887,6 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Define and export *CLASSPATH variables
-    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
-    exec_start derive_classpath
-    load_exports /data/system/environ/classpath
-    rm /data/system/environ/classpath
-
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -904,6 +898,12 @@ on post-fs-data
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
+
+    # Define and export *CLASSPATH variables
+    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
+    exec_start derive_classpath
+    load_exports /data/system/environ/classpath
+    rm /data/system/environ/classpath
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
