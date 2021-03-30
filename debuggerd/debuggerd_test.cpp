@@ -34,6 +34,7 @@
 
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
+#include <bionic/malloc.h>
 #include <bionic/mte.h>
 #include <bionic/reserved_signals.h>
 
@@ -97,6 +98,13 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 #define ASSERT_BACKTRACE_FRAME(result, frame_name) \
   ASSERT_MATCH(result,                             \
                R"(#\d\d pc [0-9a-f]+\s+ \S+ (\(offset 0x[0-9a-f]+\) )?\()" frame_name R"(\+)");
+
+// Enable GWP-ASan at the start of this process. GWP-ASan is enabled using
+// process sampling, so we need to ensure we force GWP-ASan on.
+__attribute__((constructor)) static void enable_gwp_asan() {
+  bool force = true;
+  android_mallopt(M_INITIALIZE_GWP_ASAN, &force, sizeof(force));
+}
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
                                  InterceptStatus* status, DebuggerdDumpType intercept_type) {
@@ -397,6 +405,72 @@ static void SetTagCheckingLevelSync() {
 }
 #endif
 
+// Number of iterations required to reliably guarantee a GWP-ASan crash.
+// GWP-ASan's sample rate is not truly nondeterministic, it initialises a
+// thread-local counter at 2*SampleRate, and decrements on each malloc(). Once
+// the counter reaches zero, we provide a sampled allocation. Then, double that
+// figure to allow for left/right allocation alignment, as this is done randomly
+// without bias.
+#define GWP_ASAN_ITERATIONS_TO_ENSURE_CRASH (0x20000)
+
+struct GwpAsanTestParameters {
+  size_t alloc_size;
+  bool free_before_access;
+  int access_offset;
+  std::string cause_needle; // Needle to be found in the "Cause: [GWP-ASan]" line.
+};
+
+struct GwpAsanCrasherTest : CrasherTest, testing::WithParamInterface<GwpAsanTestParameters> {};
+
+GwpAsanTestParameters gwp_asan_tests[] = {
+  {/* alloc_size */ 7, /* free_before_access */ true, /* access_offset */ 0, "Use After Free, 0 bytes into a 7-byte allocation"},
+  {/* alloc_size */ 7, /* free_before_access */ true, /* access_offset */ 1, "Use After Free, 1 byte into a 7-byte allocation"},
+  {/* alloc_size */ 7, /* free_before_access */ false, /* access_offset */ 16, "Buffer Overflow, 9 bytes right of a 7-byte allocation"},
+  {/* alloc_size */ 16, /* free_before_access */ false, /* access_offset */ -1, "Buffer Underflow, 1 byte left of a 16-byte allocation"},
+};
+
+INSTANTIATE_TEST_SUITE_P(GwpAsanTests, GwpAsanCrasherTest, testing::ValuesIn(gwp_asan_tests));
+
+TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
+  if (mte_supported()) {
+    // Skip this test on MTE hardware, as MTE will reliably catch these errors
+    // instead of GWP-ASan.
+    GTEST_SKIP() << "Skipped on MTE.";
+  }
+
+  GwpAsanTestParameters params = GetParam();
+
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([&params]() {
+    for (unsigned i = 0; i < GWP_ASAN_ITERATIONS_TO_ENSURE_CRASH; ++i) {
+      volatile char* p = reinterpret_cast<volatile char*>(malloc(params.alloc_size));
+      if (params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
+      p[params.access_offset] = 42;
+      if (!params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
+    }
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\))");
+  ASSERT_MATCH(result, R"(Cause: \[GWP-ASan\]: )" + params.cause_needle);
+  if (params.free_before_access) {
+    ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
+  }
+  ASSERT_MATCH(result, R"(allocated by thread .*
+      #00 pc)");
+}
+
 struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
 
 INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(16, 131072));
@@ -428,11 +502,10 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
-      #00 pc)");
+                           std::to_string(GetParam()) + R"(-byte allocation)");
   ASSERT_MATCH(result, R"(deallocated by thread .*
+      #00 pc)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -465,9 +538,8 @@ TEST_P(SizeParamCrasherTest, mte_overflow) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -500,9 +572,8 @@ TEST_P(SizeParamCrasherTest, mte_underflow) {
 
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation.*
-
-allocated by thread .*
+                           std::to_string(GetParam()) + R"(-byte allocation)");
+  ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";

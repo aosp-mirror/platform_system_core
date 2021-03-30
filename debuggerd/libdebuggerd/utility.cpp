@@ -125,8 +125,9 @@ void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
 
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
+static_assert(MEMORY_BYTES_PER_LINE == kTagGranuleSize);
 
-ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
+ssize_t dump_memory(void* out, size_t len, uint8_t* tags, size_t tags_len, uint64_t* addr,
                     unwindstack::Memory* memory) {
   // Align the address to the number of bytes per line to avoid confusing memory tag output if
   // memory is tagged and we start from a misaligned address. Start 32 bytes before the address.
@@ -154,17 +155,17 @@ ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
-  *start_offset = 0;
   bool skip_2nd_read = false;
   if (bytes == 0) {
     // In this case, we might want to try another read at the beginning of
     // the next page only if it's within the amount of memory we would have
     // read.
     size_t page_size = sysconf(_SC_PAGE_SIZE);
-    *start_offset = ((*addr + (page_size - 1)) & ~(page_size - 1)) - *addr;
-    if (*start_offset == 0 || *start_offset >= len) {
+    uint64_t next_page = (*addr + (page_size - 1)) & ~(page_size - 1);
+    if (next_page == *addr || next_page >= *addr + len) {
       skip_2nd_read = true;
     }
+    *addr = next_page;
   }
 
   if (bytes < len && !skip_2nd_read) {
@@ -174,8 +175,7 @@ ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
     // into a readable map. Only requires one extra read because a map has
     // to contain at least one page, and the total number of bytes to dump
     // is smaller than a page.
-    size_t bytes2 = memory->Read(*addr + *start_offset + bytes, static_cast<uint8_t*>(out) + bytes,
-                                 len - bytes - *start_offset);
+    size_t bytes2 = memory->Read(*addr + bytes, static_cast<uint8_t*>(out) + bytes, len - bytes);
     bytes += bytes2;
     if (bytes2 > 0 && bytes % sizeof(uintptr_t) != 0) {
       // This should never happen, but we'll try and continue any way.
@@ -190,15 +190,24 @@ ssize_t dump_memory(void* out, size_t len, size_t* start_offset, uint64_t* addr,
     return -1;
   }
 
+  for (uint64_t tag_granule = 0; tag_granule < bytes / kTagGranuleSize; ++tag_granule) {
+    long tag = memory->ReadTag(*addr + kTagGranuleSize * tag_granule);
+    if (tag_granule < tags_len) {
+      tags[tag_granule] = tag >= 0 ? tag : 0;
+    } else {
+      ALOGE("Insufficient space for tags");
+    }
+  }
+
   return bytes;
 }
 
 void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
   // Dump 256 bytes
   uintptr_t data[MEMORY_BYTES_TO_DUMP / sizeof(uintptr_t)];
-  size_t start_offset = 0;
+  uint8_t tags[MEMORY_BYTES_TO_DUMP / kTagGranuleSize];
 
-  ssize_t bytes = dump_memory(data, sizeof(data), &start_offset, &addr, memory);
+  ssize_t bytes = dump_memory(data, sizeof(data), tags, sizeof(tags), &addr, memory);
   if (bytes == -1) {
     return;
   }
@@ -212,38 +221,27 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   // On 32-bit machines, there are still 16 bytes per line but addresses and
   // words are of course presented differently.
   uintptr_t* data_ptr = data;
-  size_t current = 0;
-  size_t total_bytes = start_offset + bytes;
-  for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
-    uint64_t tagged_addr = addr;
-    long tag = memory->ReadTag(addr);
-    if (tag >= 0) {
-      tagged_addr |= static_cast<uint64_t>(tag) << 56;
-    }
+  uint8_t* tags_ptr = tags;
+  for (size_t line = 0; line < static_cast<size_t>(bytes) / MEMORY_BYTES_PER_LINE; line++) {
+    uint64_t tagged_addr = addr | static_cast<uint64_t>(*tags_ptr++) << 56;
     std::string logline;
     android::base::StringAppendF(&logline, "    %" PRIPTR, tagged_addr);
 
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
     for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
-      if (current >= start_offset && current + sizeof(uintptr_t) <= total_bytes) {
-        android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
+      android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
 
-        // Fill out the ascii string from the data.
-        uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);
-        for (size_t val = 0; val < sizeof(uintptr_t); val++, ptr++) {
-          if (*ptr >= 0x20 && *ptr < 0x7f) {
-            ascii += *ptr;
-          } else {
-            ascii += '.';
-          }
+      // Fill out the ascii string from the data.
+      uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);
+      for (size_t val = 0; val < sizeof(uintptr_t); val++, ptr++) {
+        if (*ptr >= 0x20 && *ptr < 0x7f) {
+          ascii += *ptr;
+        } else {
+          ascii += '.';
         }
-        data_ptr++;
-      } else {
-        logline += ' ' + std::string(sizeof(uintptr_t) * 2, '-');
-        ascii += std::string(sizeof(uintptr_t), '.');
       }
-      current += sizeof(uintptr_t);
+      data_ptr++;
     }
     _LOG(log, logtype::MEMORY, "%s  %s\n", logline.c_str(), ascii.c_str());
   }
