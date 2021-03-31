@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 
@@ -71,8 +72,13 @@ static int pointer_width(const Tombstone& tombstone) {
 
 static void print_thread_header(CallbackType callback, const Tombstone& tombstone,
                                 const Thread& thread, bool should_log) {
+  const char* process_name = "<unknown>";
+  if (!tombstone.command_line().empty()) {
+    process_name = tombstone.command_line()[0].c_str();
+    CB(should_log, "Cmdline: %s", android::base::Join(tombstone.command_line(), " ").c_str());
+  }
   CB(should_log, "pid: %d, tid: %d, name: %s  >>> %s <<<", tombstone.pid(), thread.id(),
-     thread.name().c_str(), tombstone.process_name().c_str());
+     thread.name().c_str(), process_name);
   CB(should_log, "uid: %d", tombstone.uid());
   if (thread.tagged_addr_ctrl() != -1) {
     CB(should_log, "tagged_addr_ctrl: %016" PRIx64, thread.tagged_addr_ctrl());
