@@ -1619,6 +1619,18 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
         //    as dm-snapshot (for example, after merge completes).
         bool should_unmap = current_slot != Slot::Target;
         bool should_delete = ShouldDeleteSnapshot(flashing_status, current_slot, name);
+        if (should_unmap && android::base::EndsWith(name, device_->GetSlotSuffix())) {
+            // Something very unexpected has happened - we want to unmap this
+            // snapshot, but it's on the wrong slot. We can't unmap an active
+            // partition. If this is not really a snapshot, skip the unmap
+            // step.
+            auto& dm = DeviceMapper::Instance();
+            if (dm.GetState(name) == DmDeviceState::INVALID || !IsSnapshotDevice(name)) {
+                LOG(ERROR) << "Detected snapshot " << name << " on " << current_slot << " slot"
+                           << " for source partition; removing without unmap.";
+                should_unmap = false;
+            }
+        }
 
         bool partition_ok = true;
         if (should_unmap && !UnmapPartitionWithSnapshot(lock, name)) {
