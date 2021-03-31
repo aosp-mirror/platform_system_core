@@ -562,7 +562,11 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
   result.set_uid(main_thread.uid);
   result.set_selinux_label(main_thread.selinux_label);
 
-  result.set_process_name(main_thread.process_name);
+  auto cmd_line = result.mutable_command_line();
+  for (const auto& arg : main_thread.command_line) {
+    *cmd_line->Add() = arg;
+  }
+
   if (!main_thread.siginfo) {
     async_safe_fatal("siginfo missing");
   }
