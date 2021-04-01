@@ -26,10 +26,31 @@
 #include <android-base/strings.h>
 #include "protocol.h"
 
+std::vector<std::string> get_command_line(pid_t pid) {
+  std::vector<std::string> result;
+
+  std::string cmdline;
+  android::base::ReadFileToString(android::base::StringPrintf("/proc/%d/cmdline", pid), &cmdline);
+
+  auto it = cmdline.cbegin();
+  while (it != cmdline.cend()) {
+    // string::iterator is a wrapped type, not a raw char*.
+    auto terminator = std::find(it, cmdline.cend(), '\0');
+    result.emplace_back(it, terminator);
+    it = std::find_if(terminator, cmdline.cend(), [](char c) { return c != '\0'; });
+  }
+  if (result.empty()) {
+    result.emplace_back("<unknown>");
+  }
+
+  return result;
+}
+
 std::string get_process_name(pid_t pid) {
   std::string result = "<unknown>";
   android::base::ReadFileToString(android::base::StringPrintf("/proc/%d/cmdline", pid), &result);
-  return result;
+  // We only want the name, not the whole command line, so truncate at the first NUL.
+  return result.c_str();
 }
 
 std::string get_thread_name(pid_t tid) {
