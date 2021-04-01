@@ -350,11 +350,11 @@ TEST_F(TombstoneTest, dump_header_info) {
 }
 
 TEST_F(TombstoneTest, dump_thread_info_uid) {
-  dump_thread_info(&log_, ThreadInfo{.uid = 1,
-                                     .tid = 3,
-                                     .thread_name = "some_thread",
-                                     .pid = 2,
-                                     .process_name = "some_process"});
+  std::vector<std::string> cmdline = {"some_process"};
+  dump_thread_info(
+      &log_,
+      ThreadInfo{
+          .uid = 1, .tid = 3, .thread_name = "some_thread", .pid = 2, .command_line = cmdline});
   std::string expected = "pid: 2, tid: 3, name: some_thread  >>> some_process <<<\nuid: 1\n";
   ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
 }
