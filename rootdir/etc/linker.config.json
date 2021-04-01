@@ -1,8 +1,7 @@
 {
   "requireLibs": [
-    // Keep in sync with the "platform" namespace in art/build/apex/ld.config.txt.
-    "libdexfile_external.so",
-    "libdexfiled_external.so",
+    "libdexfile.so",
+    "libdexfiled.so",
     "libnativebridge.so",
     "libnativehelper.so",
     "libnativeloader.so",
