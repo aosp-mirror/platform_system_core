@@ -215,10 +215,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    Modprobe m(mod_dirs);
-    if (blocklist) {
-        m.EnableBlocklist(true);
-    }
+    Modprobe m(mod_dirs, "modules.load", blocklist);
 
     for (const auto& module : modules) {
         switch (mode) {
