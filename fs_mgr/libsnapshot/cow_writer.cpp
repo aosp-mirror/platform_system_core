@@ -232,10 +232,6 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Remove excess data
-    if (!Truncate(next_op_pos_)) {
-        return false;
-    }
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
@@ -400,6 +396,17 @@ bool CowWriter::Finalize() {
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&footer_),
                                    sizeof(footer_))) {
         PLOG(ERROR) << "write footer failed";
+        return false;
+    }
+
+    // Remove excess data, if we're in append mode and threw away more data
+    // than we wrote before.
+    off_t offs = lseek(fd_.get(), 0, SEEK_CUR);
+    if (offs < 0) {
+        PLOG(ERROR) << "Failed to lseek to find current position";
+        return false;
+    }
+    if (!Truncate(offs)) {
         return false;
     }
 
