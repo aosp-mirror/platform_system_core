@@ -32,9 +32,21 @@ class sp {
 public:
     inline sp() : m_ptr(nullptr) { }
 
-    // TODO: switch everyone to using this over new, and make RefBase operator
-    // new private to that class so that we can avoid RefBase being used with
-    // other memory management mechanisms.
+    // The old way of using sp<> was like this. This is bad because it relies
+    // on implicit conversion to sp<>, which we would like to remove (if an
+    // object is being managed some other way, this is double-ownership). We
+    // want to move away from this:
+    //
+    //     sp<Foo> foo = new Foo(...); // DO NOT DO THIS
+    //
+    // Instead, prefer to do this:
+    //
+    //     sp<Foo> foo = sp<Foo>::make(...); // DO THIS
+    //
+    // Sometimes, in order to use this, when a constructor is marked as private,
+    // you may need to add this to your class:
+    //
+    //     friend class sp<Foo>;
     template <typename... Args>
     static inline sp<T> make(Args&&... args);
 
