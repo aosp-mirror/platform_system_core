@@ -97,7 +97,6 @@ class FirstStageMount {
 
     bool MountPartitions();
     bool TrySwitchSystemAsRoot();
-    bool TrySkipMountingPartitions();
     bool IsDmLinearEnabled();
     void GetSuperDeviceName(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
@@ -534,7 +533,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
 bool FirstStageMount::MountPartitions() {
     if (!TrySwitchSystemAsRoot()) return false;
 
-    if (!SkipMountingPartitions(&fstab_)) return false;
+    if (!SkipMountingPartitions(&fstab_, true /* verbose */)) return false;
 
     for (auto current = fstab_.begin(); current != fstab_.end();) {
         // We've already mounted /system above.
