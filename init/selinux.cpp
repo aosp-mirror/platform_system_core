@@ -658,7 +658,7 @@ void MountMissingSystemPartitions() {
         extra_fstab.emplace_back(std::move(entry));
     }
 
-    SkipMountingPartitions(&extra_fstab);
+    SkipMountingPartitions(&extra_fstab, true /* verbose */);
     if (extra_fstab.empty()) {
         return;
     }
