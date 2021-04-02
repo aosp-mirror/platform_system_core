@@ -219,7 +219,13 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
         auto iter = FindHandler(&lock, handler->misc_name());
         if (iter == dm_users_.end()) {
             // RemoveAndJoinHandler() already removed us from the list, and is
-            // now waiting on a join(), so just return.
+            // now waiting on a join(), so just return. Additionally, release
+            // all the resources held by snapuserd object which are shared
+            // by worker threads. This should be done when the last reference
+            // of "handler" is released; but we will explicitly release here
+            // to make sure snapuserd object is freed as it is the biggest
+            // consumer of memory in the daemon.
+            handler->FreeResources();
             LOG(INFO) << "Exiting handler thread to allow for join: " << misc_name;
             return;
         }
