@@ -313,7 +313,9 @@ void Modprobe::ParseKernelCmdlineOptions(void) {
     }
 }
 
-Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string load_file) {
+Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string load_file,
+                   bool use_blocklist)
+    : blocklist_enabled(use_blocklist) {
     using namespace std::placeholders;
 
     for (const auto& base_path : base_paths) {
@@ -337,10 +339,6 @@ Modprobe::Modprobe(const std::vector<std::string>& base_paths, const std::string
     }
 
     ParseKernelCmdlineOptions();
-}
-
-void Modprobe::EnableBlocklist(bool enable) {
-    blocklist_enabled = enable;
 }
 
 std::vector<std::string> Modprobe::GetDependencies(const std::string& module) {
@@ -427,10 +425,23 @@ bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
     return true;
 }
 
+bool Modprobe::IsBlocklisted(const std::string& module_name) {
+    if (!blocklist_enabled) return false;
+
+    auto canonical_name = MakeCanonical(module_name);
+    auto dependencies = GetDependencies(canonical_name);
+    for (auto dep = dependencies.begin(); dep != dependencies.end(); ++dep) {
+        if (module_blocklist_.count(MakeCanonical(*dep))) return true;
+    }
+
+    return module_blocklist_.count(canonical_name) > 0;
+}
+
 bool Modprobe::LoadListedModules(bool strict) {
     auto ret = true;
     for (const auto& module : module_load_) {
         if (!LoadWithAliases(module, true)) {
+            if (IsBlocklisted(module)) continue;
             ret = false;
             if (strict) break;
         }
@@ -440,16 +451,10 @@ bool Modprobe::LoadListedModules(bool strict) {
 
 bool Modprobe::Remove(const std::string& module_name) {
     auto dependencies = GetDependencies(MakeCanonical(module_name));
-    if (dependencies.empty()) {
-        LOG(ERROR) << "Empty dependencies for module " << module_name;
-        return false;
-    }
-    if (!Rmmod(dependencies[0])) {
-        return false;
-    }
-    for (auto dep = dependencies.begin() + 1; dep != dependencies.end(); ++dep) {
+    for (auto dep = dependencies.begin(); dep != dependencies.end(); ++dep) {
         Rmmod(*dep);
     }
+    Rmmod(module_name);
     return true;
 }
 

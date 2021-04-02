@@ -78,6 +78,18 @@ TEST(libmodprobe, Test) {
             "/test13.ko",
     };
 
+    std::vector<std::string> expected_modules_blocklist_enabled = {
+            "/test1.ko option1=50 option2=60",
+            "/test6.ko",
+            "/test2.ko",
+            "/test5.ko option1=",
+            "/test8.ko",
+            "/test7.ko param1=4",
+            "/test12.ko",
+            "/test11.ko",
+            "/test13.ko",
+    };
+
     const std::string modules_dep =
             "test1.ko:\n"
             "test2.ko:\n"
@@ -146,7 +158,7 @@ TEST(libmodprobe, Test) {
         *i = dir.path + *i;
     }
 
-    Modprobe m({dir.path});
+    Modprobe m({dir.path}, "modules.load", false);
     EXPECT_TRUE(m.LoadListedModules());
 
     GTEST_LOG_(INFO) << "Expected modules loaded (in order):";
@@ -176,8 +188,22 @@ TEST(libmodprobe, Test) {
 
     EXPECT_TRUE(modules_loaded == expected_after_remove);
 
-    m.EnableBlocklist(true);
+    m = Modprobe({dir.path});
     EXPECT_FALSE(m.LoadWithAliases("test4", true));
+    while (modules_loaded.size() > 0) EXPECT_TRUE(m.Remove(modules_loaded.front()));
+    EXPECT_TRUE(m.LoadListedModules());
+
+    GTEST_LOG_(INFO) << "Expected modules loaded after enabling blocklist (in order):";
+    for (auto i = expected_modules_blocklist_enabled.begin();
+         i != expected_modules_blocklist_enabled.end(); ++i) {
+        *i = dir.path + *i;
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+    GTEST_LOG_(INFO) << "Actual modules loaded with blocklist enabled (in order):";
+    for (auto i = modules_loaded.begin(); i != modules_loaded.end(); ++i) {
+        GTEST_LOG_(INFO) << "\"" << *i << "\"";
+    }
+    EXPECT_TRUE(modules_loaded == expected_modules_blocklist_enabled);
 }
 
 TEST(libmodprobe, ModuleDepLineWithoutColonIsSkipped) {
