@@ -711,19 +711,17 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
+    SkipMountingPartitions(fstab, false /* verbose */);
     EnableMandatoryFlags(fstab);
 
     return true;
 }
 
 // Returns fstab entries parsed from the device tree if they exist
-bool ReadFstabFromDt(Fstab* fstab, bool log) {
+bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
     std::string fstab_buf = ReadFstabFromDt();
     if (fstab_buf.empty()) {
-        if (log) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
+        if (verbose) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
         return false;
     }
 
@@ -731,34 +729,36 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
                  fstab_buf.length(), "r"), fclose);
     if (!fstab_file) {
-        if (log) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
+        if (verbose) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
         return false;
     }
 
     if (!ReadFstabFile(fstab_file.get(), false, fstab)) {
-        if (log) {
+        if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;
         }
         return false;
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
+    SkipMountingPartitions(fstab, verbose);
 
     return true;
 }
 
-#ifndef NO_SKIP_MOUNT
+#ifdef NO_SKIP_MOUNT
+bool SkipMountingPartitions(Fstab*, bool) {
+    return true;
+}
+#else
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
 // only common files for all targets can be put into system partition. It is under
 // /system/system_ext because GSI is a single system.img that includes the contents of system_ext
 // partition and product partition under /system/system_ext and /system/product, respectively.
-bool SkipMountingPartitions(Fstab* fstab) {
-    constexpr const char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
+bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
+    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
 
     std::string skip_config;
     auto save_errno = errno;
@@ -777,7 +777,9 @@ bool SkipMountingPartitions(Fstab* fstab) {
                                  });
         if (it == fstab->end()) continue;
         fstab->erase(it, fstab->end());
-        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
+        if (verbose) {
+            LINFO << "Skip mounting partition: " << skip_mount_point;
+        }
     }
 
     return true;
@@ -787,7 +789,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
     Fstab dt_fstab;
-    ReadFstabFromDt(&dt_fstab, false);
+    ReadFstabFromDt(&dt_fstab, false /* verbose */);
 
     *fstab = std::move(dt_fstab);
 

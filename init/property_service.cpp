@@ -1176,7 +1176,7 @@ static std::string RemapEmulatorPropertyName(const std::string_view qemu_key) {
     } else if (qemu_key == "media.ccodec"sv) {
         return "debug.stagefright.ccodec"s;
     } else {
-        return ""s;  // TBD
+        return "qemu."s + std::string(qemu_key);
     }
 }
 
