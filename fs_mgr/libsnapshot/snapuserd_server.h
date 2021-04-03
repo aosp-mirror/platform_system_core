@@ -49,7 +49,15 @@ class DmUserHandler {
   public:
     explicit DmUserHandler(std::shared_ptr<Snapuserd> snapuserd);
 
-    void FreeResources() { snapuserd_ = nullptr; }
+    void FreeResources() {
+        // Each worker thread holds a reference to snapuserd.
+        // Clear them so that all the resources
+        // held by snapuserd is released
+        if (snapuserd_) {
+            snapuserd_->FreeResources();
+            snapuserd_ = nullptr;
+        }
+    }
     const std::shared_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
     std::thread& thread() { return thread_; }
 
