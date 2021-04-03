@@ -158,6 +158,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     bool CommitMerge(int num_merge_ops);
 
     void CloseFds() { cow_fd_ = {}; }
+    void FreeResources() { worker_threads_.clear(); }
     size_t GetMetadataAreaSize() { return vec_.size(); }
     void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
 
