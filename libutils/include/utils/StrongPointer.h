@@ -72,6 +72,12 @@ public:
     template<typename U> sp(const sp<U>& other);  // NOLINT(implicit)
     template<typename U> sp(sp<U>&& other);  // NOLINT(implicit)
 
+    // Cast a strong pointer directly from one type to another. Constructors
+    // allow changing types, but only if they are pointer-compatible. This does
+    // a static_cast internally.
+    template <typename U>
+    static inline sp<T> cast(const sp<U>& other);
+
     ~sp();
 
     // Assignment
@@ -277,6 +283,12 @@ template<typename T> template<typename U>
 sp<T>::sp(sp<U>&& other)
         : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
+}
+
+template <typename T>
+template <typename U>
+sp<T> sp<T>::cast(const sp<U>& other) {
+    return sp<T>::fromExisting(static_cast<T*>(other.get()));
 }
 
 template<typename T>
