@@ -241,6 +241,30 @@ TEST(RefBase, ReplacedComparison) {
     ASSERT_FALSE(wp1 != wp2);
 }
 
+TEST(RefBase, AssertWeakRefExistsSuccess) {
+    // uses some other refcounting method, or non at all
+    bool isDeleted;
+    sp<Foo> foo = sp<Foo>::make(&isDeleted);
+    wp<Foo> weakFoo = foo;
+
+    EXPECT_EQ(weakFoo, wp<Foo>::fromExisting(foo.get()));
+
+    EXPECT_FALSE(isDeleted);
+    foo = nullptr;
+    EXPECT_TRUE(isDeleted);
+}
+
+TEST(RefBase, AssertWeakRefExistsDeath) {
+    // uses some other refcounting method, or non at all
+    bool isDeleted;
+    Foo* foo = new Foo(&isDeleted);
+
+    // can only get a valid wp<> object when you construct it from an sp<>
+    EXPECT_DEATH(wp<Foo>::fromExisting(foo), "");
+
+    delete foo;
+}
+
 // Set up a situation in which we race with visit2AndRremove() to delete
 // 2 strong references.  Bar destructor checks that there are no early
 // deletions and prior updates are visible to destructor.
