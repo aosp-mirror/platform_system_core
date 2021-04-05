@@ -21,8 +21,8 @@
 
 using namespace android;
 
-class SPFoo : public LightRefBase<SPFoo> {
-public:
+class SPFoo : virtual public RefBase {
+  public:
     explicit SPFoo(bool* deleted_check) : mDeleted(deleted_check) {
         *mDeleted = false;
     }
@@ -68,4 +68,15 @@ TEST(StrongPointer, PointerComparison) {
     ASSERT_EQ(foo, foo.get());
     ASSERT_NE(nullptr, foo);
     ASSERT_NE(foo, nullptr);
+}
+
+TEST(StrongPointer, AssertStrongRefExists) {
+    // uses some other refcounting method, or non at all
+    bool isDeleted;
+    SPFoo* foo = new SPFoo(&isDeleted);
+
+    // can only get a valid sp<> object when you construct it as an sp<> object
+    EXPECT_DEATH(sp<SPFoo>::fromExisting(foo), "");
+
+    delete foo;
 }
