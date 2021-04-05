@@ -50,10 +50,25 @@ public:
     template <typename... Args>
     static inline sp<T> make(Args&&... args);
 
+    // if nullptr, returns nullptr
+    //
+    // if a strong pointer is already available, this will retrieve it,
+    // otherwise, this will abort
+    static inline sp<T> fromExisting(T* other);
+
+    // for more information about this macro and correct RefBase usage, see
+    // the comment at the top of utils/RefBase.h
+#if defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
+    sp(std::nullptr_t) : sp() {}
+#else
     sp(T* other);  // NOLINT(implicit)
+#endif
     sp(const sp<T>& other);
     sp(sp<T>&& other) noexcept;
+
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     template<typename U> sp(U* other);  // NOLINT(implicit)
+#endif
     template<typename U> sp(const sp<U>& other);  // NOLINT(implicit)
     template<typename U> sp(sp<U>&& other);  // NOLINT(implicit)
 
@@ -61,13 +76,17 @@ public:
 
     // Assignment
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     sp& operator = (T* other);
+#endif
     sp& operator = (const sp<T>& other);
     sp& operator=(sp<T>&& other) noexcept;
 
     template<typename U> sp& operator = (const sp<U>& other);
     template<typename U> sp& operator = (sp<U>&& other);
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     template<typename U> sp& operator = (U* other);
+#endif
 
     //! Special optimization for use by ProcessState (and nobody else).
     void force_set(T* other);
@@ -201,6 +220,19 @@ sp<T> sp<T>::make(Args&&... args) {
     return result;
 }
 
+template <typename T>
+sp<T> sp<T>::fromExisting(T* other) {
+    if (other) {
+        check_not_on_stack(other);
+        other->incStrongRequireStrong(other);
+        sp<T> result;
+        result.m_ptr = other;
+        return result;
+    }
+    return nullptr;
+}
+
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T>
 sp<T>::sp(T* other)
         : m_ptr(other) {
@@ -209,6 +241,7 @@ sp<T>::sp(T* other)
         other->incStrong(this);
     }
 }
+#endif
 
 template<typename T>
 sp<T>::sp(const sp<T>& other)
@@ -222,6 +255,7 @@ sp<T>::sp(sp<T>&& other) noexcept : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T> template<typename U>
 sp<T>::sp(U* other)
         : m_ptr(other) {
@@ -230,6 +264,7 @@ sp<T>::sp(U* other)
         (static_cast<T*>(other))->incStrong(this);
     }
 }
+#endif
 
 template<typename T> template<typename U>
 sp<T>::sp(const sp<U>& other)
@@ -272,6 +307,7 @@ sp<T>& sp<T>::operator=(sp<T>&& other) noexcept {
     return *this;
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T>
 sp<T>& sp<T>::operator =(T* other) {
     T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
@@ -284,6 +320,7 @@ sp<T>& sp<T>::operator =(T* other) {
     m_ptr = other;
     return *this;
 }
+#endif
 
 template<typename T> template<typename U>
 sp<T>& sp<T>::operator =(const sp<U>& other) {
@@ -306,6 +343,7 @@ sp<T>& sp<T>::operator =(sp<U>&& other) {
     return *this;
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T> template<typename U>
 sp<T>& sp<T>::operator =(U* other) {
     T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
@@ -315,6 +353,7 @@ sp<T>& sp<T>::operator =(U* other) {
     m_ptr = other;
     return *this;
 }
+#endif
 
 template<typename T>
 void sp<T>::force_set(T* other) {

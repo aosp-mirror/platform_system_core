@@ -140,7 +140,9 @@
 // count, and accidentally passed to f(sp<T>), a strong pointer to the object
 // will be temporarily constructed and destroyed, prematurely deallocating the
 // object, and resulting in heap corruption. None of this would be easily
-// visible in the source.
+// visible in the source. See below on
+// ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION for a compile time
+// option which helps avoid this case.
 
 // Extra Features:
 
@@ -166,6 +168,42 @@
 // They do NOT support concurrent access (where at least one access is a write)
 // to THE SAME sp<> or wp<>.  In effect, their thread-safety properties are
 // exactly like those of T*, NOT atomic<T*>.
+
+// Safety option: ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION
+//
+// This flag makes the semantics for using a RefBase object with wp<> and sp<>
+// much stricter by disabling implicit conversion from raw pointers to these
+// objects. In order to use this, apply this flag in Android.bp like so:
+//
+//    cflags: [
+//        "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
+//    ],
+//
+// REGARDLESS of whether this flag is on, best usage of sp<> is shown below. If
+// this flag is on, no other usage is possible (directly calling RefBase methods
+// is possible, but seeing code using 'incStrong' instead of 'sp<>', for
+// instance, should already set off big alarm bells. With carefully constructed
+// data structures, it should NEVER be necessary to directly use RefBase
+// methods). Proper RefBase usage:
+//
+//    class Foo : virtual public RefBase { ... };
+//
+//    // always construct an sp object with sp::make
+//    sp<Foo> myFoo = sp<Foo>::make(/*args*/);
+//
+//    // if you need a weak pointer, it must be constructed from a strong
+//    // pointer
+//    wp<Foo> weakFoo = myFoo; // NOT myFoo.get()
+//
+//    // If you are inside of a method of Foo and need access to a strong
+//    // explicitly call this function. This documents your intention to code
+//    // readers, and it will give a runtime error for what otherwise would
+//    // be potential double ownership
+//    .... Foo::someMethod(...) {
+//        // asserts if there is a memory issue
+//        sp<Foo> thiz = sp<Foo>::fromExisting(this);
+//    }
+//
 
 #ifndef ANDROID_REF_BASE_H
 #define ANDROID_REF_BASE_H
@@ -244,6 +282,7 @@ class RefBase
 {
 public:
             void            incStrong(const void* id) const;
+            void            incStrongRequireStrong(const void* id) const;
             void            decStrong(const void* id) const;
     
             void            forceIncStrong(const void* id) const;
@@ -257,6 +296,7 @@ public:
         RefBase*            refBase() const;
 
         void                incWeak(const void* id);
+        void                incWeakRequireWeak(const void* id);
         void                decWeak(const void* id);
 
         // acquires a strong reference if there is already one.
@@ -365,10 +405,24 @@ public:
 
     inline wp() : m_ptr(nullptr), m_refs(nullptr) { }
 
+    // if nullptr, returns nullptr
+    //
+    // if a weak pointer is already available, this will retrieve it,
+    // otherwise, this will abort
+    static inline wp<T> fromExisting(T* other);
+
+    // for more information about this flag, see above
+#if defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
+    wp(std::nullptr_t) : wp() {}
+#else
     wp(T* other);  // NOLINT(implicit)
+#endif
     wp(const wp<T>& other);
     explicit wp(const sp<T>& other);
+
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     template<typename U> wp(U* other);  // NOLINT(implicit)
+#endif
     template<typename U> wp(const sp<U>& other);  // NOLINT(implicit)
     template<typename U> wp(const wp<U>& other);  // NOLINT(implicit)
 
@@ -376,11 +430,15 @@ public:
 
     // Assignment
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     wp& operator = (T* other);
+#endif
     wp& operator = (const wp<T>& other);
     wp& operator = (const sp<T>& other);
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
     template<typename U> wp& operator = (U* other);
+#endif
     template<typename U> wp& operator = (const wp<U>& other);
     template<typename U> wp& operator = (const sp<U>& other);
 
@@ -481,12 +539,26 @@ private:
 // Note that the above comparison operations go out of their way to provide an ordering consistent
 // with ordinary pointer comparison; otherwise they could ignore m_ptr, and just compare m_refs.
 
+template <typename T>
+wp<T> wp<T>::fromExisting(T* other) {
+    if (!other) return nullptr;
+
+    auto refs = other->getWeakRefs();
+    refs->incWeakRequireWeak(other);
+
+    wp<T> ret;
+    ret.m_refs = refs;
+    return ret;
+}
+
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T>
 wp<T>::wp(T* other)
     : m_ptr(other)
 {
     m_refs = other ? m_refs = other->createWeak(this) : nullptr;
 }
+#endif
 
 template<typename T>
 wp<T>::wp(const wp<T>& other)
@@ -502,12 +574,14 @@ wp<T>::wp(const sp<T>& other)
     m_refs = m_ptr ? m_ptr->createWeak(this) : nullptr;
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T> template<typename U>
 wp<T>::wp(U* other)
     : m_ptr(other)
 {
     m_refs = other ? other->createWeak(this) : nullptr;
 }
+#endif
 
 template<typename T> template<typename U>
 wp<T>::wp(const wp<U>& other)
@@ -534,6 +608,7 @@ wp<T>::~wp()
     if (m_ptr) m_refs->decWeak(this);
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T>
 wp<T>& wp<T>::operator = (T* other)
 {
@@ -544,6 +619,7 @@ wp<T>& wp<T>::operator = (T* other)
     m_refs = newRefs;
     return *this;
 }
+#endif
 
 template<typename T>
 wp<T>& wp<T>::operator = (const wp<T>& other)
@@ -569,6 +645,7 @@ wp<T>& wp<T>::operator = (const sp<T>& other)
     return *this;
 }
 
+#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
 template<typename T> template<typename U>
 wp<T>& wp<T>::operator = (U* other)
 {
@@ -579,6 +656,7 @@ wp<T>& wp<T>::operator = (U* other)
     m_refs = newRefs;
     return *this;
 }
+#endif
 
 template<typename T> template<typename U>
 wp<T>& wp<T>::operator = (const wp<U>& other)

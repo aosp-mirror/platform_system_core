@@ -443,6 +443,20 @@ void RefBase::incStrong(const void* id) const
     refs->mBase->onFirstRef();
 }
 
+void RefBase::incStrongRequireStrong(const void* id) const {
+    weakref_impl* const refs = mRefs;
+    refs->incWeak(id);
+
+    refs->addStrongRef(id);
+    const int32_t c = refs->mStrong.fetch_add(1, std::memory_order_relaxed);
+
+    LOG_ALWAYS_FATAL_IF(c <= 0 || c == INITIAL_STRONG_VALUE,
+                        "incStrongRequireStrong() called on %p which isn't already owned", refs);
+#if PRINT_REFS
+    ALOGD("incStrong (requiring strong) of %p from %p: cnt=%d\n", this, id, c);
+#endif
+}
+
 void RefBase::decStrong(const void* id) const
 {
     weakref_impl* const refs = mRefs;
@@ -521,6 +535,14 @@ void RefBase::weakref_type::incWeak(const void* id)
     ALOG_ASSERT(c >= 0, "incWeak called on %p after last weak ref", this);
 }
 
+void RefBase::weakref_type::incWeakRequireWeak(const void* id)
+{
+    weakref_impl* const impl = static_cast<weakref_impl*>(this);
+    impl->addWeakRef(id);
+    const int32_t c __unused = impl->mWeak.fetch_add(1,
+            std::memory_order_relaxed);
+    LOG_ALWAYS_FATAL_IF(c <= 0, "incWeakRequireWeak called on %p which has no weak refs", this);
+}
 
 void RefBase::weakref_type::decWeak(const void* id)
 {
