@@ -1,0 +1,55 @@
+//
+// Copyright (C) 2021 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+rust_bindgen {
+    name: "libstatspull_bindgen",
+    wrapper_src: "statslog.h",
+    crate_name: "statspull_bindgen",
+    source_stem: "bindings",
+    bindgen_flags: [
+        "--size_t-is-usize",
+        "--whitelist-function=AStatsEventList_addStatsEvent",
+        "--whitelist-function=AStatsEvent_.*",
+        "--whitelist-function=AStatsManager_.*",
+        "--whitelist-var=AStatsManager_.*",
+    ],
+    target: {
+        android: {
+            shared_libs: [
+                "libstatspull",
+                "libstatssocket",
+            ],
+        },
+        host: {
+            static_libs: [
+                "libstatspull",
+                "libstatssocket",
+            ],
+        },
+    },
+}
+
+rust_library {
+    name: "libstatspull_rust",
+    crate_name: "statspull_rust",
+    srcs: ["stats_pull.rs"],
+    rustlibs: [
+        "liblazy_static",
+        "liblog_rust",
+        "libstatslog_rust_header",
+        "libstatspull_bindgen",
+    ],
+}
