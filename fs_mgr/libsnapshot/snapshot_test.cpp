@@ -2019,6 +2019,8 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
 
     // Read bytes back and verify they match the cache.
     ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+
+    ASSERT_TRUE(sm->UnmapAllSnapshots());
 }
 
 TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
