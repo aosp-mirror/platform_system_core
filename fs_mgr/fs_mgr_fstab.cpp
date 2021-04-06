@@ -680,7 +680,7 @@ void EnableMandatoryFlags(Fstab* fstab) {
     }
 }
 
-bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
+bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
     auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (!fstab_file) {
         PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
@@ -689,7 +689,8 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
 
     bool is_proc_mounts = path == "/proc/mounts";
 
-    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, fstab)) {
+    Fstab fstab;
+    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
@@ -714,16 +715,17 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
                 PERROR << __FUNCTION__ << "(): failed to read DSU LP names";
                 return false;
             }
-            TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
+            TransformFstabForDsu(&fstab, dsu_slot, Split(lp_names, ","));
         } else if (errno != ENOENT) {
             PERROR << __FUNCTION__ << "(): failed to access() DSU booted indicator";
             return false;
         }
     }
 
-    SkipMountingPartitions(fstab, false /* verbose */);
-    EnableMandatoryFlags(fstab);
+    SkipMountingPartitions(&fstab, false /* verbose */);
+    EnableMandatoryFlags(&fstab);
 
+    *fstab_out = std::move(fstab);
     return true;
 }
 
@@ -798,10 +800,8 @@ bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
-    Fstab dt_fstab;
-    ReadFstabFromDt(&dt_fstab, false /* verbose */);
-
-    *fstab = std::move(dt_fstab);
+    fstab->clear();
+    ReadFstabFromDt(fstab, false /* verbose */);
 
     std::string default_fstab_path;
     // Use different fstab paths for normal boot and recovery boot, respectively
