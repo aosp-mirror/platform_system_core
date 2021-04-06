@@ -693,22 +693,32 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
-    if (!is_proc_mounts && !access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
-        // This is expected to fail if host is android Q, since Q doesn't
-        // support DSU slotting. The DSU "active" indicator file would be
-        // non-existent or empty if DSU is enabled within the guest system.
-        // In that case, just use the default slot name "dsu".
-        std::string dsu_slot;
-        if (!android::gsi::GetActiveDsu(&dsu_slot)) {
-            PWARNING << __FUNCTION__ << "(): failed to get active dsu slot";
+    if (!is_proc_mounts) {
+        if (!access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
+            // This is expected to fail if host is android Q, since Q doesn't
+            // support DSU slotting. The DSU "active" indicator file would be
+            // non-existent or empty if DSU is enabled within the guest system.
+            // In that case, just use the default slot name "dsu".
+            std::string dsu_slot;
+            if (!android::gsi::GetActiveDsu(&dsu_slot) && errno != ENOENT) {
+                PERROR << __FUNCTION__ << "(): failed to get active DSU slot";
+                return false;
+            }
+            if (dsu_slot.empty()) {
+                dsu_slot = "dsu";
+                LWARNING << __FUNCTION__ << "(): assuming default DSU slot: " << dsu_slot;
+            }
+            // This file is non-existent on Q vendor.
+            std::string lp_names;
+            if (!ReadFileToString(gsi::kGsiLpNamesFile, &lp_names) && errno != ENOENT) {
+                PERROR << __FUNCTION__ << "(): failed to read DSU LP names";
+                return false;
+            }
+            TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
+        } else if (errno != ENOENT) {
+            PERROR << __FUNCTION__ << "(): failed to access() DSU booted indicator";
+            return false;
         }
-        if (dsu_slot.empty()) {
-            dsu_slot = "dsu";
-        }
-
-        std::string lp_names;
-        ReadFileToString(gsi::kGsiLpNamesFile, &lp_names);
-        TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
     }
 
     SkipMountingPartitions(fstab, false /* verbose */);
@@ -802,14 +812,12 @@ bool ReadDefaultFstab(Fstab* fstab) {
     }
 
     Fstab default_fstab;
-    if (!default_fstab_path.empty()) {
-        ReadFstabFromFile(default_fstab_path, &default_fstab);
+    if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
+        for (auto&& entry : default_fstab) {
+            fstab->emplace_back(std::move(entry));
+        }
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
-    }
-
-    for (auto&& entry : default_fstab) {
-        fstab->emplace_back(std::move(entry));
     }
 
     return !fstab->empty();
