@@ -2297,6 +2297,17 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
             return false;
         }
     }
+
+    // Terminate the daemon and release the snapuserd_client_ object.
+    // If we need to re-connect with the daemon, EnsureSnapuserdConnected()
+    // will re-create the object and establish the socket connection.
+    if (snapuserd_client_) {
+        LOG(INFO) << "Shutdown snapuserd daemon";
+        snapuserd_client_->DetachSnapuserd();
+        snapuserd_client_->CloseConnection();
+        snapuserd_client_ = nullptr;
+    }
+
     return true;
 }
 
