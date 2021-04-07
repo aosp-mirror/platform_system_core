@@ -106,10 +106,10 @@ Result<void> ParseExternalFirmwareHandlerLine(
     }
 
     if (std::find_if(external_firmware_handlers->begin(), external_firmware_handlers->end(),
-                     [&args](const auto& other) { return other.devpath == args[2]; }) !=
+                     [&args](const auto& other) { return other.devpath == args[1]; }) !=
         external_firmware_handlers->end()) {
         return Error() << "found a previous external_firmware_handler with the same devpath, '"
-                       << args[2] << "'";
+                       << args[1] << "'";
     }
 
     passwd* pwd = getpwnam(args[2].c_str());
