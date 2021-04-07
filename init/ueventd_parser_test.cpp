@@ -45,6 +45,13 @@ void TestSysfsPermissions(const SysfsPermissions& expected, const SysfsPermissio
     EXPECT_EQ(expected.attribute_, test.attribute_);
 }
 
+void TestExternalFirmwareHandler(const ExternalFirmwareHandler& expected,
+                                 const ExternalFirmwareHandler& test) {
+    EXPECT_EQ(expected.devpath, test.devpath) << expected.devpath;
+    EXPECT_EQ(expected.uid, test.uid) << expected.uid;
+    EXPECT_EQ(expected.handler_path, test.handler_path) << expected.handler_path;
+}
+
 template <typename T, typename F>
 void TestVector(const T& expected, const T& test, F function) {
     ASSERT_EQ(expected.size(), test.size());
@@ -67,6 +74,8 @@ void TestUeventdFile(const std::string& content, const UeventdConfiguration& exp
     TestVector(expected.sysfs_permissions, result.sysfs_permissions, TestSysfsPermissions);
     TestVector(expected.dev_permissions, result.dev_permissions, TestPermissions);
     EXPECT_EQ(expected.firmware_directories, result.firmware_directories);
+    TestVector(expected.external_firmware_handlers, result.external_firmware_handlers,
+               TestExternalFirmwareHandler);
 }
 
 TEST(ueventd_parser, EmptyFile) {
@@ -144,7 +153,7 @@ TEST(ueventd_parser, ExternalFirmwareHandlers) {
     auto ueventd_file = R"(
 external_firmware_handler devpath root handler_path
 external_firmware_handler /devices/path/firmware/something001.bin system /vendor/bin/firmware_handler.sh
-external_firmware_handler /devices/path/firmware/something001.bin radio "/vendor/bin/firmware_handler.sh --has --arguments"
+external_firmware_handler /devices/path/firmware/something002.bin radio "/vendor/bin/firmware_handler.sh --has --arguments"
 )";
 
     auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
@@ -159,7 +168,7 @@ external_firmware_handler /devices/path/firmware/something001.bin radio "/vendor
                     "/vendor/bin/firmware_handler.sh",
             },
             {
-                    "/devices/path/firmware/something001.bin",
+                    "/devices/path/firmware/something002.bin",
                     AID_RADIO,
                     "/vendor/bin/firmware_handler.sh --has --arguments",
             },
