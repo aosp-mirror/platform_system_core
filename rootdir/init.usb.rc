@@ -19,6 +19,9 @@ service adbd /system/bin/adbd --root_seclabel=u:r:su:s0
     updatable
     seclabel u:r:adbd:s0
 
+on property:vendor.sys.usb.adb.disabled=*
+    setprop sys.usb.adb.disabled ${vendor.sys.usb.adb.disabled}
+
 # Set default value on sys.usb.configfs early in boot sequence. It will be
 # overridden in `on boot` action of init.hardware.rc.
 on init
