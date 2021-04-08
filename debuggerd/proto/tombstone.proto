@@ -17,7 +17,7 @@ message Tombstone {
   uint32 uid = 7;
   string selinux_label = 8;
 
-  string process_name = 9;
+  repeated string command_line = 9;
 
   // Process uptime in seconds.
   uint32 process_uptime = 20;

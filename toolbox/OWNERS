@@ -1,1 +1,2 @@
 include platform/system/core:/janitors/OWNERS
+per-file modprobe.c=willmcvicker@google.com,dvander@google.com

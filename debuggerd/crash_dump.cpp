@@ -450,9 +450,6 @@ int main(int argc, char** argv) {
   //       unwind, do not make this too small. b/62828735
   alarm(30 * android::base::HwTimeoutMultiplier());
 
-  // Get the process name (aka cmdline).
-  std::string process_name = get_process_name(g_target_thread);
-
   // Collect the list of open files.
   OpenFilesList open_files;
   {
@@ -489,7 +486,6 @@ int main(int argc, char** argv) {
       info.pid = target_process;
       info.tid = thread;
       info.uid = getuid();
-      info.process_name = process_name;
       info.thread_name = get_thread_name(thread);
 
       unique_fd attr_fd(openat(target_proc_fd, "attr/current", O_RDONLY | O_CLOEXEC));
@@ -517,6 +513,8 @@ int main(int argc, char** argv) {
         ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
+
+        info.command_line = get_command_line(g_target_thread);
       } else {
         info.registers.reset(unwindstack::Regs::RemoteGet(thread));
         if (!info.registers) {
