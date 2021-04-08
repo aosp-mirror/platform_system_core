@@ -547,6 +547,7 @@ wp<T> wp<T>::fromExisting(T* other) {
     refs->incWeakRequireWeak(other);
 
     wp<T> ret;
+    ret.m_ptr = other;
     ret.m_refs = refs;
     return ret;
 }
