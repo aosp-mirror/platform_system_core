@@ -1200,6 +1200,10 @@ static void ProcessKernelCmdline() {
             // emulator specific, should be retired once emulator migrates to
             // androidboot.
             InitPropertySet("ro.boot." + key, value);
+        } else if (key == "android.bootanim" && value == "0") {
+            // emulator specific, should be retired once emulator migrates to
+            // androidboot.
+            InitPropertySet("ro.boot.debug.sf.nobootanimation", "1");
         }
     });
 }
