@@ -375,6 +375,21 @@ bool CowWriter::Finalize() {
     auto continue_num_ops = footer_.op.num_ops;
     bool extra_cluster = false;
 
+    // Blank out extra ops, in case we're in append mode and dropped ops.
+    if (cluster_size_) {
+        auto unused_cluster_space = cluster_size_ - current_cluster_size_;
+        std::string clr;
+        clr.resize(unused_cluster_space, '\0');
+        if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
+            PLOG(ERROR) << "Failed to seek to footer position.";
+            return false;
+        }
+        if (!android::base::WriteFully(fd_, clr.data(), clr.size())) {
+            PLOG(ERROR) << "clearing unused cluster area failed";
+            return false;
+        }
+    }
+
     // Footer should be at the end of a file, so if there is data after the current block, end it
     // and start a new cluster.
     if (cluster_size_ && current_data_size_ > 0) {
