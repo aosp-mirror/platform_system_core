@@ -85,8 +85,6 @@ public:
 
             bool                contains(const char16_t* chrs) const;
 
-            status_t            makeLower();
-
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
 
