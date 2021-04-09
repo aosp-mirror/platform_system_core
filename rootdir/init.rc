@@ -755,6 +755,8 @@ on post-fs-data
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
+    # directory used for on-device refresh metrics file.
+    mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
     mkdir /data/misc/odsign 0700 root root
 
