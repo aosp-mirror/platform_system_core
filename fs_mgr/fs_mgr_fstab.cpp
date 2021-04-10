@@ -255,6 +255,13 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             } else {
                 entry->reserved_size = static_cast<off64_t>(size);
             }
+        } else if (StartsWith(flag, "readahead_size_kb=")) {
+            int val;
+            if (ParseInt(arg, &val, 0, 16 * 1024)) {
+                entry->readahead_size_kb = val;
+            } else {
+                LWARNING << "Warning: readahead_size_kb= flag malformed (0 ~ 16MB): " << arg;
+            }
         } else if (StartsWith(flag, "eraseblk=")) {
             // The erase block size flag is followed by an = and the flash erase block size. Get it,
             // check that it is a power of 2 and at least 4096, and return it.
