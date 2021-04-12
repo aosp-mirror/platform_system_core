@@ -264,6 +264,7 @@ cc_defaults {
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
         "libbrotli",
+        "libc++fs",
         "libfs_mgr",
         "libgsi",
         "libgmock",
@@ -297,6 +298,7 @@ cc_binary {
     ],
     static_libs: [
         "libbrotli",
+        "libc++fs",
         "libfstab",
         "libsnapshot",
         "libsnapshot_cow",
@@ -326,6 +328,7 @@ cc_test {
         "power_test.cpp",
     ],
     static_libs: [
+        "libc++fs",
         "libsnapshot",
         "update_metadata-protos",
     ],
@@ -355,6 +358,7 @@ cc_defaults {
     static_libs: [
         "libbase",
         "libbrotli",
+        "libc++fs",
         "libchrome",
         "libcrypto_static",
         "libcutils",
@@ -416,7 +420,7 @@ cc_defaults {
         "snapuserd_server.cpp",
         "snapuserd.cpp",
         "snapuserd_daemon.cpp",
-	"snapuserd_worker.cpp",
+        "snapuserd_worker.cpp",
     ],
 
     cflags: [
