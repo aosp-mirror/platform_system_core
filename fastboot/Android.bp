@@ -183,6 +183,7 @@ cc_binary {
     ],
 
     static_libs: [
+        "libc++fs",
         "libgtest_prod",
         "libhealthhalutils",
         "libsnapshot_cow",
