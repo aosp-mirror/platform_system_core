@@ -236,7 +236,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
@@ -313,6 +313,14 @@ bool CowWriter::EmitCluster() {
     // Next cluster starts after remainder of current cluster and the next data block.
     op.source = current_data_size_ + cluster_size_ - current_cluster_size_ - sizeof(CowOperation);
     return WriteOperation(op);
+}
+
+bool CowWriter::EmitClusterIfNeeded() {
+    // If there isn't room for another op and the cluster end op, end the current cluster
+    if (cluster_size_ && cluster_size_ < current_cluster_size_ + 2 * sizeof(CowOperation)) {
+        if (!EmitCluster()) return false;
+    }
+    return true;
 }
 
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
@@ -467,12 +475,7 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
         if (!WriteRawData(data, size)) return false;
     }
     AddOperation(op);
-    // If there isn't room for another op and the cluster end op, end the current cluster
-    if (cluster_size_ && op.type != kCowClusterOp &&
-        cluster_size_ < current_cluster_size_ + 2 * sizeof(op)) {
-        if (!EmitCluster()) return false;
-    }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 void CowWriter::AddOperation(const CowOperation& op) {
