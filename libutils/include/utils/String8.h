@@ -130,9 +130,7 @@ public:
             bool                removeAll(const char* other);
 
             void                toLower();
-            void                toLower(size_t start, size_t numChars);
             void                toUpper();
-            void                toUpper(size_t start, size_t numChars);
 
 
     /*
