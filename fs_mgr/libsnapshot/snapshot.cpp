@@ -2673,8 +2673,18 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     AutoDeviceList created_devices;
 
     const auto& dap_metadata = manifest.dynamic_partition_metadata();
-    bool use_compression =
-            IsCompressionEnabled() && dap_metadata.vabc_enabled() && !device_->IsRecovery();
+    CowOptions options;
+    CowWriter writer(options);
+    bool cow_format_support = true;
+    if (dap_metadata.cow_version() < writer.GetCowVersion()) {
+        cow_format_support = false;
+    }
+
+    LOG(INFO) << " dap_metadata.cow_version(): " << dap_metadata.cow_version()
+              << " writer.GetCowVersion(): " << writer.GetCowVersion();
+
+    bool use_compression = IsCompressionEnabled() && dap_metadata.vabc_enabled() &&
+                           !device_->IsRecovery() && cow_format_support;
 
     std::string compression_algorithm;
     if (use_compression) {
