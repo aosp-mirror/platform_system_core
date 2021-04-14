@@ -27,6 +27,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr_overlayfs.h>
@@ -162,7 +163,9 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
                 partition_name == "boot_b")) {
         CopyAVBFooter(&data, block_device_size);
     }
-    WipeOverlayfsForPartition(device, partition_name);
+    if (android::base::GetProperty("ro.system.build.type", "") != "user") {
+        WipeOverlayfsForPartition(device, partition_name);
+    }
     int result = FlashBlockDevice(handle.fd(), data);
     sync();
     return result;
