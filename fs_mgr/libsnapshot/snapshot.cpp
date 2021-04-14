@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#include <filesystem>
 #include <optional>
 #include <thread>
 #include <unordered_set>
@@ -587,8 +588,7 @@ bool SnapshotManager::MapSourceDevice(LockedFile* lock, const std::string& name,
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     CHECK(lock);
 
-    auto& dm = DeviceMapper::Instance();
-    if (!dm.DeleteDeviceIfExists(name)) {
+    if (!DeleteDeviceIfExists(name)) {
         LOG(ERROR) << "Could not delete snapshot device: " << name;
         return false;
     }
@@ -1252,25 +1252,6 @@ bool SnapshotManager::OnSnapshotMergeComplete(LockedFile* lock, const std::strin
     return true;
 }
 
-static bool DeleteDmDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms) {
-    auto start = std::chrono::steady_clock::now();
-    auto& dm = DeviceMapper::Instance();
-    while (true) {
-        if (dm.DeleteDeviceIfExists(name)) {
-            break;
-        }
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
-        if (elapsed >= timeout_ms) {
-            LOG(ERROR) << "DeleteDevice timeout: " << name;
-            return false;
-        }
-        std::this_thread::sleep_for(400ms);
-    }
-
-    return true;
-}
-
 bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                                              const SnapshotStatus& status) {
     auto& dm = DeviceMapper::Instance();
@@ -1326,11 +1307,11 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         UnmapDmUserDevice(name);
     }
     auto base_name = GetBaseDeviceName(name);
-    if (!dm.DeleteDeviceIfExists(base_name)) {
+    if (!DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Unable to delete base device for snapshot: " << base_name;
     }
 
-    if (!DeleteDmDevice(GetSourceDeviceName(name), 4000ms)) {
+    if (!DeleteDeviceIfExists(GetSourceDeviceName(name), 4000ms)) {
         LOG(ERROR) << "Unable to delete source device for snapshot: " << GetSourceDeviceName(name);
     }
 
@@ -2083,15 +2064,14 @@ bool SnapshotManager::UnmapPartitionWithSnapshot(LockedFile* lock,
         return false;
     }
 
-    auto& dm = DeviceMapper::Instance();
     auto base_name = GetBaseDeviceName(target_partition_name);
-    if (!dm.DeleteDeviceIfExists(base_name)) {
+    if (!DeleteDeviceIfExists(base_name)) {
         LOG(ERROR) << "Cannot delete base device: " << base_name;
         return false;
     }
 
     auto source_name = GetSourceDeviceName(target_partition_name);
-    if (!dm.DeleteDeviceIfExists(source_name)) {
+    if (!DeleteDeviceIfExists(source_name)) {
         LOG(ERROR) << "Cannot delete source device: " << source_name;
         return false;
     }
@@ -2181,7 +2161,7 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
         return false;
     }
 
-    if (!DeleteDmDevice(GetCowName(name), 4000ms)) {
+    if (!DeleteDeviceIfExists(GetCowName(name), 4000ms)) {
         LOG(ERROR) << "Cannot unmap: " << GetCowName(name);
         return false;
     }
@@ -2202,7 +2182,7 @@ bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
         return true;
     }
 
-    if (!dm.DeleteDeviceIfExists(dm_user_name)) {
+    if (!DeleteDeviceIfExists(dm_user_name)) {
         LOG(ERROR) << "Cannot unmap " << dm_user_name;
         return false;
     }
@@ -2593,11 +2573,10 @@ bool SnapshotManager::ForceLocalImageManager() {
     return true;
 }
 
-static void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
-    auto& dm = DeviceMapper::Instance();
+void SnapshotManager::UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata) {
     std::vector<std::string> to_delete;
     for (auto* existing_cow_partition : current_metadata->ListPartitionsInGroup(kCowGroupName)) {
-        if (!dm.DeleteDeviceIfExists(existing_cow_partition->name())) {
+        if (!DeleteDeviceIfExists(existing_cow_partition->name())) {
             LOG(WARNING) << existing_cow_partition->name()
                          << " cannot be unmapped and its space cannot be reclaimed";
             continue;
@@ -3624,6 +3603,72 @@ void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
     stats->set_cow_file_size(cow_file_size);
     stats->set_total_cow_size_bytes(total_cow_size);
     stats->set_estimated_cow_size_bytes(estimated_cow_size);
+}
+
+bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
+                                           const std::chrono::milliseconds& timeout_ms) {
+    auto& dm = DeviceMapper::Instance();
+    auto start = std::chrono::steady_clock::now();
+    while (true) {
+        if (dm.DeleteDeviceIfExists(name)) {
+            return true;
+        }
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+        if (elapsed >= timeout_ms) {
+            break;
+        }
+        std::this_thread::sleep_for(400ms);
+    }
+
+    // Try to diagnose why this failed. First get the actual device path.
+    std::string full_path;
+    if (!dm.GetDmDevicePathByName(name, &full_path)) {
+        LOG(ERROR) << "Unable to diagnose DM_DEV_REMOVE failure.";
+        return false;
+    }
+
+    // Check for child dm-devices.
+    std::string block_name = android::base::Basename(full_path);
+    std::string sysfs_holders = "/sys/class/block/" + block_name + "/holders";
+
+    std::error_code ec;
+    std::filesystem::directory_iterator dir_iter(sysfs_holders, ec);
+    if (auto begin = std::filesystem::begin(dir_iter); begin != std::filesystem::end(dir_iter)) {
+        LOG(ERROR) << "Child device-mapper device still mapped: " << begin->path();
+        return false;
+    }
+
+    // Check for mounted partitions.
+    android::fs_mgr::Fstab fstab;
+    android::fs_mgr::ReadFstabFromFile("/proc/mounts", &fstab);
+    for (const auto& entry : fstab) {
+        if (android::base::Basename(entry.blk_device) == block_name) {
+            LOG(ERROR) << "Partition still mounted: " << entry.mount_point;
+            return false;
+        }
+    }
+
+    // Check for detached mounted partitions.
+    for (const auto& fs : std::filesystem::directory_iterator("/sys/fs", ec)) {
+        std::string fs_type = android::base::Basename(fs.path().c_str());
+        if (!(fs_type == "ext4" || fs_type == "f2fs")) {
+            continue;
+        }
+
+        std::string path = fs.path().c_str() + "/"s + block_name;
+        if (access(path.c_str(), F_OK) == 0) {
+            LOG(ERROR) << "Block device was lazily unmounted and is still in-use: " << full_path
+                       << "; possibly open file descriptor or attached loop device.";
+            return false;
+        }
+    }
+
+    LOG(ERROR) << "Device-mapper device " << name << "(" << full_path << ")"
+               << " still in use."
+               << "  Probably a file descriptor was leaked or held open, or a loop device is"
+               << " attached.";
+    return false;
 }
 
 }  // namespace snapshot
