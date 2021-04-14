@@ -450,10 +450,22 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
 
 // zram is able to use backing device on top of a loopback device.
 // In order to unmount /data successfully, we have to kill the loopback device first
-#define ZRAM_DEVICE   "/dev/block/zram0"
-#define ZRAM_RESET    "/sys/block/zram0/reset"
-#define ZRAM_BACK_DEV "/sys/block/zram0/backing_dev"
+#define ZRAM_DEVICE       "/dev/block/zram0"
+#define ZRAM_RESET        "/sys/block/zram0/reset"
+#define ZRAM_BACK_DEV     "/sys/block/zram0/backing_dev"
+#define ZRAM_INITSTATE    "/sys/block/zram0/initstate"
 static Result<void> KillZramBackingDevice() {
+    std::string zram_initstate;
+    if (!android::base::ReadFileToString(ZRAM_INITSTATE, &zram_initstate)) {
+        return ErrnoError() << "Failed to read " << ZRAM_INITSTATE;
+    }
+
+    zram_initstate.erase(zram_initstate.length() - 1);
+    if (zram_initstate == "0") {
+        LOG(INFO) << "Zram has not been swapped on";
+        return {};
+    }
+
     if (access(ZRAM_BACK_DEV, F_OK) != 0 && errno == ENOENT) {
         LOG(INFO) << "No zram backing device configured";
         return {};
