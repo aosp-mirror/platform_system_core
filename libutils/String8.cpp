@@ -426,19 +426,6 @@ void String8::toLower()
     unlockBuffer(length);
 }
 
-void String8::toUpper()
-{
-    const size_t length = size();
-    if (length == 0) return;
-
-    char* buf = lockBuffer(length);
-    for (size_t i = length; i > 0; --i) {
-        *buf = static_cast<char>(toupper(*buf));
-        buf++;
-    }
-    unlockBuffer(length);
-}
-
 // ---------------------------------------------------------------------------
 // Path functions
 
