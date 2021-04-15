@@ -42,9 +42,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
 
                 // Casing
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->toUpper();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     str1->toLower();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8* str2) -> void {
