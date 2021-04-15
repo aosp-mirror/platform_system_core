@@ -34,11 +34,6 @@ std::vector<std::function<void(FuzzedDataProvider&, android::String16, android::
                     str1.size();
                 }),
 
-                // Casing
-                ([](FuzzedDataProvider&, android::String16 str1, android::String16) -> void {
-                    str1.makeLower();
-                }),
-
                 // Comparison
                 ([](FuzzedDataProvider&, android::String16 str1, android::String16 str2) -> void {
                     str1.startsWith(str2);

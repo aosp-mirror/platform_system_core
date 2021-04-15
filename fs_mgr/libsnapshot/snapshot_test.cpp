@@ -2019,6 +2019,36 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
 
     // Read bytes back and verify they match the cache.
     ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+
+    ASSERT_TRUE(sm->UnmapAllSnapshots());
+}
+
+TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
+    AddOperationForPartitions();
+
+    // Execute the update from B->A.
+    test_device->set_slot_suffix("_b");
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    std::string path;
+    ASSERT_TRUE(CreateLogicalPartition(
+            CreateLogicalPartitionParams{
+                    .block_device = fake_super,
+                    .metadata_slot = 0,
+                    .partition_name = "sys_a",
+                    .timeout_ms = 1s,
+                    .partition_opener = opener_.get(),
+            },
+            &path));
+
+    // Hold sys_a open so it can't be unmapped.
+    unique_fd fd(open(path.c_str(), O_RDONLY));
+
+    // Switch back to "A", make sure we can cancel. Instead of unmapping sys_a
+    // we should simply delete the old snapshots.
+    test_device->set_slot_suffix("_a");
+    ASSERT_TRUE(sm->BeginUpdate());
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,

@@ -34,22 +34,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void bootimg_set_cmdline_v3(boot_img_hdr_v3* h, const std::string& cmdline) {
+static void bootimg_set_cmdline_v3_and_above(boot_img_hdr_v3* h, const std::string& cmdline) {
     if (cmdline.size() >= sizeof(h->cmdline)) die("command line too large: %zu", cmdline.size());
     strcpy(reinterpret_cast<char*>(h->cmdline), cmdline.c_str());
 }
 
 void bootimg_set_cmdline(boot_img_hdr_v2* h, const std::string& cmdline) {
-    if (h->header_version == 3) {
-        return bootimg_set_cmdline_v3(reinterpret_cast<boot_img_hdr_v3*>(h), cmdline);
+    if (h->header_version >= 3) {
+        return bootimg_set_cmdline_v3_and_above(reinterpret_cast<boot_img_hdr_v3*>(h), cmdline);
     }
     if (cmdline.size() >= sizeof(h->cmdline)) die("command line too large: %zu", cmdline.size());
     strcpy(reinterpret_cast<char*>(h->cmdline), cmdline.c_str());
 }
 
-static boot_img_hdr_v3* mkbootimg_v3(const std::vector<char>& kernel,
-                                     const std::vector<char>& ramdisk, const boot_img_hdr_v2& src,
-                                     std::vector<char>* out) {
+static void mkbootimg_v3_and_above(const std::vector<char>& kernel,
+                                   const std::vector<char>& ramdisk, const boot_img_hdr_v2& src,
+                                   std::vector<char>* out) {
 #define V3_PAGE_SIZE 4096
     const size_t page_mask = V3_PAGE_SIZE - 1;
     int64_t kernel_actual = (kernel.size() + page_mask) & (~page_mask);
@@ -65,22 +65,27 @@ static boot_img_hdr_v3* mkbootimg_v3(const std::vector<char>& kernel,
     hdr->ramdisk_size = ramdisk.size();
     hdr->os_version = src.os_version;
     hdr->header_size = sizeof(boot_img_hdr_v3);
-    hdr->header_version = 3;
+    hdr->header_version = src.header_version;
+
+    if (src.header_version >= 4) {
+        auto hdr_v4 = reinterpret_cast<boot_img_hdr_v4*>(hdr);
+        hdr_v4->signature_size = 0;
+    }
 
     memcpy(hdr->magic + V3_PAGE_SIZE, kernel.data(), kernel.size());
     memcpy(hdr->magic + V3_PAGE_SIZE + kernel_actual, ramdisk.data(), ramdisk.size());
-
-    return hdr;
 }
 
-boot_img_hdr_v2* mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
-                           const std::vector<char>& second, const std::vector<char>& dtb,
-                           size_t base, const boot_img_hdr_v2& src, std::vector<char>* out) {
-    if (src.header_version == 3) {
+void mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
+               const std::vector<char>& second, const std::vector<char>& dtb, size_t base,
+               const boot_img_hdr_v2& src, std::vector<char>* out) {
+    if (src.header_version >= 3) {
         if (!second.empty() || !dtb.empty()) {
-            die("Second stage bootloader and dtb not supported in v3 boot image\n");
+            die("Second stage bootloader and dtb not supported in v%d boot image\n",
+                src.header_version);
         }
-        return reinterpret_cast<boot_img_hdr_v2*>(mkbootimg_v3(kernel, ramdisk, src, out));
+        mkbootimg_v3_and_above(kernel, ramdisk, src, out);
+        return;
     }
     const size_t page_mask = src.page_size - 1;
 
@@ -122,5 +127,4 @@ boot_img_hdr_v2* mkbootimg(const std::vector<char>& kernel, const std::vector<ch
            second.size());
     memcpy(hdr->magic + hdr->page_size + kernel_actual + ramdisk_actual + second_actual, dtb.data(),
            dtb.size());
-    return hdr;
 }

@@ -25,6 +25,10 @@
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 
+using testing::AssertionFailure;
+using testing::AssertionResult;
+using testing::AssertionSuccess;
+
 namespace android {
 namespace snapshot {
 
@@ -779,6 +783,202 @@ TEST_F(CowTest, AppendAfterFinalize) {
     // COW should be valid.
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
+}
+
+AssertionResult WriteDataBlock(CowWriter* writer, uint64_t new_block, std::string data) {
+    data.resize(writer->options().block_size, '\0');
+    if (!writer->AddRawBlocks(new_block, data.data(), data.size())) {
+        return AssertionFailure() << "Failed to add raw block";
+    }
+    return AssertionSuccess();
+}
+
+AssertionResult CompareDataBlock(CowReader* reader, const CowOperation& op,
+                                 const std::string& data) {
+    CowHeader header;
+    reader->GetHeader(&header);
+
+    std::string cmp = data;
+    cmp.resize(header.block_size, '\0');
+
+    StringSink sink;
+    if (!reader->ReadData(op, &sink)) {
+        return AssertionFailure() << "Failed to read data block";
+    }
+    if (cmp != sink.stream()) {
+        return AssertionFailure() << "Data blocks did not match, expected " << cmp << ", got "
+                                  << sink.stream();
+    }
+
+    return AssertionSuccess();
+}
+
+TEST_F(CowTest, ResumeMidCluster) {
+    CowOptions options;
+    options.cluster_ops = 7;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 3, "Block 3"));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 7, "Block 7"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 8, "Block 8"));
+    ASSERT_TRUE(writer->AddLabel(2));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    size_t num_replace = 0;
+    size_t max_in_cluster = 0;
+    size_t num_in_cluster = 0;
+    size_t num_clusters = 0;
+    while (!iter->Done()) {
+        const auto& op = iter->Get();
+
+        num_in_cluster++;
+        max_in_cluster = std::max(max_in_cluster, num_in_cluster);
+
+        if (op.type == kCowReplaceOp) {
+            num_replace++;
+
+            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
+        } else if (op.type == kCowClusterOp) {
+            num_in_cluster = 0;
+            num_clusters++;
+        }
+
+        iter->Next();
+    }
+    ASSERT_EQ(num_replace, 8);
+    ASSERT_EQ(max_in_cluster, 7);
+    ASSERT_EQ(num_clusters, 2);
+}
+
+TEST_F(CowTest, ResumeEndCluster) {
+    CowOptions options;
+    int cluster_ops = 5;
+    options.cluster_ops = cluster_ops;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 3, "Block 3"));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 7, "Block 7"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 8, "Block 8"));
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 7, "Block 7"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 8, "Block 8"));
+    ASSERT_TRUE(writer->AddLabel(2));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    size_t num_replace = 0;
+    size_t max_in_cluster = 0;
+    size_t num_in_cluster = 0;
+    size_t num_clusters = 0;
+    while (!iter->Done()) {
+        const auto& op = iter->Get();
+
+        num_in_cluster++;
+        max_in_cluster = std::max(max_in_cluster, num_in_cluster);
+
+        if (op.type == kCowReplaceOp) {
+            num_replace++;
+
+            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
+        } else if (op.type == kCowClusterOp) {
+            num_in_cluster = 0;
+            num_clusters++;
+        }
+
+        iter->Next();
+    }
+    ASSERT_EQ(num_replace, 8);
+    ASSERT_EQ(max_in_cluster, cluster_ops);
+    ASSERT_EQ(num_clusters, 3);
+}
+
+TEST_F(CowTest, DeleteMidCluster) {
+    CowOptions options;
+    options.cluster_ops = 7;
+    auto writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 3, "Block 3"));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
+    ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    size_t num_replace = 0;
+    size_t max_in_cluster = 0;
+    size_t num_in_cluster = 0;
+    size_t num_clusters = 0;
+    while (!iter->Done()) {
+        const auto& op = iter->Get();
+
+        num_in_cluster++;
+        max_in_cluster = std::max(max_in_cluster, num_in_cluster);
+        if (op.type == kCowReplaceOp) {
+            num_replace++;
+
+            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
+        } else if (op.type == kCowClusterOp) {
+            num_in_cluster = 0;
+            num_clusters++;
+        }
+
+        iter->Next();
+    }
+    ASSERT_EQ(num_replace, 3);
+    ASSERT_EQ(max_in_cluster, 5);  // 3 data, 1 label, 1 cluster op
+    ASSERT_EQ(num_clusters, 1);
 }
 
 }  // namespace snapshot
