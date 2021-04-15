@@ -232,15 +232,11 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Remove excess data
-    if (!Truncate(next_op_pos_)) {
-        return false;
-    }
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
@@ -319,6 +315,14 @@ bool CowWriter::EmitCluster() {
     return WriteOperation(op);
 }
 
+bool CowWriter::EmitClusterIfNeeded() {
+    // If there isn't room for another op and the cluster end op, end the current cluster
+    if (cluster_size_ && cluster_size_ < current_cluster_size_ + 2 * sizeof(CowOperation)) {
+        if (!EmitCluster()) return false;
+    }
+    return true;
+}
+
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
     switch (compression_) {
         case kCowCompressGz: {
@@ -379,6 +383,21 @@ bool CowWriter::Finalize() {
     auto continue_num_ops = footer_.op.num_ops;
     bool extra_cluster = false;
 
+    // Blank out extra ops, in case we're in append mode and dropped ops.
+    if (cluster_size_) {
+        auto unused_cluster_space = cluster_size_ - current_cluster_size_;
+        std::string clr;
+        clr.resize(unused_cluster_space, '\0');
+        if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
+            PLOG(ERROR) << "Failed to seek to footer position.";
+            return false;
+        }
+        if (!android::base::WriteFully(fd_, clr.data(), clr.size())) {
+            PLOG(ERROR) << "clearing unused cluster area failed";
+            return false;
+        }
+    }
+
     // Footer should be at the end of a file, so if there is data after the current block, end it
     // and start a new cluster.
     if (cluster_size_ && current_data_size_ > 0) {
@@ -400,6 +419,17 @@ bool CowWriter::Finalize() {
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&footer_),
                                    sizeof(footer_))) {
         PLOG(ERROR) << "write footer failed";
+        return false;
+    }
+
+    // Remove excess data, if we're in append mode and threw away more data
+    // than we wrote before.
+    off_t offs = lseek(fd_.get(), 0, SEEK_CUR);
+    if (offs < 0) {
+        PLOG(ERROR) << "Failed to lseek to find current position";
+        return false;
+    }
+    if (!Truncate(offs)) {
         return false;
     }
 
@@ -445,12 +475,7 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
         if (!WriteRawData(data, size)) return false;
     }
     AddOperation(op);
-    // If there isn't room for another op and the cluster end op, end the current cluster
-    if (cluster_size_ && op.type != kCowClusterOp &&
-        cluster_size_ < current_cluster_size_ + 2 * sizeof(op)) {
-        if (!EmitCluster()) return false;
-    }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 void CowWriter::AddOperation(const CowOperation& op) {
