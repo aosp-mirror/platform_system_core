@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -253,6 +254,13 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                 LWARNING << "Warning: reservedsize= flag malformed: " << arg;
             } else {
                 entry->reserved_size = static_cast<off64_t>(size);
+            }
+        } else if (StartsWith(flag, "readahead_size_kb=")) {
+            int val;
+            if (ParseInt(arg, &val, 0, 16 * 1024)) {
+                entry->readahead_size_kb = val;
+            } else {
+                LWARNING << "Warning: readahead_size_kb= flag malformed (0 ~ 16MB): " << arg;
             }
         } else if (StartsWith(flag, "eraseblk=")) {
             // The erase block size flag is followed by an = and the flash erase block size. Get it,
@@ -680,7 +688,7 @@ void EnableMandatoryFlags(Fstab* fstab) {
     }
 }
 
-bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
+bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
     auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
     if (!fstab_file) {
         PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
@@ -689,41 +697,51 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
 
     bool is_proc_mounts = path == "/proc/mounts";
 
-    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, fstab)) {
+    Fstab fstab;
+    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
-    if (!is_proc_mounts && !access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
-        // This is expected to fail if host is android Q, since Q doesn't
-        // support DSU slotting. The DSU "active" indicator file would be
-        // non-existent or empty if DSU is enabled within the guest system.
-        // In that case, just use the default slot name "dsu".
-        std::string dsu_slot;
-        if (!android::gsi::GetActiveDsu(&dsu_slot)) {
-            PWARNING << __FUNCTION__ << "(): failed to get active dsu slot";
+    if (!is_proc_mounts) {
+        if (!access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
+            // This is expected to fail if host is android Q, since Q doesn't
+            // support DSU slotting. The DSU "active" indicator file would be
+            // non-existent or empty if DSU is enabled within the guest system.
+            // In that case, just use the default slot name "dsu".
+            std::string dsu_slot;
+            if (!android::gsi::GetActiveDsu(&dsu_slot) && errno != ENOENT) {
+                PERROR << __FUNCTION__ << "(): failed to get active DSU slot";
+                return false;
+            }
+            if (dsu_slot.empty()) {
+                dsu_slot = "dsu";
+                LWARNING << __FUNCTION__ << "(): assuming default DSU slot: " << dsu_slot;
+            }
+            // This file is non-existent on Q vendor.
+            std::string lp_names;
+            if (!ReadFileToString(gsi::kGsiLpNamesFile, &lp_names) && errno != ENOENT) {
+                PERROR << __FUNCTION__ << "(): failed to read DSU LP names";
+                return false;
+            }
+            TransformFstabForDsu(&fstab, dsu_slot, Split(lp_names, ","));
+        } else if (errno != ENOENT) {
+            PERROR << __FUNCTION__ << "(): failed to access() DSU booted indicator";
+            return false;
         }
-        if (dsu_slot.empty()) {
-            dsu_slot = "dsu";
-        }
-
-        std::string lp_names;
-        ReadFileToString(gsi::kGsiLpNamesFile, &lp_names);
-        TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
-    EnableMandatoryFlags(fstab);
+    SkipMountingPartitions(&fstab, false /* verbose */);
+    EnableMandatoryFlags(&fstab);
 
+    *fstab_out = std::move(fstab);
     return true;
 }
 
 // Returns fstab entries parsed from the device tree if they exist
-bool ReadFstabFromDt(Fstab* fstab, bool log) {
+bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
     std::string fstab_buf = ReadFstabFromDt();
     if (fstab_buf.empty()) {
-        if (log) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
+        if (verbose) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
         return false;
     }
 
@@ -731,34 +749,36 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
                  fstab_buf.length(), "r"), fclose);
     if (!fstab_file) {
-        if (log) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
+        if (verbose) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
         return false;
     }
 
     if (!ReadFstabFile(fstab_file.get(), false, fstab)) {
-        if (log) {
+        if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;
         }
         return false;
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
+    SkipMountingPartitions(fstab, verbose);
 
     return true;
 }
 
-#ifndef NO_SKIP_MOUNT
+#ifdef NO_SKIP_MOUNT
+bool SkipMountingPartitions(Fstab*, bool) {
+    return true;
+}
+#else
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
 // only common files for all targets can be put into system partition. It is under
 // /system/system_ext because GSI is a single system.img that includes the contents of system_ext
 // partition and product partition under /system/system_ext and /system/product, respectively.
-bool SkipMountingPartitions(Fstab* fstab) {
-    constexpr const char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
+bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
+    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
 
     std::string skip_config;
     auto save_errno = errno;
@@ -767,29 +787,39 @@ bool SkipMountingPartitions(Fstab* fstab) {
         return true;
     }
 
-    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
-        if (skip_mount_point.empty()) {
+    std::vector<std::string> skip_mount_patterns;
+    for (const auto& line : Split(skip_config, "\n")) {
+        if (line.empty() || StartsWith(line, "#")) {
             continue;
         }
-        auto it = std::remove_if(fstab->begin(), fstab->end(),
-                                 [&skip_mount_point](const auto& entry) {
-                                     return entry.mount_point == skip_mount_point;
-                                 });
-        if (it == fstab->end()) continue;
-        fstab->erase(it, fstab->end());
-        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
+        skip_mount_patterns.push_back(line);
     }
 
+    // Returns false if mount_point matches any of the skip mount patterns, so that the FstabEntry
+    // would be partitioned to the second group.
+    auto glob_pattern_mismatch = [&skip_mount_patterns](const FstabEntry& entry) -> bool {
+        for (const auto& pattern : skip_mount_patterns) {
+            if (!fnmatch(pattern.c_str(), entry.mount_point.c_str(), 0 /* flags */)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    auto remove_from = std::stable_partition(fstab->begin(), fstab->end(), glob_pattern_mismatch);
+    if (verbose) {
+        for (auto it = remove_from; it != fstab->end(); ++it) {
+            LINFO << "Skip mounting mountpoint: " << it->mount_point;
+        }
+    }
+    fstab->erase(remove_from, fstab->end());
     return true;
 }
 #endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
-    Fstab dt_fstab;
-    ReadFstabFromDt(&dt_fstab, false);
-
-    *fstab = std::move(dt_fstab);
+    fstab->clear();
+    ReadFstabFromDt(fstab, false /* verbose */);
 
     std::string default_fstab_path;
     // Use different fstab paths for normal boot and recovery boot, respectively
@@ -800,14 +830,12 @@ bool ReadDefaultFstab(Fstab* fstab) {
     }
 
     Fstab default_fstab;
-    if (!default_fstab_path.empty()) {
-        ReadFstabFromFile(default_fstab_path, &default_fstab);
+    if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
+        for (auto&& entry : default_fstab) {
+            fstab->emplace_back(std::move(entry));
+        }
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
-    }
-
-    for (auto&& entry : default_fstab) {
-        fstab->emplace_back(std::move(entry));
     }
 
     return !fstab->empty();

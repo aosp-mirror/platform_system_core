@@ -493,6 +493,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Unmap a COW image device previously mapped with MapCowImage().
     bool UnmapCowImage(const std::string& name);
 
+    // Unmap a COW and remove it from a MetadataBuilder.
+    void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata);
+
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
 
@@ -737,6 +740,10 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper of UpdateUsesCompression
     bool UpdateUsesCompression(LockedFile* lock);
+
+    // Wrapper around libdm, with diagnostics.
+    bool DeleteDeviceIfExists(const std::string& name,
+                              const std::chrono::milliseconds& timeout_ms = {});
 
     std::string gsid_dir_;
     std::string metadata_dir_;

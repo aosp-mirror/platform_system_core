@@ -144,7 +144,8 @@ RetCode FastBootDriver::FlashPartition(const std::string& partition,
     return Flash(partition);
 }
 
-RetCode FastBootDriver::FlashPartition(const std::string& partition, int fd, uint32_t size) {
+RetCode FastBootDriver::FlashPartition(const std::string& partition, android::base::borrowed_fd fd,
+                                       uint32_t size) {
     RetCode ret;
     if ((ret = Download(partition, fd, size))) {
         return ret;
@@ -182,15 +183,16 @@ RetCode FastBootDriver::Partitions(std::vector<std::tuple<std::string, uint64_t>
     return SUCCESS;
 }
 
-RetCode FastBootDriver::Download(const std::string& name, int fd, size_t size,
-                                 std::string* response, std::vector<std::string>* info) {
+RetCode FastBootDriver::Download(const std::string& name, android::base::borrowed_fd fd,
+                                 size_t size, std::string* response,
+                                 std::vector<std::string>* info) {
     prolog_(StringPrintf("Sending '%s' (%zu KB)", name.c_str(), size / 1024));
     auto result = Download(fd, size, response, info);
     epilog_(result);
     return result;
 }
 
-RetCode FastBootDriver::Download(int fd, size_t size, std::string* response,
+RetCode FastBootDriver::Download(android::base::borrowed_fd fd, size_t size, std::string* response,
                                  std::vector<std::string>* info) {
     RetCode ret;
 
@@ -521,7 +523,7 @@ std::string FastBootDriver::ErrnoStr(const std::string& msg) {
 }
 
 /******************************* PRIVATE **************************************/
-RetCode FastBootDriver::SendBuffer(int fd, size_t size) {
+RetCode FastBootDriver::SendBuffer(android::base::borrowed_fd fd, size_t size) {
     static constexpr uint32_t MAX_MAP_SIZE = 512 * 1024 * 1024;
     off64_t offset = 0;
     uint32_t remaining = size;

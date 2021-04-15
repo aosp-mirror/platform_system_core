@@ -755,6 +755,8 @@ on post-fs-data
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
+    # directory used for on-device refresh metrics file.
+    mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
     mkdir /data/misc/odsign 0700 root root
 
@@ -821,6 +823,9 @@ on post-fs-data
     mkdir /data/ss 0700 system system encryption=Require
 
     mkdir /data/system 0775 system system encryption=Require
+    mkdir /data/system/environ 0700 system system
+    # b/183861600 attempt to fix selinux label before running derive_classpath service
+    restorecon /data/system/environ
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
@@ -884,10 +889,6 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Export *CLASSPATH variables from /etc/classpath
-    # TODO(b/180105615): export from the generated file instead.
-    load_exports /etc/classpath
-
     # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
@@ -900,8 +901,15 @@ on post-fs-data
     # Set SELinux security contexts on upgrade or policy update.
     restorecon --recursive --skip-ce /data
 
+    # Define and export *CLASSPATH variables
+    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
+    exec_start derive_classpath
+    load_exports /data/system/environ/classpath
+    rm /data/system/environ/classpath
+
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
+    # Must start after 'derive_classpath' to have *CLASSPATH variables set.
     start odsign
 
     # Before we can lock keys and proceed to the next boot stage, wait for
@@ -979,7 +987,7 @@ on boot && property:ro.config.low_ram=true
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
 
-on property:sys.boot_completed=1 && property:init.mount_debugfs=1
+on property:sys.boot_completed=1 && property:ro.product.enforce_debugfs_restrictions=true
    umount /sys/kernel/debug
 
 on boot
@@ -1141,6 +1149,11 @@ on property:sys.boot_completed=1
 on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
 
+# Allow users to drop caches
+on property:perf.drop_caches=3
+    write /proc/sys/vm/drop_caches 3
+    setprop perf.drop_caches 0
+
 # "tcp_default_init_rwnd" Is too long!
 on property:net.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
@@ -1252,7 +1265,7 @@ on userspace-reboot-resume
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
 
-on early-init && property:init.mount_debugfs=1
+on early-init && property:ro.product.enforce_debugfs_restrictions=true
     mount debugfs debugfs /sys/kernel/debug
     chmod 0755 /sys/kernel/debug
 

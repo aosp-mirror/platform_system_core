@@ -29,13 +29,11 @@
 #include <android-base/properties.h>
 #include <android/binder_ibinder.h>
 #include <android/binder_manager.h>
-#include <android/security/keystore/IKeystoreService.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
 #include <gatekeeper/password_handle.h>  // for password_handle_t
 #include <hardware/hw_auth_token.h>
-#include <keystore/keystore_return_types.h>
 #include <libgsi/libgsi.h>
 #include <log/log.h>
 #include <utils/String16.h>
@@ -303,7 +301,7 @@ class GateKeeperProxy : public BnGateKeeperService {
             if (gkResponse->payload().size() != 0) {
                 // try to connect to IKeystoreAuthorization AIDL service first.
                 AIBinder* authzAIBinder =
-                        AServiceManager_checkService("android.security.authorization");
+                        AServiceManager_getService("android.security.authorization");
                 ::ndk::SpAIBinder authzBinder(authzAIBinder);
                 auto authzService = IKeystoreAuthorization::fromBinder(authzBinder);
                 if (authzService) {
@@ -326,21 +324,6 @@ class GateKeeperProxy : public BnGateKeeperService {
                     auto result = authzService->addAuthToken(authToken);
                     if (!result.isOk()) {
                         LOG(ERROR) << "Failure in sending AuthToken to AuthorizationService.";
-                        return GK_ERROR;
-                    }
-                }
-                sp<IServiceManager> sm = defaultServiceManager();
-
-                sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
-                sp<security::keystore::IKeystoreService> service =
-                        interface_cast<security::keystore::IKeystoreService>(binder);
-
-                if (service) {
-                    int result = 0;
-                    auto binder_result = service->addAuthToken(gkResponse->payload(), &result);
-                    if (!binder_result.isOk() ||
-                        !keystore::KeyStoreServiceReturnCode(result).isOk()) {
-                        LOG(ERROR) << "Failure sending auth token to KeyStore: " << result;
                         return GK_ERROR;
                     }
                 } else {

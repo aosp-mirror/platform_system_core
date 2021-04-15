@@ -115,6 +115,7 @@ class CowWriter : public ICowWriter {
 
   private:
     bool EmitCluster();
+    bool EmitClusterIfNeeded();
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();

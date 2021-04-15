@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <unwindstack/Regs.h>
 
@@ -32,13 +33,14 @@ struct ThreadInfo {
 
   pid_t pid;
 
-  std::string process_name;
+  std::vector<std::string> command_line;
   std::string selinux_label;
 
   int signo = 0;
   siginfo_t* siginfo = nullptr;
 };
 
+// This struct is written into a pipe from inside the crashing process.
 struct ProcessInfo {
   uintptr_t abort_msg_address = 0;
   uintptr_t fdsan_table_address = 0;
