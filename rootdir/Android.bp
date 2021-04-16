@@ -20,7 +20,10 @@ prebuilt_etc {
     name: "init.rc",
     src: "init.rc",
     sub_dir: "init/hw",
-    required: ["fsverity_init"],
+    required: [
+        "fsverity_init",
+        "platform-bootclasspath",
+    ],
 }
 
 prebuilt_etc {
