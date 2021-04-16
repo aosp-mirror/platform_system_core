@@ -363,8 +363,9 @@ rust_bindgen {
     local_include_dirs: ["include"],
     bindgen_flags: [
         "--whitelist-function", "multiuser_get_app_id",
-        "--whitelist-function", "multiuser_get_user_id",
         "--whitelist-function", "multiuser_get_uid",
+        "--whitelist-function", "multiuser_get_user_id",
+        "--whitelist-var", "AID_KEYSTORE",
         "--whitelist-var", "AID_USER_OFFSET",
     ],
 }
