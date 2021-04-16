@@ -35,3 +35,11 @@ linker_config {
     src: "etc/linker.config.json",
     installable: false,
 }
+
+// TODO(b/185211376) Scope the native APIs that microdroid will provide to the app payload
+prebuilt_etc {
+    name: "public.libraries.android.txt",
+    src: "etc/public.libraries.android.txt",
+    filename: "public.libraries.txt",
+    installable: false,
+}
