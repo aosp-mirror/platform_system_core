@@ -15,6 +15,7 @@
  */
 
 #include <dirent.h>
+#include <dlfcn.h>
 #include <err.h>
 #include <fcntl.h>
 #include <malloc.h>
@@ -30,6 +31,7 @@
 
 #include <chrono>
 #include <regex>
+#include <string>
 #include <thread>
 
 #include <android/fdsan.h>
@@ -1508,6 +1510,60 @@ TEST_F(CrasherTest, stack_overflow) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
+}
+
+static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
+  std::string test_lib(testing::internal::GetArgvs()[0]);
+  auto const value = test_lib.find_last_of('/');
+  if (value == std::string::npos) {
+    test_lib = "./";
+  } else {
+    test_lib = test_lib.substr(0, value + 1) + "./";
+  }
+  test_lib += "libcrash_test.so";
+
+  *tmp_so_name = std::string(tmp_dir) + "/libcrash_test.so";
+  std::string cp_cmd = android::base::StringPrintf("cp %s %s", test_lib.c_str(), tmp_dir);
+
+  // Copy the shared so to a tempory directory.
+  return system(cp_cmd.c_str()) == 0;
+}
+
+TEST_F(CrasherTest, unreadable_elf) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    TemporaryDir td;
+    std::string tmp_so_name;
+    if (!CopySharedLibrary(td.path, &tmp_so_name)) {
+      _exit(1);
+    }
+    void* handle = dlopen(tmp_so_name.c_str(), RTLD_NOW);
+    if (handle == nullptr) {
+      _exit(1);
+    }
+    // Delete the original shared library so that we get the warning
+    // about unreadable elf files.
+    if (unlink(tmp_so_name.c_str()) == -1) {
+      _exit(1);
+    }
+    void (*crash_func)() = reinterpret_cast<void (*)()>(dlsym(handle, "crash"));
+    if (crash_func == nullptr) {
+      _exit(1);
+    }
+    crash_func();
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(NOTE: Function names and BuildId information is missing )");
 }
 
 TEST(tombstoned, proto) {
