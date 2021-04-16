@@ -154,6 +154,9 @@ TEST(ueventd_parser, ExternalFirmwareHandlers) {
 external_firmware_handler devpath root handler_path
 external_firmware_handler /devices/path/firmware/something001.bin system /vendor/bin/firmware_handler.sh
 external_firmware_handler /devices/path/firmware/something002.bin radio "/vendor/bin/firmware_handler.sh --has --arguments"
+external_firmware_handler /devices/path/firmware/* root "/vendor/bin/firmware_handler.sh"
+external_firmware_handler /devices/path/firmware/something* system "/vendor/bin/firmware_handler.sh"
+external_firmware_handler /devices/path/*/firmware/something*.bin radio "/vendor/bin/firmware_handler.sh"
 )";
 
     auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
@@ -171,6 +174,21 @@ external_firmware_handler /devices/path/firmware/something002.bin radio "/vendor
                     "/devices/path/firmware/something002.bin",
                     AID_RADIO,
                     "/vendor/bin/firmware_handler.sh --has --arguments",
+            },
+            {
+                    "/devices/path/firmware/",
+                    AID_ROOT,
+                    "/vendor/bin/firmware_handler.sh",
+            },
+            {
+                    "/devices/path/firmware/something",
+                    AID_SYSTEM,
+                    "/vendor/bin/firmware_handler.sh",
+            },
+            {
+                    "/devices/path/*/firmware/something*.bin",
+                    AID_RADIO,
+                    "/vendor/bin/firmware_handler.sh",
             },
     };
 
