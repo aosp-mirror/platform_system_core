@@ -17,6 +17,7 @@
 #include "firmware_handler.h"
 
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <glob.h>
 #include <pwd.h>
 #include <signal.h>
@@ -46,6 +47,20 @@ using android::base::WriteFully;
 namespace android {
 namespace init {
 
+namespace {
+bool PrefixMatch(const std::string& pattern, const std::string& path) {
+    return android::base::StartsWith(path, pattern);
+}
+
+bool FnMatch(const std::string& pattern, const std::string& path) {
+    return fnmatch(pattern.c_str(), path.c_str(), 0) == 0;
+}
+
+bool EqualMatch(const std::string& pattern, const std::string& path) {
+    return pattern == path;
+}
+}  // namespace
+
 static void LoadFirmware(const std::string& firmware, const std::string& root, int fw_fd,
                          size_t fw_size, int loading_fd, int data_fd) {
     // Start transfer.
@@ -64,6 +79,22 @@ static void LoadFirmware(const std::string& firmware, const std::string& root, i
 
 static bool IsBooting() {
     return access("/dev/.booting", F_OK) == 0;
+}
+
+ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid,
+                                                 std::string handler_path)
+    : devpath(std::move(devpath)), uid(uid), handler_path(std::move(handler_path)) {
+    auto wildcard_position = this->devpath.find('*');
+    if (wildcard_position != std::string::npos) {
+        if (wildcard_position == this->devpath.length() - 1) {
+            this->devpath.pop_back();
+            match = std::bind(PrefixMatch, this->devpath, std::placeholders::_1);
+        } else {
+            match = std::bind(FnMatch, this->devpath, std::placeholders::_1);
+        }
+    } else {
+        match = std::bind(EqualMatch, this->devpath, std::placeholders::_1);
+    }
 }
 
 FirmwareHandler::FirmwareHandler(std::vector<std::string> firmware_directories,
@@ -160,7 +191,7 @@ Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handl
 
 std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
     for (const auto& external_handler : external_firmware_handlers_) {
-        if (external_handler.devpath == uevent.path) {
+        if (external_handler.match(uevent.path)) {
             LOG(INFO) << "Launching external firmware handler '" << external_handler.handler_path
                       << "' for devpath: '" << uevent.path << "' firmware: '" << uevent.firmware
                       << "'";
