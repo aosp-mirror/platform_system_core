@@ -41,6 +41,7 @@ using android::trusty::fuzz::TrustyApp;
 #error "Binary file name must be parameterized using -DTRUSTY_APP_FILENAME."
 #endif
 
+static TrustyApp kTrustyApp(TIPC_DEV, TRUSTY_APP_PORT);
 static std::unique_ptr<CoverageRecord> record;
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
@@ -52,8 +53,7 @@ extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     }
 
     /* Make sure lazy-loaded TAs have started and connected to coverage service. */
-    TrustyApp ta(TIPC_DEV, TRUSTY_APP_PORT);
-    auto ret = ta.Connect();
+    auto ret = kTrustyApp.Connect();
     if (!ret.ok()) {
         std::cerr << ret.error() << std::endl;
         exit(-1);
@@ -79,22 +79,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ExtraCounters counters(record.get());
     counters.Reset();
 
-    TrustyApp ta(TIPC_DEV, TRUSTY_APP_PORT);
-    auto ret = ta.Connect();
+    auto ret = kTrustyApp.Write(data, size);
+    if (ret.ok()) {
+        ret = kTrustyApp.Read(&buf, sizeof(buf));
+    }
+
+    // Reconnect to ensure that the service is still up
+    kTrustyApp.Disconnect();
+    ret = kTrustyApp.Connect();
     if (!ret.ok()) {
         std::cerr << ret.error() << std::endl;
         android::trusty::fuzz::Abort();
     }
 
-    ret = ta.Write(data, size);
-    if (!ret.ok()) {
-        return -1;
-    }
-
-    ret = ta.Read(&buf, sizeof(buf));
-    if (!ret.ok()) {
-        return -1;
-    }
-
-    return 0;
+    return ret.ok() ? 0 : -1;
 }

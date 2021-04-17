@@ -25,6 +25,8 @@
 
 #include <ctype.h>
 
+#include <string>
+
 #include "SharedBuffer.h"
 
 /*
@@ -163,9 +165,7 @@ String8::String8(const char16_t* o, size_t len)
 }
 
 String8::String8(const char32_t* o)
-    : mString(allocFromUTF32(o, strlen32(o)))
-{
-}
+    : mString(allocFromUTF32(o, std::char_traits<char32_t>::length(o))) {}
 
 String8::String8(const char32_t* o, size_t len)
     : mString(allocFromUTF32(o, len))
