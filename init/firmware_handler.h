@@ -30,11 +30,13 @@ namespace android {
 namespace init {
 
 struct ExternalFirmwareHandler {
-    ExternalFirmwareHandler(std::string devpath, uid_t uid, std::string handler_path)
-        : devpath(std::move(devpath)), uid(uid), handler_path(std::move(handler_path)) {}
+    ExternalFirmwareHandler(std::string devpath, uid_t uid, std::string handler_path);
+
     std::string devpath;
     uid_t uid;
     std::string handler_path;
+
+    std::function<bool(const std::string&)> match;
 };
 
 class FirmwareHandler : public UeventHandler {
