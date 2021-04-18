@@ -197,27 +197,29 @@ void Snapuserd::MergeCompleted() {
     cv.notify_one();
 }
 
-bool Snapuserd::ReadAheadIOCompleted() {
-    // Flush the entire buffer region
-    int ret = msync(mapped_addr_, total_mapped_addr_length_, MS_SYNC);
-    if (ret < 0) {
-        PLOG(ERROR) << "msync failed after ReadAheadIOCompleted: " << ret;
-        return false;
-    }
+bool Snapuserd::ReadAheadIOCompleted(bool sync) {
+    if (sync) {
+        // Flush the entire buffer region
+        int ret = msync(mapped_addr_, total_mapped_addr_length_, MS_SYNC);
+        if (ret < 0) {
+            PLOG(ERROR) << "msync failed after ReadAheadIOCompleted: " << ret;
+            return false;
+        }
 
-    // Metadata and data are synced. Now, update the state.
-    // We need to update the state after flushing data; if there is a crash
-    // when read-ahead IO is in progress, the state of data in the COW file
-    // is unknown. kCowReadAheadDone acts as a checkpoint wherein the data
-    // in the scratch space is good and during next reboot, read-ahead thread
-    // can safely re-construct the data.
-    struct BufferState* ra_state = GetBufferState();
-    ra_state->read_ahead_state = kCowReadAheadDone;
+        // Metadata and data are synced. Now, update the state.
+        // We need to update the state after flushing data; if there is a crash
+        // when read-ahead IO is in progress, the state of data in the COW file
+        // is unknown. kCowReadAheadDone acts as a checkpoint wherein the data
+        // in the scratch space is good and during next reboot, read-ahead thread
+        // can safely re-construct the data.
+        struct BufferState* ra_state = GetBufferState();
+        ra_state->read_ahead_state = kCowReadAheadDone;
 
-    ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
-    if (ret < 0) {
-        PLOG(ERROR) << "msync failed to flush Readahead completion state...";
-        return false;
+        ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
+        if (ret < 0) {
+            PLOG(ERROR) << "msync failed to flush Readahead completion state...";
+            return false;
+        }
     }
 
     // Notify the worker threads
@@ -435,7 +437,6 @@ bool Snapuserd::ReadMetadata() {
     int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     std::optional<chunk_t> prev_id = {};
     std::map<uint64_t, const CowOperation*> map;
-    std::set<uint64_t> dest_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
     uint64_t total_copy_ops = reader_->total_copy_ops();
 
@@ -477,41 +478,20 @@ bool Snapuserd::ReadMetadata() {
             // Op-6: 15 -> 18
             //
             // Note that the blocks numbers are contiguous. Hence, all 6 copy
-            // operations can potentially be batch merged. However, that will be
+            // operations can be batch merged. However, that will be
             // problematic if we have a crash as block 20, 19, 18 would have
             // been overwritten and hence subsequent recovery may end up with
             // a silent data corruption when op-1, op-2 and op-3 are
             // re-executed.
             //
-            // We will split these 6 operations into two batches viz:
-            //
-            // Batch-1:
-            // ===================
-            // Op-1: 20 -> 23
-            // Op-2: 19 -> 22
-            // Op-3: 18 -> 21
-            // ===================
-            //
-            // Batch-2:
-            // ==================
-            // Op-4: 17 -> 20
-            // Op-5: 16 -> 19
-            // Op-6: 15 -> 18
-            // ==================
-            //
-            // Now, merge sequence will look like:
-            //
-            // 1: Merge Batch-1 { op-1, op-2, op-3 }
-            // 2: Update Metadata in COW File that op-1, op-2, op-3 merge is
-            // done.
-            // 3: Merge Batch-2
-            // 4: Update Metadata in COW File that op-4, op-5, op-6 merge is
-            // done.
-            //
-            // Note, that the order of block operations are still the same.
-            // However, we have two batch merge operations. Any crash between
-            // either of this sequence should be safe as each of these
-            // batches are self-contained.
+            // To address the above problem, read-ahead thread will
+            // read all the 6 source blocks, cache them in the scratch
+            // space of the COW file. During merge, read-ahead
+            // thread will serve the blocks from the read-ahead cache.
+            // If there is a crash during merge; on subsequent reboot,
+            // read-ahead thread will recover the data from the
+            // scratch space and re-construct it thereby there
+            // is no loss of data.
             //
             //===========================================================
             //
@@ -575,14 +555,10 @@ bool Snapuserd::ReadMetadata() {
                 if (diff != 1) {
                     break;
                 }
-                if (dest_blocks.count(cow_op->new_block) || map.count(cow_op->source) > 0) {
-                    break;
-                }
             }
             metadata_found = true;
             pending_copy_ops -= 1;
             map[cow_op->new_block] = cow_op;
-            dest_blocks.insert(cow_op->source);
             prev_id = cow_op->new_block;
             cowop_riter_->Next();
         } while (!cowop_riter_->Done() && pending_copy_ops);
@@ -644,7 +620,6 @@ bool Snapuserd::ReadMetadata() {
             }
         }
         map.clear();
-        dest_blocks.clear();
         prev_id.reset();
     }
 
@@ -746,6 +721,8 @@ bool Snapuserd::Start() {
             SNAP_LOG(ERROR) << "Failed to start Read-ahead thread...";
             return false;
         }
+
+        SNAP_LOG(INFO) << "Read-ahead thread started...";
     }
 
     // Launch worker threads
