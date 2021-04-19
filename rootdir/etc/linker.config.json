@@ -18,6 +18,7 @@
     "libnetd_resolv.so",
     // nn
     "libneuralnetworks.so",
+    "libneuralnetworks_shim.so",
     // statsd
     "libstatspull.so",
     "libstatssocket.so",
