@@ -7,9 +7,9 @@ on property:persist.mmc.max_write_speed=*
 on property:persist.mmc.cache_size=*
     write /sys/block/mmcblk0/cache_size ${persist.mmc.cache_size}
 
-on early-init && property:ro.product.enforce_debugfs_restrictions=true
+on early-init && property:ro.product.debugfs_restrictions.enabled=true
     mount debugfs debugfs /sys/kernel/debug
     chmod 0755 /sys/kernel/debug
 
-on property:sys.boot_completed=1 && property:ro.product.enforce_debugfs_restrictions=true
+on property:sys.boot_completed=1 && property:ro.product.debugfs_restrictions.enabled=true
    umount /sys/kernel/debug
