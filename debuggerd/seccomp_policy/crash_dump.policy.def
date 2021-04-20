@@ -34,7 +34,12 @@ rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 
 #define PR_SET_VMA 0x53564d41
+#if defined(__aarch64__)
+// PR_PAC_RESET_KEYS happens on aarch64 in pthread_create path.
+prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA || arg0 == PR_PAC_RESET_KEYS
+#else
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA
+#endif
 
 #if 0
 libminijail on vendor partitions older than P does not have constants from <sys/mman.h>.
