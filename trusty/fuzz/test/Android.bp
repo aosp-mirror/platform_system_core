@@ -24,5 +24,8 @@ cc_fuzz {
         "-DTRUSTY_APP_PORT=\"com.android.trusty.sancov.test.srv\"",
         "-DTRUSTY_APP_UUID=\"77f68803-c514-43ba-bdce-3254531c3d24\"",
         "-DTRUSTY_APP_FILENAME=\"srv.syms.elf\"",
-    ]
+    ],
+    fuzz_config: {
+        fuzz_on_haiku_device: false,
+    },
 }

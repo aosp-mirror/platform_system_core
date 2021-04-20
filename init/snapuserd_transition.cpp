@@ -24,6 +24,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -34,6 +35,7 @@
 #include <libsnapshot/snapshot.h>
 #include <libsnapshot/snapuserd_client.h>
 #include <private/android_filesystem_config.h>
+#include <procinfo/process_map.h>
 #include <selinux/android.h>
 
 #include "block_dev_initializer.h"
@@ -157,6 +159,33 @@ SnapuserdSelinuxHelper::SnapuserdSelinuxHelper(std::unique_ptr<SnapshotManager>&
     });
 }
 
+static void LockAllSystemPages() {
+    bool ok = true;
+    auto callback = [&](const android::procinfo::MapInfo& map) -> void {
+        if (!ok || android::base::StartsWith(map.name, "/dev/") ||
+            !android::base::StartsWith(map.name, "/")) {
+            return;
+        }
+        auto start = reinterpret_cast<const void*>(map.start);
+        auto len = map.end - map.start;
+        if (!len) {
+            return;
+        }
+        if (mlock(start, len) < 0) {
+            LOG(ERROR) << "mlock failed, " << start << " for " << len << " bytes.";
+            ok = false;
+        }
+    };
+
+    if (!android::procinfo::ReadProcessMaps(getpid(), callback) || !ok) {
+        LOG(FATAL) << "Could not process /proc/" << getpid() << "/maps file for init, "
+                   << "falling back to mlockall().";
+        if (mlockall(MCL_CURRENT) < 0) {
+            LOG(FATAL) << "mlockall failed";
+        }
+    }
+}
+
 void SnapuserdSelinuxHelper::StartTransition() {
     LOG(INFO) << "Starting SELinux transition of snapuserd";
 
@@ -170,9 +199,7 @@ void SnapuserdSelinuxHelper::StartTransition() {
 
     // We cannot access /system after the transition, so make sure init is
     // pinned in memory.
-    if (mlockall(MCL_CURRENT) < 0) {
-        LOG(FATAL) << "mlockall failed";
-    }
+    LockAllSystemPages();
 
     argv_.emplace_back("snapuserd");
     argv_.emplace_back("-no_socket");

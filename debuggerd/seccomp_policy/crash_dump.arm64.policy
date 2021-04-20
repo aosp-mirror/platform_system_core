@@ -24,7 +24,7 @@ tgkill: 1
 rt_sigprocmask: 1
 rt_sigaction: 1
 rt_tgsigqueueinfo: 1
-prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == 0x53564d41
+prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == 0x53564d41 || arg0 == PR_PAC_RESET_KEYS
 madvise: 1
 mprotect: arg2 in 0x1|0x2
 munmap: 1

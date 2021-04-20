@@ -34,6 +34,7 @@ class TrustyApp {
     android::base::Result<void> Connect();
     android::base::Result<void> Read(void* buf, size_t len);
     android::base::Result<void> Write(const void* buf, size_t len);
+    void Disconnect();
 
     android::base::Result<int> GetRawFd();
 

@@ -24,7 +24,7 @@ message Cgroups {
     Cgroups2 cgroups2 = 2 [json_name = "Cgroups2"];
 }
 
-// Next: 7
+// Next: 8
 message Cgroup {
     string controller = 1 [json_name = "Controller"];
     string path = 2 [json_name = "Path"];
@@ -35,6 +35,7 @@ message Cgroup {
 // when a boolean is specified as false, so leave unspecified in that case
 // https://developers.google.com/protocol-buffers/docs/proto3#default
     bool needs_activation = 6 [json_name = "NeedsActivation"];
+    bool is_optional = 7 [json_name = "Optional"];
 }
 
 // Next: 6

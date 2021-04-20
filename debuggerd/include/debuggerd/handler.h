@@ -42,6 +42,7 @@ struct debugger_process_info {
   const gwp_asan::AllocationMetadata* gwp_asan_metadata;
   const char* scudo_stack_depot;
   const char* scudo_region_info;
+  const char* scudo_ring_buffer;
 };
 
 // These callbacks are called in a signal handler, and thus must be async signal safe.

@@ -264,12 +264,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
                 F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
         if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache"
+            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
                                       &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache"
+            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
                                       LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
@@ -647,6 +647,46 @@ bool fs_mgr_is_f2fs(const std::string& blk_device) {
     return sb == cpu_to_le32(F2FS_SUPER_MAGIC);
 }
 
+static void SetReadAheadSize(const std::string& entry_block_device, off64_t size_kb) {
+    std::string block_device;
+    if (!Realpath(entry_block_device, &block_device)) {
+        PERROR << "Failed to realpath " << entry_block_device;
+        return;
+    }
+
+    static constexpr std::string_view kDevBlockPrefix("/dev/block/");
+    if (!android::base::StartsWith(block_device, kDevBlockPrefix)) {
+        LWARNING << block_device << " is not a block device";
+        return;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    while (true) {
+        std::string block_name = block_device;
+        if (android::base::StartsWith(block_device, kDevBlockPrefix)) {
+            block_name = block_device.substr(kDevBlockPrefix.length());
+        }
+        std::string sys_partition =
+                android::base::StringPrintf("/sys/class/block/%s/partition", block_name.c_str());
+        struct stat info;
+        if (lstat(sys_partition.c_str(), &info) == 0) {
+            // it has a partition like "sda12".
+            block_name += "/..";
+        }
+        std::string sys_ra = android::base::StringPrintf("/sys/class/block/%s/queue/read_ahead_kb",
+                                                         block_name.c_str());
+        std::string size = android::base::StringPrintf("%llu", (long long)size_kb);
+        android::base::WriteStringToFile(size, sys_ra.c_str());
+        LINFO << "Set readahead_kb: " << size << " on " << sys_ra;
+
+        auto parent = dm.GetParentBlockDeviceByPath(block_device);
+        if (!parent) {
+            return;
+        }
+        block_device = *parent;
+    }
+}
+
 //
 // Prepare the filesystem on the given block device to be mounted.
 //
@@ -666,6 +706,11 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
         unlink(mount_point.c_str());
     }
     mkdir(mount_point.c_str(), 0755);
+
+    // Don't need to return error, since it's a salt
+    if (entry.readahead_size_kb != -1) {
+        SetReadAheadSize(blk_device, entry.readahead_size_kb);
+    }
 
     int fs_stat = 0;
 
@@ -2203,7 +2248,8 @@ std::string fs_mgr_get_super_partition_name(int slot) {
     // Devices upgrading to dynamic partitions are allowed to specify a super
     // partition name. This includes cuttlefish, which is a non-A/B device.
     std::string super_partition;
-    if (fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
+    if (fs_mgr_get_boot_config_from_bootconfig_source("super_partition", &super_partition) ||
+        fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
         if (fs_mgr_get_slot_suffix().empty()) {
             return super_partition;
         }

@@ -202,6 +202,10 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     ret.snapshot_status.set_device_size(target_partition->size());
     ret.snapshot_status.set_snapshot_size(target_partition->size());
 
+    if (update && update->has_estimate_cow_size()) {
+        ret.snapshot_status.set_estimated_cow_size(update->estimate_cow_size());
+    }
+
     if (ret.snapshot_status.snapshot_size() == 0) {
         LOG(INFO) << "Not creating snapshot for partition " << ret.snapshot_status.name();
         ret.snapshot_status.set_cow_partition_size(0);

@@ -518,11 +518,9 @@ static void export_oem_lock_status() {
     if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
-    ImportKernelCmdline([](const std::string& key, const std::string& value) {
-        if (key == "androidboot.verifiedbootstate") {
-            SetProperty("ro.boot.flash.locked", value == "orange" ? "0" : "1");
-        }
-    });
+    SetProperty(
+            "ro.boot.flash.locked",
+            android::base::GetProperty("ro.boot.verifiedbootstate", "") == "orange" ? "0" : "1");
 }
 
 static Result<void> property_enable_triggers_action(const BuiltinArguments& args) {
@@ -850,21 +848,6 @@ int SecondStageMain(int argc, char** argv) {
     SetProperty(gsi::kGsiBootedProp, is_running);
     auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
     SetProperty(gsi::kGsiInstalledProp, is_installed);
-
-    /*
-     * For debug builds of S launching devices, init mounts debugfs for
-     * enabling vendor debug data collection setup at boot time. Init will unmount it on
-     * boot-complete after vendor code has performed the required initializations
-     * during boot. Dumpstate will then mount debugfs in order to read data
-     * from the same using the dumpstate HAL during bugreport creation.
-     * Dumpstate will also unmount debugfs after bugreport creation.
-     * first_api_level comparison is done here instead
-     * of init.rc since init.rc parser does not support >/< operators.
-     */
-    auto api_level = android::base::GetIntProperty("ro.product.first_api_level", 0);
-    bool is_debuggable = android::base::GetBoolProperty("ro.debuggable", false);
-    auto mount_debugfs = (is_debuggable && (api_level >= 31)) ? "1" : "0";
-    SetProperty("init.mount_debugfs", mount_debugfs);
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");

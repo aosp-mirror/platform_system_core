@@ -115,8 +115,8 @@ std::unordered_map<std::string, std::unordered_set<std::string>> llkIgnorelistPa
 // list of uids, and uid names, to skip, default nothing
 std::unordered_set<std::string> llkIgnorelistUid;
 #ifdef __PTRACE_ENABLED__
-// list of names to skip stack checking. "init", "lmkd", "llkd", "keystore" or
-// "logd" (if not userdebug).
+// list of names to skip stack checking. "init", "lmkd", "llkd", "keystore",
+// "keystore2", or "logd" (if not userdebug).
 std::unordered_set<std::string> llkIgnorelistStack;
 #endif
 
@@ -962,7 +962,8 @@ milliseconds llkCheck(bool checkRunning) {
     //
     // This alarm is effectively the live lock detection of llkd, as
     // we understandably can not monitor ourselves otherwise.
-    ::alarm(duration_cast<seconds>(llkTimeoutMs * 2 * android::base::TimeoutMultiplier()).count());
+    ::alarm(duration_cast<seconds>(llkTimeoutMs * 2 * android::base::HwTimeoutMultiplier())
+                    .count());
 
     // kernel jiffy precision fastest acquisition
     static timespec last;
