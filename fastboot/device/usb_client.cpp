@@ -283,7 +283,7 @@ ssize_t ClientUsbTransport::Write(const void* data, size_t len) {
     size_t bytes_written_total = 0;
     while (bytes_written_total < len) {
         auto bytes_to_write = std::min(len - bytes_written_total, kFbFfsNumBufs * kFbFfsBufSize);
-        auto bytes_written_now = handle_->write(handle_.get(), data, bytes_to_write);
+        auto bytes_written_now = handle_->write(handle_.get(), char_data, bytes_to_write);
         if (bytes_written_now < 0) {
             return bytes_written_total == 0 ? -1 : bytes_written_total;
         }

@@ -47,17 +47,25 @@ enum class DaemonOperations {
 
 class DmUserHandler {
   public:
-    explicit DmUserHandler(std::unique_ptr<Snapuserd>&& snapuserd);
+    explicit DmUserHandler(std::shared_ptr<Snapuserd> snapuserd);
 
-    void FreeResources() { snapuserd_ = nullptr; }
-    const std::unique_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
+    void FreeResources() {
+        // Each worker thread holds a reference to snapuserd.
+        // Clear them so that all the resources
+        // held by snapuserd is released
+        if (snapuserd_) {
+            snapuserd_->FreeResources();
+            snapuserd_ = nullptr;
+        }
+    }
+    const std::shared_ptr<Snapuserd>& snapuserd() const { return snapuserd_; }
     std::thread& thread() { return thread_; }
 
     const std::string& misc_name() const { return misc_name_; }
 
   private:
     std::thread thread_;
-    std::unique_ptr<Snapuserd> snapuserd_;
+    std::shared_ptr<Snapuserd> snapuserd_;
     std::string misc_name_;
 };
 

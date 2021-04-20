@@ -127,9 +127,14 @@ class ISnapshotManager {
     // may need to be merged before wiping.
     virtual bool FinishedSnapshotWrites(bool wipe) = 0;
 
+    // Update an ISnapshotMergeStats object with statistics about COW usage.
+    // This should be called before the merge begins as otherwise snapshots
+    // may be deleted.
+    virtual void UpdateCowStats(ISnapshotMergeStats* stats) = 0;
+
     // Initiate a merge on all snapshot devices. This should only be used after an
     // update has been marked successful after booting.
-    virtual bool InitiateMerge(uint64_t* cow_file_size = nullptr) = 0;
+    virtual bool InitiateMerge() = 0;
 
     // Perform any necessary post-boot actions. This should be run soon after
     // /data is mounted.
@@ -326,7 +331,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool BeginUpdate() override;
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
-    bool InitiateMerge(uint64_t* cow_file_size = nullptr) override;
+    void UpdateCowStats(ISnapshotMergeStats* stats) override;
+    bool InitiateMerge() override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
@@ -375,6 +381,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);
+    FRIEND_TEST(SnapshotTest, MergeFailureCode);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
@@ -487,11 +494,15 @@ class SnapshotManager final : public ISnapshotManager {
     // Unmap a COW image device previously mapped with MapCowImage().
     bool UnmapCowImage(const std::string& name);
 
+    // Unmap a COW and remove it from a MetadataBuilder.
+    void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata);
+
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
 
     // List the known snapshot names.
-    bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots);
+    bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots,
+                       const std::string& suffix = "");
 
     // Check for a cancelled or rolled back merge, returning true if such a
     // condition was detected and handled.
@@ -522,7 +533,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Interact with /metadata/ota/state.
     UpdateState ReadUpdateState(LockedFile* file);
     SnapshotUpdateStatus ReadSnapshotUpdateStatus(LockedFile* file);
-    bool WriteUpdateState(LockedFile* file, UpdateState state);
+    bool WriteUpdateState(LockedFile* file, UpdateState state,
+                          MergeFailureCode failure_code = MergeFailureCode::Ok);
     bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
 
@@ -531,12 +543,12 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
-    bool MergeSecondPhaseSnapshots(LockedFile* lock);
-    bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
-    bool RewriteSnapshotDeviceTable(const std::string& dm_name);
+    MergeFailureCode MergeSecondPhaseSnapshots(LockedFile* lock);
+    MergeFailureCode SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
+    MergeFailureCode RewriteSnapshotDeviceTable(const std::string& dm_name);
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
-    void AcknowledgeMergeFailure();
+    void AcknowledgeMergeFailure(MergeFailureCode failure_code);
     MergePhase DecideMergePhase(const SnapshotStatus& status);
     std::unique_ptr<LpMetadata> ReadCurrentMetadata();
 
@@ -563,14 +575,22 @@ class SnapshotManager final : public ISnapshotManager {
                                  const SnapshotStatus& status);
     bool CollapseSnapshotDevice(const std::string& name, const SnapshotStatus& status);
 
+    struct MergeResult {
+        explicit MergeResult(UpdateState state,
+                             MergeFailureCode failure_code = MergeFailureCode::Ok)
+            : state(state), failure_code(failure_code) {}
+        UpdateState state;
+        MergeFailureCode failure_code;
+    };
+
     // Only the following UpdateStates are used here:
     //   UpdateState::Merging
     //   UpdateState::MergeCompleted
     //   UpdateState::MergeFailed
     //   UpdateState::MergeNeedsReboot
-    UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
-    UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
-    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name,
+    MergeResult CheckMergeState(const std::function<bool()>& before_cancel);
+    MergeResult CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
+    MergeResult CheckTargetMergeState(LockedFile* lock, const std::string& name,
                                       const SnapshotUpdateStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
@@ -679,6 +699,9 @@ class SnapshotManager final : public ISnapshotManager {
     friend std::ostream& operator<<(std::ostream& os, SnapshotManager::Slot slot);
     Slot GetCurrentSlot();
 
+    // Return the suffix we expect snapshots to have.
+    std::string GetSnapshotSlotSuffix();
+
     std::string ReadUpdateSourceSlotSuffix();
 
     // Helper for RemoveAllSnapshots.
@@ -727,6 +750,10 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper of UpdateUsesCompression
     bool UpdateUsesCompression(LockedFile* lock);
+
+    // Wrapper around libdm, with diagnostics.
+    bool DeleteDeviceIfExists(const std::string& name,
+                              const std::chrono::milliseconds& timeout_ms = {});
 
     std::string gsid_dir_;
     std::string metadata_dir_;

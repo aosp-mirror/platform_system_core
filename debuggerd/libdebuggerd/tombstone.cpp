@@ -42,6 +42,7 @@
 #include <android-base/unique_fd.h>
 #include <android/log.h>
 #include <async_safe/log.h>
+#include <bionic/macros.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -181,8 +182,13 @@ static void dump_thread_info(log_t* log, const ThreadInfo& thread_info) {
   // Don't try to collect logs from the threads that implement the logging system itself.
   if (thread_info.uid == AID_LOGD) log->should_retrieve_logcat = false;
 
+  const char* process_name = "<unknown>";
+  if (!thread_info.command_line.empty()) {
+    process_name = thread_info.command_line[0].c_str();
+  }
+
   _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", thread_info.pid,
-       thread_info.tid, thread_info.thread_name.c_str(), thread_info.process_name.c_str());
+       thread_info.tid, thread_info.thread_name.c_str(), process_name);
   _LOG(log, logtype::HEADER, "uid: %d\n", thread_info.uid);
   if (thread_info.tagged_addr_ctrl != -1) {
     _LOG(log, logtype::HEADER, "tagged_addr_ctrl: %016lx\n", thread_info.tagged_addr_ctrl);
@@ -362,7 +368,7 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
   regs->IterateRegisters([log, maps, memory](const char* reg_name, uint64_t reg_value) {
     std::string label{"memory near "s + reg_name};
     if (maps) {
-      unwindstack::MapInfo* map_info = maps->Find(reg_value);
+      unwindstack::MapInfo* map_info = maps->Find(untag_address(reg_value));
       if (map_info != nullptr && !map_info->name.empty()) {
         label += " (" + map_info->name + ")";
       }
@@ -566,7 +572,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   log.amfd_data = nullptr;
 
   std::string thread_name = get_thread_name(tid);
-  std::string process_name = get_process_name(pid);
+  std::vector<std::string> command_line = get_command_line(pid);
 
   std::unique_ptr<unwindstack::Regs> regs(
       unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
@@ -581,7 +587,7 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
       .tid = tid,
       .thread_name = std::move(thread_name),
       .pid = pid,
-      .process_name = std::move(process_name),
+      .command_line = std::move(command_line),
       .selinux_label = std::move(selinux_label),
       .siginfo = siginfo,
   };

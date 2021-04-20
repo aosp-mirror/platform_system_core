@@ -390,28 +390,6 @@ size_t String16::staticStringSize() const {
     return static_cast<size_t>(*(p - 1));
 }
 
-status_t String16::makeLower()
-{
-    const size_t N = size();
-    const char16_t* str = string();
-    char16_t* edited = nullptr;
-    for (size_t i=0; i<N; i++) {
-        const char16_t v = str[i];
-        if (v >= 'A' && v <= 'Z') {
-            if (!edited) {
-                SharedBuffer* buf = static_cast<SharedBuffer*>(edit());
-                if (!buf) {
-                    return NO_MEMORY;
-                }
-                edited = (char16_t*)buf->data();
-                mString = str = edited;
-            }
-            edited[i] = tolower((char)v);
-        }
-    }
-    return OK;
-}
-
 status_t String16::replaceAll(char16_t replaceThis, char16_t withThis)
 {
     const size_t N = size();

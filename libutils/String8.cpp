@@ -25,6 +25,8 @@
 
 #include <ctype.h>
 
+#include <string>
+
 #include "SharedBuffer.h"
 
 /*
@@ -163,9 +165,7 @@ String8::String8(const char16_t* o, size_t len)
 }
 
 String8::String8(const char32_t* o)
-    : mString(allocFromUTF32(o, strlen32(o)))
-{
-}
+    : mString(allocFromUTF32(o, std::char_traits<char32_t>::length(o))) {}
 
 String8::String8(const char32_t* o, size_t len)
     : mString(allocFromUTF32(o, len))
@@ -415,50 +415,15 @@ bool String8::removeAll(const char* other) {
 
 void String8::toLower()
 {
-    toLower(0, size());
-}
+    const size_t length = size();
+    if (length == 0) return;
 
-void String8::toLower(size_t start, size_t length)
-{
-    const size_t len = size();
-    if (start >= len) {
-        return;
-    }
-    if (start+length > len) {
-        length = len-start;
-    }
-    char* buf = lockBuffer(len);
-    buf += start;
-    while (length > 0) {
+    char* buf = lockBuffer(length);
+    for (size_t i = length; i > 0; --i) {
         *buf = static_cast<char>(tolower(*buf));
         buf++;
-        length--;
     }
-    unlockBuffer(len);
-}
-
-void String8::toUpper()
-{
-    toUpper(0, size());
-}
-
-void String8::toUpper(size_t start, size_t length)
-{
-    const size_t len = size();
-    if (start >= len) {
-        return;
-    }
-    if (start+length > len) {
-        length = len-start;
-    }
-    char* buf = lockBuffer(len);
-    buf += start;
-    while (length > 0) {
-        *buf = static_cast<char>(toupper(*buf));
-        buf++;
-        length--;
-    }
-    unlockBuffer(len);
+    unlockBuffer(length);
 }
 
 // ---------------------------------------------------------------------------

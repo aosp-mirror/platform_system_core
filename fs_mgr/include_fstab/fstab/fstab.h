@@ -47,6 +47,7 @@ struct FstabEntry {
     int max_comp_streams = 0;
     off64_t zram_size = 0;
     off64_t reserved_size = 0;
+    off64_t readahead_size_kb = -1;
     std::string encryption_options;
     off64_t erase_blk_size = 0;
     off64_t logical_blk_size = 0;
@@ -97,9 +98,9 @@ struct FstabEntry {
 using Fstab = std::vector<FstabEntry>;
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
-bool ReadFstabFromDt(Fstab* fstab, bool log = true);
+bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);
 bool ReadDefaultFstab(Fstab* fstab);
-bool SkipMountingPartitions(Fstab* fstab);
+bool SkipMountingPartitions(Fstab* fstab, bool verbose = false);
 
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 // The Fstab can contain multiple entries for the same mount point with different configurations.

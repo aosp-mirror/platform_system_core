@@ -40,6 +40,7 @@ class FastbootDevice {
     void ExecuteCommands();
     bool WriteStatus(FastbootResult result, const std::string& message);
     bool HandleData(bool read, std::vector<char>* data);
+    bool HandleData(bool read, char* data, uint64_t size);
     std::string GetCurrentSlot();
 
     // Shortcuts for writing status results.
