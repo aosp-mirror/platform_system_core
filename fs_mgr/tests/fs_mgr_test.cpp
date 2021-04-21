@@ -491,7 +491,7 @@ source none2       swap   defaults      forcefdeorfbe=
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(3U, fstab.size());
+    ASSERT_LE(3U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -561,7 +561,7 @@ source none0       swap   defaults      encryptable=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.crypt = true;
@@ -585,7 +585,7 @@ source none3       swap   defaults      voldmanaged=sdcard:auto
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(4U, fstab.size());
+    ASSERT_LE(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.vold_managed = true;
@@ -626,7 +626,7 @@ source none1       swap   defaults      length=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(2U, fstab.size());
+    ASSERT_LE(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -652,7 +652,7 @@ source none1       swap   defaults      swapprio=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(2U, fstab.size());
+    ASSERT_LE(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -682,7 +682,7 @@ source none5       swap   defaults      zramsize=%
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(6U, fstab.size());
+    ASSERT_LE(6U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -728,7 +728,7 @@ source none0       swap   defaults      forceencrypt=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -751,7 +751,7 @@ source none0       swap   defaults      forcefdeorfbe=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -775,7 +775,7 @@ source none0       swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.file_encryption = true;
@@ -797,7 +797,7 @@ source none1       swap   defaults      max_comp_streams=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(2U, fstab.size());
+    ASSERT_LE(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -825,7 +825,7 @@ source none3       swap   defaults      reservedsize=2m
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(4U, fstab.size());
+    ASSERT_LE(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -863,7 +863,7 @@ source none3       swap   defaults      eraseblk=8192
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(4U, fstab.size());
+    ASSERT_LE(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -901,7 +901,7 @@ source none3       swap   defaults      logicalblk=8192
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(4U, fstab.size());
+    ASSERT_LE(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -938,7 +938,7 @@ source none1       swap   defaults      avb_keys=/path/to/test.avbpubkey
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(2U, fstab.size());
+    ASSERT_LE(2U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -967,7 +967,7 @@ source none0       swap   defaults      keydirectory=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -989,7 +989,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("adiantum", entry->metadata_encryption);
@@ -1006,7 +1006,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
@@ -1027,7 +1027,7 @@ source none0       swap   defaults      sysfs_path=/sys/device
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(1U, fstab.size());
+    ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -1053,7 +1053,7 @@ source none4       swap   defaults      zram_backingdev_size=2m
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(4U, fstab.size());
+    ASSERT_LE(4U, fstab.size());
 
     auto entry = fstab.begin();
 
@@ -1114,7 +1114,7 @@ source none6       swap   defaults      readahead_size_kb=0
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_EQ(7U, fstab.size());
+    ASSERT_LE(7U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
