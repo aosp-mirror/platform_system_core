@@ -460,7 +460,11 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    if (!IsDefaultMountNamespaceReady() && name_ != "apexd") {
+    // APEXd is always started in the "current" namespace because it is the process to set up
+    // the current namespace.
+    const bool is_apexd = args_[0] == "/system/bin/apexd";
+
+    if (!IsDefaultMountNamespaceReady() && !is_apexd) {
         // If this service is started before APEXes and corresponding linker configuration
         // get available, mark it as pre-apexd one. Note that this marking is
         // permanent. So for example, if the service is re-launched (e.g., due
