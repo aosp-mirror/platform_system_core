@@ -107,15 +107,14 @@ sp<Looper> Looper::getForThread() {
     int result = pthread_once(& gTLSOnce, initTLSKey);
     LOG_ALWAYS_FATAL_IF(result != 0, "pthread_once failed");
 
-    Looper* looper = (Looper*)pthread_getspecific(gTLSKey);
-    return sp<Looper>::fromExisting(looper);
+    return (Looper*)pthread_getspecific(gTLSKey);
 }
 
 sp<Looper> Looper::prepare(int opts) {
     bool allowNonCallbacks = opts & PREPARE_ALLOW_NON_CALLBACKS;
     sp<Looper> looper = Looper::getForThread();
     if (looper == nullptr) {
-        looper = sp<Looper>::make(allowNonCallbacks);
+        looper = new Looper(allowNonCallbacks);
         Looper::setForThread(looper);
     }
     if (looper->getAllowNonCallbacks() != allowNonCallbacks) {
@@ -425,11 +424,7 @@ void Looper::pushResponse(int events, const Request& request) {
 }
 
 int Looper::addFd(int fd, int ident, int events, Looper_callbackFunc callback, void* data) {
-    sp<SimpleLooperCallback> looperCallback;
-    if (callback) {
-        looperCallback = sp<SimpleLooperCallback>::make(callback);
-    }
-    return addFd(fd, ident, events, looperCallback, data);
+    return addFd(fd, ident, events, callback ? new SimpleLooperCallback(callback) : nullptr, data);
 }
 
 int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data) {
