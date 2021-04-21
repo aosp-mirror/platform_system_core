@@ -693,7 +693,7 @@ status_t Thread::run(const char* name, int32_t priority, size_t stack)
     mThread = thread_id_t(-1);
 
     // hold a strong reference on ourself
-    mHoldSelf = sp<Thread>::fromExisting(this);
+    mHoldSelf = this;
 
     mRunning = true;
 
