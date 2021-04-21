@@ -274,7 +274,7 @@ void CrasherTest::AssertDeath(int signo) {
   }
 
   if (signo == 0) {
-    ASSERT_TRUE(WIFEXITED(status));
+    ASSERT_TRUE(WIFEXITED(status)) << "Terminated due to unexpected signal " << WTERMSIG(status);
     ASSERT_EQ(0, WEXITSTATUS(signo));
   } else {
     ASSERT_FALSE(WIFEXITED(status));
