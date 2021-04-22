@@ -784,6 +784,7 @@ int SecondStageMain(int argc, char** argv) {
         UmountDebugRamdisk();
     }
 
+    SelinuxSetupKernelLogging();
     PropertyInit();
 
     // Umount second stage resources after property service has read the .prop files.
@@ -798,7 +799,6 @@ int SecondStageMain(int argc, char** argv) {
     MountExtraFilesystems();
 
     // Now set up SELinux for second stage.
-    SelinuxSetupKernelLogging();
     SelabelInitialize();
     SelinuxRestoreContext();
 
