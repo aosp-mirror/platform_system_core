@@ -139,7 +139,28 @@ enum UpdateState {
     Cancelled = 7;
 };
 
-// Next: 7
+// Next 14:
+//
+// To understand the source of each failure, read snapshot.cpp. To handle new
+// sources of failure, avoid reusing an existing code; add a new code instead.
+enum MergeFailureCode {
+    Ok = 0;
+    ReadStatus = 1;
+    GetTableInfo = 2;
+    UnknownTable = 3;
+    GetTableParams = 4;
+    ActivateNewTable = 5;
+    AcquireLock = 6;
+    ListSnapshots = 7;
+    WriteStatus = 8;
+    UnknownTargetType = 9;
+    QuerySnapshotStatus = 10;
+    ExpectedMergeTarget = 11;
+    UnmergedSectorsAfterCompletion = 12;
+    UnexpectedMergeState = 13;
+};
+
+// Next: 8
 message SnapshotUpdateStatus {
     UpdateState state = 1;
 
@@ -160,6 +181,9 @@ message SnapshotUpdateStatus {
 
     // Merge phase (if state == MERGING).
     MergePhase merge_phase = 6;
+
+    // Merge failure code, filled if state == MergeFailed.
+    MergeFailureCode merge_failure_code = 7;
 }
 
 // Next: 9
