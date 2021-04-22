@@ -56,7 +56,6 @@ LOCAL_MODULE := init.environ.rc
 LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
 LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
-LOCAL_REQUIRED_MODULES := etc_classpath
 
 EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
@@ -184,21 +183,6 @@ $(strip \
   $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)) \
 )
 endef
-
-#######################################
-# /etc/classpath
-include $(CLEAR_VARS)
-LOCAL_MODULE := etc_classpath
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := classpath
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo "export BOOTCLASSPATH $(PRODUCT_BOOTCLASSPATH)" > $@
-	$(hide) echo "export DEX2OATBOOTCLASSPATH $(PRODUCT_DEX2OAT_BOOTCLASSPATH)" >> $@
-	$(hide) echo "export SYSTEMSERVERCLASSPATH $(PRODUCT_SYSTEM_SERVER_CLASSPATH)" >> $@
 
 #######################################
 # sanitizer.libraries.txt
