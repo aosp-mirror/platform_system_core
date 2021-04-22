@@ -917,7 +917,6 @@ on post-fs-data
     # Must start before 'odsign', as odsign depends on *CLASSPATH variables
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
-    rm /data/system/environ/classpath
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
