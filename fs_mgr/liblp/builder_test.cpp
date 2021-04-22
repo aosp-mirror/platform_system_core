@@ -18,12 +18,14 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
+#include <android-base/properties.h>
 
 #include "utility.h"
 
 using namespace std;
 using namespace android::fs_mgr;
 using ::testing::ElementsAre;
+using android::base::GetProperty;
 
 class Environment : public ::testing::Environment {
   public:
@@ -442,6 +444,13 @@ TEST_F(BuilderTest, MetadataTooLarge) {
 }
 
 TEST_F(BuilderTest, block_device_info) {
+    //This test requires dynamic partition which is not mandatory for
+    //Automotive in Android Q or lower
+    std::string api_level = GetProperty("ro.build.version.sdk","");
+    std::string hw_type = GetProperty("ro.hardware.type","");
+    if (std::stoi(api_level) <= 29 && hw_type == "automotive") {
+      return;
+    }
     PartitionOpener opener;
 
     BlockDeviceInfo device_info;
