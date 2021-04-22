@@ -21,6 +21,7 @@
 
 #include <android-base/file.h>
 #include <android-base/unique_fd.h>
+#include <android-base/properties.h>
 #include <fs_mgr.h>
 #include <fstab/fstab.h>
 #include <gtest/gtest.h>
@@ -35,6 +36,7 @@
 using namespace std;
 using namespace android::fs_mgr;
 using unique_fd = android::base::unique_fd;
+using android::base::GetProperty;
 
 // Our tests assume a 128KiB disk with two 512 byte metadata slots.
 static const size_t kDiskSize = 131072;
@@ -706,6 +708,13 @@ TEST(liblp, UpdateNonRetrofit) {
 }
 
 TEST(liblp, ReadSuperPartition) {
+    //This test requires dynamic partition which is not mandatory for
+    //Automotive in Android Q or lower
+    std::string api_level = GetProperty("ro.build.version.sdk","");
+    std::string hw_type = GetProperty("ro.hardware.type","");
+    if (std::stoi(api_level) <= 29 && hw_type == "automotive") {
+      return;
+    }
     auto slot_suffix = fs_mgr_get_slot_suffix();
     auto slot_number = SlotNumberForSlotSuffix(slot_suffix);
     auto super_name = fs_mgr_get_super_partition_name(slot_number);
