@@ -116,6 +116,8 @@ namespace fs_mgr {
 void MapScratchPartitionIfNeeded(Fstab*, const std::function<bool(const std::set<std::string>&)>&) {
 }
 
+void CleanupOldScratchFiles() {}
+
 void TeardownAllOverlayForMountPoint(const std::string&) {}
 
 }  // namespace fs_mgr
