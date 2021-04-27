@@ -39,6 +39,8 @@ public:
 private:
     // for access to the destructor
     friend class LightRefBase<NativeHandle>;
+    // for access to the constructor
+    friend class sp<NativeHandle>;
 
     NativeHandle(native_handle_t* handle, bool ownsHandle);
     ~NativeHandle();
