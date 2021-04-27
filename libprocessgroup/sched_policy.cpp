@@ -159,10 +159,9 @@ static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
 
     if (!controller.IsUsable()) return -1;
 
-    if (!controller.GetTaskGroup(tid, &subgroup)) {
-        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
+    if (!controller.GetTaskGroup(tid, &subgroup))
         return -1;
-    }
+
     return 0;
 }
 
@@ -174,11 +173,16 @@ int get_sched_policy(int tid, SchedPolicy* policy) {
     std::string group;
     if (schedboost_enabled()) {
         if ((getCGroupSubsys(tid, "schedtune", group) < 0) &&
-            (getCGroupSubsys(tid, "cpu", group) < 0))
-		return -1;
+            (getCGroupSubsys(tid, "cpu", group) < 0)) {
+                LOG(ERROR) << "Failed to find cpu cgroup for tid " << tid;
+                return -1;
+        }
     }
     if (group.empty() && cpusets_enabled()) {
-        if (getCGroupSubsys(tid, "cpuset", group) < 0) return -1;
+        if (getCGroupSubsys(tid, "cpuset", group) < 0) {
+            LOG(ERROR) << "Failed to find cpuset cgroup for tid " << tid;
+            return -1;
+        }
     }
 
     // TODO: replace hardcoded directories
