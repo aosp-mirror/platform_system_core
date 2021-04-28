@@ -5,7 +5,9 @@ package {
 cc_library {
     name: "libvndksupport",
     native_bridge_supported: true,
-    llndk_stubs: "libvndksupport.llndk",
+    llndk: {
+        symbol_file: "libvndksupport.map.txt",
+    },
     srcs: ["linker.cpp"],
     cflags: [
         "-Wall",
@@ -22,11 +24,4 @@ cc_library {
         symbol_file: "libvndksupport.map.txt",
         versions: ["29"],
     },
-}
-
-llndk_library {
-    name: "libvndksupport.llndk",
-    native_bridge_supported: true,
-    symbol_file: "libvndksupport.map.txt",
-    export_include_dirs: ["include"],
 }
