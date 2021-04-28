@@ -34,11 +34,13 @@ class MockSnapshotMergeStats final : public ISnapshotMergeStats {
     MOCK_METHOD(void, set_estimated_cow_size_bytes, (uint64_t), (override));
     MOCK_METHOD(void, set_boot_complete_time_ms, (uint32_t), (override));
     MOCK_METHOD(void, set_boot_complete_to_merge_start_time_ms, (uint32_t), (override));
+    MOCK_METHOD(void, set_merge_failure_code, (MergeFailureCode), (override));
     MOCK_METHOD(uint64_t, cow_file_size, (), (override));
     MOCK_METHOD(uint64_t, total_cow_size_bytes, (), (override));
     MOCK_METHOD(uint64_t, estimated_cow_size_bytes, (), (override));
     MOCK_METHOD(uint32_t, boot_complete_time_ms, (), (override));
     MOCK_METHOD(uint32_t, boot_complete_to_merge_start_time_ms, (), (override));
+    MOCK_METHOD(MergeFailureCode, merge_failure_code, (), (override));
     MOCK_METHOD(std::unique_ptr<Result>, Finish, (), (override));
 
     using ISnapshotMergeStats::Result;
