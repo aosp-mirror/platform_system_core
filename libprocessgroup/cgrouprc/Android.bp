@@ -28,7 +28,9 @@ cc_library {
     // defined below. The static library is built for tests.
     vendor_available: false,
     native_bridge_supported: true,
-    llndk_stubs: "libcgrouprc.llndk",
+    llndk: {
+        symbol_file: "libcgrouprc.map.txt",
+    },
     srcs: [
         "cgroup_controller.cpp",
         "cgroup_file.cpp",
@@ -58,13 +60,4 @@ cc_library {
             version_script: "libcgrouprc.map.txt",
         },
     },
-}
-
-llndk_library {
-    name: "libcgrouprc.llndk",
-    symbol_file: "libcgrouprc.map.txt",
-    native_bridge_supported: true,
-    export_include_dirs: [
-        "include",
-    ],
 }
