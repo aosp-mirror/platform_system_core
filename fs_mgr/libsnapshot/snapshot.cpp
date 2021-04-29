@@ -3690,5 +3690,16 @@ bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
     return false;
 }
 
+MergeFailureCode SnapshotManager::ReadMergeFailureCode() {
+    auto lock = LockExclusive();
+    if (!lock) return MergeFailureCode::AcquireLock;
+
+    SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
+    if (status.state() != UpdateState::MergeFailed) {
+        return MergeFailureCode::Ok;
+    }
+    return status.merge_failure_code();
+}
+
 }  // namespace snapshot
 }  // namespace android
