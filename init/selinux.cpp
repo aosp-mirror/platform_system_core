@@ -240,25 +240,25 @@ Result<std::string> FindPrecompiledSplitPolicy() {
     }
 
     // Use precompiled sepolicy only when all corresponding hashes are equal.
-    // plat_sepolicy is always checked, while system_ext and product are checked only when they
-    // exist.
     std::vector<std::pair<std::string, std::string>> sepolicy_hashes{
             {"/system/etc/selinux/plat_sepolicy_and_mapping.sha256",
              precompiled_sepolicy + ".plat_sepolicy_and_mapping.sha256"},
+            {"/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256",
+             precompiled_sepolicy + ".system_ext_sepolicy_and_mapping.sha256"},
+            {"/product/etc/selinux/product_sepolicy_and_mapping.sha256",
+             precompiled_sepolicy + ".product_sepolicy_and_mapping.sha256"},
     };
 
-    if (access("/system_ext/etc/selinux/system_ext_sepolicy.cil", F_OK) == 0) {
-        sepolicy_hashes.emplace_back(
-                "/system_ext/etc/selinux/system_ext_sepolicy_and_mapping.sha256",
-                precompiled_sepolicy + ".system_ext_sepolicy_and_mapping.sha256");
-    }
-
-    if (access("/product/etc/selinux/product_sepolicy.cil", F_OK) == 0) {
-        sepolicy_hashes.emplace_back("/product/etc/selinux/product_sepolicy_and_mapping.sha256",
-                                     precompiled_sepolicy + ".product_sepolicy_and_mapping.sha256");
-    }
-
     for (const auto& [actual_id_path, precompiled_id_path] : sepolicy_hashes) {
+        // Both of them should exist or both of them shouldn't exist.
+        if (access(actual_id_path.c_str(), R_OK) != 0) {
+            if (access(precompiled_id_path.c_str(), R_OK) == 0) {
+                return Error() << precompiled_id_path << " exists but " << actual_id_path
+                               << " doesn't";
+            }
+            continue;
+        }
+
         std::string actual_id;
         if (!ReadFirstLine(actual_id_path.c_str(), &actual_id)) {
             return ErrnoError() << "Failed to read " << actual_id_path;
