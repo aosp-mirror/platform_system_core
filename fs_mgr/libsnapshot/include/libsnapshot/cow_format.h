@@ -24,6 +24,8 @@ static constexpr uint64_t kCowMagicNumber = 0x436f77634f572121ULL;
 static constexpr uint32_t kCowVersionMajor = 1;
 static constexpr uint32_t kCowVersionMinor = 0;
 
+static constexpr uint32_t kCowVersionManifest = 1;
+
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
 //
