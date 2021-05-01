@@ -163,3 +163,13 @@ recommended that devices use genfscon for labeling sysfs nodes. However, some de
 from enabling the parallelization option:
 
     parallel_restorecon enabled
+
+Do parallel restorecon to speed up boot process, subdirectories under `/sys`
+can be sliced by ueventd.rc, and run on multiple process.
+    parallel_restorecon_dir <directory>
+
+For example
+    parallel_restorecon_dir /sys
+    parallel_restorecon_dir /sys/devices
+    parallel_restorecon_dir /sys/devices/platform
+    parallel_restorecon_dir /sys/devices/platform/soc
