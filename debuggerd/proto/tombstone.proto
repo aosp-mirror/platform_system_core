@@ -119,11 +119,12 @@ message Thread {
   int32 id = 1;
   string name = 2;
   repeated Register registers = 3;
+  repeated string backtrace_note = 7;
   repeated BacktraceFrame current_backtrace = 4;
   repeated MemoryDump memory_dump = 5;
   int64 tagged_addr_ctrl = 6;
 
-  reserved 7 to 999;
+  reserved 8 to 999;
 }
 
 message BacktraceFrame {
