@@ -2692,8 +2692,18 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     AutoDeviceList created_devices;
 
     const auto& dap_metadata = manifest.dynamic_partition_metadata();
-    bool use_compression =
-            IsCompressionEnabled() && dap_metadata.vabc_enabled() && !device_->IsRecovery();
+    CowOptions options;
+    CowWriter writer(options);
+    bool cow_format_support = true;
+    if (dap_metadata.cow_version() < writer.GetCowVersion()) {
+        cow_format_support = false;
+    }
+
+    LOG(INFO) << " dap_metadata.cow_version(): " << dap_metadata.cow_version()
+              << " writer.GetCowVersion(): " << writer.GetCowVersion();
+
+    bool use_compression = IsCompressionEnabled() && dap_metadata.vabc_enabled() &&
+                           !device_->IsRecovery() && cow_format_support;
 
     std::string compression_algorithm;
     if (use_compression) {
@@ -2960,7 +2970,13 @@ Return SnapshotManager::InitializeUpdateSnapshots(
                 return Return::Error();
             }
 
-            CowWriter writer(CowOptions{.compression = it->second.compression_algorithm()});
+            CowOptions options;
+            if (device()->IsTestDevice()) {
+                options.scratch_space = false;
+            }
+            options.compression = it->second.compression_algorithm();
+
+            CowWriter writer(options);
             if (!writer.Initialize(fd) || !writer.Finalize()) {
                 LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
                 return Return::Error();
@@ -3069,6 +3085,10 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CowOptions cow_options;
     cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
+    // Disable scratch space for vts tests
+    if (device()->IsTestDevice()) {
+        cow_options.scratch_space = false;
+    }
 
     // Currently we don't support partial snapshots, since partition_cow_creator
     // never creates this scenario.
