@@ -24,7 +24,7 @@ static constexpr uint64_t kCowMagicNumber = 0x436f77634f572121ULL;
 static constexpr uint32_t kCowVersionMajor = 2;
 static constexpr uint32_t kCowVersionMinor = 0;
 
-static constexpr uint32_t kCowVersionManifest = 1;
+static constexpr uint32_t kCowVersionManifest = 2;
 
 static constexpr uint32_t BLOCK_SZ = 4096;
 static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
