@@ -141,18 +141,21 @@ class CowReader : public ICowReader {
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
-    void UpdateMergeProgress(uint64_t merge_ops) { header_.num_merge_ops += merge_ops; }
-
     void InitializeMerge();
 
     void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
 
     uint64_t total_data_ops() { return total_data_ops_; }
 
+    void set_copy_ops(uint64_t size) { copy_ops_ = size; }
+
+    uint64_t total_copy_ops() { return copy_ops_; }
+
     void CloseCowFd() { owned_fd_ = {}; }
 
   private:
     bool ParseOps(std::optional<uint64_t> label);
+    uint64_t FindNumCopyops();
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
@@ -162,6 +165,7 @@ class CowReader : public ICowReader {
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
     uint64_t total_data_ops_;
+    uint64_t copy_ops_;
 };
 
 }  // namespace snapshot
