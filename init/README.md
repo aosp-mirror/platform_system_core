@@ -277,6 +277,8 @@ runs the service.
   CLD_EXITED or an status other than '0', reboot the system with the target specified in
   _target_. _target_ takes the same format as the parameter to sys.powerctl. This is particularly
   intended to be used with the `exec_start` builtin for any must-have checks during boot.
+  A service being stopped by init (e.g. using the `stop` or `class_reset` commands) is not
+  considered a failure for the purpose of this setting.
 
 `restart_period <seconds>`
 > If a non-oneshot service exits, it will be restarted at its start time plus
