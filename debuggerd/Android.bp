@@ -276,6 +276,12 @@ cc_binary {
     ],
 }
 
+cc_test_library {
+    name: "libcrash_test",
+    defaults: ["debuggerd_defaults"],
+    srcs: ["crash_test.cpp"],
+}
+
 cc_test {
     name: "debuggerd_test",
     defaults: ["debuggerd_defaults"],
@@ -340,6 +346,10 @@ cc_test {
             stem: "debuggerd_test64",
         },
     },
+
+    data: [
+        ":libcrash_test",
+    ],
 
     test_suites: ["device-tests"],
 }
