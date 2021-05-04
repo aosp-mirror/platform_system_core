@@ -420,7 +420,8 @@ cc_defaults {
         "snapuserd_server.cpp",
         "snapuserd.cpp",
         "snapuserd_daemon.cpp",
-        "snapuserd_worker.cpp",
+	"snapuserd_worker.cpp",
+	"snapuserd_readahead.cpp",
     ],
 
     cflags: [
