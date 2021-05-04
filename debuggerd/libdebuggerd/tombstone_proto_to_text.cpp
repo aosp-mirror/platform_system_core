@@ -171,6 +171,10 @@ static void print_thread_backtrace(CallbackType callback, const Tombstone& tombs
                                    const Thread& thread, bool should_log) {
   CBS("");
   CB(should_log, "backtrace:");
+  if (!thread.backtrace_note().empty()) {
+    CB(should_log, "  NOTE: %s",
+       android::base::Join(thread.backtrace_note(), "\n  NOTE: ").c_str());
+  }
   print_backtrace(callback, tombstone, thread.current_backtrace(), should_log);
 }
 
