@@ -141,6 +141,7 @@ cc_library {
         "Errors.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
+        "LightRefBase.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
         "RefBase.cpp",
