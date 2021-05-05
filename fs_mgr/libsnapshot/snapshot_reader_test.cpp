@@ -150,6 +150,7 @@ TEST_F(OfflineSnapshotTest, CompressedSnapshot) {
     CowOptions options;
     options.compression = "gz";
     options.max_blocks = {kBlockCount};
+    options.scratch_space = false;
 
     unique_fd cow_fd(dup(cow_->fd));
     ASSERT_GE(cow_fd, 0);
