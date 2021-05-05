@@ -301,6 +301,12 @@ bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
     if (devices.empty()) {
         return true;
     }
+    // excluding overlays
+    for (auto iter = devices.begin(); iter != devices.end(); ) {
+        if (*iter=="overlay")  iter = devices.erase(iter);
+        else iter++;
+    }
+
     return block_dev_init_.InitDevices(std::move(devices));
 }
 
@@ -498,6 +504,11 @@ bool FirstStageMount::MountPartitions() {
             continue;
         }
 
+        if (current->fs_type == "overlay") {
+            ++current;
+            continue;
+        }
+
         // Skip raw partition entries such as boot, dtbo, etc.
         // Having emmc fstab entries allows us to probe current->vbmeta_partition
         // in InitDevices() when they are AVB chained partitions.
@@ -546,6 +557,13 @@ bool FirstStageMount::MountPartitions() {
         return InitRequiredDevices(std::move(devices));
     };
     MapScratchPartitionIfNeeded(&fstab_, init_devices);
+
+    for (auto current = fstab_.begin(); current != fstab_.end(); ) {
+        if (current->fs_type == "overlay") {
+            fs_mgr_overlayfs_mount_fstab_entry(current->lowerdir, current->mount_point);
+        }
+        ++current;
+    }
 
     fs_mgr_overlayfs_mount_all(&fstab_);
 
