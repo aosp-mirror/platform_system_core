@@ -103,6 +103,23 @@ int HandleBadPath(int argc, char** argv) {
     return 0;
 }
 
+TEST(firmware_handler, Matching) {
+    ExternalFirmwareHandler h("/dev/path/a.bin", getuid(), "/test");
+    ASSERT_TRUE(h.match("/dev/path/a.bin"));
+    ASSERT_FALSE(h.match("/dev/path/a.bi"));
+
+    h = ExternalFirmwareHandler("/dev/path/a.*", getuid(), "/test");
+    ASSERT_TRUE(h.match("/dev/path/a.bin"));
+    ASSERT_TRUE(h.match("/dev/path/a.bix"));
+    ASSERT_FALSE(h.match("/dev/path/b.bin"));
+
+    h = ExternalFirmwareHandler("/dev/*/a.bin", getuid(), "/test");
+    ASSERT_TRUE(h.match("/dev/path/a.bin"));
+    ASSERT_TRUE(h.match("/dev/other/a.bin"));
+    ASSERT_FALSE(h.match("/dev/other/c.bin"));
+    ASSERT_FALSE(h.match("/dev/path/b.bin"));
+}
+
 }  // namespace init
 }  // namespace android
 
