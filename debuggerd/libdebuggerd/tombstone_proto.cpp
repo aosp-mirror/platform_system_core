@@ -395,6 +395,15 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                             unwinder->LastErrorAddress());
     }
   } else {
+    if (unwinder->elf_from_memory_not_file()) {
+      auto backtrace_note = thread.mutable_backtrace_note();
+      *backtrace_note->Add() =
+          "Function names and BuildId information is missing for some frames due";
+      *backtrace_note->Add() =
+          "to unreadable libraries. For unwinds of apps, only shared libraries";
+      *backtrace_note->Add() = "found under the lib/ directory are readable.";
+      *backtrace_note->Add() = "On this device, run setenforce 0 to make the libraries readable.";
+    }
     unwinder->SetDisplayBuildID(true);
     for (const auto& frame : unwinder->frames()) {
       BacktraceFrame* f = thread.add_current_backtrace();
