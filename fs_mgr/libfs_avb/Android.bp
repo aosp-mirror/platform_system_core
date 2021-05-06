@@ -78,6 +78,7 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libchrome",
+        "libcrypto",
     ],
     target: {
         darwin: {
@@ -106,9 +107,6 @@ cc_test_host {
     },
     static_libs: [
         "libfs_avb_test_util",
-    ],
-    shared_libs: [
-        "libcrypto",
     ],
     compile_multilib: "first",
     data: [
