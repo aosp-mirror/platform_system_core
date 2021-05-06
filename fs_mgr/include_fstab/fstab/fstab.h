@@ -55,6 +55,7 @@ struct FstabEntry {
     std::string vbmeta_partition;
     uint64_t zram_backingdev_size = 0;
     std::string avb_keys;
+    std::string lowerdir;
 
     struct FsMgrFlags {
         bool wait : 1;
