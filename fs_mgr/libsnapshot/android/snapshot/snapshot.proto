@@ -186,7 +186,7 @@ message SnapshotUpdateStatus {
     MergeFailureCode merge_failure_code = 7;
 }
 
-// Next: 9
+// Next: 10
 message SnapshotMergeReport {
     // Status of the update after the merge attempts.
     UpdateState state = 1;
@@ -212,4 +212,7 @@ message SnapshotMergeReport {
 
     // Time from sys.boot_completed to merge start, in milliseconds.
     uint32 boot_complete_to_merge_start_time_ms = 8;
+
+    // Merge failure code, filled if state == MergeFailed.
+    MergeFailureCode merge_failure_code = 9;
 }

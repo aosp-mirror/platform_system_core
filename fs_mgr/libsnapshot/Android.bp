@@ -251,6 +251,7 @@ cc_defaults {
         "snapshot_metadata_updater_test.cpp",
         "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
+        "snapshot_writer_test.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -420,7 +421,8 @@ cc_defaults {
         "snapuserd_server.cpp",
         "snapuserd.cpp",
         "snapuserd_daemon.cpp",
-        "snapuserd_worker.cpp",
+	"snapuserd_worker.cpp",
+	"snapuserd_readahead.cpp",
     ],
 
     cflags: [
@@ -476,6 +478,9 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
+    ],
+    test_suites: [
+        "device-tests"
     ],
     test_min_api_level: 30,
     auto_gen_config: true,

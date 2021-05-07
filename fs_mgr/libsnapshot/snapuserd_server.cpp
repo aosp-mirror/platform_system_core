@@ -81,7 +81,7 @@ DmUserHandler::DmUserHandler(std::shared_ptr<Snapuserd> snapuserd)
     : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
 bool SnapuserdServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
-    ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), 0));
+    ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), MSG_NOSIGNAL));
     if (ret < 0) {
         PLOG(ERROR) << "Snapuserd:server: send() failed";
         return false;
@@ -209,10 +209,11 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     }
 
     handler->snapuserd()->CloseFds();
+    handler->snapuserd()->CheckMergeCompletionStatus();
+    handler->snapuserd()->UnmapBufferRegion();
 
     auto misc_name = handler->misc_name();
     LOG(INFO) << "Handler thread about to exit: " << misc_name;
-    handler->snapuserd()->CheckMergeCompletionStatus();
 
     {
         std::lock_guard<std::mutex> lock(lock_);

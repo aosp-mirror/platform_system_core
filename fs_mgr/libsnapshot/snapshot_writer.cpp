@@ -90,7 +90,9 @@ std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
     }
 
     const auto& cow_options = options();
-    reader->SetBlockDeviceSize(*cow_options.max_blocks * cow_options.block_size);
+    if (cow_options.max_blocks) {
+        reader->SetBlockDeviceSize(*cow_options.max_blocks * cow_options.block_size);
+    }
 
     return reader;
 }

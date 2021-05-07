@@ -298,6 +298,8 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
+        } else if (StartsWith(flag, "lowerdir=")) {
+            entry->lowerdir = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
