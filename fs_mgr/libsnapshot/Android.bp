@@ -479,6 +479,9 @@ cc_test {
         "libgtest",
         "libsnapshot_cow",
     ],
+    test_suites: [
+        "device-tests"
+    ],
     test_min_api_level: 30,
     auto_gen_config: true,
     require_root: false,
