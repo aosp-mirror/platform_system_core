@@ -55,7 +55,8 @@ using android::fs_mgr::GetPartitionName;
 static constexpr char kTestImageMetadataDir[] = "/metadata/gsi/test";
 static constexpr char kOtaTestImageMetadataDir[] = "/metadata/gsi/ota/test";
 
-std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) {
+std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix,
+                                                 const DeviceInfo& device_info) {
     auto metadata_dir = "/metadata/gsi/" + dir_prefix;
     auto data_dir = "/data/gsi/" + dir_prefix;
     auto install_dir_file = gsi::DsuInstallDirFile(gsi::GetDsuSlot(dir_prefix));
@@ -63,17 +64,28 @@ std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) 
     if (ReadFileToString(install_dir_file, &path)) {
         data_dir = path;
     }
-    return Open(metadata_dir, data_dir);
+    return Open(metadata_dir, data_dir, device_info);
 }
 
 std::unique_ptr<ImageManager> ImageManager::Open(const std::string& metadata_dir,
-                                                 const std::string& data_dir) {
-    return std::unique_ptr<ImageManager>(new ImageManager(metadata_dir, data_dir));
+                                                 const std::string& data_dir,
+                                                 const DeviceInfo& device_info) {
+    return std::unique_ptr<ImageManager>(new ImageManager(metadata_dir, data_dir, device_info));
 }
 
-ImageManager::ImageManager(const std::string& metadata_dir, const std::string& data_dir)
-    : metadata_dir_(metadata_dir), data_dir_(data_dir) {
+ImageManager::ImageManager(const std::string& metadata_dir, const std::string& data_dir,
+                           const DeviceInfo& device_info)
+    : metadata_dir_(metadata_dir), data_dir_(data_dir), device_info_(device_info) {
     partition_opener_ = std::make_unique<android::fs_mgr::PartitionOpener>();
+
+    // Allow overriding whether ImageManager thinks it's in recovery, for testing.
+#ifdef __ANDROID_RECOVERY__
+    device_info_.is_recovery = {true};
+#else
+    if (!device_info_.is_recovery.has_value()) {
+        device_info_.is_recovery = {false};
+    }
+#endif
 }
 
 std::string ImageManager::GetImageHeaderPath(const std::string& name) {
@@ -261,10 +273,11 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         return false;
     }
 
-#if defined __ANDROID_RECOVERY__
-    LOG(ERROR) << "Cannot remove images backed by /data in recovery";
-    return false;
-#else
+    if (device_info_.is_recovery.value()) {
+        LOG(ERROR) << "Cannot remove images backed by /data in recovery";
+        return false;
+    }
+
     std::string message;
     auto header_file = GetImageHeaderPath(name);
     if (!SplitFiemap::RemoveSplitFiles(header_file, &message)) {
@@ -278,7 +291,6 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         LOG(ERROR) << "Error removing " << status_file << ": " << message;
     }
     return RemoveImageMetadata(metadata_dir_, name);
-#endif
 }
 
 // Create a block device for an image file, using its extents in its
@@ -521,6 +533,9 @@ bool ImageManager::MapImageDevice(const std::string& name,
     // filesystem. This should only happen on devices with no encryption, or
     // devices with FBE and no metadata encryption. For these cases it suffices
     // to perform normal file writes to /data/gsi (which is unencrypted).
+    //
+    // Note: this is not gated on DeviceInfo, because the recovery-specific path
+    // must only be used in actual recovery.
     std::string block_device;
     bool can_use_devicemapper;
     if (!FiemapWriter::GetBlockDeviceForFile(image_header, &block_device, &can_use_devicemapper)) {
