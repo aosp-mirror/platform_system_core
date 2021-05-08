@@ -392,6 +392,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
+    FRIEND_TEST(SnapshotUpdateTest, DataWipeWithStaleSnapshots);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
