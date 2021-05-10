@@ -191,7 +191,7 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
         }
         case DaemonOperations::DETACH: {
             terminating_ = true;
-            return Sendmsg(fd, "success");
+            return true;
         }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
