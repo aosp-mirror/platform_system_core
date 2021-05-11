@@ -23,6 +23,7 @@
 
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 
 using android::base::GetProperty;
@@ -88,6 +89,40 @@ TEST(property_service, userspace_reboot_not_supported) {
 
     ASSERT_TRUE(SetProperty("init.userspace_reboot.is_supported", "false"));
     EXPECT_FALSE(SetProperty("sys.powerctl", "reboot,userspace"));
+}
+
+TEST(property_service, check_fingerprint_with_legacy_build_id) {
+    std::string legacy_build_id = GetProperty("ro.build.legacy.id", "");
+    if (legacy_build_id.empty()) {
+        GTEST_SKIP() << "Skipping test, legacy build id isn't set.";
+    }
+
+    std::string vbmeta_digest = GetProperty("ro.boot.vbmeta.digest", "");
+    ASSERT_GE(vbmeta_digest.size(), 8u);
+    std::string build_id = GetProperty("ro.boot.build.id", "");
+    // Check that the build id is constructed with the prefix of vbmeta digest
+    std::string expected_build_id = legacy_build_id + "." + vbmeta_digest.substr(0, 8);
+    ASSERT_EQ(expected_build_id, build_id);
+    // Check that the fingerprint is constructed with the expected format.
+    std::string fingerprint = GetProperty("ro.build.fingerprint", "");
+    std::vector<std::string> fingerprint_fields = {
+            GetProperty("ro.product.brand", ""),
+            "/",
+            GetProperty("ro.product.name", ""),
+            "/",
+            GetProperty("ro.product.device", ""),
+            ":",
+            GetProperty("ro.build.version.release_or_codename", ""),
+            "/",
+            expected_build_id,
+            "/",
+            GetProperty("ro.build.version.incremental", ""),
+            ":",
+            GetProperty("ro.build.type", ""),
+            "/",
+            GetProperty("ro.build.tags", "")};
+
+    ASSERT_EQ(android::base::Join(fingerprint_fields, ""), fingerprint);
 }
 
 }  // namespace init
