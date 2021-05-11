@@ -325,14 +325,14 @@ TEST(fs_mgr, ReadFstabFromFile_MountOptions) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source /            ext4    ro,barrier=1                    wait,slotselect,avb
+source /            ext4    ro,barrier=1                    wait,avb
 source /metadata    ext4    noatime,nosuid,nodev,discard    wait,formattable
 
 source /data        f2fs    noatime,nosuid,nodev,discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier    latemount,wait,check,fileencryption=ice,keydirectory=/metadata/vold/metadata_encryption,quota,formattable,sysfs_path=/sys/devices/platform/soc/1d84000.ufshc,reservedsize=128M
 
 source /misc        emmc    defaults                        defaults
 
-source /vendor/firmware_mnt    vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0    wait,slotselect
+source /vendor/firmware_mnt    vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0    wait
 
 source auto         vfat    defaults                        voldmanaged=usb:auto
 source none         swap    defaults                        zramsize=1073741824,max_comp_streams=8
@@ -412,8 +412,8 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrFlags) {
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
 source none0       swap   defaults      wait,check,nonremovable,recoveryonly,verifyatboot,verify
-source none1       swap   defaults      avb,noemulatedsd,notrim,formattable,slotselect,nofail
-source none2       swap   defaults      first_stage_mount,latemount,quota,logical,slotselect_other
+source none1       swap   defaults      avb,noemulatedsd,notrim,formattable,nofail
+source none2       swap   defaults      first_stage_mount,latemount,quota,logical
 source none3       swap   defaults      checkpoint=block
 source none4       swap   defaults      checkpoint=fs
 source none5       swap   defaults      defaults
@@ -445,7 +445,6 @@ source none5       swap   defaults      defaults
         flags.no_emulated_sd = true;
         flags.no_trim = true;
         flags.formattable = true;
-        flags.slot_select = true;
         flags.no_fail = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
@@ -458,7 +457,6 @@ source none5       swap   defaults      defaults
         flags.late_mount = true;
         flags.quota = true;
         flags.logical = true;
-        flags.slot_select_other = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
 
