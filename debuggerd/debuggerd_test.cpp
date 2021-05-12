@@ -512,6 +512,38 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
 #endif
 }
 
+TEST_P(SizeParamCrasherTest, mte_oob_uaf) {
+#if defined(__aarch64__)
+  if (!mte_supported()) {
+    GTEST_SKIP() << "Requires MTE";
+  }
+
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([&]() {
+    SetTagCheckingLevelSync();
+    volatile int* p = (volatile int*)malloc(GetParam());
+    free((void *)p);
+    p[-1] = 42;
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+  ASSERT_NOT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 4 bytes left)");
+#else
+  GTEST_SKIP() << "Requires aarch64";
+#endif
+}
+
 TEST_P(SizeParamCrasherTest, mte_overflow) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
