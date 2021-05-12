@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,16 @@
  * limitations under the License.
  */
 
-#pragma once
+#define LOG_TAG "LightRefBase"
 
-#include <stdint.h>
-#include <sys/types.h>
+#include <utils/LightRefBase.h>
 
-#include <utils/Timers.h>
+#include <log/log.h>
 
 namespace android {
 
-class StopWatch {
-  public:
-    StopWatch(const char* name, int clock = SYSTEM_TIME_MONOTONIC);
-    ~StopWatch();
-
-    const char* name() const;
-    nsecs_t elapsedTime() const;
-
-    void reset();
-
-  private:
-    const char* mName;
-    int mClock;
-
-    nsecs_t mStartTime;
-};
+void LightRefBase_reportIncStrongRequireStrongFailed(const void* thiz) {
+    LOG_ALWAYS_FATAL("incStrongRequireStrong() called on %p which isn't already owned", thiz);
+}
 
 }  // namespace android

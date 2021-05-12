@@ -96,6 +96,8 @@ class TempDevice {
 class CowSnapuserdTest final {
   public:
     bool Setup();
+    bool SetupCopyOverlap_1();
+    bool SetupCopyOverlap_2();
     bool Merge();
     void ValidateMerge();
     void ReadSnapshotDeviceAndValidate();
@@ -114,6 +116,9 @@ class CowSnapuserdTest final {
     void StartMerge();
 
     void CreateCowDevice();
+    void CreateCowDeviceWithCopyOverlap_1();
+    void CreateCowDeviceWithCopyOverlap_2();
+    bool SetupDaemon();
     void CreateBaseDevice();
     void InitCowDevice();
     void SetDeviceControlName();
@@ -191,6 +196,33 @@ bool CowSnapuserdTest::Setup() {
     return setup_ok_;
 }
 
+bool CowSnapuserdTest::SetupCopyOverlap_1() {
+    CreateBaseDevice();
+    CreateCowDeviceWithCopyOverlap_1();
+    return SetupDaemon();
+}
+
+bool CowSnapuserdTest::SetupCopyOverlap_2() {
+    CreateBaseDevice();
+    CreateCowDeviceWithCopyOverlap_2();
+    return SetupDaemon();
+}
+
+bool CowSnapuserdTest::SetupDaemon() {
+    SetDeviceControlName();
+
+    StartSnapuserdDaemon();
+    InitCowDevice();
+
+    CreateDmUserDevice();
+    InitDaemon();
+
+    CreateSnapshotDevice();
+    setup_ok_ = true;
+
+    return setup_ok_;
+}
+
 void CowSnapuserdTest::StartSnapuserdDaemon() {
     pid_t pid = fork();
     ASSERT_GE(pid, 0);
@@ -253,6 +285,101 @@ void CowSnapuserdTest::ReadSnapshotDeviceAndValidate() {
     offset += size_;
     ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), size_, offset), true);
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 3), size_), 0);
+}
+
+void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    CowOptions options;
+    options.compression = "gz";
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+
+    size_t num_blocks = size_ / options.block_size;
+    size_t x = num_blocks;
+    size_t blk_src_copy = 0;
+
+    // Create overlapping copy operations
+    while (1) {
+        ASSERT_TRUE(writer.AddCopy(blk_src_copy, blk_src_copy + 1));
+        x -= 1;
+        if (x == 1) {
+            break;
+        }
+        blk_src_copy += 1;
+    }
+
+    // Flush operations
+    ASSERT_TRUE(writer.Finalize());
+
+    // Construct the buffer required for validation
+    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+
+    // Read the entire base device
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), total_base_size_, 0),
+              true);
+
+    // Merged operations required for validation
+    int block_size = 4096;
+    x = num_blocks;
+    loff_t src_offset = block_size;
+    loff_t dest_offset = 0;
+
+    while (1) {
+        memmove((char*)orig_buffer_.get() + dest_offset, (char*)orig_buffer_.get() + src_offset,
+                block_size);
+        x -= 1;
+        if (x == 1) {
+            break;
+        }
+        src_offset += block_size;
+        dest_offset += block_size;
+    }
+}
+
+void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_1() {
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    CowOptions options;
+    options.compression = "gz";
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+
+    size_t num_blocks = size_ / options.block_size;
+    size_t x = num_blocks;
+    size_t blk_src_copy = num_blocks - 1;
+
+    // Create overlapping copy operations
+    while (1) {
+        ASSERT_TRUE(writer.AddCopy(blk_src_copy + 1, blk_src_copy));
+        x -= 1;
+        if (x == 0) {
+            ASSERT_EQ(blk_src_copy, 0);
+            break;
+        }
+        blk_src_copy -= 1;
+    }
+
+    // Flush operations
+    ASSERT_TRUE(writer.Finalize());
+
+    // Construct the buffer required for validation
+    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+
+    // Read the entire base device
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), total_base_size_, 0),
+              true);
+
+    // Merged operations
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), options.block_size, 0),
+              true);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(
+                      base_fd_, (char*)orig_buffer_.get() + options.block_size, size_, 0),
+              true);
 }
 
 void CowSnapuserdTest::CreateCowDevice() {
@@ -757,6 +884,31 @@ TEST(Snapuserd_Test, Snapshot_IO_TEST) {
     harness.ValidateMerge();
     harness.Shutdown();
 }
+
+TEST(Snapuserd_Test, Snapshot_COPY_Overlap_TEST_1) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.SetupCopyOverlap_1());
+    ASSERT_TRUE(harness.Merge());
+    harness.ValidateMerge();
+    harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, Snapshot_COPY_Overlap_TEST_2) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.SetupCopyOverlap_2());
+    ASSERT_TRUE(harness.Merge());
+    harness.ValidateMerge();
+    harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
+    CowSnapuserdTest harness;
+    ASSERT_TRUE(harness.SetupCopyOverlap_1());
+    harness.MergeInterrupt();
+    harness.ValidateMerge();
+    harness.Shutdown();
+}
+
 }  // namespace snapshot
 }  // namespace android
 

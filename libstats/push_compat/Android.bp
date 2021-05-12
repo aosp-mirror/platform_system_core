@@ -55,7 +55,7 @@ cc_library {
     export_header_lib_headers: [
         "libstatssocket_headers",
     ],
-    static_libs: ["libgtest_prod"],
+    header_libs: ["libgtest_prod_headers"],
     apex_available: ["com.android.resolv"],
     min_sdk_version: "29",
 }

@@ -94,6 +94,7 @@ void CowWriter::SetupHeaders() {
     header_.block_size = options_.block_size;
     header_.num_merge_ops = 0;
     header_.cluster_ops = options_.cluster_ops;
+    header_.buffer_size = 0;
     footer_ = {};
     footer_.op.data_length = 64;
     footer_.op.type = kCowFooterOp;
@@ -139,12 +140,6 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     return true;
 }
 
-void CowWriter::InitializeMerge(borrowed_fd fd, CowHeader* header) {
-    fd_ = fd;
-    memcpy(&header_, header, sizeof(CowHeader));
-    merge_in_progress_ = true;
-}
-
 bool CowWriter::Initialize(unique_fd&& fd) {
     owned_fd_ = std::move(fd);
     return Initialize(borrowed_fd{owned_fd_});
@@ -172,7 +167,7 @@ bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) 
 }
 
 void CowWriter::InitPos() {
-    next_op_pos_ = sizeof(header_);
+    next_op_pos_ = sizeof(header_) + header_.buffer_size;
     cluster_size_ = header_.cluster_ops * sizeof(CowOperation);
     if (header_.cluster_ops) {
         next_data_pos_ = next_op_pos_ + cluster_size_;
@@ -196,6 +191,10 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        header_.buffer_size = BUFFER_REGION_DEFAULT_SIZE;
+    }
+
     // Headers are not complete, but this ensures the file is at the right
     // position.
     if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
@@ -203,7 +202,27 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        // Initialize the scratch space
+        std::string data(header_.buffer_size, 0);
+        if (!android::base::WriteFully(fd_, data.data(), header_.buffer_size)) {
+            PLOG(ERROR) << "writing scratch space failed";
+            return false;
+        }
+    }
+
+    if (!Sync()) {
+        LOG(ERROR) << "Header sync failed";
+        return false;
+    }
+
+    if (lseek(fd_.get(), sizeof(header_) + header_.buffer_size, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+
     InitPos();
+
     return true;
 }
 
@@ -515,24 +534,6 @@ bool CowWriter::Sync() {
         return false;
     }
     return true;
-}
-
-bool CowWriter::CommitMerge(int merged_ops) {
-    CHECK(merge_in_progress_);
-    header_.num_merge_ops += merged_ops;
-
-    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-
-    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&header_),
-                                   sizeof(header_))) {
-        PLOG(ERROR) << "WriteFully failed";
-        return false;
-    }
-
-    return Sync();
 }
 
 bool CowWriter::Truncate(off_t length) {

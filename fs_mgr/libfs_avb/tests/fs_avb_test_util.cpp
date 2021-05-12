@@ -122,6 +122,7 @@ base::FilePath BaseFsAvbTest::ExtractVBMetaImage(const base::FilePath& image_pat
                                                  const size_t padding_size) {
     VBMetaImage vbmeta_image;
     vbmeta_image.path = test_dir_.Append(output_file_name);
+    GTEST_LOG_(INFO) << "ExtractVBMetaImage: " << image_path << " to " << output_file_name;
     EXPECT_COMMAND(0,
                    "avbtool extract_vbmeta_image"
                    " --image %s"

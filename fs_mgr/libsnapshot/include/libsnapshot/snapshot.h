@@ -167,6 +167,10 @@ class ISnapshotManager {
     virtual UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                            const std::function<bool()>& before_cancel = {}) = 0;
 
+    // If ProcessUpdateState() returned MergeFailed, this returns the appropriate
+    // code. Otherwise, MergeFailureCode::Ok is returned.
+    virtual MergeFailureCode ReadMergeFailureCode() = 0;
+
     // Find the status of the current update, if any.
     //
     // |progress| depends on the returned status:
@@ -332,6 +336,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
     void UpdateCowStats(ISnapshotMergeStats* stats) override;
+    MergeFailureCode ReadMergeFailureCode() override;
     bool InitiateMerge() override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
@@ -387,6 +392,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
+    FRIEND_TEST(SnapshotUpdateTest, DataWipeWithStaleSnapshots);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
