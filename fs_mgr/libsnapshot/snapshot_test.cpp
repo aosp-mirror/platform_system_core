@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <libsnapshot/cow_format.h>
 #include <libsnapshot/snapshot.h>
 
 #include <fcntl.h>
@@ -327,6 +328,7 @@ class SnapshotTest : public ::testing::Test {
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
         dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         auto group = dynamic_partition_metadata->add_groups();
         group->set_name("group");
@@ -853,6 +855,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
         dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         // Create a fake update package metadata.
         // Not using full name "system", "vendor", "product" because these names collide with the
@@ -1857,6 +1860,67 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     }
 }
 
+// Test update package that requests data wipe.
+TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
+    AddOperationForPartitions();
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
+    }
+
+    // Create a stale snapshot that should not exist.
+    {
+        ASSERT_TRUE(AcquireLock());
+
+        PartitionCowCreator cow_creator = {
+                .compression_enabled = IsCompressionEnabled(),
+                .compression_algorithm = IsCompressionEnabled() ? "gz" : "none",
+        };
+        SnapshotStatus status;
+        status.set_name("sys_a");
+        status.set_device_size(1_MiB);
+        status.set_snapshot_size(2_MiB);
+        status.set_cow_partition_size(2_MiB);
+
+        ASSERT_TRUE(sm->CreateSnapshot(lock_.get(), &cow_creator, &status));
+        lock_ = nullptr;
+
+        ASSERT_TRUE(sm->EnsureImageManager());
+        ASSERT_TRUE(sm->image_manager()->CreateBackingImage("sys_a", 1_MiB, 0));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_b");
+    test_device->set_recovery(true);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
+
+    ASSERT_TRUE(new_sm->HandleImminentDataWipe());
+    // Manually mount metadata so that we can call GetUpdateState() below.
+    MountMetadata();
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
+    ASSERT_FALSE(test_device->IsSlotUnbootable(1));
+    ASSERT_FALSE(test_device->IsSlotUnbootable(0));
+
+    // Now reboot into new slot.
+    test_device = new TestDeviceInfo(fake_super, "_b");
+    auto init = NewManagerForFirstStageMount(test_device);
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    // Verify that we are on the downgraded build.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name)) << name;
+    }
+}
+
 TEST_F(SnapshotUpdateTest, Hashtree) {
     constexpr auto partition_size = 4_MiB;
     constexpr auto data_size = 3_MiB;
@@ -2244,8 +2308,26 @@ class SnapshotTestEnvironment : public ::testing::Environment {
     void TearDown() override;
 
   private:
+    bool CreateFakeSuper();
+
     std::unique_ptr<IImageManager> super_images_;
 };
+
+bool SnapshotTestEnvironment::CreateFakeSuper() {
+    // Create and map the fake super partition.
+    static constexpr int kImageFlags =
+            IImageManager::CREATE_IMAGE_DEFAULT | IImageManager::CREATE_IMAGE_ZERO_FILL;
+    if (!super_images_->CreateBackingImage("fake-super", kSuperSize, kImageFlags)) {
+        LOG(ERROR) << "Could not create fake super partition";
+        return false;
+    }
+    if (!super_images_->MapImageDevice("fake-super", 10s, &fake_super)) {
+        LOG(ERROR) << "Could not map fake super partition";
+        return false;
+    }
+    test_device->set_fake_super(fake_super);
+    return true;
+}
 
 void SnapshotTestEnvironment::SetUp() {
     // b/163082876: GTEST_SKIP in Environment will make atest report incorrect results. Until
@@ -2272,27 +2354,36 @@ void SnapshotTestEnvironment::SetUp() {
     sm = SnapshotManager::New(test_device);
     ASSERT_NE(nullptr, sm) << "Could not create snapshot manager";
 
+    // Use a separate image manager for our fake super partition.
+    super_images_ = IImageManager::Open("ota/test/super", 10s);
+    ASSERT_NE(nullptr, super_images_) << "Could not create image manager";
+
+    // Map the old image if one exists so we can safely unmap everything that
+    // depends on it.
+    bool recreate_fake_super;
+    if (super_images_->BackingImageExists("fake-super")) {
+        if (super_images_->IsImageMapped("fake-super")) {
+            ASSERT_TRUE(super_images_->GetMappedImageDevice("fake-super", &fake_super));
+        } else {
+            ASSERT_TRUE(super_images_->MapImageDevice("fake-super", 10s, &fake_super));
+        }
+        test_device->set_fake_super(fake_super);
+        recreate_fake_super = true;
+    } else {
+        ASSERT_TRUE(CreateFakeSuper());
+        recreate_fake_super = false;
+    }
+
     // Clean up previous run.
     MetadataMountedTest().TearDown();
     SnapshotUpdateTest().Cleanup();
     SnapshotTest().Cleanup();
 
-    // Use a separate image manager for our fake super partition.
-    super_images_ = IImageManager::Open("ota/test/super", 10s);
-    ASSERT_NE(nullptr, super_images_) << "Could not create image manager";
-
-    // Clean up any old copy.
-    DeleteBackingImage(super_images_.get(), "fake-super");
-
-    // Create and map the fake super partition.
-    static constexpr int kImageFlags =
-            IImageManager::CREATE_IMAGE_DEFAULT | IImageManager::CREATE_IMAGE_ZERO_FILL;
-    ASSERT_TRUE(super_images_->CreateBackingImage("fake-super", kSuperSize, kImageFlags))
-            << "Could not create fake super partition";
-
-    ASSERT_TRUE(super_images_->MapImageDevice("fake-super", 10s, &fake_super))
-            << "Could not map fake super partition";
-    test_device->set_fake_super(fake_super);
+    if (recreate_fake_super) {
+        // Clean up any old copy.
+        DeleteBackingImage(super_images_.get(), "fake-super");
+        ASSERT_TRUE(CreateFakeSuper());
+    }
 }
 
 void SnapshotTestEnvironment::TearDown() {

@@ -36,6 +36,8 @@ struct CowOptions {
 
     // Number of CowOperations in a cluster. 0 for no clustering. Cannot be 1.
     uint32_t cluster_ops = 200;
+
+    bool scratch_space = true;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -100,12 +102,11 @@ class CowWriter : public ICowWriter {
     bool InitializeAppend(android::base::unique_fd&&, uint64_t label);
     bool InitializeAppend(android::base::borrowed_fd fd, uint64_t label);
 
-    void InitializeMerge(android::base::borrowed_fd fd, CowHeader* header);
-    bool CommitMerge(int merged_ops);
-
     bool Finalize() override;
 
     uint64_t GetCowSize() override;
+
+    uint32_t GetCowVersion() { return header_.major_version; }
 
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;

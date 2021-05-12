@@ -685,15 +685,20 @@ on post-fs-data
     exec - system system -- /system/bin/vdc keymaster earlyBootEnded
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
+    #
+    # To handle userspace reboots as well as devices that use FDE, make sure
+    # that apexd is started cleanly here (set apexd.status="") and that it is
+    # restarted if it's already running.
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
-    mkdir /data/apex/decompressed 0700 root system encryption=Require
+    mkdir /data/apex/decompressed 0755 root system encryption=Require
     mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
     mkdir /data/apex/ota_reserved 0700 root system encryption=Require
-    start apexd
+    setprop apexd.status ""
+    restart apexd
 
     # create rest of basic filesystem structure
     mkdir /data/misc/recovery 0770 system log
@@ -917,7 +922,6 @@ on post-fs-data
     # Must start before 'odsign', as odsign depends on *CLASSPATH variables
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
-    rm /data/system/environ/classpath
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
@@ -1241,7 +1245,6 @@ on userspace-reboot-requested
   setprop dev.bootcomplete ""
   setprop sys.init.updatable_crashing ""
   setprop sys.init.updatable_crashing_process_name ""
-  setprop apexd.status ""
   setprop sys.user.0.ce_available ""
   setprop sys.shutdown.requested ""
   setprop service.bootanim.exit ""
