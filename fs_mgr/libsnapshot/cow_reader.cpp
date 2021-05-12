@@ -377,7 +377,6 @@ void CowReader::InitializeMerge() {
               });
 
     if (header_.num_merge_ops > 0) {
-        CHECK(ops_->size() >= header_.num_merge_ops);
         ops_->erase(ops_.get()->begin(), ops_.get()->begin() + header_.num_merge_ops);
     }
 
