@@ -437,6 +437,7 @@ bool Snapuserd::ReadMetadata() {
     int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     std::optional<chunk_t> prev_id = {};
     std::map<uint64_t, const CowOperation*> map;
+    std::set<uint64_t> dest_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
     uint64_t total_copy_ops = reader_->total_copy_ops();
 
@@ -555,10 +556,15 @@ bool Snapuserd::ReadMetadata() {
                 if (diff != 1) {
                     break;
                 }
+
+                if (dest_blocks.count(cow_op->new_block) || map.count(cow_op->source) > 0) {
+                    break;
+                }
             }
             metadata_found = true;
             pending_copy_ops -= 1;
             map[cow_op->new_block] = cow_op;
+            dest_blocks.insert(cow_op->source);
             prev_id = cow_op->new_block;
             cowop_riter_->Next();
         } while (!cowop_riter_->Done() && pending_copy_ops);
@@ -620,6 +626,7 @@ bool Snapuserd::ReadMetadata() {
             }
         }
         map.clear();
+        dest_blocks.clear();
         prev_id.reset();
     }
 
