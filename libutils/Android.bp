@@ -275,12 +275,6 @@ cc_fuzz {
 }
 
 cc_fuzz {
-    name: "libutils_fuzz_stopwatch",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["StopWatch_fuzz.cpp"],
-}
-
-cc_fuzz {
     name: "libutils_fuzz_refbase",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["RefBase_fuzz.cpp"],
