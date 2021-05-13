@@ -378,7 +378,10 @@ std::shared_ptr<DmUserHandler> SnapuserdServer::AddHandler(const std::string& mi
 }
 
 bool SnapuserdServer::StartHandler(const std::shared_ptr<DmUserHandler>& handler) {
-    CHECK(!handler->snapuserd()->IsAttached());
+    if (handler->snapuserd()->IsAttached()) {
+        LOG(ERROR) << "Handler already attached";
+        return false;
+    }
 
     handler->snapuserd()->AttachControlDevice();
 
