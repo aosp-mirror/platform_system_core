@@ -57,7 +57,9 @@ void* BufferSink::GetBuffer(size_t requested, size_t* actual) {
 }
 
 struct dm_user_header* BufferSink::GetHeaderPtr() {
-    CHECK(sizeof(struct dm_user_header) <= buffer_size_);
+    if (!(sizeof(struct dm_user_header) <= buffer_size_)) {
+        return nullptr;
+    }
     char* buf = reinterpret_cast<char*>(GetBufPtr());
     struct dm_user_header* header = (struct dm_user_header*)(&(buf[0]));
     return header;
@@ -111,7 +113,6 @@ bool WorkerThread::InitReader() {
 // the header, zero out the remaining block.
 void WorkerThread::ConstructKernelCowHeader() {
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    CHECK(buffer != nullptr);
 
     memset(buffer, 0, BLOCK_SZ);
 
@@ -137,7 +138,10 @@ bool WorkerThread::ProcessReplaceOp(const CowOperation* cow_op) {
 
 bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    CHECK(buffer != nullptr);
+    if (buffer == nullptr) {
+        SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
+        return false;
+    }
     SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
                     << " Source: " << cow_op->source;
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ,
@@ -152,7 +156,10 @@ bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
 
 bool WorkerThread::GetReadAheadPopulatedBuffer(const CowOperation* cow_op) {
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    CHECK(buffer != nullptr);
+    if (buffer == nullptr) {
+        SNAP_LOG(ERROR) << "GetReadAheadPopulatedBuffer: Failed to get payload buffer";
+        return false;
+    }
 
     if (!snapuserd_->GetReadAheadPopulatedBuffer(cow_op->new_block, buffer)) {
         return false;
@@ -178,14 +185,20 @@ bool WorkerThread::ProcessCopyOp(const CowOperation* cow_op) {
 bool WorkerThread::ProcessZeroOp() {
     // Zero out the entire block
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    CHECK(buffer != nullptr);
+    if (buffer == nullptr) {
+        SNAP_LOG(ERROR) << "ProcessZeroOp: Failed to get payload buffer";
+        return false;
+    }
 
     memset(buffer, 0, BLOCK_SZ);
     return true;
 }
 
 bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
-    CHECK(cow_op != nullptr);
+    if (cow_op == nullptr) {
+        SNAP_LOG(ERROR) << "ProcessCowOp: Invalid cow_op";
+        return false;
+    }
 
     switch (cow_op->type) {
         case kCowReplaceOp: {
@@ -216,7 +229,8 @@ int WorkerThread::ReadUnalignedSector(
                     << " Aligned sector: " << it->first;
 
     if (!ProcessCowOp(it->second)) {
-        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size;
+        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size
+                        << " Aligned sector: " << it->first;
         return -1;
     }
 
@@ -261,7 +275,10 @@ int WorkerThread::ReadData(sector_t sector, size_t size) {
     it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
                           Snapuserd::compare);
 
-    CHECK(it != chunk_vec.end());
+    if (!(it != chunk_vec.end())) {
+        SNAP_LOG(ERROR) << "ReadData: Sector " << sector << " not found in chunk_vec";
+        return -1;
+    }
 
     // We didn't find the required sector; hence find the previous sector
     // as lower_bound will gives us the value greater than
@@ -334,7 +351,10 @@ bool WorkerThread::ZerofillDiskExceptions(size_t read_size) {
     }
 
     void* buffer = bufsink_.GetPayloadBuffer(size);
-    CHECK(buffer != nullptr);
+    if (buffer == nullptr) {
+        SNAP_LOG(ERROR) << "ZerofillDiskExceptions: Failed to get payload buffer";
+        return false;
+    }
 
     memset(buffer, 0, size);
     return true;
@@ -364,10 +384,17 @@ bool WorkerThread::ReadDiskExceptions(chunk_t chunk, size_t read_size) {
     if (divresult.quot < vec.size()) {
         size = exceptions_per_area_ * sizeof(struct disk_exception);
 
-        CHECK(read_size == size);
+        if (read_size != size) {
+            SNAP_LOG(ERROR) << "ReadDiskExceptions: read_size: " << read_size
+                            << " does not match with size: " << size;
+            return false;
+        }
 
         void* buffer = bufsink_.GetPayloadBuffer(size);
-        CHECK(buffer != nullptr);
+        if (buffer == nullptr) {
+            SNAP_LOG(ERROR) << "ReadDiskExceptions: Failed to get payload buffer of size: " << size;
+            return false;
+        }
 
         memcpy(buffer, vec[divresult.quot].get(), size);
     } else {
@@ -390,8 +417,19 @@ loff_t WorkerThread::GetMergeStartOffset(void* merged_buffer, void* unmerged_buf
 
         // Unmerged op by the kernel
         if (merged_de->old_chunk != 0 || merged_de->new_chunk != 0) {
-            CHECK(merged_de->old_chunk == cow_de->old_chunk);
-            CHECK(merged_de->new_chunk == cow_de->new_chunk);
+            if (!(merged_de->old_chunk == cow_de->old_chunk)) {
+                SNAP_LOG(ERROR) << "GetMergeStartOffset: merged_de->old_chunk: "
+                                << merged_de->old_chunk
+                                << "cow_de->old_chunk: " << cow_de->old_chunk;
+                return -1;
+            }
+
+            if (!(merged_de->new_chunk == cow_de->new_chunk)) {
+                SNAP_LOG(ERROR) << "GetMergeStartOffset: merged_de->new_chunk: "
+                                << merged_de->new_chunk
+                                << "cow_de->new_chunk: " << cow_de->new_chunk;
+                return -1;
+            }
 
             offset += sizeof(struct disk_exception);
             *unmerged_exceptions += 1;
@@ -400,8 +438,6 @@ loff_t WorkerThread::GetMergeStartOffset(void* merged_buffer, void* unmerged_buf
 
         break;
     }
-
-    CHECK(!(*unmerged_exceptions == exceptions_per_area_));
 
     SNAP_LOG(DEBUG) << "Unmerged_Exceptions: " << *unmerged_exceptions << " Offset: " << offset;
     return offset;
@@ -421,8 +457,15 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
         struct disk_exception* cow_de =
                 reinterpret_cast<struct disk_exception*>((char*)unmerged_buffer + offset);
 
-        CHECK(merged_de->new_chunk == 0);
-        CHECK(merged_de->old_chunk == 0);
+        if (!(merged_de->new_chunk == 0)) {
+            SNAP_LOG(ERROR) << "GetNumberOfMergedOps: Invalid new-chunk: " << merged_de->new_chunk;
+            return -1;
+        }
+
+        if (!(merged_de->old_chunk == 0)) {
+            SNAP_LOG(ERROR) << "GetNumberOfMergedOps: Invalid old-chunk: " << merged_de->old_chunk;
+            return -1;
+        }
 
         if (cow_de->new_chunk != 0) {
             merged_ops_cur_iter += 1;
@@ -430,11 +473,18 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
             auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
                                        std::make_pair(ChunkToSector(cow_de->new_chunk), nullptr),
                                        Snapuserd::compare);
-            CHECK(it != chunk_vec.end());
-            CHECK(it->first == ChunkToSector(cow_de->new_chunk));
+
+            if (!(it != chunk_vec.end())) {
+                SNAP_LOG(ERROR) << "Sector not found: " << ChunkToSector(cow_de->new_chunk);
+                return -1;
+            }
+
+            if (!(it->first == ChunkToSector(cow_de->new_chunk))) {
+                SNAP_LOG(ERROR) << "Invalid sector: " << ChunkToSector(cow_de->new_chunk);
+                return -1;
+            }
             const CowOperation* cow_op = it->second;
 
-            CHECK(cow_op != nullptr);
             if (snapuserd_->IsReadAheadFeaturePresent() && cow_op->type == kCowCopyOp) {
                 *copy_op = true;
                 // Every single copy operation has to come from read-ahead
@@ -453,7 +503,6 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
                 }
             }
 
-            CHECK(cow_op->new_block == cow_de->old_chunk);
             // zero out to indicate that operation is merged.
             cow_de->old_chunk = 0;
             cow_de->new_chunk = 0;
@@ -463,7 +512,6 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
             //
             // If the op was merged in previous cycle, we don't have
             // to count them.
-            CHECK(cow_de->new_chunk == 0);
             break;
         } else {
             SNAP_LOG(ERROR) << "Error in merge operation. Found invalid metadata: "
@@ -488,18 +536,33 @@ bool WorkerThread::ProcessMergeComplete(chunk_t chunk, void* buffer) {
 
     // ChunkID to vector index
     lldiv_t divresult = lldiv(chunk, stride);
-    CHECK(divresult.quot < vec.size());
+
+    if (!(divresult.quot < vec.size())) {
+        SNAP_LOG(ERROR) << "ProcessMergeComplete: Invalid chunk: " << chunk
+                        << " Metadata-Index: " << divresult.quot << " Area-size: " << vec.size();
+        return false;
+    }
+
     SNAP_LOG(DEBUG) << "ProcessMergeComplete: chunk: " << chunk
                     << " Metadata-Index: " << divresult.quot;
 
     int unmerged_exceptions = 0;
     loff_t offset = GetMergeStartOffset(buffer, vec[divresult.quot].get(), &unmerged_exceptions);
 
+    if (offset < 0) {
+        SNAP_LOG(ERROR) << "GetMergeStartOffset failed: unmerged_exceptions: "
+                        << unmerged_exceptions;
+        return false;
+    }
+
     int merged_ops_cur_iter = GetNumberOfMergedOps(buffer, vec[divresult.quot].get(), offset,
                                                    unmerged_exceptions, &copy_op, &commit);
 
     // There should be at least one operation merged in this cycle
-    CHECK(merged_ops_cur_iter > 0);
+    if (!(merged_ops_cur_iter > 0)) {
+        SNAP_LOG(ERROR) << "Merge operation failed: " << merged_ops_cur_iter;
+        return false;
+    }
 
     if (copy_op) {
         if (commit) {
@@ -570,8 +633,12 @@ bool WorkerThread::DmuserWriteRequest() {
     // REQ_PREFLUSH flag set. Snapuser daemon doesn't have anything
     // to flush per se; hence, just respond back with a success message.
     if (header->sector == 0) {
-        CHECK(header->len == 0);
-        header->type = DM_USER_RESP_SUCCESS;
+        if (!(header->len == 0)) {
+            header->type = DM_USER_RESP_ERROR;
+        } else {
+            header->type = DM_USER_RESP_SUCCESS;
+        }
+
         if (!WriteDmUserPayload(0)) {
             return false;
         }
@@ -581,33 +648,37 @@ bool WorkerThread::DmuserWriteRequest() {
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
     size_t remaining_size = header->len;
     size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
-    CHECK(read_size == BLOCK_SZ) << "DmuserWriteRequest: read_size: " << read_size;
 
-    CHECK(header->sector > 0);
     chunk_t chunk = SectorToChunk(header->sector);
     auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
                                std::make_pair(header->sector, nullptr), Snapuserd::compare);
 
     bool not_found = (it == chunk_vec.end() || it->first != header->sector);
-    CHECK(not_found);
 
-    void* buffer = bufsink_.GetPayloadBuffer(read_size);
-    CHECK(buffer != nullptr);
-    header->type = DM_USER_RESP_SUCCESS;
+    if (not_found) {
+        void* buffer = bufsink_.GetPayloadBuffer(read_size);
+        if (buffer == nullptr) {
+            SNAP_LOG(ERROR) << "DmuserWriteRequest: Failed to get payload buffer of size: "
+                            << read_size;
+            header->type = DM_USER_RESP_ERROR;
+        } else {
+            header->type = DM_USER_RESP_SUCCESS;
 
-    if (!ReadDmUserPayload(buffer, read_size)) {
-        SNAP_LOG(ERROR) << "ReadDmUserPayload failed for chunk id: " << chunk
-                        << "Sector: " << header->sector;
-        header->type = DM_USER_RESP_ERROR;
-    }
+            if (!ReadDmUserPayload(buffer, read_size)) {
+                SNAP_LOG(ERROR) << "ReadDmUserPayload failed for chunk id: " << chunk
+                                << "Sector: " << header->sector;
+                header->type = DM_USER_RESP_ERROR;
+            }
 
-    if (header->type == DM_USER_RESP_SUCCESS && !ProcessMergeComplete(chunk, buffer)) {
-        SNAP_LOG(ERROR) << "ProcessMergeComplete failed for chunk id: " << chunk
-                        << "Sector: " << header->sector;
-        header->type = DM_USER_RESP_ERROR;
+            if (header->type == DM_USER_RESP_SUCCESS && !ProcessMergeComplete(chunk, buffer)) {
+                SNAP_LOG(ERROR) << "ProcessMergeComplete failed for chunk id: " << chunk
+                                << "Sector: " << header->sector;
+                header->type = DM_USER_RESP_ERROR;
+            }
+        }
     } else {
-        SNAP_LOG(DEBUG) << "ProcessMergeComplete success for chunk id: " << chunk
-                        << "Sector: " << header->sector;
+        SNAP_LOG(ERROR) << "DmuserWriteRequest: Invalid sector received: header->sector";
+        header->type = DM_USER_RESP_ERROR;
     }
 
     if (!WriteDmUserPayload(0)) {
@@ -636,7 +707,6 @@ bool WorkerThread::DmuserReadRequest() {
         // never see multiple IO requests. Additionally this IO
         // will always be a single 4k.
         if (header->sector == 0) {
-            CHECK(read_size == BLOCK_SZ) << " Sector 0 read request of size: " << read_size;
             ConstructKernelCowHeader();
             SNAP_LOG(DEBUG) << "Kernel header constructed";
         } else {
