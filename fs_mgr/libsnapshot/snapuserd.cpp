@@ -90,7 +90,10 @@ void Snapuserd::PrepareReadAhead() {
 }
 
 bool Snapuserd::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t block, void* buffer) {
-    CHECK(lock->owns_lock());
+    if (!lock->owns_lock()) {
+        SNAP_LOG(ERROR) << "GetRABuffer - Lock not held";
+        return false;
+    }
     std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
 
     // This will be true only for IO's generated as part of reading a root
@@ -344,7 +347,10 @@ bool Snapuserd::ReadMetadata() {
         return false;
     }
 
-    CHECK(header.block_size == BLOCK_SZ);
+    if (!(header.block_size == BLOCK_SZ)) {
+        SNAP_LOG(ERROR) << "Invalid header block size found: " << header.block_size;
+        return false;
+    }
 
     reader_->InitializeMerge();
     SNAP_LOG(DEBUG) << "Merge-ops: " << header.num_merge_ops;
@@ -610,7 +616,11 @@ bool Snapuserd::ReadMetadata() {
                     SNAP_LOG(DEBUG) << "ReadMetadata() completed; Number of Areas: " << vec_.size();
                 }
 
-                CHECK(pending_copy_ops == 0);
+                if (!(pending_copy_ops == 0)) {
+                    SNAP_LOG(ERROR)
+                            << "Invalid pending_copy_ops: expected: 0 found: " << pending_copy_ops;
+                    return false;
+                }
                 pending_copy_ops = exceptions_per_area_;
             }
 
