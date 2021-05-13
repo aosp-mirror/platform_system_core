@@ -88,8 +88,6 @@ public:
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
 
-            status_t            remove(size_t len, size_t begin=0);
-
     inline  int                 compare(const String16& other) const;
 
     inline  bool                operator<(const String16& other) const;
