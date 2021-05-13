@@ -473,12 +473,17 @@ TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
 
 struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
 
-INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(16, 131072));
+INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(0, 16, 131072));
 
 TEST_P(SizeParamCrasherTest, mte_uaf) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
+  }
+
+  // Any UAF on a zero-sized allocation will be out-of-bounds so it won't be reported.
+  if (GetParam() == 0) {
+    return;
   }
 
   int intercept_result;
