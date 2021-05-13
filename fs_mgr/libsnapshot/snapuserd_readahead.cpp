@@ -257,7 +257,12 @@ bool ReadAheadThread::ReconstructDataFromCow() {
             // Verify that we have covered all the ops which were re-constructed
             // from COW device - These are the ops which are being
             // re-constructed after crash.
-            CHECK(num_ops == 0);
+            if (!(num_ops == 0)) {
+                SNAP_LOG(ERROR) << "ReconstructDataFromCow failed. Not all ops recoverd "
+                                << " Pending ops: " << num_ops;
+                snapuserd_->ReadAheadIOFailed();
+                return false;
+            }
             break;
         }
     }
@@ -370,8 +375,6 @@ bool ReadAheadThread::ReadAheadIOStart() {
         bm->file_offset = 0;
 
         buffer_offset += io_size;
-        CHECK(offset == buffer_offset);
-        CHECK((file_offset - snapuserd_->GetBufferDataOffset()) == offset);
     }
 
     snapuserd_->SetTotalRaBlocksMerged(total_blocks_merged);
