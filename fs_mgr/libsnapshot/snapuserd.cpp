@@ -90,7 +90,10 @@ void Snapuserd::PrepareReadAhead() {
 }
 
 bool Snapuserd::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t block, void* buffer) {
-    CHECK(lock->owns_lock());
+    if (!lock->owns_lock()) {
+        SNAP_LOG(ERROR) << "GetRABuffer - Lock not held";
+        return false;
+    }
     std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
 
     // This will be true only for IO's generated as part of reading a root
@@ -344,7 +347,10 @@ bool Snapuserd::ReadMetadata() {
         return false;
     }
 
-    CHECK(header.block_size == BLOCK_SZ);
+    if (!(header.block_size == BLOCK_SZ)) {
+        SNAP_LOG(ERROR) << "Invalid header block size found: " << header.block_size;
+        return false;
+    }
 
     reader_->InitializeMerge();
     SNAP_LOG(DEBUG) << "Merge-ops: " << header.num_merge_ops;
@@ -437,6 +443,7 @@ bool Snapuserd::ReadMetadata() {
     int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     std::optional<chunk_t> prev_id = {};
     std::map<uint64_t, const CowOperation*> map;
+    std::set<uint64_t> dest_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
     uint64_t total_copy_ops = reader_->total_copy_ops();
 
@@ -555,10 +562,15 @@ bool Snapuserd::ReadMetadata() {
                 if (diff != 1) {
                     break;
                 }
+
+                if (dest_blocks.count(cow_op->new_block) || map.count(cow_op->source) > 0) {
+                    break;
+                }
             }
             metadata_found = true;
             pending_copy_ops -= 1;
             map[cow_op->new_block] = cow_op;
+            dest_blocks.insert(cow_op->source);
             prev_id = cow_op->new_block;
             cowop_riter_->Next();
         } while (!cowop_riter_->Done() && pending_copy_ops);
@@ -604,7 +616,11 @@ bool Snapuserd::ReadMetadata() {
                     SNAP_LOG(DEBUG) << "ReadMetadata() completed; Number of Areas: " << vec_.size();
                 }
 
-                CHECK(pending_copy_ops == 0);
+                if (!(pending_copy_ops == 0)) {
+                    SNAP_LOG(ERROR)
+                            << "Invalid pending_copy_ops: expected: 0 found: " << pending_copy_ops;
+                    return false;
+                }
                 pending_copy_ops = exceptions_per_area_;
             }
 
@@ -620,6 +636,7 @@ bool Snapuserd::ReadMetadata() {
             }
         }
         map.clear();
+        dest_blocks.clear();
         prev_id.reset();
     }
 
