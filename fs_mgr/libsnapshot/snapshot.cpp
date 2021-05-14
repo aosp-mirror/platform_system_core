@@ -95,18 +95,16 @@ std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
     if (!info) {
         info = new DeviceInfo();
     }
-    auto sm = std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
-    if (info->IsRecovery()) {
-        sm->ForceLocalImageManager();
-    }
-    return sm;
+    return std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
 }
 
 std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceInfo* info) {
-    auto sm = New(info);
-    if (!sm || !sm->ForceLocalImageManager()) {
-        return nullptr;
+    if (!info) {
+        DeviceInfo* impl = new DeviceInfo();
+        impl->set_first_stage_init(true);
+        info = impl;
     }
+    auto sm = New(info);
 
     // The first-stage version of snapuserd is explicitly started by init. Do
     // not attempt to using it during tests (which run in normal AOSP).
@@ -117,7 +115,6 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
 }
 
 SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
-    gsid_dir_ = device_->GetGsidDir();
     metadata_dir_ = device_->GetMetadataDir();
 }
 
@@ -538,9 +535,7 @@ std::optional<std::string> SnapshotManager::MapCowImage(
 
     bool ok;
     std::string cow_dev;
-    if (has_local_image_manager_) {
-        // If we forced a local image manager, it means we don't have binder,
-        // which means first-stage init. We must use device-mapper.
+    if (device_->IsRecovery() || device_->IsFirstStageInit()) {
         const auto& opener = device_->GetPartitionOpener();
         ok = images_->MapImageWithDeviceMapper(opener, cow_image_name, &cow_dev);
     } else {
@@ -1836,6 +1831,10 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
         return false;
     }
 
+    if (!EnsureImageManager()) {
+        return false;
+    }
+
     for (const auto& partition : metadata->partitions) {
         if (GetPartitionGroupName(metadata->groups[partition.group_index]) == kCowGroupName) {
             LOG(INFO) << "Skip mapping partition " << GetPartitionName(partition) << " in group "
@@ -2556,8 +2555,7 @@ bool SnapshotManager::WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus
 bool SnapshotManager::EnsureImageManager() {
     if (images_) return true;
 
-    // For now, use a preset timeout.
-    images_ = android::fiemap::IImageManager::Open(gsid_dir_, 15000ms);
+    images_ = device_->OpenImageManager();
     if (!images_) {
         LOG(ERROR) << "Could not open ImageManager";
         return false;
@@ -2579,20 +2577,6 @@ bool SnapshotManager::EnsureSnapuserdConnected() {
         LOG(ERROR) << "Unable to connect to snapuserd";
         return false;
     }
-    return true;
-}
-
-bool SnapshotManager::ForceLocalImageManager() {
-    android::fiemap::ImageManager::DeviceInfo device_info = {
-            .is_recovery = {device_->IsRecovery()},
-    };
-
-    images_ = android::fiemap::ImageManager::Open(gsid_dir_, device_info);
-    if (!images_) {
-        LOG(ERROR) << "Could not open ImageManager";
-        return false;
-    }
-    has_local_image_manager_ = true;
     return true;
 }
 

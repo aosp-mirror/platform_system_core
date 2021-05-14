@@ -29,7 +29,6 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
 
   public:
-    std::string GetGsidDir() const override;
     std::string GetMetadataDir() const override;
     std::string GetSlotSuffix() const override;
     std::string GetOtherSlotSuffix() const override;
@@ -39,11 +38,16 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     bool SetBootControlMergeStatus(MergeStatus status) override;
     bool SetSlotAsUnbootable(unsigned int slot) override;
     bool IsRecovery() const override;
+    std::unique_ptr<IImageManager> OpenImageManager() const override;
+    bool IsFirstStageInit() const override;
+
+    void set_first_stage_init(bool value) { first_stage_init_ = value; }
 
   private:
     bool EnsureBootHal();
 
     android::fs_mgr::PartitionOpener opener_;
+    bool first_stage_init_ = false;
 #ifdef LIBSNAPSHOT_USE_HAL
     android::sp<android::hardware::boot::V1_1::IBootControl> boot_control_;
 #endif

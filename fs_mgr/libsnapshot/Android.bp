@@ -266,7 +266,7 @@ cc_defaults {
         "android.hardware.boot@1.1",
         "libbrotli",
         "libc++fs",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "libgsi",
         "libgmock",
         "liblp",
@@ -421,8 +421,8 @@ cc_defaults {
         "snapuserd_server.cpp",
         "snapuserd.cpp",
         "snapuserd_daemon.cpp",
-	"snapuserd_worker.cpp",
-	"snapuserd_readahead.cpp",
+        "snapuserd_worker.cpp",
+        "snapuserd_readahead.cpp",
     ],
 
     cflags: [
@@ -564,7 +564,7 @@ cc_test {
     srcs: [
         "cow_snapuserd_test.cpp",
         "snapuserd.cpp",
-	"snapuserd_worker.cpp",
+        "snapuserd_worker.cpp",
     ],
     cflags: [
         "-Wall",
@@ -581,7 +581,7 @@ cc_test {
         "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
-	"libfs_mgr",
+        "libfs_mgr",
         "libdm",
     ],
     header_libs: [
