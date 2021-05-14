@@ -308,9 +308,7 @@ bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 
 bool ApplyProfileAction::ExecuteForTask(int tid) const {
     for (const auto& profile : profiles_) {
-        if (!profile->ExecuteForTask(tid)) {
-            PLOG(WARNING) << "ExecuteForTask failed for aggregate profile";
-        }
+        profile->ExecuteForTask(tid);
     }
     return true;
 }
