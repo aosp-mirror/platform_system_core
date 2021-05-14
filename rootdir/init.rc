@@ -762,7 +762,7 @@ on post-fs-data
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
-    mkdir /data/misc/profiles/ref 0770 system system
+    mkdir /data/misc/profiles/ref 0771 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
