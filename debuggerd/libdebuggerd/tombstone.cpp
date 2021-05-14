@@ -106,9 +106,9 @@ static std::string get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
     unwindstack::MapInfo* map_info = maps->Find(sp);
     if (map_info == nullptr) {
       return "stack pointer is in a non-existent map; likely due to stack overflow.";
-    } else if ((map_info->flags & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
+    } else if ((map_info->flags() & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
       return "stack pointer is not in a rw map; likely due to stack overflow.";
-    } else if ((sp - map_info->start) <= kMaxDifferenceBytes) {
+    } else if ((sp - map_info->start()) <= kMaxDifferenceBytes) {
       return "stack pointer is close to top of stack; likely stack overflow.";
     }
   }
@@ -137,7 +137,7 @@ static void dump_probable_cause(log_t* log, const siginfo_t* si, unwindstack::Ma
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
     uint64_t fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
     unwindstack::MapInfo* map_info = maps->Find(fault_addr);
-    if (map_info != nullptr && map_info->flags == PROT_EXEC) {
+    if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
       cause = get_stack_overflow_cause(fault_addr, regs->sp(), maps);
@@ -244,7 +244,7 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
        "memory map (%zu entr%s):",
        maps->Total(), maps->Total() == 1 ? "y" : "ies");
   if (print_fault_address_marker) {
-    if (maps->Total() != 0 && addr < maps->Get(0)->start) {
+    if (maps->Total() != 0 && addr < maps->Get(0)->start()) {
       _LOG(log, logtype::MAPS, "\n--->Fault address falls at %s before any mapped regions\n",
            get_addr_string(addr).c_str());
       print_fault_address_marker = false;
@@ -261,37 +261,37 @@ static void dump_all_maps(log_t* log, unwindstack::Unwinder* unwinder, uint64_t 
   for (auto const& map_info : *maps) {
     line = "    ";
     if (print_fault_address_marker) {
-      if (addr < map_info->start) {
+      if (addr < map_info->start()) {
         _LOG(log, logtype::MAPS, "--->Fault address falls at %s between mapped regions\n",
              get_addr_string(addr).c_str());
         print_fault_address_marker = false;
-      } else if (addr >= map_info->start && addr < map_info->end) {
+      } else if (addr >= map_info->start() && addr < map_info->end()) {
         line = "--->";
         print_fault_address_marker = false;
       }
     }
-    line += get_addr_string(map_info->start) + '-' + get_addr_string(map_info->end - 1) + ' ';
-    if (map_info->flags & PROT_READ) {
+    line += get_addr_string(map_info->start()) + '-' + get_addr_string(map_info->end() - 1) + ' ';
+    if (map_info->flags() & PROT_READ) {
       line += 'r';
     } else {
       line += '-';
     }
-    if (map_info->flags & PROT_WRITE) {
+    if (map_info->flags() & PROT_WRITE) {
       line += 'w';
     } else {
       line += '-';
     }
-    if (map_info->flags & PROT_EXEC) {
+    if (map_info->flags() & PROT_EXEC) {
       line += 'x';
     } else {
       line += '-';
     }
-    line += StringPrintf("  %8" PRIx64 "  %8" PRIx64, map_info->offset,
-                         map_info->end - map_info->start);
+    line += StringPrintf("  %8" PRIx64 "  %8" PRIx64, map_info->offset(),
+                         map_info->end() - map_info->start());
     bool space_needed = true;
-    if (!map_info->name.empty()) {
+    if (!map_info->name().empty()) {
       space_needed = false;
-      line += "  " + map_info->name;
+      line += "  " + map_info->name();
       std::string build_id = map_info->GetPrintableBuildID();
       if (!build_id.empty()) {
         line += " (BuildId: " + build_id + ")";
@@ -369,8 +369,8 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
     std::string label{"memory near "s + reg_name};
     if (maps) {
       unwindstack::MapInfo* map_info = maps->Find(untag_address(reg_value));
-      if (map_info != nullptr && !map_info->name.empty()) {
-        label += " (" + map_info->name + ")";
+      if (map_info != nullptr && !map_info->name().empty()) {
+        label += " (" + map_info->name() + ")";
       }
     }
     dump_memory(log, memory, reg_value, label);
