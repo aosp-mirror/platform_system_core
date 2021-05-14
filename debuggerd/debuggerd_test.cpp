@@ -475,12 +475,17 @@ TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
 
 struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
 
-INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(16, 131072));
+INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(0, 16, 131072));
 
 TEST_P(SizeParamCrasherTest, mte_uaf) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
+  }
+
+  // Any UAF on a zero-sized allocation will be out-of-bounds so it won't be reported.
+  if (GetParam() == 0) {
+    return;
   }
 
   int intercept_result;
@@ -509,6 +514,38 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
       #00 pc)");
   ASSERT_MATCH(result, R"(allocated by thread .*
       #00 pc)");
+#else
+  GTEST_SKIP() << "Requires aarch64";
+#endif
+}
+
+TEST_P(SizeParamCrasherTest, mte_oob_uaf) {
+#if defined(__aarch64__)
+  if (!mte_supported()) {
+    GTEST_SKIP() << "Requires MTE";
+  }
+
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([&]() {
+    SetTagCheckingLevelSync();
+    volatile int* p = (volatile int*)malloc(GetParam());
+    free((void *)p);
+    p[-1] = 42;
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+  ASSERT_NOT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 4 bytes left)");
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif

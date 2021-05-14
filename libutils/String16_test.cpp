@@ -90,13 +90,6 @@ TEST(String16Test, Insert) {
     EXPECT_STR16EQ(u"VerifyInsert me", tmp);
 }
 
-TEST(String16Test, Remove) {
-    String16 tmp("Verify me");
-    tmp.remove(2, 6);
-    EXPECT_EQ(2U, tmp.size());
-    EXPECT_STR16EQ(u" m", tmp);
-}
-
 TEST(String16Test, ReplaceAll) {
     String16 tmp("Verify verify Verify");
     tmp.replaceAll(u'r', u'!');
@@ -158,14 +151,6 @@ TEST(String16Test, StaticStringInsert) {
     tmp.insert(6, u"Insert");
     EXPECT_EQ(15U, tmp.size());
     EXPECT_STR16EQ(u"VerifyInsert me", tmp);
-    EXPECT_FALSE(tmp.isStaticString());
-}
-
-TEST(String16Test, StaticStringRemove) {
-    StaticString16 tmp(u"Verify me");
-    tmp.remove(2, 6);
-    EXPECT_EQ(2U, tmp.size());
-    EXPECT_STR16EQ(u" m", tmp);
     EXPECT_FALSE(tmp.isStaticString());
 }
 
