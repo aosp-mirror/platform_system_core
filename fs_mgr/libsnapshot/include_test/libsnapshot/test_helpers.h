@@ -77,7 +77,6 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         : TestDeviceInfo(fake_super) {
         set_slot_suffix(slot_suffix);
     }
-    std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
     std::string GetSlotSuffix() const override { return slot_suffix_; }
     std::string GetOtherSlotSuffix() const override { return slot_suffix_ == "_a" ? "_b" : "_a"; }
@@ -96,6 +95,10 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         return true;
     }
     bool IsTestDevice() const override { return true; }
+    bool IsFirstStageInit() const override { return first_stage_init_; }
+    std::unique_ptr<IImageManager> OpenImageManager() const override {
+        return IDeviceInfo::OpenImageManager("ota/test");
+    }
 
     bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
 
@@ -104,6 +107,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         opener_ = std::make_unique<TestPartitionOpener>(path);
     }
     void set_recovery(bool value) { recovery_ = value; }
+    void set_first_stage_init(bool value) { first_stage_init_ = value; }
     MergeStatus merge_status() const { return merge_status_; }
 
   private:
@@ -111,6 +115,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::unique_ptr<TestPartitionOpener> opener_;
     MergeStatus merge_status_;
     bool recovery_ = false;
+    bool first_stage_init_ = false;
     std::unordered_set<uint32_t> unbootable_slots_;
 };
 

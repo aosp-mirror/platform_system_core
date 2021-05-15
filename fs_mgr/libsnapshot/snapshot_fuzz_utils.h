@@ -65,6 +65,8 @@ class SnapshotFuzzEnv {
     // ISnapshotManager.
     SnapshotTestModule CheckCreateSnapshotManager(const SnapshotFuzzData& data);
 
+    std::unique_ptr<android::fiemap::IImageManager> CheckCreateFakeImageManager();
+
     // Return path to super partition.
     const std::string& super() const;
 
@@ -79,8 +81,6 @@ class SnapshotFuzzEnv {
     std::string fake_data_block_device_;
     std::unique_ptr<AutoDevice> mounted_data_;
 
-    static std::unique_ptr<android::fiemap::IImageManager> CheckCreateFakeImageManager(
-            const std::string& metadata_dir, const std::string& data_dir);
     static std::unique_ptr<AutoDevice> CheckMapImage(const std::string& fake_persist_path,
                                                      uint64_t size,
                                                      android::dm::LoopControl* control,
@@ -95,15 +95,15 @@ class SnapshotFuzzEnv {
 class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
   public:
     // Client is responsible for maintaining the lifetime of |data|.
-    SnapshotFuzzDeviceInfo(const FuzzDeviceInfoData& data,
+    SnapshotFuzzDeviceInfo(SnapshotFuzzEnv* env, const FuzzDeviceInfoData& data,
                            std::unique_ptr<TestPartitionOpener>&& partition_opener,
                            const std::string& metadata_dir)
-        : data_(&data),
+        : env_(env),
+          data_(&data),
           partition_opener_(std::move(partition_opener)),
           metadata_dir_(metadata_dir) {}
 
     // Following APIs are mocked.
-    std::string GetGsidDir() const override { return "fuzz_ota"; }
     std::string GetMetadataDir() const override { return metadata_dir_; }
     std::string GetSuperDevice(uint32_t) const override {
         // TestPartitionOpener can recognize this.
@@ -124,10 +124,15 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
         return data_->allow_set_slot_as_unbootable();
     }
     bool IsRecovery() const override { return data_->is_recovery(); }
+    bool IsFirstStageInit() const override { return false; }
+    std::unique_ptr<IImageManager> OpenImageManager() const {
+        return env_->CheckCreateFakeImageManager();
+    }
 
     void SwitchSlot() { switched_slot_ = !switched_slot_; }
 
   private:
+    SnapshotFuzzEnv* env_;
     const FuzzDeviceInfoData* data_;
     std::unique_ptr<TestPartitionOpener> partition_opener_;
     std::string metadata_dir_;
