@@ -123,7 +123,10 @@ not present.
 The exact firmware file to be served can be customized by running an external program by a
 `external_firmware_handler` line in a ueventd.rc file. This line takes the format of
 
-    external_firmware_handler <devpath> <user name to run as> <path to external program>
+    external_firmware_handler <devpath> <user [group]> <path to external program>
+
+The handler will be run as the given user, or if a group is provided, as the given user and group.
+
 For example
 
     external_firmware_handler /devices/leds/red/firmware/coeffs.bin system /vendor/bin/led_coeffs.bin

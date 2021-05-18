@@ -49,6 +49,7 @@ void TestExternalFirmwareHandler(const ExternalFirmwareHandler& expected,
                                  const ExternalFirmwareHandler& test) {
     EXPECT_EQ(expected.devpath, test.devpath) << expected.devpath;
     EXPECT_EQ(expected.uid, test.uid) << expected.uid;
+    EXPECT_EQ(expected.gid, test.gid) << expected.gid;
     EXPECT_EQ(expected.handler_path, test.handler_path) << expected.handler_path;
 }
 
@@ -157,38 +158,58 @@ external_firmware_handler /devices/path/firmware/something002.bin radio "/vendor
 external_firmware_handler /devices/path/firmware/* root "/vendor/bin/firmware_handler.sh"
 external_firmware_handler /devices/path/firmware/something* system "/vendor/bin/firmware_handler.sh"
 external_firmware_handler /devices/path/*/firmware/something*.bin radio "/vendor/bin/firmware_handler.sh"
+external_firmware_handler /devices/path/firmware/something003.bin system system /vendor/bin/firmware_handler.sh
+external_firmware_handler /devices/path/firmware/something004.bin radio radio "/vendor/bin/firmware_handler.sh --has --arguments"
 )";
 
     auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
             {
                     "devpath",
                     AID_ROOT,
+                    AID_ROOT,
                     "handler_path",
             },
             {
                     "/devices/path/firmware/something001.bin",
                     AID_SYSTEM,
+                    AID_ROOT,
                     "/vendor/bin/firmware_handler.sh",
             },
             {
                     "/devices/path/firmware/something002.bin",
                     AID_RADIO,
+                    AID_ROOT,
                     "/vendor/bin/firmware_handler.sh --has --arguments",
             },
             {
                     "/devices/path/firmware/",
+                    AID_ROOT,
                     AID_ROOT,
                     "/vendor/bin/firmware_handler.sh",
             },
             {
                     "/devices/path/firmware/something",
                     AID_SYSTEM,
+                    AID_ROOT,
                     "/vendor/bin/firmware_handler.sh",
             },
             {
                     "/devices/path/*/firmware/something*.bin",
                     AID_RADIO,
+                    AID_ROOT,
                     "/vendor/bin/firmware_handler.sh",
+            },
+            {
+                    "/devices/path/firmware/something003.bin",
+                    AID_SYSTEM,
+                    AID_SYSTEM,
+                    "/vendor/bin/firmware_handler.sh",
+            },
+            {
+                    "/devices/path/firmware/something004.bin",
+                    AID_RADIO,
+                    AID_RADIO,
+                    "/vendor/bin/firmware_handler.sh --has --arguments",
             },
     };
 
@@ -204,6 +225,7 @@ external_firmware_handler devpath root handler_path2
     auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
             {
                     "devpath",
+                    AID_ROOT,
                     AID_ROOT,
                     "handler_path",
             },
@@ -305,7 +327,7 @@ parallel_restorecon enabled
     };
 
     auto external_firmware_handlers = std::vector<ExternalFirmwareHandler>{
-            {"/devices/path/firmware/firmware001.bin", AID_ROOT, "/vendor/bin/touch.sh"},
+            {"/devices/path/firmware/firmware001.bin", AID_ROOT, AID_ROOT, "/vendor/bin/touch.sh"},
     };
 
     size_t uevent_socket_rcvbuf_size = 6 * 1024 * 1024;

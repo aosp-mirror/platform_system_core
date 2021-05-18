@@ -101,8 +101,8 @@ Result<void> ParseFirmwareDirectoriesLine(std::vector<std::string>&& args,
 Result<void> ParseExternalFirmwareHandlerLine(
         std::vector<std::string>&& args,
         std::vector<ExternalFirmwareHandler>* external_firmware_handlers) {
-    if (args.size() != 4) {
-        return Error() << "external_firmware_handler lines must have exactly 3 parameters";
+    if (args.size() != 4 && args.size() != 5) {
+        return Error() << "external_firmware_handler lines must have 3 or 4 parameters";
     }
 
     if (std::find_if(external_firmware_handlers->begin(), external_firmware_handlers->end(),
@@ -117,7 +117,19 @@ Result<void> ParseExternalFirmwareHandlerLine(
         return ErrnoError() << "invalid handler uid'" << args[2] << "'";
     }
 
-    ExternalFirmwareHandler handler(std::move(args[1]), pwd->pw_uid, std::move(args[3]));
+    gid_t gid = 0;
+    int handler_index = 3;
+    if (args.size() == 5) {
+        struct group* grp = getgrnam(args[3].c_str());
+        if (!grp) {
+            return ErrnoError() << "invalid handler gid '" << args[3] << "'";
+        }
+        gid = grp->gr_gid;
+        handler_index = 4;
+    }
+
+    ExternalFirmwareHandler handler(std::move(args[1]), pwd->pw_uid, gid,
+                                    std::move(args[handler_index]));
     external_firmware_handlers->emplace_back(std::move(handler));
 
     return {};
