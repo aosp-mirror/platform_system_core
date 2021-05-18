@@ -65,6 +65,12 @@ struct dm_user_header* BufferSink::GetHeaderPtr() {
     return header;
 }
 
+void* BufferSink::GetPayloadBufPtr() {
+    char* buffer = reinterpret_cast<char*>(GetBufPtr());
+    struct dm_user_message* msg = reinterpret_cast<struct dm_user_message*>(&(buffer[0]));
+    return msg->payload.buf;
+}
+
 WorkerThread::WorkerThread(const std::string& cow_device, const std::string& backing_device,
                            const std::string& control_device, const std::string& misc_name,
                            std::shared_ptr<Snapuserd> snapuserd) {
@@ -241,6 +247,12 @@ int WorkerThread::ReadUnalignedSector(
         char* buffer = reinterpret_cast<char*>(bufsink_.GetBufPtr());
         struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
 
+        if (skip_sector_size == BLOCK_SZ) {
+            SNAP_LOG(ERROR) << "Invalid un-aligned IO request at sector: " << sector
+                            << " Base-sector: " << it->first;
+            return -1;
+        }
+
         memmove(msg->payload.buf, (char*)msg->payload.buf + skip_sector_size,
                 (BLOCK_SZ - skip_sector_size));
     }
@@ -315,16 +327,30 @@ int WorkerThread::ReadData(sector_t sector, size_t size) {
     }
 
     int num_ops = DIV_ROUND_UP(size, BLOCK_SZ);
+    sector_t read_sector = sector;
     while (num_ops) {
-        if (!ProcessCowOp(it->second)) {
+        // We have to make sure that the reads are
+        // sequential; there shouldn't be a data
+        // request merged with a metadata IO.
+        if (it->first != read_sector) {
+            SNAP_LOG(ERROR) << "Invalid IO request: read_sector: " << read_sector
+                            << " cow-op sector: " << it->first;
+            return -1;
+        } else if (!ProcessCowOp(it->second)) {
             return -1;
         }
         num_ops -= 1;
+        read_sector += (BLOCK_SZ >> SECTOR_SHIFT);
+
         it++;
+
+        if (it == chunk_vec.end() && num_ops) {
+            SNAP_LOG(ERROR) << "Invalid IO request at sector " << sector
+                            << " COW ops completed; pending read-request: " << num_ops;
+            return -1;
+        }
         // Update the buffer offset
         bufsink_.UpdateBufferOffset(BLOCK_SZ);
-
-        SNAP_LOG(DEBUG) << "ReadData at sector: " << sector << " size: " << size;
     }
 
     // Reset the buffer offset
@@ -589,6 +615,7 @@ bool WorkerThread::ReadDmUserHeader() {
         if (errno != ENOTBLK) {
             SNAP_PLOG(ERROR) << "Control-read failed";
         }
+
         return false;
     }
 
@@ -596,10 +623,16 @@ bool WorkerThread::ReadDmUserHeader() {
 }
 
 // Send the payload/data back to dm-user misc device.
-bool WorkerThread::WriteDmUserPayload(size_t size) {
-    if (!android::base::WriteFully(ctrl_fd_, bufsink_.GetBufPtr(),
-                                   sizeof(struct dm_user_header) + size)) {
-        SNAP_PLOG(ERROR) << "Write to dm-user failed size: " << size;
+bool WorkerThread::WriteDmUserPayload(size_t size, bool header_response) {
+    size_t payload_size = size;
+    void* buf = bufsink_.GetPayloadBufPtr();
+    if (header_response) {
+        payload_size += sizeof(struct dm_user_header);
+        buf = bufsink_.GetBufPtr();
+    }
+
+    if (!android::base::WriteFully(ctrl_fd_, buf, payload_size)) {
+        SNAP_PLOG(ERROR) << "Write to dm-user failed size: " << payload_size;
         return false;
     }
 
@@ -634,12 +667,13 @@ bool WorkerThread::DmuserWriteRequest() {
     // to flush per se; hence, just respond back with a success message.
     if (header->sector == 0) {
         if (!(header->len == 0)) {
+            SNAP_LOG(ERROR) << "Invalid header length received from sector 0: " << header->len;
             header->type = DM_USER_RESP_ERROR;
         } else {
             header->type = DM_USER_RESP_SUCCESS;
         }
 
-        if (!WriteDmUserPayload(0)) {
+        if (!WriteDmUserPayload(0, true)) {
             return false;
         }
         return true;
@@ -681,7 +715,7 @@ bool WorkerThread::DmuserWriteRequest() {
         header->type = DM_USER_RESP_ERROR;
     }
 
-    if (!WriteDmUserPayload(0)) {
+    if (!WriteDmUserPayload(0, true)) {
         return false;
     }
 
@@ -694,6 +728,7 @@ bool WorkerThread::DmuserReadRequest() {
     loff_t offset = 0;
     sector_t sector = header->sector;
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
+    bool header_response = true;
     do {
         size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
 
@@ -707,8 +742,13 @@ bool WorkerThread::DmuserReadRequest() {
         // never see multiple IO requests. Additionally this IO
         // will always be a single 4k.
         if (header->sector == 0) {
-            ConstructKernelCowHeader();
-            SNAP_LOG(DEBUG) << "Kernel header constructed";
+            if (read_size == BLOCK_SZ) {
+                ConstructKernelCowHeader();
+                SNAP_LOG(DEBUG) << "Kernel header constructed";
+            } else {
+                SNAP_LOG(ERROR) << "Invalid read_size: " << read_size << " for sector 0";
+                header->type = DM_USER_RESP_ERROR;
+            }
         } else {
             auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
                                        std::make_pair(header->sector, nullptr), Snapuserd::compare);
@@ -724,6 +764,7 @@ bool WorkerThread::DmuserReadRequest() {
                 }
             } else {
                 chunk_t num_sectors_read = (offset >> SECTOR_SHIFT);
+
                 ret = ReadData(sector + num_sectors_read, read_size);
                 if (ret < 0) {
                     SNAP_LOG(ERROR) << "ReadData failed for chunk id: " << chunk
@@ -739,12 +780,19 @@ bool WorkerThread::DmuserReadRequest() {
 
         // Just return the header if it is an error
         if (header->type == DM_USER_RESP_ERROR) {
+            SNAP_LOG(ERROR) << "IO read request failed...";
             ret = 0;
+        }
+
+        if (!header_response) {
+            CHECK(header->type == DM_USER_RESP_SUCCESS)
+                    << " failed for sector: " << sector << " header->len: " << header->len
+                    << " remaining_size: " << remaining_size;
         }
 
         // Daemon will not be terminated if there is any error. We will
         // just send the error back to dm-user.
-        if (!WriteDmUserPayload(ret)) {
+        if (!WriteDmUserPayload(ret, header_response)) {
             return false;
         }
 
@@ -754,6 +802,7 @@ bool WorkerThread::DmuserReadRequest() {
 
         remaining_size -= ret;
         offset += ret;
+        header_response = false;
     } while (remaining_size > 0);
 
     return true;
@@ -799,11 +848,11 @@ bool WorkerThread::ProcessIORequest() {
         return false;
     }
 
-    SNAP_LOG(DEBUG) << "msg->seq: " << std::hex << header->seq;
-    SNAP_LOG(DEBUG) << "msg->type: " << std::hex << header->type;
-    SNAP_LOG(DEBUG) << "msg->flags: " << std::hex << header->flags;
-    SNAP_LOG(DEBUG) << "msg->sector: " << std::hex << header->sector;
-    SNAP_LOG(DEBUG) << "msg->len: " << std::hex << header->len;
+    SNAP_LOG(DEBUG) << "Daemon: msg->seq: " << std::dec << header->seq;
+    SNAP_LOG(DEBUG) << "Daemon: msg->len: " << std::dec << header->len;
+    SNAP_LOG(DEBUG) << "Daemon: msg->sector: " << std::dec << header->sector;
+    SNAP_LOG(DEBUG) << "Daemon: msg->type: " << std::dec << header->type;
+    SNAP_LOG(DEBUG) << "Daemon: msg->flags: " << std::dec << header->flags;
 
     switch (header->type) {
         case DM_USER_REQ_MAP_READ: {
