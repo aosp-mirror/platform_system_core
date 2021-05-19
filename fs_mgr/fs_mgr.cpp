@@ -2265,3 +2265,72 @@ std::string fs_mgr_get_super_partition_name(int slot) {
     }
     return LP_METADATA_DEFAULT_PARTITION_NAME;
 }
+
+bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
+    auto overlayfs_valid_result = fs_mgr_overlayfs_valid();
+    if (overlayfs_valid_result == OverlayfsValidResult::kNotSupported) {
+        LERROR << __FUNCTION__ << "(): kernel does not support overlayfs";
+        return false;
+    }
+
+#if ALLOW_ADBD_DISABLE_VERITY == 0
+    // Allowlist the mount point if user build.
+    static const std::vector<const std::string> kAllowedPaths = {
+            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+    };
+    static const std::vector<const std::string> kAllowedPrefixes = {
+            "/mnt/product/",
+            "/mnt/vendor/",
+    };
+    if (std::none_of(kAllowedPaths.begin(), kAllowedPaths.end(),
+                     [&entry](const auto& path) -> bool {
+                         return entry.mount_point == path ||
+                                StartsWith(entry.mount_point, path + "/");
+                     }) &&
+        std::none_of(kAllowedPrefixes.begin(), kAllowedPrefixes.end(),
+                     [&entry](const auto& prefix) -> bool {
+                         return entry.mount_point != prefix &&
+                                StartsWith(entry.mount_point, prefix);
+                     })) {
+        LERROR << __FUNCTION__
+               << "(): mount point is forbidden on user build: " << entry.mount_point;
+        return false;
+    }
+#endif  // ALLOW_ADBD_DISABLE_VERITY == 0
+
+    // Create the mount point in case it doesn't exist.
+    mkdir(entry.mount_point.c_str(), 0755);
+
+    // Ensure that mount point exists and doesn't contain symbolic link or /../.
+    std::string mount_point;
+    if (!Realpath(entry.mount_point, &mount_point)) {
+        PERROR << __FUNCTION__ << "(): failed to realpath " << entry.mount_point;
+        return false;
+    }
+    if (entry.mount_point != mount_point) {
+        LERROR << __FUNCTION__ << "(): mount point must be a canonicalized path: realpath "
+               << entry.mount_point << " = " << mount_point;
+        return false;
+    }
+
+    auto options = "lowerdir=" + entry.lowerdir;
+    if (overlayfs_valid_result == OverlayfsValidResult::kOverrideCredsRequired) {
+        options += ",override_creds=off";
+    }
+
+    // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
+    // confuse this with adb remount overlay, whose device name is "overlay".
+    // Overlayfs is a pseudo filesystem, so the source device is a symbolic value and isn't used to
+    // back the filesystem. However the device name would be shown in /proc/mounts.
+    auto source = "overlay-" + entry.blk_device;
+    auto report = "__mount(source=" + source + ",target=" + entry.mount_point + ",type=overlay," +
+                  options + ")=";
+    auto ret = mount(source.c_str(), entry.mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+        return false;
+    }
+    LINFO << report << ret;
+    return true;
+}
