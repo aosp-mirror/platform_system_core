@@ -92,7 +92,7 @@ bool fs_mgr_vendor_overlay_mount(const std::pair<std::string, std::string>& moun
     }
     auto report = "__mount(source=overlay,target="s + vendor_mount_point + ",type=overlay," +
                   options + ")=";
-    auto ret = mount("overlay", vendor_mount_point.c_str(), "overlay", MS_RDONLY | MS_RELATIME,
+    auto ret = mount("overlay", vendor_mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
                      options.c_str());
     if (ret) {
         PERROR << report << ret;
