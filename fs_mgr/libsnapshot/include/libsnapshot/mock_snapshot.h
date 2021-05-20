@@ -27,6 +27,7 @@ class MockSnapshotManager : public ISnapshotManager {
     MOCK_METHOD(bool, CancelUpdate, (), (override));
     MOCK_METHOD(bool, FinishedSnapshotWrites, (bool wipe), (override));
     MOCK_METHOD(void, UpdateCowStats, (ISnapshotMergeStats * stats), (override));
+    MOCK_METHOD(MergeFailureCode, ReadMergeFailureCode, (), (override));
     MOCK_METHOD(bool, InitiateMerge, (), (override));
 
     MOCK_METHOD(UpdateState, ProcessUpdateState,

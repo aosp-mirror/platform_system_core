@@ -94,8 +94,9 @@ class ISnapshotManager {
     // Dependency injection for testing.
     class IDeviceInfo {
       public:
+        using IImageManager = android::fiemap::IImageManager;
+
         virtual ~IDeviceInfo() {}
-        virtual std::string GetGsidDir() const = 0;
         virtual std::string GetMetadataDir() const = 0;
         virtual std::string GetSlotSuffix() const = 0;
         virtual std::string GetOtherSlotSuffix() const = 0;
@@ -107,6 +108,11 @@ class ISnapshotManager {
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
         virtual bool IsTestDevice() const { return false; }
+        virtual bool IsFirstStageInit() const = 0;
+        virtual std::unique_ptr<IImageManager> OpenImageManager() const = 0;
+
+        // Helper method for implementing OpenImageManager.
+        std::unique_ptr<IImageManager> OpenImageManager(const std::string& gsid_dir) const;
     };
     virtual ~ISnapshotManager() = default;
 
@@ -166,6 +172,10 @@ class ISnapshotManager {
     // progress with GetUpdateState().
     virtual UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                            const std::function<bool()>& before_cancel = {}) = 0;
+
+    // If ProcessUpdateState() returned MergeFailed, this returns the appropriate
+    // code. Otherwise, MergeFailureCode::Ok is returned.
+    virtual MergeFailureCode ReadMergeFailureCode() = 0;
 
     // Find the status of the current update, if any.
     //
@@ -332,6 +342,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool CancelUpdate() override;
     bool FinishedSnapshotWrites(bool wipe) override;
     void UpdateCowStats(ISnapshotMergeStats* stats) override;
+    MergeFailureCode ReadMergeFailureCode() override;
     bool InitiateMerge() override;
     UpdateState ProcessUpdateState(const std::function<bool()>& callback = {},
                                    const std::function<bool()>& before_cancel = {}) override;
@@ -381,11 +392,13 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
     FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);
+    FRIEND_TEST(SnapshotTest, MergeFailureCode);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
+    FRIEND_TEST(SnapshotUpdateTest, DataWipeWithStaleSnapshots);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
@@ -413,7 +426,6 @@ class SnapshotManager final : public ISnapshotManager {
     bool EnsureSnapuserdConnected();
 
     // Helpers for first-stage init.
-    bool ForceLocalImageManager();
     const std::unique_ptr<IDeviceInfo>& device() const { return device_; }
 
     // Helper functions for tests.
@@ -532,7 +544,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Interact with /metadata/ota/state.
     UpdateState ReadUpdateState(LockedFile* file);
     SnapshotUpdateStatus ReadSnapshotUpdateStatus(LockedFile* file);
-    bool WriteUpdateState(LockedFile* file, UpdateState state);
+    bool WriteUpdateState(LockedFile* file, UpdateState state,
+                          MergeFailureCode failure_code = MergeFailureCode::Ok);
     bool WriteSnapshotUpdateStatus(LockedFile* file, const SnapshotUpdateStatus& status);
     std::string GetStateFilePath() const;
 
@@ -541,12 +554,12 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetMergeStateFilePath() const;
 
     // Helpers for merging.
-    bool MergeSecondPhaseSnapshots(LockedFile* lock);
-    bool SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
-    bool RewriteSnapshotDeviceTable(const std::string& dm_name);
+    MergeFailureCode MergeSecondPhaseSnapshots(LockedFile* lock);
+    MergeFailureCode SwitchSnapshotToMerge(LockedFile* lock, const std::string& name);
+    MergeFailureCode RewriteSnapshotDeviceTable(const std::string& dm_name);
     bool MarkSnapshotMergeCompleted(LockedFile* snapshot_lock, const std::string& snapshot_name);
     void AcknowledgeMergeSuccess(LockedFile* lock);
-    void AcknowledgeMergeFailure();
+    void AcknowledgeMergeFailure(MergeFailureCode failure_code);
     MergePhase DecideMergePhase(const SnapshotStatus& status);
     std::unique_ptr<LpMetadata> ReadCurrentMetadata();
 
@@ -573,14 +586,22 @@ class SnapshotManager final : public ISnapshotManager {
                                  const SnapshotStatus& status);
     bool CollapseSnapshotDevice(const std::string& name, const SnapshotStatus& status);
 
+    struct MergeResult {
+        explicit MergeResult(UpdateState state,
+                             MergeFailureCode failure_code = MergeFailureCode::Ok)
+            : state(state), failure_code(failure_code) {}
+        UpdateState state;
+        MergeFailureCode failure_code;
+    };
+
     // Only the following UpdateStates are used here:
     //   UpdateState::Merging
     //   UpdateState::MergeCompleted
     //   UpdateState::MergeFailed
     //   UpdateState::MergeNeedsReboot
-    UpdateState CheckMergeState(const std::function<bool()>& before_cancel);
-    UpdateState CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
-    UpdateState CheckTargetMergeState(LockedFile* lock, const std::string& name,
+    MergeResult CheckMergeState(const std::function<bool()>& before_cancel);
+    MergeResult CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
+    MergeResult CheckTargetMergeState(LockedFile* lock, const std::string& name,
                                       const SnapshotUpdateStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
@@ -749,7 +770,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::string metadata_dir_;
     std::unique_ptr<IDeviceInfo> device_;
     std::unique_ptr<IImageManager> images_;
-    bool has_local_image_manager_ = false;
     bool use_first_stage_snapuserd_ = false;
     bool in_factory_data_reset_ = false;
     std::function<bool(const std::string&)> uevent_regen_callback_;

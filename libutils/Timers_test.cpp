@@ -27,3 +27,12 @@ TEST(Timers, systemTime_invalid) {
     systemTime(SYSTEM_TIME_BOOTTIME);
     EXPECT_EXIT(systemTime(SYSTEM_TIME_BOOTTIME + 1), testing::KilledBySignal(SIGABRT), "");
 }
+
+TEST(Timers, toMillisecondTimeoutDelay) {
+    EXPECT_EQ(0, toMillisecondTimeoutDelay(100, 100));
+    EXPECT_EQ(0, toMillisecondTimeoutDelay(100, 10));
+
+    EXPECT_EQ(-1, toMillisecondTimeoutDelay(0, INT_MAX * 1000000LL));
+
+    EXPECT_EQ(123, toMillisecondTimeoutDelay(0, 123000000));
+}

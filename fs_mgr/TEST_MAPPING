@@ -17,6 +17,9 @@
     },
     {
       "name": "libsnapshot_fuzzer_test"
+    },
+    {
+      "name": "cow_api_test"
     }
   ]
 }

@@ -47,9 +47,6 @@ typedef sector_t chunk_t;
 static constexpr uint32_t CHUNK_SIZE = 8;
 static constexpr uint32_t CHUNK_SHIFT = (__builtin_ffs(CHUNK_SIZE) - 1);
 
-static constexpr uint32_t BLOCK_SZ = 4096;
-static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
-
 #define DIV_ROUND_UP(n, d) (((n) + (d)-1) / (d))
 
 // This structure represents the kernel COW header.

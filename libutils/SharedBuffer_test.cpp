@@ -32,10 +32,25 @@ TEST(SharedBufferTest, alloc_death) {
     EXPECT_DEATH(android::SharedBuffer::alloc(SIZE_MAX - sizeof(android::SharedBuffer)), "");
 }
 
-TEST(SharedBufferTest, alloc_null) {
-    // Big enough to fail, not big enough to abort.
+TEST(SharedBufferTest, alloc_max) {
     SKIP_WITH_HWASAN;  // hwasan has a 2GiB allocation limit.
-    ASSERT_EQ(nullptr, android::SharedBuffer::alloc(SIZE_MAX / 2));
+
+    android::SharedBuffer* buf =
+            android::SharedBuffer::alloc(SIZE_MAX - sizeof(android::SharedBuffer) - 1);
+    if (buf != nullptr) {
+        EXPECT_NE(nullptr, buf->data());
+        buf->release();
+    }
+}
+
+TEST(SharedBufferTest, alloc_big) {
+    SKIP_WITH_HWASAN;  // hwasan has a 2GiB allocation limit.
+
+    android::SharedBuffer* buf = android::SharedBuffer::alloc(SIZE_MAX / 2);
+    if (buf != nullptr) {
+        EXPECT_NE(nullptr, buf->data());
+        buf->release();
+    }
 }
 
 TEST(SharedBufferTest, alloc_zero_size) {
@@ -56,7 +71,13 @@ TEST(SharedBufferTest, editResize_null) {
     // Big enough to fail, not big enough to abort.
     SKIP_WITH_HWASAN;  // hwasan has a 2GiB allocation limit.
     android::SharedBuffer* buf = android::SharedBuffer::alloc(10);
-    ASSERT_EQ(nullptr, buf->editResize(SIZE_MAX / 2));
+    android::SharedBuffer* buf2 = buf->editResize(SIZE_MAX / 2);
+    if (buf2 == nullptr) {
+        buf->release();
+    } else {
+        EXPECT_NE(nullptr, buf2->data());
+        buf2->release();
+    }
 }
 
 TEST(SharedBufferTest, editResize_zero_size) {
