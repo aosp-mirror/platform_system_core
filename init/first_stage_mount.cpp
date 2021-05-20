@@ -331,12 +331,6 @@ bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
     if (devices.empty()) {
         return true;
     }
-    // excluding overlays
-    for (auto iter = devices.begin(); iter != devices.end(); ) {
-        if (*iter=="overlay")  iter = devices.erase(iter);
-        else iter++;
-    }
-
     return block_dev_init_.InitDevices(std::move(devices));
 }
 
@@ -695,6 +689,10 @@ bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) 
     // Includes the partition names of fstab records.
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (const auto& fstab_entry : fstab_) {
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
+        }
         if (!fstab_entry.fs_mgr_flags.logical) {
             devices->emplace(basename(fstab_entry.blk_device.c_str()));
         }
@@ -756,6 +754,10 @@ bool FirstStageMountVBootV2::GetDmVerityDevices(std::set<std::string>* devices) 
     for (const auto& fstab_entry : fstab_) {
         if (fstab_entry.fs_mgr_flags.avb) {
             need_dm_verity_ = true;
+        }
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
         }
         if (fstab_entry.fs_mgr_flags.logical) {
             // Don't try to find logical partitions via uevent regeneration.
