@@ -542,6 +542,7 @@ bool FirstStageMount::MountPartitions() {
             continue;
         }
 
+        // Handle overlayfs entries later.
         if (current->fs_type == "overlay") {
             ++current;
             continue;
@@ -571,6 +572,12 @@ bool FirstStageMount::MountPartitions() {
         current = end;
     }
 
+    for (const auto& entry : fstab_) {
+        if (entry.fs_type == "overlay") {
+            fs_mgr_overlayfs_mount_fstab_entry(entry);
+        }
+    }
+
     // If we don't see /system or / in the fstab, then we need to create an root entry for
     // overlayfs.
     if (!GetEntryForMountPoint(&fstab_, "/system") && !GetEntryForMountPoint(&fstab_, "/")) {
@@ -595,13 +602,6 @@ bool FirstStageMount::MountPartitions() {
         return InitRequiredDevices(std::move(devices));
     };
     MapScratchPartitionIfNeeded(&fstab_, init_devices);
-
-    for (auto current = fstab_.begin(); current != fstab_.end(); ) {
-        if (current->fs_type == "overlay") {
-            fs_mgr_overlayfs_mount_fstab_entry(current->lowerdir, current->mount_point);
-        }
-        ++current;
-    }
 
     fs_mgr_overlayfs_mount_all(&fstab_);
 
