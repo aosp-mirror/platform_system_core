@@ -25,10 +25,10 @@ rust_bindgen {
     source_stem: "bindings",
     bindgen_flags: [
         "--size_t-is-usize",
-        "--whitelist-function=AStatsEventList_addStatsEvent",
-        "--whitelist-function=AStatsEvent_.*",
-        "--whitelist-function=AStatsManager_.*",
-        "--whitelist-var=AStatsManager_.*",
+        "--allowlist-function=AStatsEventList_addStatsEvent",
+        "--allowlist-function=AStatsEvent_.*",
+        "--allowlist-function=AStatsManager_.*",
+        "--allowlist-var=AStatsManager_.*",
     ],
     target: {
         android: {

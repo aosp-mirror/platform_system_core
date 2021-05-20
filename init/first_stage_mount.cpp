@@ -542,6 +542,12 @@ bool FirstStageMount::MountPartitions() {
             continue;
         }
 
+        // Handle overlayfs entries later.
+        if (current->fs_type == "overlay") {
+            ++current;
+            continue;
+        }
+
         // Skip raw partition entries such as boot, dtbo, etc.
         // Having emmc fstab entries allows us to probe current->vbmeta_partition
         // in InitDevices() when they are AVB chained partitions.
@@ -564,6 +570,12 @@ bool FirstStageMount::MountPartitions() {
             }
         }
         current = end;
+    }
+
+    for (const auto& entry : fstab_) {
+        if (entry.fs_type == "overlay") {
+            fs_mgr_overlayfs_mount_fstab_entry(entry);
+        }
     }
 
     // If we don't see /system or / in the fstab, then we need to create an root entry for
@@ -677,6 +689,10 @@ bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) 
     // Includes the partition names of fstab records.
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (const auto& fstab_entry : fstab_) {
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
+        }
         if (!fstab_entry.fs_mgr_flags.logical) {
             devices->emplace(basename(fstab_entry.blk_device.c_str()));
         }
@@ -738,6 +754,10 @@ bool FirstStageMountVBootV2::GetDmVerityDevices(std::set<std::string>* devices) 
     for (const auto& fstab_entry : fstab_) {
         if (fstab_entry.fs_mgr_flags.avb) {
             need_dm_verity_ = true;
+        }
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
         }
         if (fstab_entry.fs_mgr_flags.logical) {
             // Don't try to find logical partitions via uevent regeneration.

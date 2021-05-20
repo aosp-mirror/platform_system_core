@@ -251,6 +251,7 @@ cc_defaults {
         "snapshot_metadata_updater_test.cpp",
         "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
+        "snapshot_writer_test.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -265,7 +266,7 @@ cc_defaults {
         "android.hardware.boot@1.1",
         "libbrotli",
         "libc++fs",
-        "libfs_mgr",
+        "libfs_mgr_binder",
         "libgsi",
         "libgmock",
         "liblp",
@@ -421,6 +422,7 @@ cc_defaults {
         "snapuserd.cpp",
         "snapuserd_daemon.cpp",
         "snapuserd_worker.cpp",
+        "snapuserd_readahead.cpp",
     ],
 
     cflags: [
@@ -476,6 +478,9 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
+    ],
+    test_suites: [
+        "device-tests"
     ],
     test_min_api_level: 30,
     auto_gen_config: true,
@@ -559,7 +564,7 @@ cc_test {
     srcs: [
         "cow_snapuserd_test.cpp",
         "snapuserd.cpp",
-	"snapuserd_worker.cpp",
+        "snapuserd_worker.cpp",
     ],
     cflags: [
         "-Wall",
@@ -576,7 +581,7 @@ cc_test {
         "libsnapshot_snapuserd",
         "libcutils_sockets",
         "libz",
-	"libfs_mgr",
+        "libfs_mgr",
         "libdm",
     ],
     header_libs: [

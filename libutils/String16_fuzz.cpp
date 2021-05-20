@@ -72,12 +72,6 @@ std::vector<std::function<void(FuzzedDataProvider&, android::String16, android::
                     char16_t replaceChar = dataProvider.ConsumeIntegral<char16_t>();
                     str1.replaceAll(findChar, replaceChar);
                 }),
-                ([](FuzzedDataProvider& dataProvider, android::String16 str1,
-                    android::String16) -> void {
-                    size_t len = dataProvider.ConsumeIntegral<size_t>();
-                    size_t begin = dataProvider.ConsumeIntegral<size_t>();
-                    str1.remove(len, begin);
-                }),
 };
 
 void callFunc(uint8_t index, FuzzedDataProvider& dataProvider, android::String16 str1,
@@ -111,7 +105,5 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         callFunc(op, dataProvider, str_one_utf16, str_two_utf16);
     }
 
-    str_one_utf16.remove(0, str_one_utf16.size());
-    str_two_utf16.remove(0, str_two_utf16.size());
     return 0;
 }

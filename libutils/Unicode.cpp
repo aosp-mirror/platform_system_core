@@ -22,20 +22,6 @@
 
 #include <log/log.h>
 
-#if defined(_WIN32)
-# undef  nhtol
-# undef  htonl
-# undef  nhtos
-# undef  htons
-
-# define ntohl(x)    ( ((x) << 24) | (((x) >> 24) & 255) | (((x) << 8) & 0xff0000) | (((x) >> 8) & 0xff00) )
-# define htonl(x)    ntohl(x)
-# define ntohs(x)    ( (((x) << 8) & 0xff00) | (((x) >> 8) & 255) )
-# define htons(x)    ntohs(x)
-#else
-# include <netinet/in.h>
-#endif
-
 extern "C" {
 
 static const char32_t kByteMask = 0x000000BF;
@@ -113,24 +99,6 @@ static inline void utf32_codepoint_to_utf8(uint8_t* dstP, char32_t srcChar, size
             FALLTHROUGH_INTENDED;
         case 1: *--dstP = (uint8_t)(srcChar | kFirstByteMark[bytes]);
     }
-}
-
-size_t strlen32(const char32_t *s)
-{
-  const char32_t *ss = s;
-  while ( *ss )
-    ss++;
-  return ss-s;
-}
-
-size_t strnlen32(const char32_t *s, size_t maxlen)
-{
-  const char32_t *ss = s;
-  while ((maxlen > 0) && *ss) {
-    ss++;
-    maxlen--;
-  }
-  return ss-s;
 }
 
 static inline int32_t utf32_at_internal(const char* cur, size_t *num_read)
@@ -252,19 +220,6 @@ int strncmp16(const char16_t *s1, const char16_t *s2, size_t n)
   } while (--n);
 
   return d;
-}
-
-char16_t *strcpy16(char16_t *dst, const char16_t *src)
-{
-  char16_t *q = dst;
-  const char16_t *p = src;
-  char16_t ch;
-
-  do {
-    *q++ = ch = *p++;
-  } while ( ch );
-
-  return dst;
 }
 
 size_t strlen16(const char16_t *s)

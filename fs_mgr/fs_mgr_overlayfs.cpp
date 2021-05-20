@@ -92,6 +92,10 @@ bool fs_mgr_overlayfs_mount_all(Fstab*) {
     return false;
 }
 
+bool fs_mgr_overlayfs_mount_fstab_entry(const android::fs_mgr::FstabEntry&) {
+    return false;
+}
+
 std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab*) {
     return {};
 }
@@ -115,6 +119,8 @@ namespace fs_mgr {
 
 void MapScratchPartitionIfNeeded(Fstab*, const std::function<bool(const std::set<std::string>&)>&) {
 }
+
+void CleanupOldScratchFiles() {}
 
 void TeardownAllOverlayForMountPoint(const std::string&) {}
 
@@ -1291,6 +1297,32 @@ static void TryMountScratch() {
     if (has_overlayfs_dir) {
         fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
     }
+}
+
+bool fs_mgr_overlayfs_mount_fstab_entry(const android::fs_mgr::FstabEntry& entry) {
+    if (fs_mgr_overlayfs_invalid()) return false;
+
+    // Create the mount point in case it doesn't exist.
+    mkdir(entry.mount_point.c_str(), 0755);
+
+    auto options = kLowerdirOption + entry.lowerdir;
+    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
+        options += ",override_creds=off";
+    }
+
+    // Use .blk_device as the mount() source for debugging purposes.
+    // Overlayfs is pseudo filesystem, so the source device is a symbolic value and isn't used to
+    // back the filesystem. /proc/mounts would show the source as the device name of the mount.
+    auto report = "__mount(source=" + entry.blk_device + ",target=" + entry.mount_point +
+                  ",type=overlay," + options + ")=";
+    auto ret = mount(entry.blk_device.c_str(), entry.mount_point.c_str(), "overlay",
+                     MS_RDONLY | MS_NOATIME, options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+        return false;
+    }
+    LINFO << report << ret;
+    return true;
 }
 
 bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
