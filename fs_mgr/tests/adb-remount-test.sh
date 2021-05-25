@@ -735,23 +735,46 @@ check_ne() {
   fi
 }
 
+[ "USAGE: join_with <delimiter> <strings>
+
+Joins strings with delimiter" ]
+join_with() {
+  if [ "${#}" -lt 2 ]; then
+    echo
+    return
+  fi
+  local delimiter="${1}"
+  local result="${2}"
+  shift 2
+  for element in "${@}"; do
+    result+="${delimiter}${element}"
+  done
+  echo "${result}"
+}
+
 [ "USAGE: skip_administrative_mounts [data] < /proc/mounts
 
 Filters out all administrative (eg: sysfs) mounts uninteresting to the test" ]
 skip_administrative_mounts() {
+  local exclude_filesystems=(
+    "overlay" "tmpfs" "none" "sysfs" "proc" "selinuxfs" "debugfs" "bpf"
+    "binfmt_misc" "cg2_bpf" "pstore" "tracefs" "adb" "mtp" "ptp" "devpts"
+    "ramdumpfs" "binder" "securityfs" "functionfs" "rootfs"
+  )
+  local exclude_devices=(
+    "[/]sys[/]kernel[/]debug" "[/]data[/]media" "[/]dev[/]block[/]loop[0-9]*"
+    "${exclude_filesystems[@]}"
+  )
+  local exclude_mount_points=(
+    "[/]cache" "[/]mnt[/]scratch" "[/]mnt[/]vendor[/]persist" "[/]persist"
+    "[/]metadata"
+  )
   if [ "data" = "${1}" ]; then
-    grep -v " /data "
-  else
-    cat -
-  fi |
-  grep -v \
-    -e "^\(overlay\|tmpfs\|none\|sysfs\|proc\|selinuxfs\|debugfs\|bpf\) " \
-    -e "^\(binfmt_misc\|cg2_bpf\|pstore\|tracefs\|adb\|mtp\|ptp\|devpts\) " \
-    -e "^\(ramdumpfs\|binder\|/sys/kernel/debug\|securityfs\) " \
-    -e " functionfs " \
-    -e "^\(/data/media\|/dev/block/loop[0-9]*\) " \
-    -e "^rootfs / rootfs rw," \
-    -e " /\(cache\|mnt/scratch\|mnt/vendor/persist\|persist\|metadata\) "
+    exclude_mount_points+=("[/]data")
+  fi
+  awk '$1 !~ /^('"$(join_with "|" "${exclude_devices[@]}")"')$/ &&
+      $2 !~ /^('"$(join_with "|" "${exclude_mount_points[@]}")"')$/ &&
+      $3 !~ /^('"$(join_with "|" "${exclude_filesystems[@]}")"')$/'
 }
 
 [ "USAGE: skip_unrelated_mounts < /proc/mounts
@@ -907,9 +930,11 @@ ACTIVE_SLOT=`get_active_slot`
 
 # Acquire list of system partitions
 
+# KISS (assume system partition mount point is "/<partition name>")
 PARTITIONS=`adb_su cat /vendor/etc/fstab* </dev/null |
+              grep -v "^[#${SPACE}${TAB}]" |
               skip_administrative_mounts |
-              sed -n "s@^\([^ ${TAB}/][^ ${TAB}/]*\)[ ${TAB}].*[, ${TAB}]ro[, ${TAB}].*@\1@p" |
+              awk '$1 ~ /^[^/]+$/ && "/"$1 == $2 && $4 ~ /(^|,)ro(,|$)/ { print $1 }' |
               sort -u |
               tr '\n' ' '`
 PARTITIONS="${PARTITIONS:-system vendor}"
