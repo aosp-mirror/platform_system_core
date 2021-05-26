@@ -1310,13 +1310,15 @@ bool fs_mgr_overlayfs_mount_fstab_entry(const android::fs_mgr::FstabEntry& entry
         options += ",override_creds=off";
     }
 
-    // Use .blk_device as the mount() source for debugging purposes.
-    // Overlayfs is pseudo filesystem, so the source device is a symbolic value and isn't used to
-    // back the filesystem. /proc/mounts would show the source as the device name of the mount.
-    auto report = "__mount(source=" + entry.blk_device + ",target=" + entry.mount_point +
-                  ",type=overlay," + options + ")=";
-    auto ret = mount(entry.blk_device.c_str(), entry.mount_point.c_str(), "overlay",
-                     MS_RDONLY | MS_NOATIME, options.c_str());
+    // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
+    // confuse this with adb remount overlay, whose device name is "overlay".
+    // Overlayfs is a pseudo filesystem, so the source device is a symbolic value and isn't used to
+    // back the filesystem. However the device name would be shown in /proc/mounts.
+    auto source = "overlay-" + entry.blk_device;
+    auto report = "__mount(source=" + source + ",target=" + entry.mount_point + ",type=overlay," +
+                  options + ")=";
+    auto ret = mount(source.c_str(), entry.mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
     if (ret) {
         PERROR << report << ret;
         return false;
