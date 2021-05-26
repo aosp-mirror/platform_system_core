@@ -35,6 +35,7 @@
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
 #include "test_util.h"
+#include "utility.h"
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -616,4 +617,65 @@ TEST(libdm, GetParentBlockDeviceByPath) {
     ASSERT_FALSE(dm.GetParentBlockDeviceByPath(loop.device()));
     auto sub_block_device = dm.GetParentBlockDeviceByPath(dev.path());
     ASSERT_EQ(loop.device(), *sub_block_device);
+}
+
+TEST(libdm, DeleteDeviceDeferredNoReferences) {
+    unique_fd tmp(CreateTempFile("file_1", 4096));
+    ASSERT_GE(tmp, 0);
+    LoopDevice loop(tmp, 10s);
+    ASSERT_TRUE(loop.valid());
+
+    DmTable table;
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop.device(), 0));
+    ASSERT_TRUE(table.valid());
+    TempDevice dev("libdm-test-dm-linear", table);
+    ASSERT_TRUE(dev.valid());
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    std::string path;
+    ASSERT_TRUE(dm.GetDmDevicePathByName("libdm-test-dm-linear", &path));
+    ASSERT_EQ(0, access(path.c_str(), F_OK));
+
+    ASSERT_TRUE(dm.DeleteDeviceDeferred("libdm-test-dm-linear"));
+
+    ASSERT_TRUE(WaitForFileDeleted(path, 5s));
+    ASSERT_EQ(DmDeviceState::INVALID, dm.GetState("libdm-test-dm-linear"));
+    ASSERT_NE(0, access(path.c_str(), F_OK));
+    ASSERT_EQ(ENOENT, errno);
+}
+
+TEST(libdm, DeleteDeviceDeferredWaitsForLastReference) {
+    unique_fd tmp(CreateTempFile("file_1", 4096));
+    ASSERT_GE(tmp, 0);
+    LoopDevice loop(tmp, 10s);
+    ASSERT_TRUE(loop.valid());
+
+    DmTable table;
+    ASSERT_TRUE(table.Emplace<DmTargetLinear>(0, 1, loop.device(), 0));
+    ASSERT_TRUE(table.valid());
+    TempDevice dev("libdm-test-dm-linear", table);
+    ASSERT_TRUE(dev.valid());
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+
+    std::string path;
+    ASSERT_TRUE(dm.GetDmDevicePathByName("libdm-test-dm-linear", &path));
+    ASSERT_EQ(0, access(path.c_str(), F_OK));
+
+    {
+        // Open a reference to block device.
+        unique_fd fd(TEMP_FAILURE_RETRY(open(dev.path().c_str(), O_RDONLY | O_CLOEXEC)));
+        ASSERT_GE(fd.get(), 0);
+
+        ASSERT_TRUE(dm.DeleteDeviceDeferred("libdm-test-dm-linear"));
+
+        ASSERT_EQ(0, access(path.c_str(), F_OK));
+    }
+
+    // After release device will be removed.
+    ASSERT_TRUE(WaitForFileDeleted(path, 5s));
+    ASSERT_EQ(DmDeviceState::INVALID, dm.GetState("libdm-test-dm-linear"));
+    ASSERT_NE(0, access(path.c_str(), F_OK));
+    ASSERT_EQ(ENOENT, errno);
 }
