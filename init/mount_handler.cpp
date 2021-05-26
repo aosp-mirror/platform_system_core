@@ -90,12 +90,18 @@ void SetMountProperty(const MountHandlerEntry& entry, bool add) {
     auto mount_prop = entry.mount_point;
     if (mount_prop == "/") mount_prop = "/root";
     std::replace(mount_prop.begin(), mount_prop.end(), '/', '.');
-    mount_prop = "dev.mnt.blk" + mount_prop;
+    auto blk_mount_prop = "dev.mnt.blk" + mount_prop;
+    auto dev_mount_prop = "dev.mnt.dev" + mount_prop;
     // Set property even if its value does not change to trigger 'on property:'
     // handling, except for clearing non-existent or already clear property.
     // Goal is reduction of empty properties and associated triggers.
-    if (value.empty() && android::base::GetProperty(mount_prop, "").empty()) return;
-    android::base::SetProperty(mount_prop, value);
+    if (value.empty() && android::base::GetProperty(blk_mount_prop, "").empty()) return;
+    android::base::SetProperty(blk_mount_prop, value);
+    if (!value.empty()) {
+        android::base::SetProperty(dev_mount_prop, entry.blk_device.substr(strlen(devblock)));
+    } else {
+        android::base::SetProperty(dev_mount_prop, "");
+    }
 }
 
 }  // namespace
