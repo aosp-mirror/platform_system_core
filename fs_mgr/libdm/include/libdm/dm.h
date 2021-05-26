@@ -95,6 +95,12 @@ class DeviceMapper final {
     bool DeleteDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms);
     bool DeleteDeviceIfExists(const std::string& name, const std::chrono::milliseconds& timeout_ms);
 
+    // Enqueues a deletion of device mapper device with the given name once last reference is
+    // closed.
+    // Returns 'true' on success, false otherwise.
+    bool DeleteDeviceDeferred(const std::string& name);
+    bool DeleteDeviceIfExistsDeferred(const std::string& name);
+
     // Fetches and returns the complete state of the underlying device mapper
     // device with given name.
     std::optional<Info> GetDetailedInfo(const std::string& name) const;
