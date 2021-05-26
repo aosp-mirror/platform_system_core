@@ -103,6 +103,7 @@ class CowSnapuserdTest final {
     void ReadSnapshotDeviceAndValidate();
     void Shutdown();
     void MergeInterrupt();
+    void ReadDmUserBlockWithoutDaemon();
 
     std::string snapshot_dev() const { return snapshot_dev_->path(); }
 
@@ -479,6 +480,36 @@ void CowSnapuserdTest::CreateDmUserDevice() {
 
     auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
     ASSERT_TRUE(android::fs_mgr::WaitForFile(misc_device, 10s));
+}
+
+void CowSnapuserdTest::ReadDmUserBlockWithoutDaemon() {
+    DmTable dmuser_table;
+    std::string dm_user_name = "dm-test-device";
+    unique_fd fd;
+
+    // Create a dm-user block device
+    ASSERT_TRUE(dmuser_table.AddTarget(std::make_unique<DmTargetUser>(0, 123456, dm_user_name)));
+    ASSERT_TRUE(dmuser_table.valid());
+
+    dmuser_dev_ = std::make_unique<TempDevice>(dm_user_name, dmuser_table);
+    ASSERT_TRUE(dmuser_dev_->valid());
+    ASSERT_FALSE(dmuser_dev_->path().empty());
+
+    fd.reset(open(dmuser_dev_->path().c_str(), O_RDONLY));
+    ASSERT_GE(fd, 0);
+
+    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(1_MiB);
+
+    loff_t offset = 0;
+    // Every IO should fail as there is no daemon to process the IO
+    for (size_t j = 0; j < 10; j++) {
+        ASSERT_EQ(ReadFullyAtOffset(fd, (char*)buffer.get() + offset, BLOCK_SZ, offset), false);
+
+        offset += BLOCK_SZ;
+    }
+
+    fd = {};
+    ASSERT_TRUE(dmuser_dev_->Destroy());
 }
 
 void CowSnapuserdTest::InitDaemon() {
@@ -907,6 +938,11 @@ TEST(Snapuserd_Test, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
     harness.MergeInterrupt();
     harness.ValidateMerge();
     harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, ReadDmUserBlockWithoutDaemon) {
+    CowSnapuserdTest harness;
+    harness.ReadDmUserBlockWithoutDaemon();
 }
 
 }  // namespace snapshot
