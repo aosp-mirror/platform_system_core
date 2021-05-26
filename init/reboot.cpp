@@ -478,6 +478,11 @@ static Result<void> KillZramBackingDevice() {
     // cut the last "\n"
     backing_dev.erase(backing_dev.length() - 1);
 
+    if (android::base::StartsWith(backing_dev, "none")) {
+        LOG(INFO) << "No zram backing device configured";
+        return {};
+    }
+
     // shutdown zram handle
     Timer swap_timer;
     LOG(INFO) << "swapoff() start...";
