@@ -220,6 +220,9 @@ static ssize_t read_response(int tipc_fd) {
         case APPLOADER_ERR_INTERNAL:
             LOG(ERROR) << "Error: internal apploader error";
             break;
+        case APPLOADER_ERR_INVALID_VERSION:
+            LOG(ERROR) << "Error: invalid application version";
+            break;
         default:
             LOG(ERROR) << "Unrecognized error: " << resp.error;
             break;
