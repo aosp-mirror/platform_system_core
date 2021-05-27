@@ -92,10 +92,6 @@ bool fs_mgr_overlayfs_mount_all(Fstab*) {
     return false;
 }
 
-bool fs_mgr_overlayfs_mount_fstab_entry(const android::fs_mgr::FstabEntry&) {
-    return false;
-}
-
 std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab*) {
     return {};
 }
@@ -1297,34 +1293,6 @@ static void TryMountScratch() {
     if (has_overlayfs_dir) {
         fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
     }
-}
-
-bool fs_mgr_overlayfs_mount_fstab_entry(const android::fs_mgr::FstabEntry& entry) {
-    if (fs_mgr_overlayfs_invalid()) return false;
-
-    // Create the mount point in case it doesn't exist.
-    mkdir(entry.mount_point.c_str(), 0755);
-
-    auto options = kLowerdirOption + entry.lowerdir;
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
-        options += ",override_creds=off";
-    }
-
-    // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
-    // confuse this with adb remount overlay, whose device name is "overlay".
-    // Overlayfs is a pseudo filesystem, so the source device is a symbolic value and isn't used to
-    // back the filesystem. However the device name would be shown in /proc/mounts.
-    auto source = "overlay-" + entry.blk_device;
-    auto report = "__mount(source=" + source + ",target=" + entry.mount_point + ",type=overlay," +
-                  options + ")=";
-    auto ret = mount(source.c_str(), entry.mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
-                     options.c_str());
-    if (ret) {
-        PERROR << report << ret;
-        return false;
-    }
-    LINFO << report << ret;
-    return true;
 }
 
 bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
