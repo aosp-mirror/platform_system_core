@@ -776,6 +776,9 @@ on post-fs-data
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
     mkdir /data/misc/odsign 0700 root root
+    # Directory for VirtualizationService temporary image files. Ensure that it is empty.
+    exec -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
 
     mkdir /data/preloads 0775 system system encryption=None
 
