@@ -574,7 +574,7 @@ bool FirstStageMount::MountPartitions() {
 
     for (const auto& entry : fstab_) {
         if (entry.fs_type == "overlay") {
-            fs_mgr_overlayfs_mount_fstab_entry(entry);
+            fs_mgr_mount_overlayfs_fstab_entry(entry);
         }
     }
 
