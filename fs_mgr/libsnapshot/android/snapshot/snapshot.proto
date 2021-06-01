@@ -213,6 +213,7 @@ message SnapshotMergeReport {
     // Time from sys.boot_completed to merge start, in milliseconds.
     uint32 boot_complete_to_merge_start_time_ms = 8;
 
-    // Merge failure code, filled if state == MergeFailed.
+    // Merge failure code, filled if the merge failed at any time (regardless
+    // of whether it succeeded at a later time).
     MergeFailureCode merge_failure_code = 9;
 }
