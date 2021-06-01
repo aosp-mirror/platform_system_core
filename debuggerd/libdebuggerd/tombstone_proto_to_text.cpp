@@ -272,14 +272,14 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
   if (tombstone.causes_size() > 1) {
     CBS("");
-    CBS("Note: multiple potential causes for this crash were detected, listing them in decreasing "
+    CBL("Note: multiple potential causes for this crash were detected, listing them in decreasing "
         "order of probability.");
   }
 
   for (const Cause& cause : tombstone.causes()) {
     if (tombstone.causes_size() > 1) {
       CBS("");
-      CBS("Cause: %s", cause.human_readable().c_str());
+      CBL("Cause: %s", cause.human_readable().c_str());
     }
 
     if (cause.has_memory_error() && cause.memory_error().has_heap()) {
@@ -287,14 +287,14 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
       if (heap_object.deallocation_backtrace_size() != 0) {
         CBS("");
-        CBS("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
-        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), false);
+        CBL("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
+        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), true);
       }
 
       if (heap_object.allocation_backtrace_size() != 0) {
         CBS("");
-        CBS("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
-        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), false);
+        CBL("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
+        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), true);
       }
     }
   }
