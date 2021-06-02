@@ -127,15 +127,16 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
             }
             fs_options.append(flag);
 
-            if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
-                std::string arg;
-                if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
-                    arg = flag.substr(equal_sign + 1);
-                }
-                if (!ParseInt(arg, &entry->reserved_size)) {
-                    LWARNING << "Warning: reserve_root= flag malformed: " << arg;
-                } else {
-                    entry->reserved_size <<= 12;
+            if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
+                const auto arg = flag.substr(equal_sign + 1);
+                if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
+                    if (!ParseInt(arg, &entry->reserved_size)) {
+                        LWARNING << "Warning: reserve_root= flag malformed: " << arg;
+                    } else {
+                        entry->reserved_size <<= 12;
+                    }
+                } else if (StartsWith(flag, "lowerdir=")) {
+                    entry->lowerdir = std::move(arg);
                 }
             }
         }
@@ -298,8 +299,6 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (StartsWith(flag, "lowerdir=")) {
-            entry->lowerdir = arg;
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
