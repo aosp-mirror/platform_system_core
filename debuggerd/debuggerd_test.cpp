@@ -51,6 +51,7 @@
 #include <android-base/test_utils.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <libminijail.h>
@@ -65,6 +66,7 @@ using namespace std::chrono_literals;
 
 using android::base::SendFileDescriptors;
 using android::base::unique_fd;
+using ::testing::HasSubstr;
 
 #if defined(__LP64__)
 #define ARCH_SUFFIX "64"
@@ -307,6 +309,19 @@ static void ConsumeFd(unique_fd fd, std::string* output) {
   *output = std::move(result);
 }
 
+class LogcatCollector {
+ public:
+  LogcatCollector() { system("logcat -c"); }
+
+  void Collect(std::string* output) {
+    FILE* cmd_stdout = popen("logcat -d '*:S DEBUG'", "r");
+    ASSERT_NE(cmd_stdout, nullptr);
+    unique_fd tmp_fd(TEMP_FAILURE_RETRY(dup(fileno(cmd_stdout))));
+    ConsumeFd(std::move(tmp_fd), output);
+    pclose(cmd_stdout);
+  }
+};
+
 TEST_F(CrasherTest, smoke) {
   int intercept_result;
   unique_fd output_fd;
@@ -441,6 +456,7 @@ TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
   }
 
   GwpAsanTestParameters params = GetParam();
+  LogcatCollector logcat_collector;
 
   int intercept_result;
   unique_fd output_fd;
@@ -460,17 +476,18 @@ TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
 
-  std::string result;
-  ConsumeFd(std::move(output_fd), &result);
+  std::vector<std::string> log_sources(2);
+  ConsumeFd(std::move(output_fd), &log_sources[0]);
+  logcat_collector.Collect(&log_sources[1]);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\))");
-  ASSERT_MATCH(result, R"(Cause: \[GWP-ASan\]: )" + params.cause_needle);
-  if (params.free_before_access) {
-    ASSERT_MATCH(result, R"(deallocated by thread .*
-      #00 pc)");
+  for (const auto& result : log_sources) {
+    ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\))");
+    ASSERT_MATCH(result, R"(Cause: \[GWP-ASan\]: )" + params.cause_needle);
+    if (params.free_before_access) {
+      ASSERT_MATCH(result, R"(deallocated by thread .*\n.*#00 pc)");
+    }
+    ASSERT_MATCH(result, R"((^|\s)allocated by thread .*\n.*#00 pc)");
   }
-  ASSERT_MATCH(result, R"(allocated by thread .*
-      #00 pc)");
 }
 
 struct SizeParamCrasherTest : CrasherTest, testing::WithParamInterface<size_t> {};
@@ -488,6 +505,8 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
     return;
   }
 
+  LogcatCollector logcat_collector;
+
   int intercept_result;
   unique_fd output_fd;
   StartProcess([&]() {
@@ -504,16 +523,17 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
 
-  std::string result;
-  ConsumeFd(std::move(output_fd), &result);
+  std::vector<std::string> log_sources(2);
+  ConsumeFd(std::move(output_fd), &log_sources[0]);
+  logcat_collector.Collect(&log_sources[1]);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation)");
-  ASSERT_MATCH(result, R"(deallocated by thread .*
-      #00 pc)");
-  ASSERT_MATCH(result, R"(allocated by thread .*
-      #00 pc)");
+  for (const auto& result : log_sources) {
+    ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+    ASSERT_MATCH(result, R"(Cause: \[MTE\]: Use After Free, 0 bytes into a )" +
+                             std::to_string(GetParam()) + R"(-byte allocation)");
+    ASSERT_MATCH(result, R"(deallocated by thread .*?\n.*#00 pc)");
+    ASSERT_MATCH(result, R"((^|\s)allocated by thread .*?\n.*#00 pc)");
+  }
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
@@ -557,6 +577,7 @@ TEST_P(SizeParamCrasherTest, mte_overflow) {
     GTEST_SKIP() << "Requires MTE";
   }
 
+  LogcatCollector logcat_collector;
   int intercept_result;
   unique_fd output_fd;
   StartProcess([&]() {
@@ -572,14 +593,16 @@ TEST_P(SizeParamCrasherTest, mte_overflow) {
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
 
-  std::string result;
-  ConsumeFd(std::move(output_fd), &result);
+  std::vector<std::string> log_sources(2);
+  ConsumeFd(std::move(output_fd), &log_sources[0]);
+  logcat_collector.Collect(&log_sources[1]);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
-                           std::to_string(GetParam()) + R"(-byte allocation)");
-  ASSERT_MATCH(result, R"(allocated by thread .*
-      #00 pc)");
+  for (const auto& result : log_sources) {
+    ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+    ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a )" +
+                             std::to_string(GetParam()) + R"(-byte allocation)");
+    ASSERT_MATCH(result, R"((^|\s)allocated by thread .*?\n.*#00 pc)");
+  }
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
@@ -612,7 +635,7 @@ TEST_P(SizeParamCrasherTest, mte_underflow) {
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 9 \(SEGV_MTESERR\))");
   ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Underflow, 4 bytes left of a )" +
                            std::to_string(GetParam()) + R"(-byte allocation)");
-  ASSERT_MATCH(result, R"(allocated by thread .*
+  ASSERT_MATCH(result, R"((^|\s)allocated by thread .*
       #00 pc)");
 #else
   GTEST_SKIP() << "Requires aarch64";
@@ -624,6 +647,8 @@ TEST_F(CrasherTest, mte_multiple_causes) {
   if (!mte_supported()) {
     GTEST_SKIP() << "Requires MTE";
   }
+
+  LogcatCollector logcat_collector;
 
   int intercept_result;
   unique_fd output_fd;
@@ -657,17 +682,23 @@ TEST_F(CrasherTest, mte_multiple_causes) {
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
 
-  std::string result;
-  ConsumeFd(std::move(output_fd), &result);
+  std::vector<std::string> log_sources(2);
+  ConsumeFd(std::move(output_fd), &log_sources[0]);
+  logcat_collector.Collect(&log_sources[1]);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
-  ASSERT_MATCH(
-      result,
-      R"(Note: multiple potential causes for this crash were detected, listing them in decreasing order of probability.)");
-
-  // Adjacent untracked allocations may cause us to see the wrong underflow here (or only
-  // overflows), so we can't match explicitly for an underflow message.
-  ASSERT_MATCH(result, R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation)");
+  for (const auto& result : log_sources) {
+    ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
+    ASSERT_THAT(result, HasSubstr("Note: multiple potential causes for this crash were detected, "
+                                  "listing them in decreasing order of probability."));
+    // Adjacent untracked allocations may cause us to see the wrong underflow here (or only
+    // overflows), so we can't match explicitly for an underflow message.
+    ASSERT_MATCH(result,
+                 R"(Cause: \[MTE\]: Buffer Overflow, 0 bytes right of a 16-byte allocation)");
+    // Ensure there's at least two allocation traces (one for each cause).
+    ASSERT_MATCH(
+        result,
+        R"((^|\s)allocated by thread .*?\n.*#00 pc(.|\n)*?(^|\s)allocated by thread .*?\n.*#00 pc)");
+  }
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
