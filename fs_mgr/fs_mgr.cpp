@@ -2266,6 +2266,26 @@ std::string fs_mgr_get_super_partition_name(int slot) {
     return LP_METADATA_DEFAULT_PARTITION_NAME;
 }
 
+bool fs_mgr_create_canonical_mount_point(const std::string& mount_point) {
+    auto saved_errno = errno;
+    auto ok = true;
+    auto created_mount_point = !mkdir(mount_point.c_str(), 0755);
+    std::string real_mount_point;
+    if (!Realpath(mount_point, &real_mount_point)) {
+        ok = false;
+        PERROR << "failed to realpath(" << mount_point << ")";
+    } else if (mount_point != real_mount_point) {
+        ok = false;
+        LERROR << "mount point is not canonical: realpath(" << mount_point << ") -> "
+               << real_mount_point;
+    }
+    if (!ok && created_mount_point) {
+        rmdir(mount_point.c_str());
+    }
+    errno = saved_errno;
+    return ok;
+}
+
 bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
     auto overlayfs_valid_result = fs_mgr_overlayfs_valid();
     if (overlayfs_valid_result == OverlayfsValidResult::kNotSupported) {
@@ -2298,18 +2318,7 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
     }
 #endif  // ALLOW_ADBD_DISABLE_VERITY == 0
 
-    // Create the mount point in case it doesn't exist.
-    mkdir(entry.mount_point.c_str(), 0755);
-
-    // Ensure that mount point exists and doesn't contain symbolic link or /../.
-    std::string mount_point;
-    if (!Realpath(entry.mount_point, &mount_point)) {
-        PERROR << __FUNCTION__ << "(): failed to realpath " << entry.mount_point;
-        return false;
-    }
-    if (entry.mount_point != mount_point) {
-        LERROR << __FUNCTION__ << "(): mount point must be a canonicalized path: realpath "
-               << entry.mount_point << " = " << mount_point;
+    if (!fs_mgr_create_canonical_mount_point(entry.mount_point)) {
         return false;
     }
 
