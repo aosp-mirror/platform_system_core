@@ -420,6 +420,10 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
         *end = begin + 1;
     }
 
+    if (!fs_mgr_create_canonical_mount_point(begin->mount_point)) {
+        return false;
+    }
+
     if (begin->fs_mgr_flags.logical) {
         if (!fs_mgr_update_logical_partition(&(*begin))) {
             return false;
