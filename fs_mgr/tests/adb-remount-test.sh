@@ -762,15 +762,15 @@ skip_administrative_mounts() {
     "ramdumpfs" "binder" "securityfs" "functionfs" "rootfs"
   )
   local exclude_devices=(
-    "[/]sys[/]kernel[/]debug" "[/]data[/]media" "[/]dev[/]block[/]loop[0-9]*"
+    "\/sys\/kernel\/debug" "\/data\/media" "\/dev\/block\/loop[0-9]*"
     "${exclude_filesystems[@]}"
   )
   local exclude_mount_points=(
-    "[/]cache" "[/]mnt[/]scratch" "[/]mnt[/]vendor[/]persist" "[/]persist"
-    "[/]metadata"
+    "\/cache" "\/mnt\/scratch" "\/mnt\/vendor\/persist" "\/persist"
+    "\/metadata"
   )
   if [ "data" = "${1}" ]; then
-    exclude_mount_points+=("[/]data")
+    exclude_mount_points+=("\/data")
   fi
   awk '$1 !~ /^('"$(join_with "|" "${exclude_devices[@]}")"')$/ &&
       $2 !~ /^('"$(join_with "|" "${exclude_mount_points[@]}")"')$/ &&
@@ -934,7 +934,7 @@ ACTIVE_SLOT=`get_active_slot`
 PARTITIONS=`adb_su cat /vendor/etc/fstab* </dev/null |
               grep -v "^[#${SPACE}${TAB}]" |
               skip_administrative_mounts |
-              awk '$1 ~ /^[^/]+$/ && "/"$1 == $2 && $4 ~ /(^|,)ro(,|$)/ { print $1 }' |
+              awk '$1 ~ /^[^\/]+$/ && "/"$1 == $2 && $4 ~ /(^|,)ro(,|$)/ { print $1 }' |
               sort -u |
               tr '\n' ' '`
 PARTITIONS="${PARTITIONS:-system vendor}"
