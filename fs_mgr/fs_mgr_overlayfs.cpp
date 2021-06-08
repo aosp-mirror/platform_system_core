@@ -92,10 +92,6 @@ bool fs_mgr_overlayfs_mount_all(Fstab*) {
     return false;
 }
 
-std::vector<std::string> fs_mgr_overlayfs_required_devices(Fstab*) {
-    return {};
-}
-
 bool fs_mgr_overlayfs_setup(const char*, const char*, bool* change, bool) {
     if (change) *change = false;
     return false;
