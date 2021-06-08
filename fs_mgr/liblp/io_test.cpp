@@ -20,7 +20,10 @@
 #include <sys/syscall.h>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
+#include <fs_mgr.h>
+#include <fstab/fstab.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
@@ -38,6 +41,7 @@ using namespace android::fs_mgr::testing;
 using ::testing::_;
 using ::testing::Return;
 using unique_fd = android::base::unique_fd;
+using android::base::GetProperty;
 
 // Our tests assume a 128KiB disk with two 512 byte metadata slots.
 static const size_t kDiskSize = 131072;
