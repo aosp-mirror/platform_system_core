@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <android-base/properties.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
@@ -31,6 +32,7 @@ using ::testing::AnyNumber;
 using ::testing::ElementsAre;
 using ::testing::NiceMock;
 using ::testing::Return;
+using android::base::GetProperty;
 
 class Environment : public ::testing::Environment {
   public:
