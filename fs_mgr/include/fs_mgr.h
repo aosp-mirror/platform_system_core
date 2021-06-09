@@ -131,3 +131,12 @@ int fs_mgr_remount_userdata_into_checkpointing(android::fs_mgr::Fstab* fstab);
 // Finds the dm_bow device on which this block device is stacked, or returns
 // empty string
 std::string fs_mgr_find_bow_device(const std::string& block_device);
+
+// Creates mount point if not already existed, and checks that mount point is a
+// canonical path that doesn't contain any symbolic link or /../.
+bool fs_mgr_create_canonical_mount_point(const std::string& mount_point);
+
+// Like fs_mgr_do_mount_one() but for overlayfs fstab entries.
+// Unlike fs_mgr_overlayfs, mount overlayfs without upperdir and workdir, so the
+// filesystem cannot be remount read-write.
+bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry);
