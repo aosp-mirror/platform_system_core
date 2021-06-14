@@ -58,6 +58,12 @@ bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t
     return EmitRawBlocks(new_block_start, data, size);
 }
 
+bool AddXorBlocks(uint32_t /*new_block_start*/, const void* /*data*/, size_t /*size*/,
+                  uint32_t /*old_block*/, uint16_t /*offset*/) {
+    LOG(ERROR) << "AddXorBlocks not yet implemented";
+    return false;
+}
+
 bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     uint64_t last_block = new_block_start + num_blocks - 1;
     if (!ValidateNewBlock(last_block)) {
@@ -68,6 +74,11 @@ bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
 
 bool ICowWriter::AddLabel(uint64_t label) {
     return EmitLabel(label);
+}
+
+bool AddSequenceData(size_t /*num_ops*/, const uint32_t* /*data*/) {
+    LOG(ERROR) << "AddSequenceData not yet implemented";
+    return false;
 }
 
 bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
