@@ -387,6 +387,7 @@ cc_test {
 
     srcs: [
         "devices_test.cpp",
+        "epoll_test.cpp",
         "firmware_handler_test.cpp",
         "init_test.cpp",
         "keychords_test.cpp",
