@@ -55,11 +55,18 @@ class ICowWriter {
     // Encode a sequence of raw blocks. |size| must be a multiple of the block size.
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size);
 
+    // Add a sequence of xor'd blocks. |size| must be a multiple of the block size.
+    bool AddXorBlocks(uint32_t new_block_start, const void* data, size_t size, uint32_t old_block,
+                      uint16_t offset);
+
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
     bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks);
 
     // Add a label to the op sequence.
     bool AddLabel(uint64_t label);
+
+    // Add sequence data for op merging. Data is a list of the destination block numbers.
+    bool AddSequenceData(size_t num_ops, const uint32_t* data);
 
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
