@@ -186,99 +186,59 @@ status_t String16::setTo(const char16_t* other, size_t len)
     return NO_MEMORY;
 }
 
-status_t String16::append(const String16& other)
-{
-    const size_t myLen = size();
-    const size_t otherLen = other.size();
-    if (myLen == 0) {
-        setTo(other);
-        return OK;
-    } else if (otherLen == 0) {
-        return OK;
-    }
-
-    if (myLen >= SIZE_MAX / sizeof(char16_t) - otherLen) {
-        android_errorWriteLog(0x534e4554, "73826242");
-        abort();
-    }
-
-    SharedBuffer* buf =
-            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
-    if (buf) {
-        char16_t* str = (char16_t*)buf->data();
-        memcpy(str+myLen, other, (otherLen+1)*sizeof(char16_t));
-        mString = str;
-        return OK;
-    }
-    return NO_MEMORY;
+status_t String16::append(const String16& other) {
+    return append(other.string(), other.size());
 }
 
-status_t String16::append(const char16_t* chrs, size_t otherLen)
-{
+status_t String16::append(const char16_t* chrs, size_t otherLen) {
     const size_t myLen = size();
-    if (myLen == 0) {
-        setTo(chrs, otherLen);
-        return OK;
-    } else if (otherLen == 0) {
-        return OK;
-    }
 
-    if (myLen >= SIZE_MAX / sizeof(char16_t) - otherLen) {
-        android_errorWriteLog(0x534e4554, "73826242");
-        abort();
-    }
+    if (myLen == 0) return setTo(chrs, otherLen);
 
-    SharedBuffer* buf =
-            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
-    if (buf) {
-        char16_t* str = (char16_t*)buf->data();
-        memcpy(str+myLen, chrs, otherLen*sizeof(char16_t));
-        str[myLen+otherLen] = 0;
-        mString = str;
-        return OK;
-    }
-    return NO_MEMORY;
+    if (otherLen == 0) return OK;
+
+    size_t size = myLen;
+    if (__builtin_add_overflow(size, otherLen, &size) ||
+        __builtin_add_overflow(size, 1, &size) ||
+        __builtin_mul_overflow(size, sizeof(char16_t), &size)) return NO_MEMORY;
+
+    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize(size));
+    if (!buf) return NO_MEMORY;
+
+    char16_t* str = static_cast<char16_t*>(buf->data());
+    memcpy(str + myLen, chrs, otherLen * sizeof(char16_t));
+    str[myLen + otherLen] = 0;
+    mString = str;
+    return OK;
 }
 
-status_t String16::insert(size_t pos, const char16_t* chrs)
-{
+status_t String16::insert(size_t pos, const char16_t* chrs) {
     return insert(pos, chrs, strlen16(chrs));
 }
 
-status_t String16::insert(size_t pos, const char16_t* chrs, size_t len)
-{
+status_t String16::insert(size_t pos, const char16_t* chrs, size_t otherLen) {
     const size_t myLen = size();
-    if (myLen == 0) {
-        return setTo(chrs, len);
-        return OK;
-    } else if (len == 0) {
-        return OK;
-    }
+
+    if (myLen == 0) return setTo(chrs, otherLen);
+
+    if (otherLen == 0) return OK;
 
     if (pos > myLen) pos = myLen;
 
-    #if 0
-    printf("Insert in to %s: pos=%d, len=%d, myLen=%d, chrs=%s\n",
-           String8(*this).string(), pos,
-           len, myLen, String8(chrs, len).string());
-    #endif
+    size_t size = myLen;
+    if (__builtin_add_overflow(size, otherLen, &size) ||
+        __builtin_add_overflow(size, 1, &size) ||
+        __builtin_mul_overflow(size, sizeof(char16_t), &size)) return NO_MEMORY;
 
-    SharedBuffer* buf =
-            static_cast<SharedBuffer*>(editResize((myLen + len + 1) * sizeof(char16_t)));
-    if (buf) {
-        char16_t* str = (char16_t*)buf->data();
-        if (pos < myLen) {
-            memmove(str+pos+len, str+pos, (myLen-pos)*sizeof(char16_t));
-        }
-        memcpy(str+pos, chrs, len*sizeof(char16_t));
-        str[myLen+len] = 0;
-        mString = str;
-        #if 0
-        printf("Result (%d chrs): %s\n", size(), String8(*this).string());
-        #endif
-        return OK;
-    }
-    return NO_MEMORY;
+    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize(size));
+    if (!buf) return NO_MEMORY;
+
+    char16_t* str = static_cast<char16_t*>(buf->data());
+    if (pos < myLen) memmove(str + pos + otherLen, str + pos, (myLen - pos) * sizeof(char16_t));
+    memcpy(str + pos, chrs, otherLen * sizeof(char16_t));
+    str[myLen + otherLen] = 0;
+    mString = str;
+    return OK;
 }
 
 ssize_t String16::findFirst(char16_t c) const
