@@ -15,13 +15,14 @@
  */
 
 #define LOG_TAG "String8_test"
+
 #include <utils/Log.h>
 #include <utils/String8.h>
 #include <utils/String16.h>
 
 #include <gtest/gtest.h>
 
-namespace android {
+using namespace android;
 
 class String8Test : public testing::Test {
 protected:
@@ -101,4 +102,15 @@ TEST_F(String8Test, ValidUtf16Conversion) {
     String8 valid = String8(String16(tmp));
     EXPECT_STREQ(valid, "abcdef");
 }
+
+TEST_F(String8Test, append) {
+    String8 s;
+    EXPECT_EQ(OK, s.append("foo"));
+    EXPECT_STREQ("foo", s);
+    EXPECT_EQ(OK, s.append("bar"));
+    EXPECT_STREQ("foobar", s);
+    EXPECT_EQ(OK, s.append("baz", 0));
+    EXPECT_STREQ("foobar", s);
+    EXPECT_EQ(NO_MEMORY, s.append("baz", SIZE_MAX));
+    EXPECT_STREQ("foobar", s);
 }
