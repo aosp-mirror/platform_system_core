@@ -429,7 +429,7 @@ static int show_help() {
             " snapshot-update merge      On devices that support snapshot-based updates, finish\n"
             "                            an in-progress update if it is in the \"merging\"\n"
             "                            phase.\n"
-            " fetch PARTITION            Fetch a partition image from the device."
+            " fetch PARTITION OUT_FILE   Fetch a partition image from the device."
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
