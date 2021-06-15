@@ -104,8 +104,6 @@ static std::string g_dtb_path;
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
 
-static const std::string convert_fbe_marker_filename("convert_fbe");
-
 fastboot::FastBootDriver* fb = nullptr;
 
 enum fb_buffer_type {
@@ -473,9 +471,6 @@ static int show_help() {
             " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
             " --fs-options=OPTION[,OPTION]\n"
             "                            Enable filesystem features. OPTION supports casefold, projid, compress\n"
-#if !defined(_WIN32)
-            " --wipe-and-use-fbe         Enable file-based encryption, wiping userdata.\n"
-#endif
             // TODO: remove --unbuffered?
             " --unbuffered               Don't buffer input or output.\n"
             " --verbose, -v              Verbose output.\n"
@@ -593,10 +588,6 @@ static FILE* win32_tmpfile() {
 
 #define tmpfile win32_tmpfile
 
-static std::string make_temporary_directory() {
-    die("make_temporary_directory not supported under Windows, sorry!");
-}
-
 static int make_temporary_fd(const char* /*what*/) {
     // TODO: reimplement to avoid leaking a FILE*.
     return fileno(tmpfile());
@@ -608,15 +599,6 @@ static std::string make_temporary_template() {
     const char* tmpdir = getenv("TMPDIR");
     if (tmpdir == nullptr) tmpdir = P_tmpdir;
     return std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
-}
-
-static std::string make_temporary_directory() {
-    std::string result(make_temporary_template());
-    if (mkdtemp(&result[0]) == nullptr) {
-        die("unable to create temporary directory with template %s: %s",
-            result.c_str(), strerror(errno));
-    }
-    return result;
 }
 
 static int make_temporary_fd(const char* what) {
@@ -631,32 +613,6 @@ static int make_temporary_fd(const char* what) {
 }
 
 #endif
-
-static std::string create_fbemarker_tmpdir() {
-    std::string dir = make_temporary_directory();
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
-    if (fd == -1) {
-        die("unable to create FBE marker file %s locally: %s",
-            marker_file.c_str(), strerror(errno));
-    }
-    close(fd);
-    return dir;
-}
-
-static void delete_fbemarker_tmpdir(const std::string& dir) {
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    if (unlink(marker_file.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker file %s locally: %d, %s\n",
-            marker_file.c_str(), errno, strerror(errno));
-        return;
-    }
-    if (rmdir(dir.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker directory %s locally: %d, %s\n",
-            dir.c_str(), errno, strerror(errno));
-        return;
-    }
-}
 
 static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
@@ -1895,7 +1851,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
-    bool set_fbe_marker = false;
     bool force_flash = false;
     unsigned fs_options = 0;
     int longindex;
@@ -1933,9 +1888,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
         {"unbuffered", no_argument, 0, 0},
         {"verbose", no_argument, 0, 'v'},
         {"version", no_argument, 0, 0},
-#if !defined(_WIN32)
-        {"wipe-and-use-fbe", no_argument, 0, 0},
-#endif
         {0, 0, 0, 0}
     };
 
@@ -1989,11 +1941,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fprintf(stdout, "fastboot version %s-%s\n", PLATFORM_TOOLS_VERSION, android::build::GetBuildNumber().c_str());
                 fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
-#if !defined(_WIN32)
-            } else if (name == "wipe-and-use-fbe") {
-                wants_wipe = true;
-                set_fbe_marker = true;
-#endif
             } else {
                 die("unknown option %s", longopts[longindex].name);
             }
@@ -2305,14 +2252,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             if (partition_type.empty()) continue;
             fb->Erase(partition);
-            if (partition == "userdata" && set_fbe_marker) {
-                fprintf(stderr, "setting FBE marker on initial userdata...\n");
-                std::string initial_userdata_dir = create_fbemarker_tmpdir();
-                fb_perform_format(partition, 1, partition_type, "", initial_userdata_dir, fs_options);
-                delete_fbemarker_tmpdir(initial_userdata_dir);
-            } else {
-                fb_perform_format(partition, 1, partition_type, "", "", fs_options);
-            }
+            fb_perform_format(partition, 1, partition_type, "", "", fs_options);
         }
     }
     if (wants_set_active) {
