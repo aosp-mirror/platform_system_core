@@ -86,6 +86,27 @@ prebuilt_etc {
     src: "set_attestation_key/keymaster_soft_attestation_keys.xml",
 }
 
+cc_library {
+    name: "libtrusty_ipc",
+    vendor: true,
+    srcs: ["ipc/trusty_keymaster_ipc.cpp"],
+    local_include_dirs: ["include"],
+    shared_libs: [
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libxml2",
+    ],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
 cc_binary {
     name: "trusty_keymaster_set_attestation_key",
     vendor: true,
