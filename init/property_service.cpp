@@ -1214,7 +1214,9 @@ void PropertyLoadBootDefaults() {
     update_sys_usb_config();
 
     // Workaround SafetyNet
-    workaround_snet_properties();
+    if (!IsRecoveryMode()) {
+        workaround_snet_properties();
+    }
 }
 
 bool LoadPropertyInfoFromFile(const std::string& filename,
