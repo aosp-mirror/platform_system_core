@@ -80,6 +80,49 @@ cc_binary {
     vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
 }
 
+cc_binary {
+    name: "android.hardware.security.keymint-service.trusty",
+    relative_install_path: "hw",
+    init_rc: ["keymint/android.hardware.security.keymint-service.trusty.rc"],
+    vintf_fragments: [
+        "keymint/android.hardware.security.keymint-service.trusty.xml",
+    ],
+    vendor: true,
+    cflags: [
+        "-Wall",
+        "-Wextra",
+    ],
+    local_include_dirs: [
+        "include",
+    ],
+    srcs: [
+        "TrustyKeymaster.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+        "keymint/TrustyKeyMintDevice.cpp",
+        "keymint/TrustyKeyMintOperation.cpp",
+        "keymint/TrustySecureClock.cpp",
+        "keymint/TrustySharedSecret.cpp",
+        "keymint/service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.security.keymint-V1-ndk_platform",
+        "android.hardware.security.secureclock-V1-ndk_platform",
+        "android.hardware.security.sharedsecret-V1-ndk_platform",
+        "lib_android_keymaster_keymint_utils",
+        "libbase",
+        "libbinder_ndk",
+        "libhardware",
+        "libkeymaster_messages",
+        "libkeymint",
+        "liblog",
+        "libtrusty",
+    ],
+    required: [
+        "RemoteProvisioner",
+        "android.hardware.hardware_keystore.xml",
+    ],
+}
+
 prebuilt_etc {
     name: "keymaster_soft_attestation_keys.xml",
     vendor: true,
