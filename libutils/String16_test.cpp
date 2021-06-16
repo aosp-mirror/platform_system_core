@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 
-namespace android {
+using namespace android;
 
 ::testing::AssertionResult Char16_tStringEquals(const char16_t* a, const char16_t* b) {
     if (strcmp16(a, b) != 0) {
@@ -197,4 +197,36 @@ TEST(String16Test, ValidUtf8Conversion) {
     EXPECT_STR16EQ(another, u"abcdef");
 }
 
-}  // namespace android
+TEST(String16Test, append) {
+    String16 s;
+    EXPECT_EQ(OK, s.append(String16(u"foo")));
+    EXPECT_STR16EQ(u"foo", s);
+    EXPECT_EQ(OK, s.append(String16(u"bar")));
+    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_EQ(OK, s.append(u"baz", 0));
+    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_EQ(NO_MEMORY, s.append(u"baz", SIZE_MAX));
+    EXPECT_STR16EQ(u"foobar", s);
+}
+
+TEST(String16Test, insert) {
+    String16 s;
+
+    // Inserting into the empty string inserts at the start.
+    EXPECT_EQ(OK, s.insert(123, u"foo"));
+    EXPECT_STR16EQ(u"foo", s);
+
+    // Inserting zero characters at any position is okay, but won't expand the string.
+    EXPECT_EQ(OK, s.insert(123, u"foo", 0));
+    EXPECT_STR16EQ(u"foo", s);
+
+    // Inserting past the end of a non-empty string appends.
+    EXPECT_EQ(OK, s.insert(123, u"bar"));
+    EXPECT_STR16EQ(u"foobar", s);
+
+    EXPECT_EQ(OK, s.insert(3, u"!"));
+    EXPECT_STR16EQ(u"foo!bar", s);
+
+    EXPECT_EQ(NO_MEMORY, s.insert(3, u"", SIZE_MAX));
+    EXPECT_STR16EQ(u"foo!bar", s);
+}
