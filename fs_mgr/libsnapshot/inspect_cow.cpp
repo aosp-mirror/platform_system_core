@@ -106,6 +106,8 @@ static bool Inspect(const std::string& path, bool silent, bool decompress, bool 
         std::cout << "Header size: " << header.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
+        std::cout << "Num merge ops: " << header.num_merge_ops << "\n";
+        std::cout << "RA buffer size: " << header.buffer_size << "\n";
         std::cout << "\n";
         if (has_footer) {
             std::cout << "Total Ops size: " << footer.op.ops_size << "\n";
