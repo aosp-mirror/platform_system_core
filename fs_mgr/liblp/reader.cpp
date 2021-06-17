@@ -174,7 +174,7 @@ static bool ReadMetadataHeader(Reader* reader, LpMetadata* metadata) {
         return false;
     }
 
-    // Do basic sanity checks before computing the checksum.
+    // Do basic validity checks before computing the checksum.
     if (header.magic != LP_METADATA_HEADER_MAGIC) {
         LERROR << "Logical partition metadata has invalid magic value.";
         return false;
@@ -255,7 +255,7 @@ static std::unique_ptr<LpMetadata> ParseMetadata(const LpMetadataGeometry& geome
 
     LpMetadataHeader& header = metadata->header;
 
-    // Sanity check the table size.
+    // Check the table size.
     if (header.tables_size > geometry.metadata_max_size) {
         LERROR << "Invalid partition metadata header table size.";
         return nullptr;

@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#include <functional>
 #include <map>
 #include <string>
 
@@ -30,7 +31,13 @@
 #include "types.h"
 
 // Forward declarations
+class BacktraceFrame;
+class Cause;
+class Tombstone;
+
 namespace unwindstack {
+struct FrameData;
+class Maps;
 class Unwinder;
 }
 
@@ -44,18 +51,25 @@ constexpr size_t kMaxFrames = 256;
 int open_tombstone(std::string* path);
 
 /* Creates a tombstone file and writes the crash dump to it. */
-void engrave_tombstone(int tombstone_fd, unwindstack::Unwinder* unwinder,
-                       const OpenFilesList* open_files, pid_t pid, pid_t tid,
-                       const std::string& process_name, const std::map<pid_t, std::string>& threads,
-                       uint64_t abort_msg_address, std::string* amfd_data);
-
-void engrave_tombstone_ucontext(int tombstone_fd, uint64_t abort_msg_address, siginfo_t* siginfo,
-                                ucontext_t* ucontext);
-
-void engrave_tombstone(android::base::unique_fd output_fd, unwindstack::Unwinder* unwinder,
+void engrave_tombstone(android::base::unique_fd output_fd, android::base::unique_fd proto_fd,
+                       unwindstack::Unwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread,
-                       uint64_t abort_msg_address, OpenFilesList* open_files,
-                       std::string* amfd_data, uintptr_t gwp_asan_state,
-                       uintptr_t gwp_asan_metadata);
+                       const ProcessInfo& process_info, OpenFilesList* open_files,
+                       std::string* amfd_data);
+
+void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_msg_address,
+                                siginfo_t* siginfo, ucontext_t* ucontext);
+
+void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
+                             const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
+                             const ProcessInfo& process_info, const OpenFilesList* open_files);
+
+bool tombstone_proto_to_text(
+    const Tombstone& tombstone,
+    std::function<void(const std::string& line, bool should_log)> callback);
+
+void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame,
+                             unwindstack::Maps* maps);
+void set_human_readable_cause(Cause* cause, uint64_t fault_addr);
 
 #endif  // _DEBUGGERD_TOMBSTONE_H

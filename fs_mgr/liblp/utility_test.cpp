@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <optional>
+
 #include <gtest/gtest.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
@@ -58,15 +60,28 @@ TEST(liblp, GetMetadataOffset) {
     EXPECT_EQ(GetBackupMetadataOffset(geometry, 0), backup_start + 16384 * 0);
 }
 
+std::optional<uint64_t> AlignTo(uint64_t base, uint32_t alignment) {
+    uint64_t r;
+    if (!AlignTo(base, alignment, &r)) {
+        return {};
+    }
+    return {r};
+}
+
 TEST(liblp, AlignTo) {
-    EXPECT_EQ(AlignTo(37, 0), 37);
-    EXPECT_EQ(AlignTo(1024, 1024), 1024);
-    EXPECT_EQ(AlignTo(555, 1024), 1024);
-    EXPECT_EQ(AlignTo(555, 1000), 1000);
-    EXPECT_EQ(AlignTo(0, 1024), 0);
-    EXPECT_EQ(AlignTo(54, 32, 30), 62);
-    EXPECT_EQ(AlignTo(32, 32, 30), 62);
-    EXPECT_EQ(AlignTo(17, 32, 30), 30);
+    EXPECT_EQ(AlignTo(37, 0), std::optional<uint64_t>(37));
+    EXPECT_EQ(AlignTo(1024, 1024), std::optional<uint64_t>(1024));
+    EXPECT_EQ(AlignTo(555, 1024), std::optional<uint64_t>(1024));
+    EXPECT_EQ(AlignTo(555, 1000), std::optional<uint64_t>(1000));
+    EXPECT_EQ(AlignTo(0, 1024), std::optional<uint64_t>(0));
+    EXPECT_EQ(AlignTo(54, 32), std::optional<uint64_t>(64));
+    EXPECT_EQ(AlignTo(32, 32), std::optional<uint64_t>(32));
+    EXPECT_EQ(AlignTo(17, 32), std::optional<uint64_t>(32));
+
+    auto u32limit = std::numeric_limits<uint32_t>::max();
+    auto u64limit = std::numeric_limits<uint64_t>::max();
+    EXPECT_EQ(AlignTo(u64limit - u32limit + 1, u32limit), std::optional<uint64_t>{u64limit});
+    EXPECT_EQ(AlignTo(std::numeric_limits<uint64_t>::max(), 2), std::optional<uint64_t>{});
 }
 
 TEST(liblp, GetPartitionSlotSuffix) {
