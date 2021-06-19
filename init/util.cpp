@@ -246,6 +246,19 @@ void ImportKernelCmdline(const std::function<void(const std::string&, const std:
     }
 }
 
+void ImportBootconfig(const std::function<void(const std::string&, const std::string&)>& fn) {
+    std::string bootconfig;
+    android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
+
+    for (const auto& entry : android::base::Split(bootconfig, "\n")) {
+        std::vector<std::string> pieces = android::base::Split(entry, "=");
+        if (pieces.size() == 2) {
+            pieces[1].erase(std::remove(pieces[1].begin(), pieces[1].end(), '"'), pieces[1].end());
+            fn(android::base::Trim(pieces[0]), android::base::Trim(pieces[1]));
+        }
+    }
+}
+
 bool make_dir(const std::string& path, mode_t mode) {
     std::string secontext;
     if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {
@@ -363,6 +376,15 @@ static std::string init_android_dt_dir() {
             android_dt_dir = value;
         }
     });
+    // ..Or bootconfig
+    if (android_dt_dir == kDefaultAndroidDtDir) {
+        ImportBootconfig([&](const std::string& key, const std::string& value) {
+            if (key == "androidboot.android_dt_dir") {
+                android_dt_dir = value;
+            }
+        });
+    }
+
     LOG(INFO) << "Using Android DT directory " << android_dt_dir;
     return android_dt_dir;
 }
@@ -720,6 +742,17 @@ void InitKernelLogging(char** argv) {
 
 bool IsRecoveryMode() {
     return access("/system/bin/recovery", F_OK) == 0;
+}
+
+// Check if default mount namespace is ready to be used with APEX modules
+static bool is_default_mount_namespace_ready = false;
+
+bool IsDefaultMountNamespaceReady() {
+    return is_default_mount_namespace_ready;
+}
+
+void SetDefaultMountNamespaceReady() {
+    is_default_mount_namespace_ready = true;
 }
 
 }  // namespace init

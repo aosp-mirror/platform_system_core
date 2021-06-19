@@ -61,9 +61,8 @@ TEST(util, ReadFileWorldWiteable) {
 
 TEST(util, ReadFileSymbolicLink) {
     errno = 0;
-    // lrwxrwxrwx 1 root shell 6 2020-06-26 09:55 /system/bin/ps -> toybox
+    // lrwxr-xr-x 1 root shell 6 2009-01-01 09:00 /system/bin/ps -> toybox
     auto file_contents = ReadFile("/system/bin/ps");
-
     EXPECT_EQ(ELOOP, errno);
     ASSERT_FALSE(file_contents.ok());
     EXPECT_EQ("open() failed: Too many symbolic links encountered",
