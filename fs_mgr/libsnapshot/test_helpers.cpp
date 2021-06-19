@@ -23,6 +23,7 @@
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
 #include <openssl/sha.h>
+#include <payload_consumer/file_descriptor.h>
 
 namespace android {
 namespace snapshot {
@@ -125,6 +126,79 @@ bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size,
         *hash = ToHexString(out, sizeof(out));
     }
     return true;
+}
+
+bool WriteRandomData(ICowWriter* writer, std::string* hash) {
+    unique_fd rand(open("/dev/urandom", O_RDONLY));
+    if (rand < 0) {
+        PLOG(ERROR) << "open /dev/urandom";
+        return false;
+    }
+
+    SHA256_CTX ctx;
+    if (hash) {
+        SHA256_Init(&ctx);
+    }
+
+    if (!writer->options().max_blocks) {
+        LOG(ERROR) << "CowWriter must specify maximum number of blocks";
+        return false;
+    }
+    uint64_t num_blocks = writer->options().max_blocks.value();
+
+    size_t block_size = writer->options().block_size;
+    std::string block(block_size, '\0');
+    for (uint64_t i = 0; i < num_blocks; i++) {
+        if (!ReadFully(rand, block.data(), block.size())) {
+            PLOG(ERROR) << "read /dev/urandom";
+            return false;
+        }
+        if (!writer->AddRawBlocks(i, block.data(), block.size())) {
+            LOG(ERROR) << "Failed to add raw block " << i;
+            return false;
+        }
+        if (hash) {
+            SHA256_Update(&ctx, block.data(), block.size());
+        }
+    }
+
+    if (hash) {
+        uint8_t out[32];
+        SHA256_Final(out, &ctx);
+        *hash = ToHexString(out, sizeof(out));
+    }
+    return true;
+}
+
+std::string HashSnapshot(ISnapshotWriter* writer) {
+    auto reader = writer->OpenReader();
+    if (!reader) {
+        return {};
+    }
+
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+
+    uint64_t remaining = reader->BlockDevSize();
+    char buffer[4096];
+    while (remaining) {
+        size_t to_read =
+                static_cast<size_t>(std::min(remaining, static_cast<uint64_t>(sizeof(buffer))));
+        ssize_t read = reader->Read(&buffer, to_read);
+        if (read <= 0) {
+            if (read < 0) {
+                LOG(ERROR) << "Failed to read from snapshot writer";
+                return {};
+            }
+            break;
+        }
+        SHA256_Update(&ctx, buffer, to_read);
+        remaining -= static_cast<size_t>(read);
+    }
+
+    uint8_t out[32];
+    SHA256_Final(out, &ctx);
+    return ToHexString(out, sizeof(out));
 }
 
 std::optional<std::string> GetHash(const std::string& path) {

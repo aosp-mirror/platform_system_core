@@ -1,5 +1,11 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library {
     name: "libpackagelistparser",
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     srcs: ["packagelistparser.cpp"],
     shared_libs: ["liblog"],

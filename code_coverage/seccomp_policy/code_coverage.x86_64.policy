@@ -1,4 +1,5 @@
 close: 1
+fchmod: 1
 mkdirat: 1
 msync: 1
 munmap: 1
