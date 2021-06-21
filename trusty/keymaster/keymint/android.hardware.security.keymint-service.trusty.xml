@@ -1,0 +1,14 @@
+<manifest version="1.0" type="device">
+    <hal format="aidl">
+        <name>android.hardware.security.keymint</name>
+        <fqname>IKeyMintDevice/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.secureclock</name>
+        <fqname>ISecureClock/default</fqname>
+    </hal>
+    <hal format="aidl">
+        <name>android.hardware.security.sharedsecret</name>
+        <fqname>ISharedSecret/default</fqname>
+    </hal>
+</manifest>

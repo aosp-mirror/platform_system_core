@@ -1,0 +1,40 @@
+// Copyright (C) 2021 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+// Fuzz Trusty IPC messages sent to apploader.
+cc_fuzz {
+    name: "trusty_apploader_tipc_fuzzer",
+    defaults: ["trusty_fuzzer_defaults"],
+    srcs: [":trusty_tipc_fuzzer"],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.apploader\"",
+        "-DTRUSTY_APP_UUID=\"081ba88f-f1ee-452e-b5e8-a7e9ef173a97\"",
+        "-DTRUSTY_APP_FILENAME=\"apploader.syms.elf\"",
+    ]
+}
+
+// Fuzz app package sent to apploader.
+cc_fuzz {
+    name: "trusty_apploader_app_fuzzer",
+    defaults: ["trusty_fuzzer_defaults"],
+    srcs: ["app_fuzzer.cpp"],
+    include_dirs: ["system/core/trusty/apploader"],
+    shared_libs: [
+        "libdmabufheap",
+    ],
+}

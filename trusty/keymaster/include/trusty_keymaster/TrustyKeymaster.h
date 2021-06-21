@@ -25,7 +25,7 @@ class TrustyKeymaster {
   public:
     TrustyKeymaster();
     ~TrustyKeymaster();
-    int Initialize();
+    int Initialize(KmVersion version);
     void GetVersion(const GetVersionRequest& request, GetVersionResponse* response);
     void SupportedAlgorithms(const SupportedAlgorithmsRequest& request,
                              SupportedAlgorithmsResponse* response);
@@ -59,6 +59,14 @@ class TrustyKeymaster {
     GetHmacSharingParametersResponse GetHmacSharingParameters();
     ComputeSharedHmacResponse ComputeSharedHmac(const ComputeSharedHmacRequest& request);
     VerifyAuthorizationResponse VerifyAuthorization(const VerifyAuthorizationRequest& request);
+    GetVersion2Response GetVersion2(const GetVersion2Request& request);
+    EarlyBootEndedResponse EarlyBootEnded();
+    DeviceLockedResponse DeviceLocked(const DeviceLockedRequest& request);
+
+    uint32_t message_version() const { return message_version_; }
+
+  private:
+    uint32_t message_version_;
 };
 
 }  // namespace keymaster
