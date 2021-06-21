@@ -42,6 +42,11 @@ static constexpr uint32_t kDefaultBlockSize = 4096;
 // Name of the default group in a metadata.
 static constexpr std::string_view kDefaultGroup = "default";
 
+enum class ExtentType {
+    kZero,
+    kLinear,
+};
+
 // Abstraction around dm-targets that can be encoded into logical partition tables.
 class Extent {
   public:
@@ -50,6 +55,10 @@ class Extent {
 
     virtual bool AddTo(LpMetadata* out) const = 0;
     virtual LinearExtent* AsLinearExtent() { return nullptr; }
+    virtual ExtentType GetExtentType() const = 0;
+
+    virtual bool operator==(const Extent& other) const = 0;
+    virtual bool operator!=(const Extent& other) const { return !(*this == other); }
 
     uint64_t num_sectors() const { return num_sectors_; }
     void set_num_sectors(uint64_t num_sectors) { num_sectors_ = num_sectors; }
@@ -57,6 +66,8 @@ class Extent {
   protected:
     uint64_t num_sectors_;
 };
+
+std::ostream& operator<<(std::ostream& os, const Extent& extent);
 
 // This corresponds to a dm-linear target.
 class LinearExtent final : public Extent {
@@ -66,6 +77,9 @@ class LinearExtent final : public Extent {
 
     bool AddTo(LpMetadata* metadata) const override;
     LinearExtent* AsLinearExtent() override { return this; }
+    ExtentType GetExtentType() const override { return ExtentType::kLinear; }
+
+    bool operator==(const Extent& other) const override;
 
     uint64_t physical_sector() const { return physical_sector_; }
     uint64_t end_sector() const { return physical_sector_ + num_sectors_; }
@@ -87,6 +101,9 @@ class ZeroExtent final : public Extent {
     explicit ZeroExtent(uint64_t num_sectors) : Extent(num_sectors) {}
 
     bool AddTo(LpMetadata* out) const override;
+    ExtentType GetExtentType() const override { return ExtentType::kZero; }
+
+    bool operator==(const Extent& other) const override;
 };
 
 class PartitionGroup final {
@@ -144,7 +161,6 @@ class Partition final {
     std::vector<std::unique_ptr<Extent>> extents_;
     uint32_t attributes_;
     uint64_t size_;
-    bool disabled_;
 };
 
 // An interval in the metadata. This is similar to a LinearExtent with one difference.
@@ -244,6 +260,14 @@ class MetadataBuilder {
         return New(device_info, metadata_max_size, metadata_slot_count);
     }
 
+    // Verifies that the given partitions in the metadata have the same extents as the source
+    // metadata.
+    static bool VerifyExtentsAgainstSourceMetadata(const MetadataBuilder& source_metadata,
+                                                   uint32_t source_slot_number,
+                                                   const MetadataBuilder& target_metadata,
+                                                   uint32_t target_slot_number,
+                                                   const std::vector<std::string>& partitions);
+
     // Define a new partition group. By default there is one group called
     // "default", with an unrestricted size. A non-zero size will restrict the
     // total space used by all partitions in the group.
@@ -268,10 +292,10 @@ class MetadataBuilder {
     void RemovePartition(std::string_view name);
 
     // Find a partition by name. If no partition is found, nullptr is returned.
-    Partition* FindPartition(std::string_view name);
+    Partition* FindPartition(std::string_view name) const;
 
     // Find a group by name. If no group is found, nullptr is returned.
-    PartitionGroup* FindGroup(std::string_view name);
+    PartitionGroup* FindGroup(std::string_view name) const;
 
     // Add a predetermined extent to a partition.
     bool AddLinearExtent(Partition* partition, const std::string& block_device,
@@ -323,9 +347,6 @@ class MetadataBuilder {
     // Set the LP_HEADER_FLAG_VIRTUAL_AB_DEVICE flag.
     void SetVirtualABDeviceFlag();
 
-    // If set, checks for slot suffixes will be ignored internally.
-    void IgnoreSlotSuffixing();
-
     bool GetBlockDeviceInfo(const std::string& partition_name, BlockDeviceInfo* info) const;
     bool UpdateBlockDeviceInfo(const std::string& partition_name, const BlockDeviceInfo& info);
 
@@ -361,7 +382,7 @@ class MetadataBuilder {
     bool GrowPartition(Partition* partition, uint64_t aligned_size,
                        const std::vector<Interval>& free_region_hint);
     void ShrinkPartition(Partition* partition, uint64_t aligned_size);
-    uint64_t AlignSector(const LpMetadataBlockDevice& device, uint64_t sector) const;
+    bool AlignSector(const LpMetadataBlockDevice& device, uint64_t sector, uint64_t* out) const;
     uint64_t TotalSizeOfGroup(PartitionGroup* group) const;
     bool UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo& info);
     bool FindBlockDeviceByName(const std::string& partition_name, uint32_t* index) const;

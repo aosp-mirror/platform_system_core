@@ -1,8 +1,0 @@
-{
-  "presubmit": [
-    {
-      "name": "libprocessgroup_proto_test",
-      "host": true
-    }
-  ]
-}

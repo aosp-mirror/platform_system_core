@@ -266,7 +266,7 @@ bool SplitFiemap::Write(const void* data, uint64_t bytes) {
         cursor_file_pos_ += bytes_to_write;
     }
 
-    // If we've reached the end of the current file, close it for sanity.
+    // If we've reached the end of the current file, close it.
     if (cursor_file_pos_ == file->size()) {
         cursor_fd_ = {};
     }

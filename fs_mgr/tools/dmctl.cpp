@@ -38,6 +38,7 @@
 #include <vector>
 
 using namespace std::literals::string_literals;
+using namespace std::chrono_literals;
 using namespace android::dm;
 using DmBlockDevice = ::android::dm::DeviceMapper::DmBlockDevice;
 
@@ -49,6 +50,7 @@ static int Usage(void) {
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
+    std::cerr << "  getuuid <dm-name>" << std::endl;
     std::cerr << "  info <dm-name>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
     std::cerr << "  resume <dm-name>" << std::endl;
@@ -174,6 +176,13 @@ class TargetParser final {
             }
             return std::make_unique<DmTargetSnapshot>(start_sector, num_sectors, base_device,
                                                       cow_device, mode, chunk_size);
+        } else if (target_type == "user") {
+            if (!HasArgs(1)) {
+                std::cerr << "Expected \"user\" <control_device_name>" << std::endl;
+                return nullptr;
+            }
+            std::string control_device = NextArg();
+            return std::make_unique<DmTargetUser>(start_sector, num_sectors, control_device);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
@@ -239,8 +248,9 @@ static int DmCreateCmdHandler(int argc, char** argv) {
         return ret;
     }
 
+    std::string ignore_path;
     DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.CreateDevice(name, table)) {
+    if (!dm.CreateDevice(name, table, &ignore_path, 5s)) {
         std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
         return -EIO;
     }
@@ -389,6 +399,22 @@ static int GetPathCmdHandler(int argc, char** argv) {
     return 0;
 }
 
+static int GetUuidCmdHandler(int argc, char** argv) {
+    if (argc != 1) {
+        std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
+        return -EINVAL;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    std::string uuid;
+    if (!dm.GetDmDeviceUuidByName(argv[0], &uuid)) {
+        std::cerr << "Could not query uuid of device \"" << argv[0] << "\"." << std::endl;
+        return -EINVAL;
+    }
+    std::cout << uuid << std::endl;
+    return 0;
+}
+
 static int InfoCmdHandler(int argc, char** argv) {
     if (argc != 1) {
         std::cerr << "Invalid arguments, see \'dmctl help\'" << std::endl;
@@ -502,6 +528,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"list", DmListCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
+        {"getuuid", GetUuidCmdHandler},
         {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},

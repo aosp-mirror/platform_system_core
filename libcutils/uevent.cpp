@@ -101,7 +101,7 @@ int uevent_open_socket(int buf_sz, bool passcred) {
 
     memset(&addr, 0, sizeof(addr));
     addr.nl_family = AF_NETLINK;
-    addr.nl_pid = getpid();
+    addr.nl_pid = 0;
     addr.nl_groups = 0xffffffff;
 
     s = socket(PF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
