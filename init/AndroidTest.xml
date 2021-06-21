@@ -24,6 +24,9 @@
         <option name="push" value="CtsInitTestCases->/data/local/tmp/CtsInitTestCases" />
         <option name="append-bitness" value="true" />
     </target_preparer>
+    <target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer">
+        <option name="throw-on-error" value="false" />
+    </target_preparer>
     <test class="com.android.tradefed.testtype.GTest" >
         <option name="native-test-device-path" value="/data/local/tmp" />
         <option name="module-name" value="CtsInitTestCases" />
