@@ -75,7 +75,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_AIDL             (1<<24)
 #define ATRACE_TAG_NNAPI            (1<<25)
 #define ATRACE_TAG_RRO              (1<<26)
-#define ATRACE_TAG_LAST             ATRACE_TAG_RRO
+#define ATRACE_TAG_SYSPROP          (1<<27)
+#define ATRACE_TAG_LAST             ATRACE_TAG_SYSPROP
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1ULL<<63)
@@ -101,14 +102,6 @@ void atrace_setup();
  * debug.atrace.tags.enableflags. Can be used as a sysprop change callback.
  */
 void atrace_update_tags();
-
-/**
- * Set whether the process is debuggable.  By default the process is not
- * considered debuggable.  If the process is not debuggable then application-
- * level tracing is not allowed unless the ro.debuggable system property is
- * set to '1'.
- */
-void atrace_set_debuggable(bool debuggable);
 
 /**
  * Set whether tracing is enabled for the current process.  This is used to
