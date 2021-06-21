@@ -350,20 +350,13 @@ TEST_F(TombstoneTest, dump_header_info) {
 }
 
 TEST_F(TombstoneTest, dump_thread_info_uid) {
-  dump_thread_info(&log_, ThreadInfo{.uid = 1,
-                                     .tid = 3,
-                                     .thread_name = "some_thread",
-                                     .pid = 2,
-                                     .process_name = "some_process"});
+  std::vector<std::string> cmdline = {"some_process"};
+  dump_thread_info(
+      &log_,
+      ThreadInfo{
+          .uid = 1, .tid = 3, .thread_name = "some_thread", .pid = 2, .command_line = cmdline});
   std::string expected = "pid: 2, tid: 3, name: some_thread  >>> some_process <<<\nuid: 1\n";
   ASSERT_STREQ(expected.c_str(), amfd_data_.c_str());
-}
-
-TEST_F(TombstoneTest, dump_timestamp) {
-  setenv("TZ", "UTC", 1);
-  tzset();
-  dump_timestamp(&log_, 0);
-  ASSERT_STREQ("Timestamp: 1970-01-01 00:00:00+0000\n", amfd_data_.c_str());
 }
 
 class GwpAsanCrashDataTest : public GwpAsanCrashData {
@@ -371,7 +364,7 @@ public:
   GwpAsanCrashDataTest(
       gwp_asan::Error error,
       const gwp_asan::AllocationMetadata *responsible_allocation) :
-      GwpAsanCrashData(nullptr, 0u, 0u, ThreadInfo{}) {
+      GwpAsanCrashData(nullptr, ProcessInfo{}, ThreadInfo{}) {
     is_gwp_asan_responsible_ = true;
     error_ = error;
     responsible_allocation_ = responsible_allocation;
@@ -386,7 +379,7 @@ public:
 TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::USE_AFTER_FREE, &meta);
   crash_data.SetCrashAddress(0x1000);
@@ -395,15 +388,14 @@ TEST_F(TombstoneTest, gwp_asan_cause_uaf_exact) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   std::string tombstone_contents;
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_THAT(tombstone_contents,
-              MatchesRegex("Cause: \\[GWP-ASan\\]: Use After Free on a 32-byte "
-                           "allocation at 0x[a-fA-F0-9]+\n"));
+  ASSERT_THAT(tombstone_contents, MatchesRegex("Cause: \\[GWP-ASan\\]: Use After Free, 0 bytes "
+                                               "into a 32-byte allocation at 0x[a-fA-F0-9]+\n"));
 }
 
 TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::DOUBLE_FREE, &meta);
   crash_data.SetCrashAddress(0x1000);
@@ -412,15 +404,14 @@ TEST_F(TombstoneTest, gwp_asan_cause_double_free) {
   ASSERT_TRUE(lseek(log_.tfd, 0, SEEK_SET) == 0);
   std::string tombstone_contents;
   ASSERT_TRUE(android::base::ReadFdToString(log_.tfd, &tombstone_contents));
-  ASSERT_THAT(tombstone_contents,
-              MatchesRegex("Cause: \\[GWP-ASan\\]: Double Free on a 32-byte "
-                           "allocation at 0x[a-fA-F0-9]+\n"));
+  ASSERT_THAT(tombstone_contents, MatchesRegex("Cause: \\[GWP-ASan\\]: Double Free, 0 bytes into a "
+                                               "32-byte allocation at 0x[a-fA-F0-9]+\n"));
 }
 
 TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_OVERFLOW, &meta);
   crash_data.SetCrashAddress(0x1025);
@@ -439,7 +430,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_overflow) {
 TEST_F(TombstoneTest, gwp_asan_cause_underflow) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::BUFFER_UNDERFLOW, &meta);
   crash_data.SetCrashAddress(0xffe);
@@ -458,7 +449,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_underflow) {
 TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_inside) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
   crash_data.SetCrashAddress(0x1001);
@@ -477,7 +468,7 @@ TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_inside) {
 TEST_F(TombstoneTest, gwp_asan_cause_invalid_free_outside) {
   gwp_asan::AllocationMetadata meta;
   meta.Addr = 0x1000;
-  meta.Size = 32;
+  meta.RequestedSize = 32;
 
   GwpAsanCrashDataTest crash_data(gwp_asan::Error::INVALID_FREE, &meta);
   crash_data.SetCrashAddress(0x1021);

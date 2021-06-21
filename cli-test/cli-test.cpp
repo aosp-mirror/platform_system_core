@@ -146,6 +146,13 @@ static void CollectTests(std::vector<Test>* tests, const char* test_filename) {
       test->befores.push_back(line);
     } else if (Match(&line, "after:")) {
       test->afters.push_back(line);
+    } else if (Match(&line, "expected-exit-status:")) {
+      char* end_p;
+      errno = 0;
+      test->exit_status = strtol(line.c_str(), &end_p, 10);
+      if (errno != 0 || *end_p != '\0') {
+        Die(0, "%s:%zu: bad exit status: \"%s\"", g_file, g_line, line.c_str());
+      }
     } else if (Match(&line, "expected-stdout:")) {
       // Collect tab-indented lines.
       std::string text;
@@ -231,15 +238,15 @@ static int RunTests(const std::vector<Test>& tests) {
       V("running command \"%s\"", test.command.c_str());
       CapturedStdout test_stdout;
       CapturedStderr test_stderr;
-      int exit_status = system(test.command.c_str());
+      int status = system(test.command.c_str());
       test_stdout.Stop();
       test_stderr.Stop();
 
-      V("exit status %d", exit_status);
-      if (exit_status != test.exit_status) {
+      V("system() returned status %d", status);
+      if (WEXITSTATUS(status) != test.exit_status) {
         failed = true;
         fprintf(stderr, "Incorrect exit status: expected %d but %s\n", test.exit_status,
-                ExitStatusToString(exit_status).c_str());
+                ExitStatusToString(status).c_str());
       }
 
       if (!CheckOutput("stdout", test_stdout.str(), test.expected_stdout, FILES)) failed = true;
