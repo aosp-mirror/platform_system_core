@@ -16,7 +16,7 @@ service storageproxyd /vendor/bin/storageproxyd -d /dev/trusty-ipc-dev0 \
     disabled
     user root
 
-service rpmb_mock_init /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --init --key "ea df 64 44 ea 65 5d 1c 87 27 d4 20 71 0d 53 42 dd 73 a3 38 63 e1 d7 94 c3 72 a6 ea e0 64 64 e6" --size 2048
+service rpmb_mock_init /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --init --size 2048
     disabled
     user system
     group system

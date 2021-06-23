@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 
-namespace android {
+using namespace android;
 
 ::testing::AssertionResult Char16_tStringEquals(const char16_t* a, const char16_t* b) {
     if (strcmp16(a, b) != 0) {
@@ -90,20 +90,6 @@ TEST(String16Test, Insert) {
     EXPECT_STR16EQ(u"VerifyInsert me", tmp);
 }
 
-TEST(String16Test, Remove) {
-    String16 tmp("Verify me");
-    tmp.remove(2, 6);
-    EXPECT_EQ(2U, tmp.size());
-    EXPECT_STR16EQ(u" m", tmp);
-}
-
-TEST(String16Test, MakeLower) {
-    String16 tmp("Verify Me!");
-    tmp.makeLower();
-    EXPECT_EQ(10U, tmp.size());
-    EXPECT_STR16EQ(u"verify me!", tmp);
-}
-
 TEST(String16Test, ReplaceAll) {
     String16 tmp("Verify verify Verify");
     tmp.replaceAll(u'r', u'!');
@@ -168,22 +154,6 @@ TEST(String16Test, StaticStringInsert) {
     EXPECT_FALSE(tmp.isStaticString());
 }
 
-TEST(String16Test, StaticStringRemove) {
-    StaticString16 tmp(u"Verify me");
-    tmp.remove(2, 6);
-    EXPECT_EQ(2U, tmp.size());
-    EXPECT_STR16EQ(u" m", tmp);
-    EXPECT_FALSE(tmp.isStaticString());
-}
-
-TEST(String16Test, StaticStringMakeLower) {
-    StaticString16 tmp(u"Verify me!");
-    tmp.makeLower();
-    EXPECT_EQ(10U, tmp.size());
-    EXPECT_STR16EQ(u"verify me!", tmp);
-    EXPECT_FALSE(tmp.isStaticString());
-}
-
 TEST(String16Test, StaticStringReplaceAll) {
     StaticString16 tmp(u"Verify verify Verify");
     tmp.replaceAll(u'r', u'!');
@@ -215,4 +185,48 @@ TEST(String16Test, EmptyStringIsStatic) {
     EXPECT_TRUE(tmp.isStaticString());
 }
 
-}  // namespace android
+TEST(String16Test, OverreadUtf8Conversion) {
+    char tmp[] = {'a', static_cast<char>(0xe0), '\0'};
+    String16 another(tmp);
+    EXPECT_TRUE(another.size() == 0);
+}
+
+TEST(String16Test, ValidUtf8Conversion) {
+    String16 another("abcdef");
+    EXPECT_EQ(6U, another.size());
+    EXPECT_STR16EQ(another, u"abcdef");
+}
+
+TEST(String16Test, append) {
+    String16 s;
+    EXPECT_EQ(OK, s.append(String16(u"foo")));
+    EXPECT_STR16EQ(u"foo", s);
+    EXPECT_EQ(OK, s.append(String16(u"bar")));
+    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_EQ(OK, s.append(u"baz", 0));
+    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_EQ(NO_MEMORY, s.append(u"baz", SIZE_MAX));
+    EXPECT_STR16EQ(u"foobar", s);
+}
+
+TEST(String16Test, insert) {
+    String16 s;
+
+    // Inserting into the empty string inserts at the start.
+    EXPECT_EQ(OK, s.insert(123, u"foo"));
+    EXPECT_STR16EQ(u"foo", s);
+
+    // Inserting zero characters at any position is okay, but won't expand the string.
+    EXPECT_EQ(OK, s.insert(123, u"foo", 0));
+    EXPECT_STR16EQ(u"foo", s);
+
+    // Inserting past the end of a non-empty string appends.
+    EXPECT_EQ(OK, s.insert(123, u"bar"));
+    EXPECT_STR16EQ(u"foobar", s);
+
+    EXPECT_EQ(OK, s.insert(3, u"!"));
+    EXPECT_STR16EQ(u"foo!bar", s);
+
+    EXPECT_EQ(NO_MEMORY, s.insert(3, u"", SIZE_MAX));
+    EXPECT_STR16EQ(u"foo!bar", s);
+}
