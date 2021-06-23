@@ -881,6 +881,8 @@ on post-fs-data
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
     mount none /data/misc/profiles/cur /data_mirror/cur_profiles bind rec
+    mkdir /data_mirror/ref_profiles 0700 root root
+    mount none /data/misc/profiles/ref /data_mirror/ref_profiles bind rec
 
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
@@ -1262,6 +1264,7 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
   umount /data_mirror/cur_profiles
+  umount /data_mirror/ref_profiles
   umount /data_mirror
   remount_userdata
   start bootanim
