@@ -12,5 +12,5 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart restart media
     onrestart restart netd
     onrestart restart wificond
-    writepid /dev/cpuset/foreground/tasks
+    task_profiles ProcessCapacityHigh
     critical window=${zygote.critical_window.minute:-off} target=zygote-fatal
