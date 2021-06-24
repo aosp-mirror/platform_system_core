@@ -95,7 +95,9 @@ void DmTargetVerity::UseFec(const std::string& device, uint32_t num_roots, uint3
 }
 
 void DmTargetVerity::SetVerityMode(const std::string& mode) {
-    if (mode != "restart_on_corruption" && mode != "ignore_corruption") {
+    if (mode != "panic_on_corruption" &&
+        mode != "restart_on_corruption" &&
+        mode != "ignore_corruption") {
         LOG(ERROR) << "Unknown verity mode: " << mode;
         valid_ = false;
         return;
@@ -105,6 +107,10 @@ void DmTargetVerity::SetVerityMode(const std::string& mode) {
 
 void DmTargetVerity::IgnoreZeroBlocks() {
     optional_args_.emplace_back("ignore_zero_blocks");
+}
+
+void DmTargetVerity::CheckAtMostOnce() {
+    optional_args_.emplace_back("check_at_most_once");
 }
 
 std::string DmTargetVerity::GetParameterString() const {

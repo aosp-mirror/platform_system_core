@@ -38,7 +38,8 @@ void MyLogger(android::base::LogId, android::base::LogSeverity severity, const c
 static void usage(void) {
     LOG(ERROR) << "Usage: inspect_cow [-sd] <COW_FILE>";
     LOG(ERROR) << "\t -s Run Silent";
-    LOG(ERROR) << "\t -d Attempt to decompress\n";
+    LOG(ERROR) << "\t -d Attempt to decompress";
+    LOG(ERROR) << "\t -b Show data for failed decompress\n";
 }
 
 // Sink that always appends to the end of a string.
@@ -59,7 +60,25 @@ class StringSink : public IByteSink {
     std::string stream_;
 };
 
-static bool Inspect(const std::string& path, bool silent, bool decompress) {
+static void ShowBad(CowReader& reader, const struct CowOperation& op) {
+    size_t count;
+    auto buffer = std::make_unique<uint8_t[]>(op.data_length);
+
+    if (!reader.GetRawBytes(op.source, buffer.get(), op.data_length, &count)) {
+        std::cerr << "Failed to read at all!\n";
+    } else {
+        std::cout << "The Block data is:\n";
+        for (int i = 0; i < op.data_length; i++) {
+            std::cout << std::hex << (int)buffer[i];
+        }
+        std::cout << std::dec << "\n\n";
+        if (op.data_length >= sizeof(CowOperation)) {
+            std::cout << "The start, as an op, would be " << *(CowOperation*)buffer.get() << "\n";
+        }
+    }
+}
+
+static bool Inspect(const std::string& path, bool silent, bool decompress, bool show_bad) {
     android::base::unique_fd fd(open(path.c_str(), O_RDONLY));
     if (fd < 0) {
         PLOG(ERROR) << "open failed: " << path;
@@ -87,6 +106,8 @@ static bool Inspect(const std::string& path, bool silent, bool decompress) {
         std::cout << "Header size: " << header.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
+        std::cout << "Num merge ops: " << header.num_merge_ops << "\n";
+        std::cout << "RA buffer size: " << header.buffer_size << "\n";
         std::cout << "\n";
         if (has_footer) {
             std::cout << "Total Ops size: " << footer.op.ops_size << "\n";
@@ -107,6 +128,7 @@ static bool Inspect(const std::string& path, bool silent, bool decompress) {
             if (!reader.ReadData(op, &sink)) {
                 std::cerr << "Failed to decompress for :" << op << "\n";
                 success = false;
+                if (show_bad) ShowBad(reader, op);
             }
             sink.Reset();
         }
@@ -124,13 +146,17 @@ int main(int argc, char** argv) {
     int ch;
     bool silent = false;
     bool decompress = false;
-    while ((ch = getopt(argc, argv, "sd")) != -1) {
+    bool show_bad = false;
+    while ((ch = getopt(argc, argv, "sdb")) != -1) {
         switch (ch) {
             case 's':
                 silent = true;
                 break;
             case 'd':
                 decompress = true;
+                break;
+            case 'b':
+                show_bad = true;
                 break;
             default:
                 android::snapshot::usage();
@@ -143,7 +169,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (!android::snapshot::Inspect(argv[optind], silent, decompress)) {
+    if (!android::snapshot::Inspect(argv[optind], silent, decompress, show_bad)) {
         return 1;
     }
     return 0;

@@ -171,6 +171,10 @@ static void print_thread_backtrace(CallbackType callback, const Tombstone& tombs
                                    const Thread& thread, bool should_log) {
   CBS("");
   CB(should_log, "backtrace:");
+  if (!thread.backtrace_note().empty()) {
+    CB(should_log, "  NOTE: %s",
+       android::base::Join(thread.backtrace_note(), "\n  NOTE: ").c_str());
+  }
   print_backtrace(callback, tombstone, thread.current_backtrace(), should_log);
 }
 
@@ -268,14 +272,14 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
   if (tombstone.causes_size() > 1) {
     CBS("");
-    CBS("Note: multiple potential causes for this crash were detected, listing them in decreasing "
+    CBL("Note: multiple potential causes for this crash were detected, listing them in decreasing "
         "order of probability.");
   }
 
   for (const Cause& cause : tombstone.causes()) {
     if (tombstone.causes_size() > 1) {
       CBS("");
-      CBS("Cause: %s", cause.human_readable().c_str());
+      CBL("Cause: %s", cause.human_readable().c_str());
     }
 
     if (cause.has_memory_error() && cause.memory_error().has_heap()) {
@@ -283,14 +287,14 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
       if (heap_object.deallocation_backtrace_size() != 0) {
         CBS("");
-        CBS("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
-        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), false);
+        CBL("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
+        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), true);
       }
 
       if (heap_object.allocation_backtrace_size() != 0) {
         CBS("");
-        CBS("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
-        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), false);
+        CBL("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
+        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), true);
       }
     }
   }

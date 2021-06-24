@@ -102,9 +102,9 @@ static std::optional<std::string> get_stack_overflow_cause(uint64_t fault_addr, 
     unwindstack::MapInfo* map_info = maps->Find(sp);
     if (map_info == nullptr) {
       return "stack pointer is in a non-existent map; likely due to stack overflow.";
-    } else if ((map_info->flags & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
+    } else if ((map_info->flags() & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
       return "stack pointer is not in a rw map; likely due to stack overflow.";
-    } else if ((sp - map_info->start) <= kMaxDifferenceBytes) {
+    } else if ((sp - map_info->start()) <= kMaxDifferenceBytes) {
       return "stack pointer is close to top of stack; likely stack overflow.";
     }
   }
@@ -221,7 +221,7 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::Unwinder* unw
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
     unwindstack::MapInfo* map_info = maps->Find(fault_addr);
-    if (map_info != nullptr && map_info->flags == PROT_EXEC) {
+    if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
       cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
@@ -359,7 +359,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
           dump.set_register_name(name);
           unwindstack::MapInfo* map_info = maps->Find(untag_address(value));
           if (map_info) {
-            dump.set_mapping_name(map_info->name);
+            dump.set_mapping_name(map_info->name());
           }
 
           char buf[256];
@@ -395,6 +395,15 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                             unwinder->LastErrorAddress());
     }
   } else {
+    if (unwinder->elf_from_memory_not_file()) {
+      auto backtrace_note = thread.mutable_backtrace_note();
+      *backtrace_note->Add() =
+          "Function names and BuildId information is missing for some frames due";
+      *backtrace_note->Add() =
+          "to unreadable libraries. For unwinds of apps, only shared libraries";
+      *backtrace_note->Add() = "found under the lib/ directory are readable.";
+      *backtrace_note->Add() = "On this device, run setenforce 0 to make the libraries readable.";
+    }
     unwinder->SetDisplayBuildID(true);
     for (const auto& frame : unwinder->frames()) {
       BacktraceFrame* f = thread.add_current_backtrace();
@@ -417,21 +426,21 @@ static void dump_mappings(Tombstone* tombstone, unwindstack::Unwinder* unwinder)
 
   for (const auto& map_info : *maps) {
     auto* map = tombstone->add_memory_mappings();
-    map->set_begin_address(map_info->start);
-    map->set_end_address(map_info->end);
-    map->set_offset(map_info->offset);
+    map->set_begin_address(map_info->start());
+    map->set_end_address(map_info->end());
+    map->set_offset(map_info->offset());
 
-    if (map_info->flags & PROT_READ) {
+    if (map_info->flags() & PROT_READ) {
       map->set_read(true);
     }
-    if (map_info->flags & PROT_WRITE) {
+    if (map_info->flags() & PROT_WRITE) {
       map->set_write(true);
     }
-    if (map_info->flags & PROT_EXEC) {
+    if (map_info->flags() & PROT_EXEC) {
       map->set_execute(true);
     }
 
-    map->set_mapping_name(map_info->name);
+    map->set_mapping_name(map_info->name());
 
     std::string build_id = map_info->GetPrintableBuildID();
     if (!build_id.empty()) {

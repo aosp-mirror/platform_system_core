@@ -36,6 +36,8 @@ struct CowOptions {
 
     // Number of CowOperations in a cluster. 0 for no clustering. Cannot be 1.
     uint32_t cluster_ops = 200;
+
+    bool scratch_space = true;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -53,11 +55,18 @@ class ICowWriter {
     // Encode a sequence of raw blocks. |size| must be a multiple of the block size.
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size);
 
+    // Add a sequence of xor'd blocks. |size| must be a multiple of the block size.
+    bool AddXorBlocks(uint32_t new_block_start, const void* data, size_t size, uint32_t old_block,
+                      uint16_t offset);
+
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
     bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks);
 
     // Add a label to the op sequence.
     bool AddLabel(uint64_t label);
+
+    // Add sequence data for op merging. Data is a list of the destination block numbers.
+    bool AddSequenceData(size_t num_ops, const uint32_t* data);
 
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
@@ -100,12 +109,11 @@ class CowWriter : public ICowWriter {
     bool InitializeAppend(android::base::unique_fd&&, uint64_t label);
     bool InitializeAppend(android::base::borrowed_fd fd, uint64_t label);
 
-    void InitializeMerge(android::base::borrowed_fd fd, CowHeader* header);
-    bool CommitMerge(int merged_ops);
-
     bool Finalize() override;
 
     uint64_t GetCowSize() override;
+
+    uint32_t GetCowVersion() { return header_.major_version; }
 
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
@@ -115,6 +123,7 @@ class CowWriter : public ICowWriter {
 
   private:
     bool EmitCluster();
+    bool EmitClusterIfNeeded();
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();

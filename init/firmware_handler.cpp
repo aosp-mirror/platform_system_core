@@ -17,7 +17,9 @@
 #include "firmware_handler.h"
 
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <glob.h>
+#include <grp.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -46,6 +48,20 @@ using android::base::WriteFully;
 namespace android {
 namespace init {
 
+namespace {
+bool PrefixMatch(const std::string& pattern, const std::string& path) {
+    return android::base::StartsWith(path, pattern);
+}
+
+bool FnMatch(const std::string& pattern, const std::string& path) {
+    return fnmatch(pattern.c_str(), path.c_str(), 0) == 0;
+}
+
+bool EqualMatch(const std::string& pattern, const std::string& path) {
+    return pattern == path;
+}
+}  // namespace
+
 static void LoadFirmware(const std::string& firmware, const std::string& root, int fw_fd,
                          size_t fw_size, int loading_fd, int data_fd) {
     // Start transfer.
@@ -66,13 +82,33 @@ static bool IsBooting() {
     return access("/dev/.booting", F_OK) == 0;
 }
 
+ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid, gid_t gid,
+                                                 std::string handler_path)
+    : devpath(std::move(devpath)), uid(uid), gid(gid), handler_path(std::move(handler_path)) {
+    auto wildcard_position = this->devpath.find('*');
+    if (wildcard_position != std::string::npos) {
+        if (wildcard_position == this->devpath.length() - 1) {
+            this->devpath.pop_back();
+            match = std::bind(PrefixMatch, this->devpath, std::placeholders::_1);
+        } else {
+            match = std::bind(FnMatch, this->devpath, std::placeholders::_1);
+        }
+    } else {
+        match = std::bind(EqualMatch, this->devpath, std::placeholders::_1);
+    }
+}
+
+ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid,
+                                                 std::string handler_path)
+    : ExternalFirmwareHandler(devpath, uid, 0, handler_path) {}
+
 FirmwareHandler::FirmwareHandler(std::vector<std::string> firmware_directories,
                                  std::vector<ExternalFirmwareHandler> external_firmware_handlers)
     : firmware_directories_(std::move(firmware_directories)),
       external_firmware_handlers_(std::move(external_firmware_handlers)) {}
 
 Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handler, uid_t uid,
-                                                        const Uevent& uevent) const {
+                                                        gid_t gid, const Uevent& uevent) const {
     unique_fd child_stdout;
     unique_fd parent_stdout;
     if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &child_stdout, &parent_stdout)) {
@@ -108,6 +144,13 @@ Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handl
             c_args.emplace_back(arg.data());
         }
         c_args.emplace_back(nullptr);
+
+        if (gid != 0) {
+            if (setgid(gid) != 0) {
+                fprintf(stderr, "setgid() failed: %s", strerror(errno));
+                _exit(EXIT_FAILURE);
+            }
+        }
 
         if (setuid(uid) != 0) {
             fprintf(stderr, "setuid() failed: %s", strerror(errno));
@@ -160,13 +203,13 @@ Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handl
 
 std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
     for (const auto& external_handler : external_firmware_handlers_) {
-        if (external_handler.devpath == uevent.path) {
+        if (external_handler.match(uevent.path)) {
             LOG(INFO) << "Launching external firmware handler '" << external_handler.handler_path
                       << "' for devpath: '" << uevent.path << "' firmware: '" << uevent.firmware
                       << "'";
 
-            auto result =
-                    RunExternalHandler(external_handler.handler_path, external_handler.uid, uevent);
+            auto result = RunExternalHandler(external_handler.handler_path, external_handler.uid,
+                                             external_handler.gid, uevent);
             if (!result.ok()) {
                 LOG(ERROR) << "Using default firmware; External firmware handler failed: "
                            << result.error();

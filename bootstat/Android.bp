@@ -35,7 +35,7 @@ cc_defaults {
         "libcutils",
         "liblog",
     ],
-    static_libs: ["libgtest_prod"],
+    header_libs: ["libgtest_prod_headers"],
 }
 
 // bootstat static library

@@ -755,6 +755,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     std::string out_public_key_data;
     std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
             fd, "system", "" /*expected_public_key_blob */, &out_public_key_data, &verify_result);
+    ASSERT_EQ(0, close(fd.release()));
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
 
@@ -776,6 +777,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(hash_modified_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(hash_modified_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
@@ -791,6 +793,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(aux_modified_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(aux_modified_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
@@ -802,6 +805,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ResultOK..
     vbmeta = VerifyVBMetaData(ok_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(ok_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);

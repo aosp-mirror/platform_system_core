@@ -61,7 +61,9 @@ bool ConstructVerityTable(const FsAvbHashtreeDescriptor& hashtree_desc,
 
     // Converts veritymode to the format used in kernel.
     std::string dm_verity_mode;
-    if (verity_mode == "enforcing") {
+    if (verity_mode == "panicking") {
+        dm_verity_mode = "panic_on_corruption";
+    } else if (verity_mode == "enforcing") {
         dm_verity_mode = "restart_on_corruption";
     } else if (verity_mode == "logging") {
         dm_verity_mode = "ignore_corruption";
@@ -89,6 +91,10 @@ bool ConstructVerityTable(const FsAvbHashtreeDescriptor& hashtree_desc,
     }
     // Always use ignore_zero_blocks.
     target.IgnoreZeroBlocks();
+
+    if (hashtree_desc.flags & AVB_HASHTREE_DESCRIPTOR_FLAGS_CHECK_AT_MOST_ONCE) {
+        target.CheckAtMostOnce();
+    }
 
     LINFO << "Built verity table: '" << target.GetParameterString() << "'";
 

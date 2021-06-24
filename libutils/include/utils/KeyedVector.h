@@ -47,7 +47,7 @@ public:
 
     inline  void            clear()                     { mVector.clear(); }
 
-    /*! 
+    /*!
      * vector stats
      */
 
@@ -63,14 +63,14 @@ public:
     // returns true if the arguments is known to be identical to this vector
     inline bool isIdenticalTo(const KeyedVector& rhs) const;
 
-    /*! 
+    /*!
      * accessors
      */
-            const VALUE&    valueFor(const KEY& key) const;
-            const VALUE&    valueAt(size_t index) const;
-            const KEY&      keyAt(size_t index) const;
-            ssize_t         indexOfKey(const KEY& key) const;
-            const VALUE&    operator[] (size_t index) const;
+    const VALUE& valueFor(const KEY& key) const;
+    const VALUE& valueAt(size_t index) const;
+    const KEY& keyAt(size_t index) const;
+    ssize_t indexOfKey(const KEY& key) const;
+    const VALUE& operator[](size_t index) const;
 
     /*!
      * modifying the array
@@ -79,10 +79,10 @@ public:
             VALUE&          editValueFor(const KEY& key);
             VALUE&          editValueAt(size_t index);
 
-            /*! 
+            /*!
              * add/insert/replace items
              */
-             
+
             ssize_t         add(const KEY& key, const VALUE& item);
             ssize_t         replaceValueFor(const KEY& key, const VALUE& item);
             ssize_t         replaceValueAt(size_t index, const VALUE& item);
@@ -93,7 +93,7 @@ public:
 
             ssize_t         removeItem(const KEY& key);
             ssize_t         removeItemsAt(size_t index, size_t count = 1);
-            
+
 private:
             SortedVector< key_value_pair_t<KEY, VALUE> >    mVector;
 };
@@ -208,7 +208,7 @@ DefaultKeyedVector<KEY,VALUE>::DefaultKeyedVector(const VALUE& defValue)
 template<typename KEY, typename VALUE> inline
 const VALUE& DefaultKeyedVector<KEY,VALUE>::valueFor(const KEY& key) const {
     ssize_t i = this->indexOfKey(key);
-    return i >= 0 ? KeyedVector<KEY,VALUE>::valueAt(i) : mDefault;
+    return i >= 0 ? KeyedVector<KEY, VALUE>::valueAt(static_cast<size_t>(i)) : mDefault;
 }
 
 }  // namespace android

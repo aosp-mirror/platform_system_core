@@ -62,31 +62,34 @@ public:
     sp(std::nullptr_t) : sp() {}
 #else
     sp(T* other);  // NOLINT(implicit)
+    template <typename U>
+    sp(U* other);  // NOLINT(implicit)
+    sp& operator=(T* other);
+    template <typename U>
+    sp& operator=(U* other);
 #endif
+
     sp(const sp<T>& other);
     sp(sp<T>&& other) noexcept;
 
-#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
-    template<typename U> sp(U* other);  // NOLINT(implicit)
-#endif
     template<typename U> sp(const sp<U>& other);  // NOLINT(implicit)
     template<typename U> sp(sp<U>&& other);  // NOLINT(implicit)
+
+    // Cast a strong pointer directly from one type to another. Constructors
+    // allow changing types, but only if they are pointer-compatible. This does
+    // a static_cast internally.
+    template <typename U>
+    static inline sp<T> cast(const sp<U>& other);
 
     ~sp();
 
     // Assignment
 
-#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
-    sp& operator = (T* other);
-#endif
     sp& operator = (const sp<T>& other);
     sp& operator=(sp<T>&& other) noexcept;
 
     template<typename U> sp& operator = (const sp<U>& other);
     template<typename U> sp& operator = (sp<U>&& other);
-#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
-    template<typename U> sp& operator = (U* other);
-#endif
 
     //! Special optimization for use by ProcessState (and nobody else).
     void force_set(T* other);
@@ -241,6 +244,28 @@ sp<T>::sp(T* other)
         other->incStrong(this);
     }
 }
+
+template <typename T>
+template <typename U>
+sp<T>::sp(U* other) : m_ptr(other) {
+    if (other) {
+        check_not_on_stack(other);
+        (static_cast<T*>(other))->incStrong(this);
+    }
+}
+
+template <typename T>
+sp<T>& sp<T>::operator=(T* other) {
+    T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
+    if (other) {
+        check_not_on_stack(other);
+        other->incStrong(this);
+    }
+    if (oldPtr) oldPtr->decStrong(this);
+    if (oldPtr != *const_cast<T* volatile*>(&m_ptr)) sp_report_race();
+    m_ptr = other;
+    return *this;
+}
 #endif
 
 template<typename T>
@@ -255,17 +280,6 @@ sp<T>::sp(sp<T>&& other) noexcept : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
 }
 
-#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
-template<typename T> template<typename U>
-sp<T>::sp(U* other)
-        : m_ptr(other) {
-    if (other) {
-        check_not_on_stack(other);
-        (static_cast<T*>(other))->incStrong(this);
-    }
-}
-#endif
-
 template<typename T> template<typename U>
 sp<T>::sp(const sp<U>& other)
         : m_ptr(other.m_ptr) {
@@ -277,6 +291,12 @@ template<typename T> template<typename U>
 sp<T>::sp(sp<U>&& other)
         : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
+}
+
+template <typename T>
+template <typename U>
+sp<T> sp<T>::cast(const sp<U>& other) {
+    return sp<T>::fromExisting(static_cast<T*>(other.get()));
 }
 
 template<typename T>
@@ -306,21 +326,6 @@ sp<T>& sp<T>::operator=(sp<T>&& other) noexcept {
     other.m_ptr = nullptr;
     return *this;
 }
-
-#if !defined(ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION)
-template<typename T>
-sp<T>& sp<T>::operator =(T* other) {
-    T* oldPtr(*const_cast<T* volatile*>(&m_ptr));
-    if (other) {
-        check_not_on_stack(other);
-        other->incStrong(this);
-    }
-    if (oldPtr) oldPtr->decStrong(this);
-    if (oldPtr != *const_cast<T* volatile*>(&m_ptr)) sp_report_race();
-    m_ptr = other;
-    return *this;
-}
-#endif
 
 template<typename T> template<typename U>
 sp<T>& sp<T>::operator =(const sp<U>& other) {
