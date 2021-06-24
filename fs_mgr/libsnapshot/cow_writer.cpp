@@ -58,6 +58,12 @@ bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t
     return EmitRawBlocks(new_block_start, data, size);
 }
 
+bool AddXorBlocks(uint32_t /*new_block_start*/, const void* /*data*/, size_t /*size*/,
+                  uint32_t /*old_block*/, uint16_t /*offset*/) {
+    LOG(ERROR) << "AddXorBlocks not yet implemented";
+    return false;
+}
+
 bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     uint64_t last_block = new_block_start + num_blocks - 1;
     if (!ValidateNewBlock(last_block)) {
@@ -68,6 +74,11 @@ bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
 
 bool ICowWriter::AddLabel(uint64_t label) {
     return EmitLabel(label);
+}
+
+bool AddSequenceData(size_t /*num_ops*/, const uint32_t* /*data*/) {
+    LOG(ERROR) << "AddSequenceData not yet implemented";
+    return false;
 }
 
 bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
@@ -94,6 +105,7 @@ void CowWriter::SetupHeaders() {
     header_.block_size = options_.block_size;
     header_.num_merge_ops = 0;
     header_.cluster_ops = options_.cluster_ops;
+    header_.buffer_size = 0;
     footer_ = {};
     footer_.op.data_length = 64;
     footer_.op.type = kCowFooterOp;
@@ -139,12 +151,6 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     return true;
 }
 
-void CowWriter::InitializeMerge(borrowed_fd fd, CowHeader* header) {
-    fd_ = fd;
-    memcpy(&header_, header, sizeof(CowHeader));
-    merge_in_progress_ = true;
-}
-
 bool CowWriter::Initialize(unique_fd&& fd) {
     owned_fd_ = std::move(fd);
     return Initialize(borrowed_fd{owned_fd_});
@@ -172,7 +178,7 @@ bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) 
 }
 
 void CowWriter::InitPos() {
-    next_op_pos_ = sizeof(header_);
+    next_op_pos_ = sizeof(header_) + header_.buffer_size;
     cluster_size_ = header_.cluster_ops * sizeof(CowOperation);
     if (header_.cluster_ops) {
         next_data_pos_ = next_op_pos_ + cluster_size_;
@@ -196,6 +202,10 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        header_.buffer_size = BUFFER_REGION_DEFAULT_SIZE;
+    }
+
     // Headers are not complete, but this ensures the file is at the right
     // position.
     if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
@@ -203,7 +213,27 @@ bool CowWriter::OpenForWrite() {
         return false;
     }
 
+    if (options_.scratch_space) {
+        // Initialize the scratch space
+        std::string data(header_.buffer_size, 0);
+        if (!android::base::WriteFully(fd_, data.data(), header_.buffer_size)) {
+            PLOG(ERROR) << "writing scratch space failed";
+            return false;
+        }
+    }
+
+    if (!Sync()) {
+        LOG(ERROR) << "Header sync failed";
+        return false;
+    }
+
+    if (lseek(fd_.get(), sizeof(header_) + header_.buffer_size, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek failed";
+        return false;
+    }
+
     InitPos();
+
     return true;
 }
 
@@ -232,15 +262,11 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     // Free reader so we own the descriptor position again.
     reader = nullptr;
 
-    // Remove excess data
-    if (!Truncate(next_op_pos_)) {
-        return false;
-    }
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
@@ -319,6 +345,14 @@ bool CowWriter::EmitCluster() {
     return WriteOperation(op);
 }
 
+bool CowWriter::EmitClusterIfNeeded() {
+    // If there isn't room for another op and the cluster end op, end the current cluster
+    if (cluster_size_ && cluster_size_ < current_cluster_size_ + 2 * sizeof(CowOperation)) {
+        if (!EmitCluster()) return false;
+    }
+    return true;
+}
+
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
     switch (compression_) {
         case kCowCompressGz: {
@@ -379,6 +413,21 @@ bool CowWriter::Finalize() {
     auto continue_num_ops = footer_.op.num_ops;
     bool extra_cluster = false;
 
+    // Blank out extra ops, in case we're in append mode and dropped ops.
+    if (cluster_size_) {
+        auto unused_cluster_space = cluster_size_ - current_cluster_size_;
+        std::string clr;
+        clr.resize(unused_cluster_space, '\0');
+        if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
+            PLOG(ERROR) << "Failed to seek to footer position.";
+            return false;
+        }
+        if (!android::base::WriteFully(fd_, clr.data(), clr.size())) {
+            PLOG(ERROR) << "clearing unused cluster area failed";
+            return false;
+        }
+    }
+
     // Footer should be at the end of a file, so if there is data after the current block, end it
     // and start a new cluster.
     if (cluster_size_ && current_data_size_ > 0) {
@@ -400,6 +449,17 @@ bool CowWriter::Finalize() {
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&footer_),
                                    sizeof(footer_))) {
         PLOG(ERROR) << "write footer failed";
+        return false;
+    }
+
+    // Remove excess data, if we're in append mode and threw away more data
+    // than we wrote before.
+    off_t offs = lseek(fd_.get(), 0, SEEK_CUR);
+    if (offs < 0) {
+        PLOG(ERROR) << "Failed to lseek to find current position";
+        return false;
+    }
+    if (!Truncate(offs)) {
         return false;
     }
 
@@ -445,12 +505,7 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
         if (!WriteRawData(data, size)) return false;
     }
     AddOperation(op);
-    // If there isn't room for another op and the cluster end op, end the current cluster
-    if (cluster_size_ && op.type != kCowClusterOp &&
-        cluster_size_ < current_cluster_size_ + 2 * sizeof(op)) {
-        if (!EmitCluster()) return false;
-    }
-    return true;
+    return EmitClusterIfNeeded();
 }
 
 void CowWriter::AddOperation(const CowOperation& op) {
@@ -490,24 +545,6 @@ bool CowWriter::Sync() {
         return false;
     }
     return true;
-}
-
-bool CowWriter::CommitMerge(int merged_ops) {
-    CHECK(merge_in_progress_);
-    header_.num_merge_ops += merged_ops;
-
-    if (lseek(fd_.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-
-    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&header_),
-                                   sizeof(header_))) {
-        PLOG(ERROR) << "WriteFully failed";
-        return false;
-    }
-
-    return Sync();
 }
 
 bool CowWriter::Truncate(off_t length) {

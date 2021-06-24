@@ -242,12 +242,12 @@ TEST(RefBase, ReplacedComparison) {
 }
 
 TEST(RefBase, AssertWeakRefExistsSuccess) {
-    // uses some other refcounting method, or non at all
     bool isDeleted;
     sp<Foo> foo = sp<Foo>::make(&isDeleted);
     wp<Foo> weakFoo = foo;
 
     EXPECT_EQ(weakFoo, wp<Foo>::fromExisting(foo.get()));
+    EXPECT_EQ(weakFoo.unsafe_get(), wp<Foo>::fromExisting(foo.get()).unsafe_get());
 
     EXPECT_FALSE(isDeleted);
     foo = nullptr;
@@ -255,7 +255,7 @@ TEST(RefBase, AssertWeakRefExistsSuccess) {
 }
 
 TEST(RefBase, AssertWeakRefExistsDeath) {
-    // uses some other refcounting method, or non at all
+    // uses some other refcounting method, or none at all
     bool isDeleted;
     Foo* foo = new Foo(&isDeleted);
 

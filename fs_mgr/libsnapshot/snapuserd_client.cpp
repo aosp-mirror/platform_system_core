@@ -113,7 +113,7 @@ bool SnapuserdClient::ValidateConnection() {
 
 bool SnapuserdClient::Sendmsg(const std::string& msg) {
     LOG(DEBUG) << "Sendmsg: msg " << msg << " sockfd: " << sockfd_;
-    ssize_t numBytesSent = TEMP_FAILURE_RETRY(send(sockfd_, msg.data(), msg.size(), 0));
+    ssize_t numBytesSent = TEMP_FAILURE_RETRY(send(sockfd_, msg.data(), msg.size(), MSG_NOSIGNAL));
     if (numBytesSent < 0) {
         PLOG(ERROR) << "Send failed";
         return false;

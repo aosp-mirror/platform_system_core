@@ -123,12 +123,19 @@ not present.
 The exact firmware file to be served can be customized by running an external program by a
 `external_firmware_handler` line in a ueventd.rc file. This line takes the format of
 
-    external_firmware_handler <devpath> <user name to run as> <path to external program>
+    external_firmware_handler <devpath> <user [group]> <path to external program>
+
+The handler will be run as the given user, or if a group is provided, as the given user and group.
+
 For example
 
     external_firmware_handler /devices/leds/red/firmware/coeffs.bin system /vendor/bin/led_coeffs.bin
 Will launch `/vendor/bin/led_coeffs.bin` as the system user instead of serving the default firmware
 for `/devices/leds/red/firmware/coeffs.bin`.
+
+The `devpath` argument may include asterisks (`*`) to match multiple paths. For example, the string
+`/dev/*/red` will match `/dev/leds/red` as well as `/dev/lights/red`. The pattern matching follows
+the rules of the fnmatch() function.
 
 Ueventd will provide the uevent `DEVPATH` and `FIRMWARE` to this external program on the environment
 via environment variables with the same names. Ueventd will use the string written to stdout as the
@@ -156,3 +163,13 @@ recommended that devices use genfscon for labeling sysfs nodes. However, some de
 from enabling the parallelization option:
 
     parallel_restorecon enabled
+
+Do parallel restorecon to speed up boot process, subdirectories under `/sys`
+can be sliced by ueventd.rc, and run on multiple process.
+    parallel_restorecon_dir <directory>
+
+For example
+    parallel_restorecon_dir /sys
+    parallel_restorecon_dir /sys/devices
+    parallel_restorecon_dir /sys/devices/platform
+    parallel_restorecon_dir /sys/devices/platform/soc

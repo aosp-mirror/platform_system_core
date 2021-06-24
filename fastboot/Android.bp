@@ -183,7 +183,7 @@ cc_binary {
     ],
 
     static_libs: [
-        "libgtest_prod",
+        "libc++fs",
         "libhealthhalutils",
         "libsnapshot_cow",
         "libsnapshot_nobinder",
@@ -192,6 +192,7 @@ cc_binary {
 
     header_libs: [
         "avb_headers",
+        "libgtest_prod_headers",
         "libsnapshot_headers",
         "libstorage_literals_headers",
     ],

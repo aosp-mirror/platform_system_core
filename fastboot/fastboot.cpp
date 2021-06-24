@@ -104,8 +104,6 @@ static std::string g_dtb_path;
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
 
-static const std::string convert_fbe_marker_filename("convert_fbe");
-
 fastboot::FastBootDriver* fb = nullptr;
 
 enum fb_buffer_type {
@@ -165,6 +163,11 @@ static Image images[] = {
                   "vbmeta_system.img",
                                       "vbmeta_system.sig",
                                                       "vbmeta_system",
+                                                                  true,  ImageType::BootCritical },
+    { "vbmeta_vendor",
+                  "vbmeta_vendor.img",
+                                      "vbmeta_vendor.sig",
+                                                      "vbmeta_vendor",
                                                                   true,  ImageType::BootCritical },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
     { "vendor_boot",
@@ -411,13 +414,20 @@ static int show_help() {
             " gsi wipe|disable           Wipe or disable a GSI installation (fastbootd only).\n"
             " wipe-super [SUPER_EMPTY]   Wipe the super partition. This will reset it to\n"
             "                            contain an empty set of default dynamic partitions.\n"
+            " create-logical-partition NAME SIZE\n"
+            "                            Create a logical partition with the given name and\n"
+            "                            size, in the super partition.\n"
+            " delete-logical-partition NAME\n"
+            "                            Delete a logical partition with the given name.\n"
+            " resize-logical-partition NAME SIZE\n"
+            "                            Change the size of the named logical partition.\n"
             " snapshot-update cancel     On devices that support snapshot-based updates, cancel\n"
             "                            an in-progress update. This may make the device\n"
             "                            unbootable until it is reflashed.\n"
             " snapshot-update merge      On devices that support snapshot-based updates, finish\n"
             "                            an in-progress update if it is in the \"merging\"\n"
             "                            phase.\n"
-            " fetch PARTITION            Fetch a partition image from the device."
+            " fetch PARTITION OUT_FILE   Fetch a partition image from the device."
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
@@ -461,9 +471,6 @@ static int show_help() {
             " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
             " --fs-options=OPTION[,OPTION]\n"
             "                            Enable filesystem features. OPTION supports casefold, projid, compress\n"
-#if !defined(_WIN32)
-            " --wipe-and-use-fbe         Enable file-based encryption, wiping userdata.\n"
-#endif
             // TODO: remove --unbuffered?
             " --unbuffered               Don't buffer input or output.\n"
             " --verbose, -v              Verbose output.\n"
@@ -581,10 +588,6 @@ static FILE* win32_tmpfile() {
 
 #define tmpfile win32_tmpfile
 
-static std::string make_temporary_directory() {
-    die("make_temporary_directory not supported under Windows, sorry!");
-}
-
 static int make_temporary_fd(const char* /*what*/) {
     // TODO: reimplement to avoid leaking a FILE*.
     return fileno(tmpfile());
@@ -596,15 +599,6 @@ static std::string make_temporary_template() {
     const char* tmpdir = getenv("TMPDIR");
     if (tmpdir == nullptr) tmpdir = P_tmpdir;
     return std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
-}
-
-static std::string make_temporary_directory() {
-    std::string result(make_temporary_template());
-    if (mkdtemp(&result[0]) == nullptr) {
-        die("unable to create temporary directory with template %s: %s",
-            result.c_str(), strerror(errno));
-    }
-    return result;
 }
 
 static int make_temporary_fd(const char* what) {
@@ -619,32 +613,6 @@ static int make_temporary_fd(const char* what) {
 }
 
 #endif
-
-static std::string create_fbemarker_tmpdir() {
-    std::string dir = make_temporary_directory();
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
-    if (fd == -1) {
-        die("unable to create FBE marker file %s locally: %s",
-            marker_file.c_str(), strerror(errno));
-    }
-    close(fd);
-    return dir;
-}
-
-static void delete_fbemarker_tmpdir(const std::string& dir) {
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    if (unlink(marker_file.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker file %s locally: %d, %s\n",
-            marker_file.c_str(), errno, strerror(errno));
-        return;
-    }
-    if (rmdir(dir.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker directory %s locally: %d, %s\n",
-            dir.c_str(), errno, strerror(errno));
-        return;
-    }
-}
 
 static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
@@ -673,7 +641,7 @@ static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     return fd;
 }
 
-static void CheckRequirement(const std::string& cur_product, const std::string& var,
+static bool CheckRequirement(const std::string& cur_product, const std::string& var,
                              const std::string& product, bool invert,
                              const std::vector<std::string>& options) {
     Status("Checking '" + var + "'");
@@ -685,7 +653,7 @@ static void CheckRequirement(const std::string& cur_product, const std::string& 
             double split = now();
             fprintf(stderr, "IGNORE, product is %s required only for %s [%7.3fs]\n",
                     cur_product.c_str(), product.c_str(), (split - start));
-            return;
+            return true;
         }
     }
 
@@ -694,7 +662,7 @@ static void CheckRequirement(const std::string& cur_product, const std::string& 
         fprintf(stderr, "FAILED\n\n");
         fprintf(stderr, "Could not getvar for '%s' (%s)\n\n", var.c_str(),
                 fb->Error().c_str());
-        die("requirements not met!");
+        return false;
     }
 
     bool match = false;
@@ -714,7 +682,7 @@ static void CheckRequirement(const std::string& cur_product, const std::string& 
     if (match) {
         double split = now();
         fprintf(stderr, "OKAY [%7.3fs]\n", (split - start));
-        return;
+        return true;
     }
 
     fprintf(stderr, "FAILED\n\n");
@@ -724,7 +692,7 @@ static void CheckRequirement(const std::string& cur_product, const std::string& 
         fprintf(stderr, " or '%s'", it->c_str());
     }
     fprintf(stderr, ".\n\n");
-    die("requirements not met!");
+    return false;
 }
 
 bool ParseRequirementLine(const std::string& line, std::string* name, std::string* product,
@@ -788,7 +756,7 @@ static void HandlePartitionExists(const std::vector<std::string>& options) {
     }
 }
 
-static void CheckRequirements(const std::string& data) {
+static void CheckRequirements(const std::string& data, bool force_flash) {
     std::string cur_product;
     if (fb->GetVar("product", &cur_product) != fastboot::SUCCESS) {
         fprintf(stderr, "getvar:product FAILED (%s)\n", fb->Error().c_str());
@@ -812,7 +780,14 @@ static void CheckRequirements(const std::string& data) {
         if (name == "partition-exists") {
             HandlePartitionExists(options);
         } else {
-            CheckRequirement(cur_product, name, product, invert, options);
+            bool met = CheckRequirement(cur_product, name, product, invert, options);
+            if (!met) {
+                if (!force_flash) {
+                  die("requirements not met!");
+                } else {
+                  fprintf(stderr, "requirements not met! but proceeding due to --force\n");
+                }
+            }
         }
     }
 }
@@ -1405,7 +1380,8 @@ class ImageSource {
 
 class FlashAllTool {
   public:
-    FlashAllTool(const ImageSource& source, const std::string& slot_override, bool skip_secondary, bool wipe);
+    FlashAllTool(const ImageSource& source, const std::string& slot_override, bool skip_secondary,
+                 bool wipe, bool force_flash);
 
     void Flash();
 
@@ -1421,16 +1397,19 @@ class FlashAllTool {
     std::string slot_override_;
     bool skip_secondary_;
     bool wipe_;
+    bool force_flash_;
     std::string secondary_slot_;
     std::vector<std::pair<const Image*, std::string>> boot_images_;
     std::vector<std::pair<const Image*, std::string>> os_images_;
 };
 
-FlashAllTool::FlashAllTool(const ImageSource& source, const std::string& slot_override, bool skip_secondary, bool wipe)
+FlashAllTool::FlashAllTool(const ImageSource& source, const std::string& slot_override,
+                           bool skip_secondary, bool wipe, bool force_flash)
    : source_(source),
      slot_override_(slot_override),
      skip_secondary_(skip_secondary),
-     wipe_(wipe)
+     wipe_(wipe),
+     force_flash_(force_flash)
 {
 }
 
@@ -1478,7 +1457,7 @@ void FlashAllTool::CheckRequirements() {
     if (!source_.ReadFile("android-info.txt", &contents)) {
         die("could not read android-info.txt");
     }
-    ::CheckRequirements({contents.data(), contents.size()});
+    ::CheckRequirements({contents.data(), contents.size()}, force_flash_);
 }
 
 void FlashAllTool::DetermineSecondarySlot() {
@@ -1598,14 +1577,15 @@ unique_fd ZipImageSource::OpenFile(const std::string& name) const {
     return unzip_to_file(zip_, name.c_str());
 }
 
-static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary) {
+static void do_update(const char* filename, const std::string& slot_override, bool skip_secondary,
+                      bool force_flash) {
     ZipArchiveHandle zip;
     int error = OpenArchive(filename, &zip);
     if (error != 0) {
         die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
 
-    FlashAllTool tool(ZipImageSource(zip), slot_override, skip_secondary, false);
+    FlashAllTool tool(ZipImageSource(zip), slot_override, skip_secondary, false, force_flash);
     tool.Flash();
 
     CloseArchive(zip);
@@ -1630,8 +1610,9 @@ unique_fd LocalImageSource::OpenFile(const std::string& name) const {
     return unique_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_BINARY)));
 }
 
-static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe) {
-    FlashAllTool tool(LocalImageSource(), slot_override, skip_secondary, wipe);
+static void do_flashall(const std::string& slot_override, bool skip_secondary, bool wipe,
+                        bool force_flash) {
+    FlashAllTool tool(LocalImageSource(), slot_override, skip_secondary, wipe, force_flash);
     tool.Flash();
 }
 
@@ -1870,7 +1851,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
-    bool set_fbe_marker = false;
     bool force_flash = false;
     unsigned fs_options = 0;
     int longindex;
@@ -1908,9 +1888,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
         {"unbuffered", no_argument, 0, 0},
         {"verbose", no_argument, 0, 'v'},
         {"version", no_argument, 0, 0},
-#if !defined(_WIN32)
-        {"wipe-and-use-fbe", no_argument, 0, 0},
-#endif
         {0, 0, 0, 0}
     };
 
@@ -1964,11 +1941,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fprintf(stdout, "fastboot version %s-%s\n", PLATFORM_TOOLS_VERSION, android::build::GetBuildNumber().c_str());
                 fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
-#if !defined(_WIN32)
-            } else if (name == "wipe-and-use-fbe") {
-                wants_wipe = true;
-                set_fbe_marker = true;
-#endif
             } else {
                 die("unknown option %s", longopts[longindex].name);
             }
@@ -2179,9 +2151,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == "flashall") {
             if (slot_override == "all") {
                 fprintf(stderr, "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
-                do_flashall(slot_override, true, wants_wipe);
+                do_flashall(slot_override, true, wants_wipe, force_flash);
             } else {
-                do_flashall(slot_override, skip_secondary, wants_wipe);
+                do_flashall(slot_override, skip_secondary, wants_wipe, force_flash);
             }
             wants_reboot = true;
         } else if (command == "update") {
@@ -2193,7 +2165,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (!args.empty()) {
                 filename = next_arg(&args);
             }
-            do_update(filename.c_str(), slot_override, skip_secondary || slot_all);
+            do_update(filename.c_str(), slot_override, skip_secondary || slot_all, force_flash);
             wants_reboot = true;
         } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
@@ -2280,14 +2252,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             if (partition_type.empty()) continue;
             fb->Erase(partition);
-            if (partition == "userdata" && set_fbe_marker) {
-                fprintf(stderr, "setting FBE marker on initial userdata...\n");
-                std::string initial_userdata_dir = create_fbemarker_tmpdir();
-                fb_perform_format(partition, 1, partition_type, "", initial_userdata_dir, fs_options);
-                delete_fbemarker_tmpdir(initial_userdata_dir);
-            } else {
-                fb_perform_format(partition, 1, partition_type, "", "", fs_options);
-            }
+            fb_perform_format(partition, 1, partition_type, "", "", fs_options);
         }
     }
     if (wants_set_active) {

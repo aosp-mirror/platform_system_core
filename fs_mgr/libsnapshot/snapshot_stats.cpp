@@ -130,6 +130,14 @@ uint32_t SnapshotMergeStats::boot_complete_to_merge_start_time_ms() {
     return report_.boot_complete_to_merge_start_time_ms();
 }
 
+void SnapshotMergeStats::set_merge_failure_code(MergeFailureCode code) {
+    report_.set_merge_failure_code(code);
+}
+
+MergeFailureCode SnapshotMergeStats::merge_failure_code() {
+    return report_.merge_failure_code();
+}
+
 class SnapshotMergeStatsResultImpl : public SnapshotMergeStats::Result {
   public:
     SnapshotMergeStatsResultImpl(const SnapshotMergeReport& report,

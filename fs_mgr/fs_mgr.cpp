@@ -264,12 +264,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
                 F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
         if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache"
+            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
                                       &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache"
+            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
                                       LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
@@ -647,6 +647,46 @@ bool fs_mgr_is_f2fs(const std::string& blk_device) {
     return sb == cpu_to_le32(F2FS_SUPER_MAGIC);
 }
 
+static void SetReadAheadSize(const std::string& entry_block_device, off64_t size_kb) {
+    std::string block_device;
+    if (!Realpath(entry_block_device, &block_device)) {
+        PERROR << "Failed to realpath " << entry_block_device;
+        return;
+    }
+
+    static constexpr std::string_view kDevBlockPrefix("/dev/block/");
+    if (!android::base::StartsWith(block_device, kDevBlockPrefix)) {
+        LWARNING << block_device << " is not a block device";
+        return;
+    }
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    while (true) {
+        std::string block_name = block_device;
+        if (android::base::StartsWith(block_device, kDevBlockPrefix)) {
+            block_name = block_device.substr(kDevBlockPrefix.length());
+        }
+        std::string sys_partition =
+                android::base::StringPrintf("/sys/class/block/%s/partition", block_name.c_str());
+        struct stat info;
+        if (lstat(sys_partition.c_str(), &info) == 0) {
+            // it has a partition like "sda12".
+            block_name += "/..";
+        }
+        std::string sys_ra = android::base::StringPrintf("/sys/class/block/%s/queue/read_ahead_kb",
+                                                         block_name.c_str());
+        std::string size = android::base::StringPrintf("%llu", (long long)size_kb);
+        android::base::WriteStringToFile(size, sys_ra.c_str());
+        LINFO << "Set readahead_kb: " << size << " on " << sys_ra;
+
+        auto parent = dm.GetParentBlockDeviceByPath(block_device);
+        if (!parent) {
+            return;
+        }
+        block_device = *parent;
+    }
+}
+
 //
 // Prepare the filesystem on the given block device to be mounted.
 //
@@ -666,6 +706,11 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
         unlink(mount_point.c_str());
     }
     mkdir(mount_point.c_str(), 0755);
+
+    // Don't need to return error, since it's a salt
+    if (entry.readahead_size_kb != -1) {
+        SetReadAheadSize(blk_device, entry.readahead_size_kb);
+    }
 
     int fs_stat = 0;
 
@@ -2219,4 +2264,82 @@ std::string fs_mgr_get_super_partition_name(int slot) {
         return super_partition + suffix;
     }
     return LP_METADATA_DEFAULT_PARTITION_NAME;
+}
+
+bool fs_mgr_create_canonical_mount_point(const std::string& mount_point) {
+    auto saved_errno = errno;
+    auto ok = true;
+    auto created_mount_point = !mkdir(mount_point.c_str(), 0755);
+    std::string real_mount_point;
+    if (!Realpath(mount_point, &real_mount_point)) {
+        ok = false;
+        PERROR << "failed to realpath(" << mount_point << ")";
+    } else if (mount_point != real_mount_point) {
+        ok = false;
+        LERROR << "mount point is not canonical: realpath(" << mount_point << ") -> "
+               << real_mount_point;
+    }
+    if (!ok && created_mount_point) {
+        rmdir(mount_point.c_str());
+    }
+    errno = saved_errno;
+    return ok;
+}
+
+bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
+    auto overlayfs_valid_result = fs_mgr_overlayfs_valid();
+    if (overlayfs_valid_result == OverlayfsValidResult::kNotSupported) {
+        LERROR << __FUNCTION__ << "(): kernel does not support overlayfs";
+        return false;
+    }
+
+#if ALLOW_ADBD_DISABLE_VERITY == 0
+    // Allowlist the mount point if user build.
+    static const std::vector<const std::string> kAllowedPaths = {
+            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+    };
+    static const std::vector<const std::string> kAllowedPrefixes = {
+            "/mnt/product/",
+            "/mnt/vendor/",
+    };
+    if (std::none_of(kAllowedPaths.begin(), kAllowedPaths.end(),
+                     [&entry](const auto& path) -> bool {
+                         return entry.mount_point == path ||
+                                StartsWith(entry.mount_point, path + "/");
+                     }) &&
+        std::none_of(kAllowedPrefixes.begin(), kAllowedPrefixes.end(),
+                     [&entry](const auto& prefix) -> bool {
+                         return entry.mount_point != prefix &&
+                                StartsWith(entry.mount_point, prefix);
+                     })) {
+        LERROR << __FUNCTION__
+               << "(): mount point is forbidden on user build: " << entry.mount_point;
+        return false;
+    }
+#endif  // ALLOW_ADBD_DISABLE_VERITY == 0
+
+    if (!fs_mgr_create_canonical_mount_point(entry.mount_point)) {
+        return false;
+    }
+
+    auto options = "lowerdir=" + entry.lowerdir;
+    if (overlayfs_valid_result == OverlayfsValidResult::kOverrideCredsRequired) {
+        options += ",override_creds=off";
+    }
+
+    // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
+    // confuse this with adb remount overlay, whose device name is "overlay".
+    // Overlayfs is a pseudo filesystem, so the source device is a symbolic value and isn't used to
+    // back the filesystem. However the device name would be shown in /proc/mounts.
+    auto source = "overlay-" + entry.blk_device;
+    auto report = "__mount(source=" + source + ",target=" + entry.mount_point + ",type=overlay," +
+                  options + ")=";
+    auto ret = mount(source.c_str(), entry.mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+        return false;
+    }
+    LINFO << report << ret;
+    return true;
 }

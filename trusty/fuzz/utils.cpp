@@ -127,6 +127,10 @@ Result<int> TrustyApp::GetRawFd() {
     return ta_fd_;
 }
 
+void TrustyApp::Disconnect() {
+    ta_fd_.reset();
+}
+
 void Abort() {
     PrintTrustyLog();
     exit(-1);

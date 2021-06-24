@@ -27,6 +27,7 @@ package {
 cc_library_static {
     name: "libfs_avb",
     defaults: ["fs_mgr_defaults"],
+    ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     export_include_dirs: ["include"],
@@ -78,6 +79,7 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libchrome",
+        "libcrypto",
     ],
     target: {
         darwin: {
@@ -106,9 +108,6 @@ cc_test_host {
     },
     static_libs: [
         "libfs_avb_test_util",
-    ],
-    shared_libs: [
-        "libcrypto",
     ],
     compile_multilib: "first",
     data: [
