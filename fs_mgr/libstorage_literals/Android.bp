@@ -6,6 +6,7 @@ package {
 cc_library_headers {
     name: "libstorage_literals_headers",
     host_supported: true,
+    ramdisk_available: true,
     recovery_available: true,
     export_include_dirs: ["."],
     target: {
