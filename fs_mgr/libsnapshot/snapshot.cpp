@@ -1126,6 +1126,11 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
         return MergeResult(UpdateState::Merging);
     }
 
+    auto code = CheckMergeConsistency(lock, name, snapshot_status);
+    if (code != MergeFailureCode::Ok) {
+        return MergeResult(UpdateState::MergeFailed, code);
+    }
+
     // Merging is done. First, update the status file to indicate the merge
     // is complete. We do this before calling OnSnapshotMergeComplete, even
     // though this means the write is potentially wasted work (since in the
@@ -1142,6 +1147,91 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
         return MergeResult(UpdateState::MergeNeedsReboot);
     }
     return MergeResult(UpdateState::MergeCompleted, MergeFailureCode::Ok);
+}
+
+// This returns the backing device, not the dm-user layer.
+static std::string GetMappedCowDeviceName(const std::string& snapshot,
+                                          const SnapshotStatus& status) {
+    // If no partition was created (the COW exists entirely on /data), the
+    // device-mapper layering is different than if we had a partition.
+    if (status.cow_partition_size() == 0) {
+        return GetCowImageDeviceName(snapshot);
+    }
+    return GetCowName(snapshot);
+}
+
+MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const std::string& name,
+                                                        const SnapshotStatus& status) {
+    CHECK(lock);
+
+    if (!status.compression_enabled()) {
+        // Do not try to verify old-style COWs yet.
+        return MergeFailureCode::Ok;
+    }
+
+    auto& dm = DeviceMapper::Instance();
+
+    std::string cow_image_name = GetMappedCowDeviceName(name, status);
+    std::string cow_image_path;
+    if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
+        LOG(ERROR) << "Failed to get path for cow device: " << cow_image_name;
+        return MergeFailureCode::GetCowPathConsistencyCheck;
+    }
+
+    // First pass, count # of ops.
+    size_t num_ops = 0;
+    {
+        unique_fd fd(open(cow_image_path.c_str(), O_RDONLY | O_CLOEXEC));
+        if (fd < 0) {
+            PLOG(ERROR) << "Failed to open " << cow_image_name;
+            return MergeFailureCode::OpenCowConsistencyCheck;
+        }
+
+        CowReader reader;
+        if (!reader.Parse(std::move(fd))) {
+            LOG(ERROR) << "Failed to parse cow " << cow_image_path;
+            return MergeFailureCode::ParseCowConsistencyCheck;
+        }
+
+        for (auto iter = reader.GetOpIter(); !iter->Done(); iter->Next()) {
+            if (!IsMetadataOp(iter->Get())) {
+                num_ops++;
+            }
+        }
+    }
+
+    // Second pass, try as hard as we can to get the actual number of blocks
+    // the system thinks is merged.
+    unique_fd fd(open(cow_image_path.c_str(), O_RDONLY | O_DIRECT | O_SYNC | O_CLOEXEC));
+    if (fd < 0) {
+        PLOG(ERROR) << "Failed to open direct " << cow_image_name;
+        return MergeFailureCode::OpenCowDirectConsistencyCheck;
+    }
+
+    void* addr;
+    size_t page_size = getpagesize();
+    if (posix_memalign(&addr, page_size, page_size) < 0) {
+        PLOG(ERROR) << "posix_memalign with page size " << page_size;
+        return MergeFailureCode::MemAlignConsistencyCheck;
+    }
+
+    // COWs are always at least 2MB, this is guaranteed in snapshot creation.
+    std::unique_ptr<void, decltype(&::free)> buffer(addr, ::free);
+    if (!android::base::ReadFully(fd, buffer.get(), page_size)) {
+        PLOG(ERROR) << "Direct read failed " << cow_image_name;
+        return MergeFailureCode::DirectReadConsistencyCheck;
+    }
+
+    auto header = reinterpret_cast<CowHeader*>(buffer.get());
+    if (header->num_merge_ops != num_ops) {
+        LOG(ERROR) << "COW consistency check failed, expected " << num_ops << " to be merged, "
+                   << "but " << header->num_merge_ops << " were actually recorded.";
+        LOG(ERROR) << "Aborting merge progress for snapshot " << name
+                   << ", will try again next boot";
+        return MergeFailureCode::WrongMergeCountConsistencyCheck;
+    }
+
+    return MergeFailureCode::Ok;
 }
 
 MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
@@ -1429,14 +1519,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
-        // If no partition was created (the COW exists entirely on /data), the
-        // device-mapper layering is different than if we had a partition.
-        std::string cow_image_name;
-        if (snapshot_status.cow_partition_size() == 0) {
-            cow_image_name = GetCowImageDeviceName(snapshot);
-        } else {
-            cow_image_name = GetCowName(snapshot);
-        }
+        std::string cow_image_name = GetMappedCowDeviceName(snapshot, snapshot_status);
 
         std::string cow_image_device;
         if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_device)) {
