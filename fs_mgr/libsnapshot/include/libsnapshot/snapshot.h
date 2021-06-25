@@ -603,6 +603,8 @@ class SnapshotManager final : public ISnapshotManager {
     MergeResult CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     MergeResult CheckTargetMergeState(LockedFile* lock, const std::string& name,
                                       const SnapshotUpdateStatus& update_status);
+    MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
+                                           const SnapshotStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
     bool WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status);
