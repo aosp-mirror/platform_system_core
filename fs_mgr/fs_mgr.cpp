@@ -2092,7 +2092,7 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
         }
 
         if (entry.zram_size > 0) {
-	    if (!PrepareZramBackingDevice(entry.zram_backingdev_size)) {
+            if (!PrepareZramBackingDevice(entry.zram_backingdev_size)) {
                 LERROR << "Failure of zram backing device file for '" << entry.blk_device << "'";
             }
             // A zram_size was specified, so we need to configure the
