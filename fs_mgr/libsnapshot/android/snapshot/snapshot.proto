@@ -158,6 +158,13 @@ enum MergeFailureCode {
     ExpectedMergeTarget = 11;
     UnmergedSectorsAfterCompletion = 12;
     UnexpectedMergeState = 13;
+    GetCowPathConsistencyCheck = 14;
+    OpenCowConsistencyCheck = 15;
+    ParseCowConsistencyCheck = 16;
+    OpenCowDirectConsistencyCheck = 17;
+    MemAlignConsistencyCheck = 18;
+    DirectReadConsistencyCheck = 19;
+    WrongMergeCountConsistencyCheck = 20;
 };
 
 // Next: 8
