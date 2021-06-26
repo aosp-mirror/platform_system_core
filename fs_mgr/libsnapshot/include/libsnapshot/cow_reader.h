@@ -27,7 +27,6 @@ namespace android {
 namespace snapshot {
 
 class ICowOpIter;
-class ICowOpReverseIter;
 
 // A ByteSink object handles requests for a buffer of a specific size. It
 // always owns the underlying buffer. It's designed to minimize potential
@@ -76,7 +75,7 @@ class ICowReader {
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
     // Return an reverse iterator for retrieving CowOperation entries.
-    virtual std::unique_ptr<ICowOpReverseIter> GetRevOpIter() = 0;
+    virtual std::unique_ptr<ICowOpIter> GetRevOpIter() = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
@@ -87,21 +86,6 @@ class ICowReader {
 class ICowOpIter {
   public:
     virtual ~ICowOpIter() {}
-
-    // True if there are more items to read, false otherwise.
-    virtual bool Done() = 0;
-
-    // Read the current operation.
-    virtual const CowOperation& Get() = 0;
-
-    // Advance to the next item.
-    virtual void Next() = 0;
-};
-
-// Reverse Iterate over a sequence of COW operations.
-class ICowOpReverseIter {
-  public:
-    virtual ~ICowOpReverseIter() {}
 
     // True if there are more items to read, false otherwise.
     virtual bool Done() = 0;
@@ -135,7 +119,7 @@ class CowReader : public ICowReader {
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
-    std::unique_ptr<ICowOpReverseIter> GetRevOpIter() override;
+    std::unique_ptr<ICowOpIter> GetRevOpIter() override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
