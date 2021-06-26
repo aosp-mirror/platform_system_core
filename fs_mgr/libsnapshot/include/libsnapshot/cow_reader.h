@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
@@ -77,6 +78,9 @@ class ICowReader {
     // Return an reverse iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetRevOpIter() = 0;
 
+    // Return an iterator for retrieving CowOperation entries in merge order
+    virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter() = 0;
+
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
     virtual bool ReadData(const CowOperation& op, IByteSink* sink) = 0;
@@ -120,6 +124,7 @@ class CowReader : public ICowReader {
     // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
     std::unique_ptr<ICowOpIter> GetRevOpIter() override;
+    std::unique_ptr<ICowOpIter> GetRevMergeOpIter() override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
@@ -138,6 +143,7 @@ class CowReader : public ICowReader {
 
   private:
     bool ParseOps(std::optional<uint64_t> label);
+    bool PrepMergeOps();
     uint64_t FindNumCopyops();
 
     android::base::unique_fd owned_fd_;
@@ -147,6 +153,8 @@ class CowReader : public ICowReader {
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
+    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
     uint64_t total_data_ops_;
     uint64_t copy_ops_;
     bool has_seq_ops_;

@@ -102,7 +102,7 @@ void CowWriter::SetupHeaders() {
     header_.footer_size = sizeof(CowFooter);
     header_.op_size = sizeof(CowOperation);
     header_.block_size = options_.block_size;
-    header_.num_merge_ops = 0;
+    header_.num_merge_ops = options_.num_merge_ops;
     header_.cluster_ops = options_.cluster_ops;
     header_.buffer_size = 0;
     footer_ = {};

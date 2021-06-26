@@ -38,6 +38,9 @@ struct CowOptions {
     uint32_t cluster_ops = 200;
 
     bool scratch_space = true;
+
+    // Preset the number of merged ops. Only useful for testing.
+    uint64_t num_merge_ops = 0;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
