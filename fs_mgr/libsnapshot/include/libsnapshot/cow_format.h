@@ -148,6 +148,7 @@ static constexpr uint8_t kCowReplaceOp = 2;
 static constexpr uint8_t kCowZeroOp = 3;
 static constexpr uint8_t kCowLabelOp = 4;
 static constexpr uint8_t kCowClusterOp = 5;
+static constexpr uint8_t kCowSequenceOp = 7;
 static constexpr uint8_t kCowFooterOp = -1;
 
 static constexpr uint8_t kCowCompressNone = 0;

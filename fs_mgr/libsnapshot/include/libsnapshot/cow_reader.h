@@ -165,6 +165,7 @@ class CowReader : public ICowReader {
     std::shared_ptr<std::vector<CowOperation>> ops_;
     uint64_t total_data_ops_;
     uint64_t copy_ops_;
+    bool has_seq_ops_;
 };
 
 }  // namespace snapshot

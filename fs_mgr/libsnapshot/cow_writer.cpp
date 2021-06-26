@@ -76,9 +76,8 @@ bool ICowWriter::AddLabel(uint64_t label) {
     return EmitLabel(label);
 }
 
-bool ICowWriter::AddSequenceData(size_t /*num_ops*/, const uint32_t* /*data*/) {
-    LOG(ERROR) << "AddSequenceData not yet implemented";
-    return false;
+bool ICowWriter::AddSequenceData(size_t num_ops, const uint32_t* data) {
+    return EmitSequenceData(num_ops, data);
 }
 
 bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
@@ -335,6 +334,26 @@ bool CowWriter::EmitLabel(uint64_t label) {
     op.type = kCowLabelOp;
     op.source = label;
     return WriteOperation(op) && Sync();
+}
+
+bool CowWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
+    CHECK(!merge_in_progress_);
+    size_t to_add = 0;
+    size_t max_ops = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t);
+    while (num_ops > 0) {
+        CowOperation op = {};
+        op.type = kCowSequenceOp;
+        op.source = next_data_pos_;
+        to_add = std::min(num_ops, max_ops);
+        op.data_length = static_cast<uint16_t>(to_add * sizeof(uint32_t));
+        if (!WriteOperation(op, data, op.data_length)) {
+            PLOG(ERROR) << "AddSequenceData: write failed";
+            return false;
+        }
+        num_ops -= to_add;
+        data += to_add;
+    }
+    return true;
 }
 
 bool CowWriter::EmitCluster() {

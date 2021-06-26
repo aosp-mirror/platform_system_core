@@ -85,6 +85,7 @@ class ICowWriter {
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
     virtual bool EmitLabel(uint64_t label) = 0;
+    virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) = 0;
 
     bool ValidateNewBlock(uint64_t new_block);
 
@@ -120,6 +121,7 @@ class CowWriter : public ICowWriter {
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
     virtual bool EmitLabel(uint64_t label) override;
+    virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
 
   private:
     bool EmitCluster();

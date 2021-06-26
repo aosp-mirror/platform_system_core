@@ -201,6 +201,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
                 current_op_num--;
                 done = true;
                 break;
+            } else if (current_op.type == kCowSequenceOp) {
+                has_seq_ops_ = true;
             }
         }
 
