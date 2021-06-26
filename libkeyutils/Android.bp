@@ -5,10 +5,8 @@ package {
 license {
     name: "system_core_libkeyutils_license",
     visibility: [":__subpackages__"],
-    license_kinds: [
-        "SPDX-license-identifier-BSD",
-    ],
-    // large-scale-change unable to identify any license_text files
+    license_kinds: ["SPDX-license-identifier-BSD"],
+    license_text: ["NOTICE"],
 }
 
 cc_library {
