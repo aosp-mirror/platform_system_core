@@ -191,33 +191,6 @@ on init
     chown system system /dev/cpuctl/camera-daemon/tasks
     chmod 0664 /dev/cpuctl/camera-daemon/tasks
 
-    # Android only use global RT throttling and doesn't use CONFIG_RT_GROUP_SCHED
-    # for RT group throttling. These values here are just to make sure RT threads
-    # can be migrated to those groups. These settings can be removed once we migrate
-    # to GKI kernel.
-    write /dev/cpuctl/cpu.rt_period_us 1000000
-    write /dev/cpuctl/cpu.rt_runtime_us 950000
-    # Surfaceflinger is in FG group so giving it a bit more
-    write /dev/cpuctl/foreground/cpu.rt_runtime_us 450000
-    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
-    write /dev/cpuctl/background/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/background/cpu.rt_period_us 1000000
-    write /dev/cpuctl/top-app/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/top-app/cpu.rt_period_us 1000000
-    write /dev/cpuctl/rt/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/rt/cpu.rt_period_us 1000000
-    write /dev/cpuctl/system/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/system/cpu.rt_period_us 1000000
-    write /dev/cpuctl/system-background/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/system-background/cpu.rt_period_us 1000000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
-    write /dev/cpuctl/camera-daemon/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/camera-daemon/cpu.rt_period_us 1000000
-
-    # Migrate root group to system subgroup
-    copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
-
     # Create an stune group for camera-specific processes
     mkdir /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon
@@ -1278,7 +1251,3 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
-
-# Migrate tasks again in case kernel threads are created during boot
-on property:sys.boot_completed=1
-  copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
