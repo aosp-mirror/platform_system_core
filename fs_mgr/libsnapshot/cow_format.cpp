@@ -90,5 +90,14 @@ bool IsMetadataOp(const CowOperation& op) {
     }
 }
 
+bool IsOrderedOp(const CowOperation& op) {
+    switch (op.type) {
+        case kCowCopyOp:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace snapshot
 }  // namespace android

@@ -185,7 +185,10 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
 int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
 
+// Ops that are internal to the Cow Format and not OTA data
 bool IsMetadataOp(const CowOperation& op);
+// Ops that have dependencies on old blocks, and must take care in their merge order
+bool IsOrderedOp(const CowOperation& op);
 
 }  // namespace snapshot
 }  // namespace android

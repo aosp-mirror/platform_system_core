@@ -395,7 +395,7 @@ bool Snapuserd::ReadMetadata() {
         // handling of assigning chunk-id's. Furthermore, we make
         // sure that replace/zero and copy ops are not batch merged; hence,
         // the bump in the chunk_id before break of this loop
-        if (cow_op->type == kCowCopyOp) {
+        if (IsOrderedOp(*cow_op)) {
             data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
             break;
         }
