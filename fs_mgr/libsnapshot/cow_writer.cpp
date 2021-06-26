@@ -76,7 +76,7 @@ bool ICowWriter::AddLabel(uint64_t label) {
     return EmitLabel(label);
 }
 
-bool AddSequenceData(size_t /*num_ops*/, const uint32_t* /*data*/) {
+bool ICowWriter::AddSequenceData(size_t /*num_ops*/, const uint32_t* /*data*/) {
     LOG(ERROR) << "AddSequenceData not yet implemented";
     return false;
 }
