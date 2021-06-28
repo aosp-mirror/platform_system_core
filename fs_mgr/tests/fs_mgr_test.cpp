@@ -120,7 +120,7 @@ const std::vector<std::pair<std::string, std::string>> result_space = {
 };
 
 const std::string bootconfig =
-        "androidboot.bootdevice  = \" \"1d84000.ufshc\"\n"
+        "androidboot.bootdevice = \"1d84000.ufshc\"\n"
         "androidboot.boot_devices = \"dev1\", \"dev2,withcomma\", \"dev3\"\n"
         "androidboot.baseband = \"sdy\"\n"
         "androidboot.keymaster = \"1\"\n"

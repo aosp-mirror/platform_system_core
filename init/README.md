@@ -406,6 +406,33 @@ at three times:
    3. Any time that property c transitions to value d, while property a already equals b.
 
 
+Trigger Sequence
+----------------
+
+Init uses the following sequence of triggers during early boot. These are the
+built-in triggers defined in init.cpp.
+
+   1. `early-init` - The first in the sequence, triggered after cgroups has been configured
+      but before ueventd's coldboot is complete.
+   2. `init` - Triggered after coldboot is complete.
+   3. `charger` - Triggered if `ro.bootmode == "charger"`.
+   4. `late-init` - Triggered if `ro.bootmode != "charger"`, or via healthd triggering a boot
+      from charging mode.
+
+Remaining triggers are configured in `init.rc` and are not built-in. The default sequence for
+these is specified under the "on late-init" event in `init.rc`. Actions internal to `init.rc`
+have been omitted.
+
+   1. `early-fs` - Start vold.
+   2. `fs` - Vold is up. Mount partitions not marked as first-stage or latemounted.
+   3. `post-fs` - Configure anything dependent on early mounts.
+   4. `late-fs` - Mount partitions marked as latemounted.
+   5. `post-fs-data` - Mount and configure `/data`; set up encryption. `/metadata` is
+      reformatted here if it couldn't mount in first-stage init.
+   6. `zygote-start` - Start the zygote.
+   7. `early-boot` - After zygote has started.
+   8. `boot` - After `early-boot` actions have completed.
+
 Commands
 --------
 
