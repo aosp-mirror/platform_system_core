@@ -46,3 +46,10 @@ prebuilt_etc {
     filename: "public.libraries.txt",
     installable: false,
 }
+
+// adb_debug.prop in debug ramdisk
+prebuilt_root {
+    name: "adb_debug.prop",
+    src: "adb_debug.prop",
+    debug_ramdisk: true,
+}

@@ -143,12 +143,11 @@ class CowReader : public ICowReader {
 
     void InitializeMerge();
 
+    // Number of copy, replace, and zero ops. Set if InitializeMerge is called.
     void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
-
     uint64_t total_data_ops() { return total_data_ops_; }
-
+    // Number of copy ops. Set if InitializeMerge is called.
     void set_copy_ops(uint64_t size) { copy_ops_ = size; }
-
     uint64_t total_copy_ops() { return copy_ops_; }
 
     void CloseCowFd() { owned_fd_ = {}; }
