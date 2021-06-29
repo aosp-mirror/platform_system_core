@@ -29,6 +29,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
+#include <bionic/macros.h>
 
 #include "tombstone.pb.h"
 
@@ -193,8 +194,11 @@ static void print_thread_memory_dump(CallbackType callback, const Tombstone& tom
     uint64_t addr = mem.begin_address();
     for (size_t offset = 0; offset < mem.memory().size(); offset += bytes_per_line) {
       uint64_t tagged_addr = addr;
-      if (mem.tags().size() > offset / kTagGranuleSize) {
-        tagged_addr |= static_cast<uint64_t>(mem.tags()[offset / kTagGranuleSize]) << 56;
+      if (mem.has_arm_mte_metadata() &&
+          mem.arm_mte_metadata().memory_tags().size() > offset / kTagGranuleSize) {
+        tagged_addr |=
+            static_cast<uint64_t>(mem.arm_mte_metadata().memory_tags()[offset / kTagGranuleSize])
+            << 56;
       }
       std::string line = StringPrintf("    %0*" PRIx64, word_size * 2, tagged_addr + offset);
 
@@ -230,6 +234,60 @@ static void print_thread(CallbackType callback, const Tombstone& tombstone, cons
   print_thread_registers(callback, tombstone, thread, false);
   print_thread_backtrace(callback, tombstone, thread, false);
   print_thread_memory_dump(callback, tombstone, thread);
+}
+
+static void print_tag_dump(CallbackType callback, const Tombstone& tombstone) {
+  if (!tombstone.has_signal_info()) return;
+
+  const Signal& signal = tombstone.signal_info();
+
+  if (!signal.has_fault_address() || !signal.has_fault_adjacent_metadata()) {
+    return;
+  }
+
+  const MemoryDump& memory_dump = signal.fault_adjacent_metadata();
+
+  if (!memory_dump.has_arm_mte_metadata() || memory_dump.arm_mte_metadata().memory_tags().empty()) {
+    return;
+  }
+
+  const std::string& tags = memory_dump.arm_mte_metadata().memory_tags();
+
+  CBS("");
+  CBS("Memory tags around the fault address (0x%" PRIx64 "), one tag per %zu bytes:",
+      signal.fault_address(), kTagGranuleSize);
+  constexpr uintptr_t kRowStartMask = ~(kNumTagColumns * kTagGranuleSize - 1);
+
+  size_t tag_index = 0;
+  size_t num_tags = tags.length();
+  uintptr_t fault_granule = untag_address(signal.fault_address()) & ~(kTagGranuleSize - 1);
+  for (size_t row = 0; tag_index < num_tags; ++row) {
+    uintptr_t row_addr =
+        (memory_dump.begin_address() + row * kNumTagColumns * kTagGranuleSize) & kRowStartMask;
+    std::string row_contents;
+    bool row_has_fault = false;
+
+    for (size_t column = 0; column < kNumTagColumns; ++column) {
+      uintptr_t granule_addr = row_addr + column * kTagGranuleSize;
+      if (granule_addr < memory_dump.begin_address() ||
+          granule_addr >= memory_dump.begin_address() + num_tags * kTagGranuleSize) {
+        row_contents += " . ";
+      } else if (granule_addr == fault_granule) {
+        row_contents += StringPrintf("[%1hhx]", tags[tag_index++]);
+        row_has_fault = true;
+      } else {
+        row_contents += StringPrintf(" %1hhx ", tags[tag_index++]);
+      }
+    }
+
+    if (row_contents.back() == ' ') row_contents.pop_back();
+
+    if (row_has_fault) {
+      CBS("    =>0x%" PRIxPTR ":%s", row_addr, row_contents.c_str());
+    } else {
+      CBS("      0x%" PRIxPTR ":%s", row_addr, row_contents.c_str());
+    }
+  }
 }
 
 static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
@@ -298,6 +356,8 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
       }
     }
   }
+
+  print_tag_dump(callback, tombstone);
 
   print_thread_memory_dump(callback, tombstone, thread);
 
