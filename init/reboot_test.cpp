@@ -113,6 +113,11 @@ service $name /system/bin/yes
 }
 
 TEST_F(RebootTest, StopServicesSIGTERM) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
     AddTestService("A");
     AddTestService("B");
 
@@ -148,6 +153,11 @@ TEST_F(RebootTest, StopServicesSIGTERM) {
 }
 
 TEST_F(RebootTest, StopServicesSIGKILL) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Skipping test, must be run as root.";
+        return;
+    }
+
     AddTestService("A");
     AddTestService("B");
 
