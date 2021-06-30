@@ -96,6 +96,12 @@ String16::String16(const String16& o)
     acquire();
 }
 
+String16::String16(String16&& o) noexcept
+    : mString(o.mString)
+{
+    o.mString = getEmptyString();
+}
+
 String16::String16(const String16& o, size_t len, size_t begin)
     : mString(getEmptyString())
 {
@@ -124,6 +130,13 @@ String16::String16(const char* o, size_t len)
 String16::~String16()
 {
     release();
+}
+
+String16& String16::operator=(String16&& other) noexcept {
+    release();
+    mString = other.mString;
+    other.mString = getEmptyString();
+    return *this;
 }
 
 size_t String16::size() const
