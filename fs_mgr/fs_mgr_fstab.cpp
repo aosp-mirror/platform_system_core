@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,15 +127,16 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
             }
             fs_options.append(flag);
 
-            if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
-                std::string arg;
-                if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
-                    arg = flag.substr(equal_sign + 1);
-                }
-                if (!ParseInt(arg, &entry->reserved_size)) {
-                    LWARNING << "Warning: reserve_root= flag malformed: " << arg;
-                } else {
-                    entry->reserved_size <<= 12;
+            if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
+                const auto arg = flag.substr(equal_sign + 1);
+                if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
+                    if (!ParseInt(arg, &entry->reserved_size)) {
+                        LWARNING << "Warning: reserve_root= flag malformed: " << arg;
+                    } else {
+                        entry->reserved_size <<= 12;
+                    }
+                } else if (StartsWith(flag, "lowerdir=")) {
+                    entry->lowerdir = std::move(arg);
                 }
             }
         }
@@ -690,19 +692,17 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
         TransformFstabForDsu(fstab, Split(lp_names, ","));
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
+    SkipMountingPartitions(fstab, false /* verbose */);
     EnableMandatoryFlags(fstab);
 
     return true;
 }
 
 // Returns fstab entries parsed from the device tree if they exist
-bool ReadFstabFromDt(Fstab* fstab, bool log) {
+bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
     std::string fstab_buf = ReadFstabFromDt();
     if (fstab_buf.empty()) {
-        if (log) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
+        if (verbose) LINFO << __FUNCTION__ << "(): failed to read fstab from dt";
         return false;
     }
 
@@ -710,34 +710,36 @@ bool ReadFstabFromDt(Fstab* fstab, bool log) {
         fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
                  fstab_buf.length(), "r"), fclose);
     if (!fstab_file) {
-        if (log) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
+        if (verbose) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
         return false;
     }
 
     if (!ReadFstabFile(fstab_file.get(), false, fstab)) {
-        if (log) {
+        if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;
         }
         return false;
     }
 
-#ifndef NO_SKIP_MOUNT
-    SkipMountingPartitions(fstab);
-#endif
+    SkipMountingPartitions(fstab, verbose);
 
     return true;
 }
 
-#ifndef NO_SKIP_MOUNT
+#ifdef NO_SKIP_MOUNT
+bool SkipMountingPartitions(Fstab*, bool) {
+    return true;
+}
+#else
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
 // only common files for all targets can be put into system partition. It is under
 // /system/system_ext because GSI is a single system.img that includes the contents of system_ext
 // partition and product partition under /system/system_ext and /system/product, respectively.
-bool SkipMountingPartitions(Fstab* fstab) {
-    constexpr const char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
+bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
+    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
 
     std::string skip_config;
     auto save_errno = errno;
@@ -746,19 +748,31 @@ bool SkipMountingPartitions(Fstab* fstab) {
         return true;
     }
 
-    for (const auto& skip_mount_point : Split(skip_config, "\n")) {
-        if (skip_mount_point.empty()) {
+    std::vector<std::string> skip_mount_patterns;
+    for (const auto& line : Split(skip_config, "\n")) {
+        if (line.empty() || StartsWith(line, "#")) {
             continue;
         }
-        auto it = std::remove_if(fstab->begin(), fstab->end(),
-                                 [&skip_mount_point](const auto& entry) {
-                                     return entry.mount_point == skip_mount_point;
-                                 });
-        if (it == fstab->end()) continue;
-        fstab->erase(it, fstab->end());
-        LOG(INFO) << "Skip mounting partition: " << skip_mount_point;
+        skip_mount_patterns.push_back(line);
     }
 
+    // Returns false if mount_point matches any of the skip mount patterns, so that the FstabEntry
+    // would be partitioned to the second group.
+    auto glob_pattern_mismatch = [&skip_mount_patterns](const FstabEntry& entry) -> bool {
+        for (const auto& pattern : skip_mount_patterns) {
+            if (!fnmatch(pattern.c_str(), entry.mount_point.c_str(), 0 /* flags */)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    auto remove_from = std::stable_partition(fstab->begin(), fstab->end(), glob_pattern_mismatch);
+    if (verbose) {
+        for (auto it = remove_from; it != fstab->end(); ++it) {
+            LINFO << "Skip mounting mountpoint: " << it->mount_point;
+        }
+    }
+    fstab->erase(remove_from, fstab->end());
     return true;
 }
 #endif
@@ -766,7 +780,7 @@ bool SkipMountingPartitions(Fstab* fstab) {
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
     Fstab dt_fstab;
-    ReadFstabFromDt(&dt_fstab, false);
+    ReadFstabFromDt(&dt_fstab, false /* verbose */);
 
     *fstab = std::move(dt_fstab);
 

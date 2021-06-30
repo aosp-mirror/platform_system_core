@@ -92,7 +92,6 @@ class FirstStageMount {
 
     bool MountPartitions();
     bool TrySwitchSystemAsRoot();
-    bool TrySkipMountingPartitions();
     bool IsDmLinearEnabled();
     void GetSuperDeviceName(std::set<std::string>* devices);
     bool InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata);
@@ -490,11 +489,17 @@ bool FirstStageMount::MountPartitions() {
 
     if (!TrySwitchSystemAsRoot()) return false;
 
-    if (!SkipMountingPartitions(&fstab_)) return false;
+    if (!SkipMountingPartitions(&fstab_, true /* verbose */)) return false;
 
     for (auto current = fstab_.begin(); current != fstab_.end();) {
         // We've already mounted /system above.
         if (current->mount_point == "/system") {
+            ++current;
+            continue;
+        }
+
+        // Handle overlayfs entries later.
+        if (current->fs_type == "overlay") {
             ++current;
             continue;
         }
@@ -521,6 +526,12 @@ bool FirstStageMount::MountPartitions() {
             }
         }
         current = end;
+    }
+
+    for (const auto& entry : fstab_) {
+        if (entry.fs_type == "overlay") {
+            fs_mgr_mount_overlayfs_fstab_entry(entry);
+        }
     }
 
     // If we don't see /system or / in the fstab, then we need to create an root entry for
@@ -634,6 +645,10 @@ bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) 
     // Includes the partition names of fstab records.
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (const auto& fstab_entry : fstab_) {
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
+        }
         if (!fstab_entry.fs_mgr_flags.logical) {
             devices->emplace(basename(fstab_entry.blk_device.c_str()));
         }
@@ -695,6 +710,10 @@ bool FirstStageMountVBootV2::GetDmVerityDevices(std::set<std::string>* devices) 
     for (const auto& fstab_entry : fstab_) {
         if (fstab_entry.fs_mgr_flags.avb) {
             need_dm_verity_ = true;
+        }
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
         }
         if (fstab_entry.fs_mgr_flags.logical) {
             // Don't try to find logical partitions via uevent regeneration.
