@@ -174,16 +174,6 @@ protected:
 
     template <size_t N>
     explicit constexpr String16(const StaticData<N>& s) : mString(s.data) {}
-
-public:
-    template <size_t N>
-    explicit constexpr String16(const StaticString16<N>& s) : mString(s.mString) {}
-    template <size_t N>
-    constexpr String16& operator=(const StaticString16<N>& s) {
-        release();
-        mString = s.mString;
-        return *this;
-    }
 };
 
 // String16 can be trivially moved using memcpy() because moving does not
