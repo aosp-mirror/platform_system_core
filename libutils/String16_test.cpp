@@ -58,6 +58,14 @@ TEST(String16Test, Copy) {
     EXPECT_STR16EQ(u"Verify me", another);
 }
 
+TEST(String16Test, CopyAssign) {
+    String16 tmp("Verify me");
+    String16 another;
+    another = tmp;
+    EXPECT_STR16EQ(u"Verify me", tmp);
+    EXPECT_STR16EQ(u"Verify me", another);
+}
+
 TEST(String16Test, Move) {
     String16 tmp("Verify me");
     String16 another(std::move(tmp));
@@ -130,10 +138,6 @@ TEST(String16Test, StaticStringMove) {
     String16 another(std::move(tmp));
     EXPECT_STR16EQ(u"Verify me", another);
     EXPECT_TRUE(another.isStaticString());
-    // move/copy from StaticString16 is specialized (just copy the handle).
-    // no extra actions required.
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_TRUE(tmp.isStaticString());
 }
 
 TEST(String16Test, StaticStringSize) {
@@ -185,16 +189,22 @@ TEST(String16Test, StringSetToStaticString) {
     EXPECT_STR16EQ(u"Verify me", another);
 }
 
+TEST(String16Test, StringCopyAssignFromStaticString) {
+    StaticString16 tmp(u"Verify me");
+    String16 another(u"nonstatic");
+    another = tmp;
+    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_TRUE(another.isStaticString());
+    EXPECT_STR16EQ(u"Verify me", tmp);
+    EXPECT_TRUE(tmp.isStaticString());
+}
+
 TEST(String16Test, StringMoveAssignFromStaticString) {
     StaticString16 tmp(u"Verify me");
     String16 another(u"nonstatic");
     another = std::move(tmp);
     EXPECT_STR16EQ(u"Verify me", another);
     EXPECT_TRUE(another.isStaticString());
-    // move/copy from StaticString16 is specialized (just copy handle).
-    // no extra actions required.
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_TRUE(tmp.isStaticString());
 }
 
 TEST(String16Test, EmptyStringIsStatic) {
