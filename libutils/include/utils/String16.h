@@ -41,6 +41,7 @@ class String16
 public:
                                 String16();
                                 String16(const String16& o);
+                                String16(String16&& o) noexcept;
                                 String16(const String16& o,
                                          size_t len,
                                          size_t begin=0);
@@ -69,6 +70,7 @@ public:
             status_t            append(const char16_t* other, size_t len);
 
     inline  String16&           operator=(const String16& other);
+            String16&           operator=(String16&& other) noexcept;
 
     inline  String16&           operator+=(const String16& other);
     inline  String16            operator+(const String16& other) const;
@@ -176,6 +178,12 @@ protected:
 public:
     template <size_t N>
     explicit constexpr String16(const StaticString16<N>& s) : mString(s.mString) {}
+    template <size_t N>
+    constexpr String16& operator=(const StaticString16<N>& s) {
+        release();
+        mString = s.mString;
+        return *this;
+    }
 };
 
 // String16 can be trivially moved using memcpy() because moving does not
