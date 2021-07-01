@@ -146,12 +146,6 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
         std::this_thread::sleep_for(5ms);
     }
 
-    // With the exception of boot or shutdown, system uid_ folders are always populated. Spinning
-    // here would needlessly delay most pid removals. Additionally, once empty a uid_ cgroup won't
-    // have processes hanging on it (we've already spun for all its pid_), so there's no need to
-    // spin anyway.
-    rmdir(uid_path.c_str());
-
     return ret;
 }
 
