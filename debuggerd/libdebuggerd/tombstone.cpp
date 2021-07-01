@@ -593,6 +593,9 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   };
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
+  auto process_memory =
+      unwindstack::Memory::CreateProcessMemoryCached(getpid());
+  unwinder.SetProcessMemory(process_memory);
   if (!unwinder.Init()) {
     async_safe_fatal("failed to init unwinder object");
   }
