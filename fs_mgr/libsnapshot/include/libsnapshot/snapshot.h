@@ -177,6 +177,9 @@ class ISnapshotManager {
     // code. Otherwise, MergeFailureCode::Ok is returned.
     virtual MergeFailureCode ReadMergeFailureCode() = 0;
 
+    // If an update is in progress, return the source build fingerprint.
+    virtual std::string ReadSourceBuildFingerprint() = 0;
+
     // Find the status of the current update, if any.
     //
     // |progress| depends on the returned status:
@@ -369,6 +372,7 @@ class SnapshotManager final : public ISnapshotManager {
     ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
     bool UnmapAllSnapshots() override;
+    std::string ReadSourceBuildFingerprint() override;
 
     // We can't use WaitForFile during first-stage init, because ueventd is not
     // running and therefore will not automatically create symlinks. Instead,
