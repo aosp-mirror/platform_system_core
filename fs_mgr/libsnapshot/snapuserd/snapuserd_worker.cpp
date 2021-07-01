@@ -183,10 +183,19 @@ bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
     }
     SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
                     << " Source: " << cow_op->source;
-    if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ,
-                                          cow_op->source * BLOCK_SZ)) {
-        SNAP_PLOG(ERROR) << "Copy-op failed. Read from backing store: " << backing_store_device_
-                         << "at block :" << cow_op->source;
+    uint64_t offset = cow_op->source;
+    if (cow_op->type == kCowCopyOp) {
+        offset *= BLOCK_SZ;
+    }
+    if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
+        std::string op;
+        if (cow_op->type == kCowCopyOp)
+            op = "Copy-op";
+        else {
+            op = "Xor-op";
+        }
+        SNAP_PLOG(ERROR) << op << " failed. Read from backing store: " << backing_store_device_
+                         << "at block :" << offset / BLOCK_SZ << " offset:" << offset % BLOCK_SZ;
         return false;
     }
 
@@ -221,6 +230,23 @@ bool WorkerThread::ProcessCopyOp(const CowOperation* cow_op) {
     return true;
 }
 
+bool WorkerThread::ProcessXorOp(const CowOperation* cow_op) {
+    if (!GetReadAheadPopulatedBuffer(cow_op)) {
+        SNAP_LOG(DEBUG) << " GetReadAheadPopulatedBuffer failed..."
+                        << " new_block: " << cow_op->new_block;
+        if (!ReadFromBaseDevice(cow_op)) {
+            return false;
+        }
+    }
+    xorsink_.Reset();
+    if (!reader_->ReadData(*cow_op, &xorsink_)) {
+        SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block;
+        return false;
+    }
+
+    return true;
+}
+
 bool WorkerThread::ProcessZeroOp() {
     // Zero out the entire block
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
@@ -250,6 +276,10 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
 
         case kCowCopyOp: {
             return ProcessCopyOp(cow_op);
+        }
+
+        case kCowXorOp: {
+            return ProcessXorOp(cow_op);
         }
 
         default: {
@@ -503,10 +533,10 @@ loff_t WorkerThread::GetMergeStartOffset(void* merged_buffer, void* unmerged_buf
 }
 
 int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffer, loff_t offset,
-                                       int unmerged_exceptions, bool* copy_op, bool* commit) {
+                                       int unmerged_exceptions, bool* ordered_op, bool* commit) {
     int merged_ops_cur_iter = 0;
     std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
-    *copy_op = false;
+    *ordered_op = false;
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
 
     // Find the operations which are merged in this cycle.
@@ -544,9 +574,9 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
             }
             const CowOperation* cow_op = it->second;
 
-            if (snapuserd_->IsReadAheadFeaturePresent() && cow_op->type == kCowCopyOp) {
-                *copy_op = true;
-                // Every single copy operation has to come from read-ahead
+            if (snapuserd_->IsReadAheadFeaturePresent() && IsOrderedOp(*cow_op)) {
+                *ordered_op = true;
+                // Every single ordered operation has to come from read-ahead
                 // cache.
                 if (read_ahead_buffer_map.find(cow_op->new_block) == read_ahead_buffer_map.end()) {
                     SNAP_LOG(ERROR)
@@ -590,7 +620,7 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
 bool WorkerThread::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     uint32_t stride = exceptions_per_area_ + 1;
     const std::vector<std::unique_ptr<uint8_t[]>>& vec = snapuserd_->GetMetadataVec();
-    bool copy_op = false;
+    bool ordered_op = false;
     bool commit = false;
 
     // ChunkID to vector index
@@ -615,7 +645,7 @@ bool WorkerThread::ProcessMergeComplete(chunk_t chunk, void* buffer) {
     }
 
     int merged_ops_cur_iter = GetNumberOfMergedOps(buffer, vec[divresult.quot].get(), offset,
-                                                   unmerged_exceptions, &copy_op, &commit);
+                                                   unmerged_exceptions, &ordered_op, &commit);
 
     // There should be at least one operation merged in this cycle
     if (!(merged_ops_cur_iter > 0)) {
@@ -623,7 +653,7 @@ bool WorkerThread::ProcessMergeComplete(chunk_t chunk, void* buffer) {
         return false;
     }
 
-    if (copy_op) {
+    if (ordered_op) {
         if (commit) {
             // Push the flushing logic to read-ahead thread so that merge thread
             // can make forward progress. Sync will happen in the background
@@ -852,6 +882,7 @@ void WorkerThread::InitializeBufsink() {
 
 bool WorkerThread::RunThread() {
     InitializeBufsink();
+    xorsink_.Initialize(&bufsink_, BLOCK_SZ);
 
     if (!InitializeFds()) {
         return false;
