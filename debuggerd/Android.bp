@@ -8,6 +8,7 @@ cc_defaults {
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-Wno-gcc-compat",
         "-Wno-unused-argument",
         "-Wno-unused-function",
         "-Wno-nullability-completeness",
