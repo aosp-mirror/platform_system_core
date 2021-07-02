@@ -253,11 +253,32 @@ cc_binary {
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
-// This currently is only for the VM usecase.
-// TODO(jiyong): replace init_first_stage in Android.mk with this
+soong_config_module_type {
+    name: "init_first_stage_cc_defaults",
+    module_type: "cc_defaults",
+    config_namespace: "ANDROID",
+    bool_variables: ["BOARD_BUILD_SYSTEM_ROOT_IMAGE", "BOARD_USES_RECOVERY_AS_BOOT"],
+    properties: ["installable"],
+}
+
+// Do not install init_first_stage even with mma if we're system-as-root.
+// Otherwise, it will overwrite the symlink.
+init_first_stage_cc_defaults {
+    name: "init_first_stage_defaults",
+    soong_config_variables: {
+        BOARD_BUILD_SYSTEM_ROOT_IMAGE: {
+            installable: false,
+        },
+        BOARD_USES_RECOVERY_AS_BOOT: {
+            installable: false,
+        },
+    },
+}
+
 cc_binary {
-    name: "init_first_stage_soong",
-    stem: "init_vendor",
+    name: "init_first_stage",
+    stem: "init",
+    defaults: ["init_first_stage_defaults"],
 
     srcs: [
         "block_dev_initializer.cpp",
@@ -313,6 +334,7 @@ cc_binary {
     ],
 
     static_executable: true,
+    system_shared_libs: [],
 
     cflags: [
         "-Wall",
@@ -363,8 +385,23 @@ cc_binary {
 
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
+
+        // First stage init is weird: it may start without stdout/stderr, and no /proc.
         hwaddress: false,
     },
+
+    // Install adb_debug.prop into debug ramdisk.
+    // This allows adb root on a user build, when debug ramdisk is used.
+    required: ["adb_debug.prop"],
+
+    ramdisk: true,
+
+    install_in_root: true,
+}
+
+phony {
+    name: "init_system",
+    required: ["init_second_stage"],
 }
 
 // Tests
