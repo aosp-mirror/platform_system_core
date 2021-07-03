@@ -191,6 +191,9 @@ message SnapshotUpdateStatus {
 
     // Merge failure code, filled if state == MergeFailed.
     MergeFailureCode merge_failure_code = 7;
+
+    // Source build fingerprint.
+    string source_build_fingerprint = 8;
 }
 
 // Next: 10
@@ -222,4 +225,7 @@ message SnapshotMergeReport {
 
     // Merge failure code, filled if state == MergeFailed.
     MergeFailureCode merge_failure_code = 9;
+
+    // The source fingerprint at the time the OTA was downloaded.
+    string source_build_fingerprint = 10;
 }
