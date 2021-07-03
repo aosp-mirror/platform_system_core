@@ -716,7 +716,7 @@ bool SnapshotManager::InitiateMerge() {
         }
     }
 
-    SnapshotUpdateStatus initial_status;
+    SnapshotUpdateStatus initial_status = ReadSnapshotUpdateStatus(lock.get());
     initial_status.set_state(UpdateState::Merging);
     initial_status.set_sectors_allocated(initial_target_values.sectors_allocated);
     initial_status.set_total_sectors(initial_target_values.total_sectors);
@@ -2515,15 +2515,25 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
     SnapshotUpdateStatus status;
     status.set_state(state);
 
-    if (state == UpdateState::MergeFailed) {
-        status.set_merge_failure_code(failure_code);
+    switch (state) {
+        case UpdateState::MergeFailed:
+            status.set_merge_failure_code(failure_code);
+            break;
+        case UpdateState::Initiated:
+            status.set_source_build_fingerprint(
+                    android::base::GetProperty("ro.build.fingerprint", ""));
+            break;
+        default:
+            break;
     }
 
     // If we're transitioning between two valid states (eg, we're not beginning
-    // or ending an OTA), then make sure to propagate the compression bit.
+    // or ending an OTA), then make sure to propagate the compression bit and
+    // build fingerprint.
     if (!(state == UpdateState::Initiated || state == UpdateState::None)) {
         SnapshotUpdateStatus old_status = ReadSnapshotUpdateStatus(lock);
         status.set_compression_enabled(old_status.compression_enabled());
+        status.set_source_build_fingerprint(old_status.source_build_fingerprint());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -2838,7 +2848,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
     }
 
-    SnapshotUpdateStatus status = {};
+    SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
     status.set_state(update_state);
     status.set_compression_enabled(cow_creator.compression_enabled);
     if (!WriteSnapshotUpdateStatus(lock.get(), status)) {
@@ -3264,9 +3274,10 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     std::stringstream ss;
 
+    auto update_status = ReadSnapshotUpdateStatus(file.get());
+
     ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
-    ss << "Compression: " << ReadSnapshotUpdateStatus(file.get()).compression_enabled()
-       << std::endl;
+    ss << "Compression: " << update_status.compression_enabled() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
     ss << "Rollback indicator: "
@@ -3275,6 +3286,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
     ss << "Forward merge indicator: "
        << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
        << std::endl;
+    ss << "Source build fingerprint: " << update_status.source_build_fingerprint() << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -3790,6 +3802,14 @@ MergeFailureCode SnapshotManager::ReadMergeFailureCode() {
         return MergeFailureCode::Ok;
     }
     return status.merge_failure_code();
+}
+
+std::string SnapshotManager::ReadSourceBuildFingerprint() {
+    auto lock = LockExclusive();
+    if (!lock) return {};
+
+    SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
+    return status.source_build_fingerprint();
 }
 
 }  // namespace snapshot
