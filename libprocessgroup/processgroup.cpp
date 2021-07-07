@@ -224,7 +224,11 @@ void removeAllProcessGroups() {
  * transferred for the user/group passed as uid/gid before system_server can properly access them.
  */
 static bool MkdirAndChown(const std::string& path, mode_t mode, uid_t uid, gid_t gid) {
-    if (mkdir(path.c_str(), mode) == -1 && errno != EEXIST) {
+    if (mkdir(path.c_str(), mode) == -1) {
+        if (errno == EEXIST) {
+            // Directory already exists and permissions have been set at the time it was created
+            return true;
+        }
         return false;
     }
 
