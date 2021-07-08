@@ -264,6 +264,8 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
         setfscreatecon(secontext.c_str());
     }
 
+    gid_t new_group = -1;
+
     dev_t dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
@@ -291,10 +293,21 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             PLOG(ERROR) << "Cannot set '" << secontext << "' SELinux label on '" << path
                         << "' device";
         }
+
+        struct stat s;
+        if (stat(path.c_str(), &s) == 0) {
+            if (gid != s.st_gid) {
+                new_group = gid;
+            }
+        } else {
+            PLOG(ERROR) << "Cannot stat " << path;
+        }
     }
 
 out:
-    chown(path.c_str(), uid, -1);
+    if (chown(path.c_str(), uid, new_group) < 0) {
+        PLOG(ERROR) << "Cannot chown " << path << " " << uid << " " << new_group;
+    }
     if (setegid(AID_ROOT)) {
         PLOG(FATAL) << "setegid(AID_ROOT) failed";
     }
