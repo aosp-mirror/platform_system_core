@@ -13,6 +13,5 @@ cc_binary {
         "libutils",
         "libhardware",
         "android.hardware.usb.gadget@1.0",
-        "libcutils",
     ],
 }

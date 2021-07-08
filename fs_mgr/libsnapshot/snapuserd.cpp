@@ -266,14 +266,15 @@ chunk_t Snapuserd::GetNextAllocatableChunkId(chunk_t chunk) {
 
 void Snapuserd::CheckMergeCompletionStatus() {
     if (!merge_initiated_) {
-        SNAP_LOG(INFO) << "Merge was not initiated. Total-data-ops: " << reader_->total_data_ops();
+        SNAP_LOG(INFO) << "Merge was not initiated. Total-data-ops: "
+                       << reader_->get_num_total_data_ops();
         return;
     }
 
     struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
 
     SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << ch->num_merge_ops
-                   << " Total-data-ops: " << reader_->total_data_ops();
+                   << " Total-data-ops: " << reader_->get_num_total_data_ops();
 }
 
 /*
@@ -352,7 +353,6 @@ bool Snapuserd::ReadMetadata() {
         return false;
     }
 
-    reader_->InitializeMerge();
     SNAP_LOG(DEBUG) << "Merge-ops: " << header.num_merge_ops;
 
     if (!MmapMetadata()) {
@@ -361,7 +361,7 @@ bool Snapuserd::ReadMetadata() {
     }
 
     // Initialize the iterator for reading metadata
-    cowop_riter_ = reader_->GetRevOpIter();
+    std::unique_ptr<ICowOpIter> cowop_rm_iter = reader_->GetRevMergeOpIter();
 
     exceptions_per_area_ = (CHUNK_SIZE << SECTOR_SHIFT) / sizeof(struct disk_exception);
 
@@ -379,15 +379,10 @@ bool Snapuserd::ReadMetadata() {
     // this memset will ensure that metadata read is completed.
     memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-    while (!cowop_riter_->Done()) {
-        const CowOperation* cow_op = &cowop_riter_->Get();
+    while (!cowop_rm_iter->Done()) {
+        const CowOperation* cow_op = &cowop_rm_iter->Get();
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
-
-        if (IsMetadataOp(*cow_op)) {
-            cowop_riter_->Next();
-            continue;
-        }
 
         metadata_found = true;
         // This loop will handle all the replace and zero ops.
@@ -395,7 +390,7 @@ bool Snapuserd::ReadMetadata() {
         // handling of assigning chunk-id's. Furthermore, we make
         // sure that replace/zero and copy ops are not batch merged; hence,
         // the bump in the chunk_id before break of this loop
-        if (cow_op->type == kCowCopyOp) {
+        if (IsOrderedOp(*cow_op)) {
             data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
             break;
         }
@@ -415,7 +410,7 @@ bool Snapuserd::ReadMetadata() {
         chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), cow_op));
         num_ops += 1;
         offset += sizeof(struct disk_exception);
-        cowop_riter_->Next();
+        cowop_rm_iter->Next();
 
         SNAP_LOG(DEBUG) << num_ops << ":"
                         << " Old-chunk: " << de->old_chunk << " New-chunk: " << de->new_chunk;
@@ -432,7 +427,7 @@ bool Snapuserd::ReadMetadata() {
                                                  sizeof(struct disk_exception));
             memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-            if (cowop_riter_->Done()) {
+            if (cowop_rm_iter->Done()) {
                 vec_.push_back(std::move(de_ptr));
             }
         }
@@ -445,18 +440,15 @@ bool Snapuserd::ReadMetadata() {
     std::map<uint64_t, const CowOperation*> map;
     std::set<uint64_t> dest_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
-    uint64_t total_copy_ops = reader_->total_copy_ops();
+    uint64_t total_copy_ops = reader_->get_num_ordered_ops_to_merge();
 
     SNAP_LOG(DEBUG) << " Processing copy-ops at Area: " << vec_.size()
                     << " Number of replace/zero ops completed in this area: " << num_ops
                     << " Pending copy ops for this area: " << pending_copy_ops;
-    while (!cowop_riter_->Done()) {
+
+    while (!cowop_rm_iter->Done()) {
         do {
-            const CowOperation* cow_op = &cowop_riter_->Get();
-            if (IsMetadataOp(*cow_op)) {
-                cowop_riter_->Next();
-                continue;
-            }
+            const CowOperation* cow_op = &cowop_rm_iter->Get();
 
             // We have two cases specific cases:
             //
@@ -572,8 +564,8 @@ bool Snapuserd::ReadMetadata() {
             map[cow_op->new_block] = cow_op;
             dest_blocks.insert(cow_op->source);
             prev_id = cow_op->new_block;
-            cowop_riter_->Next();
-        } while (!cowop_riter_->Done() && pending_copy_ops);
+            cowop_rm_iter->Next();
+        } while (!cowop_rm_iter->Done() && pending_copy_ops);
 
         data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
         SNAP_LOG(DEBUG) << "Batch Merge copy-ops of size: " << map.size()
@@ -611,7 +603,7 @@ bool Snapuserd::ReadMetadata() {
                                                      sizeof(struct disk_exception));
                 memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-                if (cowop_riter_->Done()) {
+                if (cowop_rm_iter->Done()) {
                     vec_.push_back(std::move(de_ptr));
                     SNAP_LOG(DEBUG) << "ReadMetadata() completed; Number of Areas: " << vec_.size();
                 }
@@ -661,7 +653,7 @@ bool Snapuserd::ReadMetadata() {
                    << " Replace-ops: " << replace_ops << " Zero-ops: " << zero_ops
                    << " Copy-ops: " << copy_ops << " Areas: " << vec_.size()
                    << " Num-ops-merged: " << header.num_merge_ops
-                   << " Total-data-ops: " << reader_->total_data_ops();
+                   << " Total-data-ops: " << reader_->get_num_total_data_ops();
 
     // Total number of sectors required for creating dm-user device
     num_sectors_ = ChunkToSector(data_chunk_id);
