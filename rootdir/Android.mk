@@ -210,4 +210,15 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
 		echo $(lib) >> $@;)
 
+#######################################
+# adb_debug.prop in debug ramdisk
+include $(CLEAR_VARS)
+LOCAL_MODULE := adb_debug.prop
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_DEBUG_RAMDISK_OUT)
+include $(BUILD_PREBUILT)
+
 include $(call all-makefiles-under,$(LOCAL_PATH))
