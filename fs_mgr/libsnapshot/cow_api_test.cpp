@@ -981,6 +981,137 @@ TEST_F(CowTest, DeleteMidCluster) {
     ASSERT_EQ(num_clusters, 1);
 }
 
+TEST_F(CowTest, BigSeqOp) {
+    CowOptions options;
+    CowWriter writer(options);
+    const int seq_len = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t) + 1;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len));
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+
+    for (int i = 0; i < seq_len; i++) {
+        ASSERT_TRUE(!iter->Done());
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, seq_len - i);
+
+        iter->Next();
+    }
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, RevMergeOpItrTest) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    CowWriter writer(options);
+    uint32_t sequence[] = {2, 10, 6, 7, 3, 5};
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(6, sequence));
+    ASSERT_TRUE(writer.AddCopy(6, 3));
+    ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
+    ASSERT_TRUE(writer.AddCopy(3, 5));
+    ASSERT_TRUE(writer.AddCopy(2, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(4, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(9, 1));
+    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, 1));
+    ASSERT_TRUE(writer.AddCopy(10, 2));
+    ASSERT_TRUE(writer.AddCopy(7, 4));
+    ASSERT_TRUE(writer.Finalize());
+
+    // New block in cow order is 6, 12, 8, 11, 3, 2, 4, 9, 5, 1, 10, 7
+    // New block in merge order is 2, 10, 6, 7, 3, 5, 12, 11, 9, 8, 4, 1
+    // RevMergeOrder is 1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10, 2
+    // new block 2 is "already merged", so will be left out.
+
+    std::vector<uint64_t> revMergeOpSequence = {1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10};
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+    auto expected_new_block = revMergeOpSequence.begin();
+
+    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, *expected_new_block);
+
+        iter->Next();
+        expected_new_block++;
+    }
+    ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, LegacyRevMergeOpItrTest) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddCopy(2, 1));
+    ASSERT_TRUE(writer.AddCopy(10, 2));
+    ASSERT_TRUE(writer.AddCopy(6, 3));
+    ASSERT_TRUE(writer.AddCopy(7, 4));
+    ASSERT_TRUE(writer.AddCopy(3, 5));
+    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(4, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(9, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, 1));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    // New block in cow order is 2, 10, 6, 7, 3, 5, 12, 8, 11, 4, 9, 1
+    // New block in merge order is 2, 10, 6, 7, 3, 5, 12, 11, 9, 8, 4, 1
+    // RevMergeOrder is 1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10, 2
+    // new block 2 is "already merged", so will be left out.
+
+    std::vector<uint64_t> revMergeOpSequence = {1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10};
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+    auto expected_new_block = revMergeOpSequence.begin();
+
+    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, *expected_new_block);
+
+        iter->Next();
+        expected_new_block++;
+    }
+    ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
+    ASSERT_TRUE(iter->Done());
+}
+
 }  // namespace snapshot
 }  // namespace android
 
