@@ -20,10 +20,12 @@
 #include <android/binder_process.h>
 
 #include <trusty_keymaster/TrustyKeyMintDevice.h>
+#include <trusty_keymaster/TrustyRemotelyProvisionedComponentDevice.h>
 #include <trusty_keymaster/TrustySecureClock.h>
 #include <trusty_keymaster/TrustySharedSecret.h>
 
 using aidl::android::hardware::security::keymint::trusty::TrustyKeyMintDevice;
+using aidl::android::hardware::security::keymint::trusty::TrustyRemotelyProvisionedComponentDevice;
 using aidl::android::hardware::security::secureclock::trusty::TrustySecureClock;
 using aidl::android::hardware::security::sharedsecret::trusty::TrustySharedSecret;
 
@@ -52,7 +54,8 @@ int main() {
     auto keyMint = addService<TrustyKeyMintDevice>(trustyKeymaster);
     auto secureClock = addService<TrustySecureClock>(trustyKeymaster);
     auto sharedSecret = addService<TrustySharedSecret>(trustyKeymaster);
-
+    auto remotelyProvisionedComponent =
+            addService<TrustyRemotelyProvisionedComponentDevice>(trustyKeymaster);
     ABinderProcess_joinThreadPool();
     return EXIT_FAILURE;  // should not reach
 }
