@@ -27,7 +27,6 @@ package {
 cc_library_static {
     name: "libfs_avb",
     defaults: ["fs_mgr_defaults"],
-    ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     export_include_dirs: ["include"],
