@@ -37,6 +37,8 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
         os << "kCowLabelOp,   ";
     else if (op.type == kCowClusterOp)
         os << "kCowClusterOp  ";
+    else if (op.type == kCowSequenceOp)
+        os << "kCowSequenceOp ";
     else if (op.type == kCowFooterOp)
         os << "kCowFooterOp  ";
     else
@@ -81,6 +83,16 @@ bool IsMetadataOp(const CowOperation& op) {
         case kCowLabelOp:
         case kCowClusterOp:
         case kCowFooterOp:
+        case kCowSequenceOp:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsOrderedOp(const CowOperation& op) {
+    switch (op.type) {
+        case kCowCopyOp:
             return true;
         default:
             return false;

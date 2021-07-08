@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
@@ -27,7 +28,6 @@ namespace android {
 namespace snapshot {
 
 class ICowOpIter;
-class ICowOpReverseIter;
 
 // A ByteSink object handles requests for a buffer of a specific size. It
 // always owns the underlying buffer. It's designed to minimize potential
@@ -75,8 +75,8 @@ class ICowReader {
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
-    // Return an reverse iterator for retrieving CowOperation entries.
-    virtual std::unique_ptr<ICowOpReverseIter> GetRevOpIter() = 0;
+    // Return an iterator for retrieving CowOperation entries in merge order
+    virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter() = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
@@ -87,21 +87,6 @@ class ICowReader {
 class ICowOpIter {
   public:
     virtual ~ICowOpIter() {}
-
-    // True if there are more items to read, false otherwise.
-    virtual bool Done() = 0;
-
-    // Read the current operation.
-    virtual const CowOperation& Get() = 0;
-
-    // Advance to the next item.
-    virtual void Next() = 0;
-};
-
-// Reverse Iterate over a sequence of COW operations.
-class ICowOpReverseIter {
-  public:
-    virtual ~ICowOpReverseIter() {}
 
     // True if there are more items to read, false otherwise.
     virtual bool Done() = 0;
@@ -135,25 +120,21 @@ class CowReader : public ICowReader {
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
-    std::unique_ptr<ICowOpReverseIter> GetRevOpIter() override;
+    std::unique_ptr<ICowOpIter> GetRevMergeOpIter() override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
-    void InitializeMerge();
+    uint64_t get_num_total_data_ops() { return num_total_data_ops_; }
 
-    // Number of copy, replace, and zero ops. Set if InitializeMerge is called.
-    void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
-    uint64_t total_data_ops() { return total_data_ops_; }
-    // Number of copy ops. Set if InitializeMerge is called.
-    void set_copy_ops(uint64_t size) { copy_ops_ = size; }
-    uint64_t total_copy_ops() { return copy_ops_; }
+    uint64_t get_num_ordered_ops_to_merge() { return num_ordered_ops_to_merge_; }
 
     void CloseCowFd() { owned_fd_ = {}; }
 
   private:
     bool ParseOps(std::optional<uint64_t> label);
+    bool PrepMergeOps();
     uint64_t FindNumCopyops();
 
     android::base::unique_fd owned_fd_;
@@ -163,8 +144,11 @@ class CowReader : public ICowReader {
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
-    uint64_t total_data_ops_;
-    uint64_t copy_ops_;
+    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
+    uint64_t num_total_data_ops_;
+    uint64_t num_ordered_ops_to_merge_;
+    bool has_seq_ops_;
 };
 
 }  // namespace snapshot
