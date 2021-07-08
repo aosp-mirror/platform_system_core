@@ -306,8 +306,6 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     uint32_t exceptions_per_area_;
     uint64_t num_sectors_;
 
-    std::unique_ptr<ICowOpIter> cowop_iter_;
-    std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
 
     // Vector of disk exception which is a
