@@ -118,7 +118,6 @@ cc_library_static {
     native_coverage : true,
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
-    ramdisk_available: true,
     recovery_available: true,
     cflags: [
         "-DLIBSNAPSHOT_NO_COW_WRITE",
