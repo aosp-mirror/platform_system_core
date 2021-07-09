@@ -114,6 +114,10 @@ bool CompressedSnapshotWriter::EmitLabel(uint64_t label) {
     return cow_->AddLabel(label);
 }
 
+bool CompressedSnapshotWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
+    return cow_->AddSequenceData(num_ops, data);
+}
+
 bool CompressedSnapshotWriter::Initialize() {
     return cow_->Initialize(cow_device_);
 }
@@ -179,6 +183,11 @@ bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block
 }
 
 bool OnlineKernelSnapshotWriter::EmitLabel(uint64_t) {
+    // Not Needed
+    return true;
+}
+
+bool OnlineKernelSnapshotWriter::EmitSequenceData(size_t, const uint32_t*) {
     // Not Needed
     return true;
 }
