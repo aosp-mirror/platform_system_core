@@ -790,20 +790,26 @@ static int __mount(const std::string& source, const std::string& target, const F
     int save_errno = 0;
     int gc_allowance = 0;
     std::string opts;
+    std::string checkpoint_opts;
     bool try_f2fs_gc_allowance = is_f2fs(entry.fs_type) && entry.fs_checkpoint_opts.length() > 0;
+    bool try_f2fs_fallback = false;
     Timer t;
 
     do {
-        if (save_errno == EINVAL && try_f2fs_gc_allowance) {
-            PINFO << "Kernel does not support checkpoint=disable:[n]%, trying without.";
+        if (save_errno == EINVAL && (try_f2fs_gc_allowance || try_f2fs_fallback)) {
+            PINFO << "Kernel does not support " << checkpoint_opts << ", trying without.";
             try_f2fs_gc_allowance = false;
+            // Attempt without gc allowance before dropping.
+            try_f2fs_fallback = !try_f2fs_fallback;
         }
         if (try_f2fs_gc_allowance) {
-            opts = entry.fs_options + entry.fs_checkpoint_opts + ":" +
-                   std::to_string(gc_allowance) + "%";
+            checkpoint_opts = entry.fs_checkpoint_opts + ":" + std::to_string(gc_allowance) + "%";
+        } else if (try_f2fs_fallback) {
+            checkpoint_opts = entry.fs_checkpoint_opts;
         } else {
-            opts = entry.fs_options;
+            checkpoint_opts = "";
         }
+        opts = entry.fs_options + checkpoint_opts;
         if (save_errno == EAGAIN) {
             PINFO << "Retrying mount (source=" << source << ",target=" << target
                   << ",type=" << entry.fs_type << ", gc_allowance=" << gc_allowance << "%)=" << ret
@@ -814,7 +820,7 @@ static int __mount(const std::string& source, const std::string& target, const F
         save_errno = errno;
         if (try_f2fs_gc_allowance) gc_allowance += 10;
     } while ((ret && save_errno == EAGAIN && gc_allowance <= 100) ||
-             (ret && save_errno == EINVAL && try_f2fs_gc_allowance));
+             (ret && save_errno == EINVAL && (try_f2fs_gc_allowance || try_f2fs_fallback)));
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
