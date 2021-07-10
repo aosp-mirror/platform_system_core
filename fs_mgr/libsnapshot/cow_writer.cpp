@@ -58,8 +58,8 @@ bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t
     return EmitRawBlocks(new_block_start, data, size);
 }
 
-bool AddXorBlocks(uint32_t /*new_block_start*/, const void* /*data*/, size_t /*size*/,
-                  uint32_t /*old_block*/, uint16_t /*offset*/) {
+bool ICowWriter::AddXorBlocks(uint32_t /*new_block_start*/, const void* /*data*/, size_t /*size*/,
+                              uint32_t /*old_block*/, uint16_t /*offset*/) {
     LOG(ERROR) << "AddXorBlocks not yet implemented";
     return false;
 }
