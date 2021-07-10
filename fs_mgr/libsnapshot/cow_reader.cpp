@@ -45,6 +45,23 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 #endif
 }
 
+std::unique_ptr<CowReader> CowReader::CloneCowReader() {
+    auto cow = std::make_unique<CowReader>();
+    cow->owned_fd_.reset();
+    cow->header_ = header_;
+    cow->footer_ = footer_;
+    cow->fd_size_ = fd_size_;
+    cow->last_label_ = last_label_;
+    cow->ops_ = ops_;
+    cow->merge_op_blocks_ = merge_op_blocks_;
+    cow->block_map_ = block_map_;
+    cow->num_total_data_ops_ = num_total_data_ops_;
+    cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
+    cow->has_seq_ops_ = has_seq_ops_;
+    cow->data_loc_ = data_loc_;
+    return cow;
+}
+
 bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
     owned_fd_ = std::move(fd);
     fd_ = owned_fd_.get();
@@ -138,6 +155,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
 
 bool CowReader::ParseOps(std::optional<uint64_t> label) {
     uint64_t pos;
+    auto data_loc = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
     // Skip the scratch space
     if (header_.major_version >= 2 && (header_.buffer_size > 0)) {
@@ -185,7 +203,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
             auto& current_op = ops_buffer->data()[current_op_num];
             current_op_num++;
             if (current_op.type == kCowXorOp) {
-                data_loc_[current_op.new_block] = data_pos;
+                data_loc->insert({current_op.new_block, data_pos});
             }
             pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
             data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
@@ -279,6 +297,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 
     ops_ = ops_buffer;
     ops_->shrink_to_fit();
+    data_loc_ = data_loc;
 
     return true;
 }
@@ -619,7 +638,7 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
 
     uint64_t offset;
     if (op.type == kCowXorOp) {
-        offset = data_loc_[op.new_block];
+        offset = data_loc_->at(op.new_block);
     } else {
         offset = op.source;
     }

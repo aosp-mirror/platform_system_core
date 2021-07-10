@@ -136,6 +136,9 @@ class CowReader : public ICowReader {
 
     void CloseCowFd() { owned_fd_ = {}; }
 
+    // Creates a clone of the current CowReader without the file handlers
+    std::unique_ptr<CowReader> CloneCowReader();
+
   private:
     bool ParseOps(std::optional<uint64_t> label);
     bool PrepMergeOps();
@@ -153,7 +156,7 @@ class CowReader : public ICowReader {
     uint64_t num_total_data_ops_;
     uint64_t num_ordered_ops_to_merge_;
     bool has_seq_ops_;
-    std::unordered_map<uint64_t, uint64_t> data_loc_;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
 };
 
 }  // namespace snapshot

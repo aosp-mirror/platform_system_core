@@ -244,6 +244,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
 
     bool InitializeWorkers();
+    std::unique_ptr<CowReader> CloneReaderForWorker();
     std::shared_ptr<Snapuserd> GetSharedPtr() { return shared_from_this(); }
 
     std::vector<std::pair<sector_t, const CowOperation*>>& GetChunkVec() { return chunk_vec_; }

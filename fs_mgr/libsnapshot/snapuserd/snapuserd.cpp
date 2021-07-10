@@ -53,6 +53,10 @@ bool Snapuserd::InitializeWorkers() {
     return true;
 }
 
+std::unique_ptr<CowReader> Snapuserd::CloneReaderForWorker() {
+    return reader_->CloneCowReader();
+}
+
 bool Snapuserd::CommitMerge(int num_merge_ops) {
     struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
     ch->num_merge_ops += num_merge_ops;

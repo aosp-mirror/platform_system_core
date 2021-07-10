@@ -105,11 +105,11 @@ bool WorkerThread::InitializeFds() {
 }
 
 bool WorkerThread::InitReader() {
-    reader_ = std::make_unique<CowReader>();
+    reader_ = snapuserd_->CloneReaderForWorker();
+
     if (!reader_->InitForMerge(std::move(cow_fd_))) {
         return false;
     }
-
     return true;
 }
 
