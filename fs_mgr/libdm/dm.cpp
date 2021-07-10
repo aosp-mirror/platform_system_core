@@ -170,19 +170,18 @@ static bool IsRecovery() {
     return access("/system/bin/recovery", F_OK) == 0;
 }
 
-bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
-                                const std::chrono::milliseconds& timeout_ms) {
+bool DeviceMapper::CreateEmptyDevice(const std::string& name) {
     std::string uuid = GenerateUuid();
-    if (!CreateDevice(name, uuid)) {
-        return false;
-    }
+    return CreateDevice(name, uuid);
+}
 
+bool DeviceMapper::WaitForDevice(const std::string& name,
+                                 const std::chrono::milliseconds& timeout_ms, std::string* path) {
     // We use the unique path for testing whether the device is ready. After
     // that, it's safe to use the dm-N path which is compatible with callers
     // that expect it to be formatted as such.
     std::string unique_path;
-    if (!LoadTableAndActivate(name, table) || !GetDeviceUniquePath(name, &unique_path) ||
-        !GetDmDevicePathByName(name, path)) {
+    if (!GetDeviceUniquePath(name, &unique_path) || !GetDmDevicePathByName(name, path)) {
         DeleteDevice(name);
         return false;
     }
@@ -205,6 +204,25 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, s
         DeleteDevice(name);
         return false;
     }
+    return true;
+}
+
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                                const std::chrono::milliseconds& timeout_ms) {
+    if (!CreateEmptyDevice(name)) {
+        return false;
+    }
+
+    if (!LoadTableAndActivate(name, table)) {
+        DeleteDevice(name);
+        return false;
+    }
+
+    if (!WaitForDevice(name, timeout_ms, path)) {
+        DeleteDevice(name);
+        return false;
+    }
+
     return true;
 }
 
