@@ -107,6 +107,20 @@ class BufferSink : public IByteSink {
     size_t buffer_size_;
 };
 
+class XorSink : public IByteSink {
+  public:
+    void Initialize(BufferSink* sink, size_t size);
+    void Reset();
+    void* GetBuffer(size_t requested, size_t* actual) override;
+    bool ReturnData(void* buffer, size_t len) override;
+
+  private:
+    BufferSink* bufsink_;
+    std::unique_ptr<uint8_t[]> buffer_;
+    size_t buffer_size_;
+    size_t returned_;
+};
+
 class Snapuserd;
 
 class ReadAheadThread {

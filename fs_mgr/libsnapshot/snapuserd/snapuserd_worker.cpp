@@ -71,6 +71,39 @@ void* BufferSink::GetPayloadBufPtr() {
     return msg->payload.buf;
 }
 
+void XorSink::Initialize(BufferSink* sink, size_t size) {
+    bufsink_ = sink;
+    buffer_size_ = size;
+    returned_ = 0;
+    buffer_ = std::make_unique<uint8_t[]>(size);
+}
+
+void XorSink::Reset() {
+    returned_ = 0;
+}
+
+void* XorSink::GetBuffer(size_t requested, size_t* actual) {
+    if (requested > buffer_size_) {
+        *actual = buffer_size_;
+    } else {
+        *actual = requested;
+    }
+    return buffer_.get();
+}
+
+bool XorSink::ReturnData(void* buffer, size_t len) {
+    uint8_t* xor_data = reinterpret_cast<uint8_t*>(buffer);
+    uint8_t* buff = reinterpret_cast<uint8_t*>(bufsink_->GetPayloadBuffer(len + returned_));
+    if (buff == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        buff[returned_ + i] ^= xor_data[i];
+    }
+    returned_ += len;
+    return true;
+}
+
 WorkerThread::WorkerThread(const std::string& cow_device, const std::string& backing_device,
                            const std::string& control_device, const std::string& misc_name,
                            std::shared_ptr<Snapuserd> snapuserd) {
