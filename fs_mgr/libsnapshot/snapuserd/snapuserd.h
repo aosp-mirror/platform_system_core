@@ -130,10 +130,10 @@ class ReadAheadThread {
     bool RunThread();
 
   private:
-    void InitializeIter();
-    bool IterDone();
-    void IterNext();
-    const CowOperation* GetIterOp();
+    void InitializeRAIter();
+    bool RAIterDone();
+    void RAIterNext();
+    const CowOperation* GetRAOpIter();
     void InitializeBuffer();
 
     bool InitializeFds();

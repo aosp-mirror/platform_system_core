@@ -185,11 +185,11 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_block, int* pending_ops,
     int num_ops = *pending_ops;
     int nr_consecutive = 0;
 
-    if (!IterDone() && num_ops) {
+    if (!RAIterDone() && num_ops) {
         // Get the first block
-        const CowOperation* cow_op = GetIterOp();
+        const CowOperation* cow_op = GetRAOpIter();
         *source_block = cow_op->source;
-        IterNext();
+        RAIterNext();
         num_ops -= 1;
         nr_consecutive = 1;
         blocks.push_back(cow_op->new_block);
@@ -201,15 +201,15 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_block, int* pending_ops,
         /*
          * Find number of consecutive blocks working backwards.
          */
-        while (!IterDone() && num_ops) {
-            const CowOperation* op = GetIterOp();
+        while (!RAIterDone() && num_ops) {
+            const CowOperation* op = GetRAOpIter();
             if (op->source != (*source_block - nr_consecutive)) {
                 break;
             }
             nr_consecutive += 1;
             num_ops -= 1;
             blocks.push_back(op->new_block);
-            IterNext();
+            RAIterNext();
 
             if (!overlap_) {
                 CheckOverlap(op);
@@ -247,12 +247,12 @@ bool ReadAheadThread::ReconstructDataFromCow() {
     // We are done re-constructing the mapping; however, we need to make sure
     // all the COW operations to-be merged are present in the re-constructed
     // mapping.
-    while (!IterDone()) {
-        const CowOperation* op = GetIterOp();
+    while (!RAIterDone()) {
+        const CowOperation* op = GetRAOpIter();
         if (read_ahead_buffer_map.find(op->new_block) != read_ahead_buffer_map.end()) {
             num_ops -= 1;
             snapuserd_->SetFinalBlockMerged(op->new_block);
-            IterNext();
+            RAIterNext();
         } else {
             // Verify that we have covered all the ops which were re-constructed
             // from COW device - These are the ops which are being
@@ -394,10 +394,10 @@ bool ReadAheadThread::RunThread() {
         return false;
     }
 
-    InitializeIter();
+    InitializeRAIter();
     InitializeBuffer();
 
-    while (!IterDone()) {
+    while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
             return false;
         }
@@ -433,21 +433,21 @@ bool ReadAheadThread::InitializeFds() {
     return true;
 }
 
-void ReadAheadThread::InitializeIter() {
+void ReadAheadThread::InitializeRAIter() {
     std::vector<const CowOperation*>& read_ahead_ops = snapuserd_->GetReadAheadOpsVec();
     read_ahead_iter_ = read_ahead_ops.rbegin();
 }
 
-bool ReadAheadThread::IterDone() {
+bool ReadAheadThread::RAIterDone() {
     std::vector<const CowOperation*>& read_ahead_ops = snapuserd_->GetReadAheadOpsVec();
     return read_ahead_iter_ == read_ahead_ops.rend();
 }
 
-void ReadAheadThread::IterNext() {
+void ReadAheadThread::RAIterNext() {
     read_ahead_iter_++;
 }
 
-const CowOperation* ReadAheadThread::GetIterOp() {
+const CowOperation* ReadAheadThread::GetRAOpIter() {
     return *read_ahead_iter_;
 }
 
