@@ -1184,6 +1184,53 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 }
 
+TEST_F(SnapshotUpdateTest, DuplicateOps) {
+    if (!IsCompressionEnabled()) {
+        GTEST_SKIP() << "Compression-only test";
+    }
+
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+
+    std::vector<PartitionUpdate*> partitions = {sys_, vnd_, prd_};
+    for (auto* partition : partitions) {
+        AddOperation(partition);
+
+        std::unique_ptr<ISnapshotWriter> writer;
+        auto res = MapUpdateSnapshot(partition->partition_name() + "_b", &writer);
+        ASSERT_TRUE(res);
+        ASSERT_TRUE(writer->AddZeroBlocks(0, 1));
+        ASSERT_TRUE(writer->AddZeroBlocks(0, 1));
+        ASSERT_TRUE(writer->Finalize());
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = NewManagerForFirstStageMount("_b");
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    // Initiate the merge and wait for it to be completed.
+    ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+}
+
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {

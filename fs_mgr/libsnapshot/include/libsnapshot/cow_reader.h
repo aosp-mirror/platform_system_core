@@ -126,6 +126,10 @@ class CowReader : public ICowReader {
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
+    // Returns the total number of data ops that should be merged. This is the
+    // count of the merge sequence before removing already-merged operations.
+    // It may be different than the actual data op count, for example, if there
+    // are duplicate ops in the stream.
     uint64_t get_num_total_data_ops() { return num_total_data_ops_; }
 
     uint64_t get_num_ordered_ops_to_merge() { return num_ordered_ops_to_merge_; }
