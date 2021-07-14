@@ -584,7 +584,7 @@
           }
         }
       ]
-    },
+    }
   ],
 
   "AggregateProfiles": [
@@ -635,6 +635,10 @@
     {
       "Name": "CPUSET_SP_RESTRICTED",
       "Profiles": [ "ServiceCapacityRestricted", "TimerSlackNormal" ]
+    },
+    {
+      "Name": "Dex2OatBootComplete",
+      "Profiles": [ "SCHED_SP_BACKGROUND" ]
     }
   ]
 }
