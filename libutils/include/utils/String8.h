@@ -137,14 +137,6 @@ public:
      */
 
     /*
-     * Set the filename field to a specific value.
-     *
-     * Normalizes the filename, removing a trailing '/' if present.
-     */
-    void setPathName(const char* name);
-    void setPathName(const char* name, size_t numChars);
-
-    /*
      * Get just the filename component.
      *
      * "/tmp/foo/bar.c" --> "bar.c"
