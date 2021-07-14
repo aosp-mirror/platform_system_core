@@ -121,7 +121,7 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
 }
 
 static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt_footer,
-                       bool needs_projid, bool needs_casefold) {
+                       bool needs_projid, bool needs_casefold, bool fs_compress) {
     if (!dev_sz) {
         int rc = get_dev_sz(fs_blkdev, &dev_sz);
         if (rc) {
@@ -147,6 +147,12 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
         args.push_back("-C");
         args.push_back("utf8");
     }
+    if (fs_compress) {
+        args.push_back("-O");
+        args.push_back("compression");
+        args.push_back("-O");
+        args.push_back("extra_attr");
+    }
     args.push_back(fs_blkdev.c_str());
     args.push_back(size_str.c_str());
 
@@ -166,7 +172,7 @@ int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
 
     if (entry.fs_type == "f2fs") {
         return format_f2fs(entry.blk_device, entry.length, crypt_footer, needs_projid,
-                           needs_casefold);
+                           needs_casefold, entry.fs_mgr_flags.fs_compress);
     } else if (entry.fs_type == "ext4") {
         return format_ext4(entry.blk_device, entry.mount_point, crypt_footer, needs_projid,
                            entry.fs_mgr_flags.ext_meta_csum);
