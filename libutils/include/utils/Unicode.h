@@ -27,7 +27,6 @@ int strcmp16(const char16_t *, const char16_t *);
 int strncmp16(const char16_t *s1, const char16_t *s2, size_t n);
 size_t strlen16(const char16_t *);
 size_t strnlen16(const char16_t *, size_t);
-char16_t *strcpy16(char16_t *, const char16_t *);
 char16_t *strstr16(const char16_t*, const char16_t*);
 
 // Version of comparison that supports embedded NULs.
@@ -38,10 +37,6 @@ char16_t *strstr16(const char16_t*, const char16_t*);
 // your string is not nul-terminated as it will have the
 // equivalent result as strcmp16 (unlike strncmp16).
 int strzcmp16(const char16_t *s1, size_t n1, const char16_t *s2, size_t n2);
-
-// Standard string functions on char32_t strings.
-size_t strlen32(const char32_t *);
-size_t strnlen32(const char32_t *, size_t);
 
 /**
  * Measure the length of a UTF-32 string in UTF-8. If the string is invalid
@@ -109,24 +104,6 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len);
  * NUL terminator.
  */
 void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_len);
-
-/**
- * Returns the length of "src" when "src" is valid UTF-8 string.
- * Returns 0 if src is NULL or 0-length string. Returns -1 when the source
- * is an invalid string.
- *
- * This function should be used to determine whether "src" is valid UTF-8
- * characters with valid unicode codepoints. "src" must be nul-terminated.
- *
- * If you are going to use other utf8_to_... functions defined in this header
- * with string which may not be valid UTF-8 with valid codepoint (form 0 to
- * 0x10FFFF), you should use this function before calling others, since the
- * other functions do not check whether the string is valid UTF-8 or not.
- *
- * If you do not care whether "src" is valid UTF-8 or not, you should use
- * strlen() as usual, which should be much faster.
- */
-ssize_t utf8_length(const char *src);
 
 /**
  * Returns the UTF-16 length of UTF-8 string "src". Returns -1 in case

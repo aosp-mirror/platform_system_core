@@ -30,9 +30,9 @@ void atrace_set_tracing_enabled(bool enabled)
 
 static void atrace_init_once()
 {
-    atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+    atrace_marker_fd = open("/sys/kernel/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     if (atrace_marker_fd == -1) {
-        atrace_marker_fd = open("/sys/kernel/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
+        atrace_marker_fd = open("/sys/kernel/debug/tracing/trace_marker", O_WRONLY | O_CLOEXEC);
     }
 
     if (atrace_marker_fd == -1) {

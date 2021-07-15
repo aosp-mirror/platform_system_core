@@ -26,58 +26,26 @@
 
 #include <utils/Log.h>
 
-/*****************************************************************************/
-
 namespace android {
 
 StopWatch::StopWatch(const char* name, int clock) : mName(name), mClock(clock) {
     reset();
 }
 
-StopWatch::~StopWatch()
-{
-    nsecs_t elapsed = elapsedTime();
-    const int n = mNumLaps;
-    ALOGD("StopWatch %s (us): %" PRId64 " ", mName, ns2us(elapsed));
-    for (int i=0 ; i<n ; i++) {
-        const nsecs_t soFar = mLaps[i].soFar;
-        const nsecs_t thisLap = mLaps[i].thisLap;
-        ALOGD(" [%d: %" PRId64 ", %" PRId64, i, ns2us(soFar), ns2us(thisLap));
-    }
+StopWatch::~StopWatch() {
+    ALOGD("StopWatch %s (us): %" PRId64 " ", name(), ns2us(elapsedTime()));
 }
 
-const char* StopWatch::name() const
-{
+const char* StopWatch::name() const {
     return mName;
 }
 
-nsecs_t StopWatch::lap()
-{
-    nsecs_t elapsed = elapsedTime();
-    if (mNumLaps >= 8) {
-        elapsed = 0;
-    } else {
-        const int n = mNumLaps;
-        mLaps[n].soFar   = elapsed;
-        mLaps[n].thisLap = n ? (elapsed - mLaps[n-1].soFar) : elapsed;
-        mNumLaps = n+1;
-    }
-    return elapsed;
-}
-
-nsecs_t StopWatch::elapsedTime() const
-{
+nsecs_t StopWatch::elapsedTime() const {
     return systemTime(mClock) - mStartTime;
 }
 
-void StopWatch::reset()
-{
-    mNumLaps = 0;
+void StopWatch::reset() {
     mStartTime = systemTime(mClock);
 }
 
-
-/*****************************************************************************/
-
-}; // namespace android
-
+}  // namespace android

@@ -48,6 +48,17 @@ bool DumpCmdHandler(int /*argc*/, char** argv) {
     return SnapshotManager::New()->Dump(std::cout);
 }
 
+bool MapCmdHandler(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::StderrLogger);
+    using namespace std::chrono_literals;
+    return SnapshotManager::New()->MapAllSnapshots(5000ms);
+}
+
+bool UnmapCmdHandler(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::StderrLogger);
+    return SnapshotManager::New()->UnmapAllSnapshots();
+}
+
 bool MergeCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
     LOG(WARNING) << "Deprecated. Call update_engine_client --merge instead.";
@@ -58,6 +69,8 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         // clang-format off
         {"dump", DumpCmdHandler},
         {"merge", MergeCmdHandler},
+        {"map", MapCmdHandler},
+        {"unmap", UnmapCmdHandler},
         // clang-format on
 };
 

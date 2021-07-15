@@ -16,6 +16,8 @@
 
 #include <libfiemap/image_manager.h>
 
+#include <optional>
+
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -53,7 +55,8 @@ using android::fs_mgr::GetPartitionName;
 static constexpr char kTestImageMetadataDir[] = "/metadata/gsi/test";
 static constexpr char kOtaTestImageMetadataDir[] = "/metadata/gsi/ota/test";
 
-std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) {
+std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix,
+                                                 const DeviceInfo& device_info) {
     auto metadata_dir = "/metadata/gsi/" + dir_prefix;
     auto data_dir = "/data/gsi/" + dir_prefix;
     auto install_dir_file = gsi::DsuInstallDirFile(gsi::GetDsuSlot(dir_prefix));
@@ -61,17 +64,28 @@ std::unique_ptr<ImageManager> ImageManager::Open(const std::string& dir_prefix) 
     if (ReadFileToString(install_dir_file, &path)) {
         data_dir = path;
     }
-    return Open(metadata_dir, data_dir);
+    return Open(metadata_dir, data_dir, device_info);
 }
 
 std::unique_ptr<ImageManager> ImageManager::Open(const std::string& metadata_dir,
-                                                 const std::string& data_dir) {
-    return std::unique_ptr<ImageManager>(new ImageManager(metadata_dir, data_dir));
+                                                 const std::string& data_dir,
+                                                 const DeviceInfo& device_info) {
+    return std::unique_ptr<ImageManager>(new ImageManager(metadata_dir, data_dir, device_info));
 }
 
-ImageManager::ImageManager(const std::string& metadata_dir, const std::string& data_dir)
-    : metadata_dir_(metadata_dir), data_dir_(data_dir) {
+ImageManager::ImageManager(const std::string& metadata_dir, const std::string& data_dir,
+                           const DeviceInfo& device_info)
+    : metadata_dir_(metadata_dir), data_dir_(data_dir), device_info_(device_info) {
     partition_opener_ = std::make_unique<android::fs_mgr::PartitionOpener>();
+
+    // Allow overriding whether ImageManager thinks it's in recovery, for testing.
+#ifdef __ANDROID_RECOVERY__
+    device_info_.is_recovery = {true};
+#else
+    if (!device_info_.is_recovery.has_value()) {
+        device_info_.is_recovery = {false};
+    }
+#endif
 }
 
 std::string ImageManager::GetImageHeaderPath(const std::string& name) {
@@ -136,13 +150,13 @@ bool ImageManager::BackingImageExists(const std::string& name) {
     return !!FindPartition(*metadata.get(), name);
 }
 
-static bool IsTestDir(const std::string& path) {
-    return android::base::StartsWith(path, kTestImageMetadataDir) ||
-           android::base::StartsWith(path, kOtaTestImageMetadataDir);
+bool ImageManager::MetadataDirIsTest() const {
+    return IsSubdir(metadata_dir_, kTestImageMetadataDir) ||
+           IsSubdir(metadata_dir_, kOtaTestImageMetadataDir);
 }
 
-static bool IsUnreliablePinningAllowed(const std::string& path) {
-    return android::base::StartsWith(path, "/data/gsi/dsu/") || IsTestDir(path);
+bool ImageManager::IsUnreliablePinningAllowed() const {
+    return IsSubdir(data_dir_, "/data/gsi/dsu/") || MetadataDirIsTest();
 }
 
 FiemapStatus ImageManager::CreateBackingImage(
@@ -159,7 +173,7 @@ FiemapStatus ImageManager::CreateBackingImage(
     if (!FilesystemHasReliablePinning(data_path, &reliable_pinning)) {
         return FiemapStatus::Error();
     }
-    if (!reliable_pinning && !IsUnreliablePinningAllowed(data_path)) {
+    if (!reliable_pinning && !IsUnreliablePinningAllowed()) {
         // For historical reasons, we allow unreliable pinning for certain use
         // cases (DSUs, testing) because the ultimate use case is either
         // developer-oriented or ephemeral (the intent is to boot immediately
@@ -178,7 +192,7 @@ FiemapStatus ImageManager::CreateBackingImage(
     // if device-mapper is stacked in some complex way not supported by
     // FiemapWriter.
     auto device_path = GetDevicePathForFile(fw.get());
-    if (android::base::StartsWith(device_path, "/dev/block/dm-") && !IsTestDir(metadata_dir_)) {
+    if (android::base::StartsWith(device_path, "/dev/block/dm-") && !MetadataDirIsTest()) {
         LOG(ERROR) << "Cannot persist images against device-mapper device: " << device_path;
 
         fw = {};
@@ -259,10 +273,11 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         return false;
     }
 
-#if defined __ANDROID_RECOVERY__
-    LOG(ERROR) << "Cannot remove images backed by /data in recovery";
-    return false;
-#else
+    if (device_info_.is_recovery.value()) {
+        LOG(ERROR) << "Cannot remove images backed by /data in recovery";
+        return false;
+    }
+
     std::string message;
     auto header_file = GetImageHeaderPath(name);
     if (!SplitFiemap::RemoveSplitFiles(header_file, &message)) {
@@ -276,7 +291,6 @@ bool ImageManager::DeleteBackingImage(const std::string& name) {
         LOG(ERROR) << "Error removing " << status_file << ": " << message;
     }
     return RemoveImageMetadata(metadata_dir_, name);
-#endif
 }
 
 // Create a block device for an image file, using its extents in its
@@ -486,15 +500,14 @@ bool ImageManager::MapWithLoopDevice(const std::string& name,
         if (!MapWithLoopDeviceList(loop_devices, name, timeout_ms, path)) {
             return false;
         }
+    } else {
+        auto status_message = "loop:" + loop_devices.back();
+        auto status_file = GetStatusFilePath(name);
+        if (!android::base::WriteStringToFile(status_message, status_file)) {
+            PLOG(ERROR) << "Write failed: " << status_file;
+            return false;
+        }
     }
-
-    auto status_message = "loop:" + loop_devices.back();
-    auto status_file = GetStatusFilePath(name);
-    if (!android::base::WriteStringToFile(status_message, status_file)) {
-        PLOG(ERROR) << "Write failed: " << status_file;
-        return false;
-    }
-
     auto_detach.Commit();
 
     *path = loop_devices.back();
@@ -520,6 +533,9 @@ bool ImageManager::MapImageDevice(const std::string& name,
     // filesystem. This should only happen on devices with no encryption, or
     // devices with FBE and no metadata encryption. For these cases it suffices
     // to perform normal file writes to /data/gsi (which is unencrypted).
+    //
+    // Note: this is not gated on DeviceInfo, because the recovery-specific path
+    // must only be used in actual recovery.
     std::string block_device;
     bool can_use_devicemapper;
     if (!FiemapWriter::GetBlockDeviceForFile(image_header, &block_device, &can_use_devicemapper)) {
@@ -575,7 +591,7 @@ bool ImageManager::UnmapImageDevice(const std::string& name, bool force) {
         return false;
     }
     auto& dm = DeviceMapper::Instance();
-    LoopControl loop;
+    std::optional<LoopControl> loop;
 
     std::string status;
     auto status_file = GetStatusFilePath(name);
@@ -599,9 +615,14 @@ bool ImageManager::UnmapImageDevice(const std::string& name, bool force) {
                 return false;
             }
         } else if (pieces[0] == "loop") {
+            // Lazily connect to loop-control to avoid spurious errors in recovery.
+            if (!loop.has_value()) {
+                loop.emplace();
+            }
+
             // Failure to remove a loop device is not fatal, since we can still
             // remove the backing file if we want.
-            loop.Detach(pieces[1]);
+            loop->Detach(pieces[1]);
         } else {
             LOG(ERROR) << "Unknown status: " << pieces[0];
         }
@@ -640,16 +661,22 @@ bool ImageManager::Validate() {
         return false;
     }
 
+    bool ok = true;
     for (const auto& partition : metadata->partitions) {
         auto name = GetPartitionName(partition);
         auto image_path = GetImageHeaderPath(name);
         auto fiemap = SplitFiemap::Open(image_path);
-        if (!fiemap || !fiemap->HasPinnedExtents()) {
-            LOG(ERROR) << "Image is missing or was moved: " << image_path;
-            return false;
+        if (fiemap == nullptr) {
+            LOG(ERROR) << "SplitFiemap::Open(\"" << image_path << "\") failed";
+            ok = false;
+            continue;
+        }
+        if (!fiemap->HasPinnedExtents()) {
+            LOG(ERROR) << "Image doesn't have pinned extents: " << image_path;
+            ok = false;
         }
     }
-    return true;
+    return ok;
 }
 
 bool ImageManager::DisableImage(const std::string& name) {
