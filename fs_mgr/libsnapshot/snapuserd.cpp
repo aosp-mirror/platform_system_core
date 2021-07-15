@@ -64,7 +64,7 @@ bool Snapuserd::CommitMerge(int num_merge_ops) {
 
     int ret = msync(mapped_addr_, BLOCK_SZ, MS_SYNC);
     if (ret < 0) {
-        PLOG(ERROR) << "msync header failed: " << ret;
+        SNAP_PLOG(ERROR) << "msync header failed: " << ret;
         return false;
     }
 

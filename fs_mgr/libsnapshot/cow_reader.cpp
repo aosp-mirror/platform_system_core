@@ -381,10 +381,10 @@ bool CowReader::PrepMergeOps() {
     std::set<int, std::greater<int>> other_ops;
     auto seq_ops_set = std::unordered_set<uint32_t>();
     auto block_map = std::make_shared<std::unordered_map<uint32_t, int>>();
-    int num_seqs = 0;
+    size_t num_seqs = 0;
     size_t read;
 
-    for (int i = 0; i < ops_->size(); i++) {
+    for (size_t i = 0; i < ops_->size(); i++) {
         auto& current_op = ops_->data()[i];
 
         if (current_op.type == kCowSequenceOp) {
@@ -396,7 +396,7 @@ bool CowReader::PrepMergeOps() {
                 PLOG(ERROR) << "Failed to read sequence op!";
                 return false;
             }
-            for (int j = num_seqs; j < num_seqs + seq_len; j++) {
+            for (size_t j = num_seqs; j < num_seqs + seq_len; j++) {
                 seq_ops_set.insert(merge_op_blocks->data()[j]);
             }
             num_seqs += seq_len;
@@ -413,10 +413,11 @@ bool CowReader::PrepMergeOps() {
         }
         block_map->insert({current_op.new_block, i});
     }
-    if (merge_op_blocks->size() > header_.num_merge_ops)
+    if (merge_op_blocks->size() > header_.num_merge_ops) {
         num_ordered_ops_to_merge_ = merge_op_blocks->size() - header_.num_merge_ops;
-    else
+    } else {
         num_ordered_ops_to_merge_ = 0;
+    }
     merge_op_blocks->reserve(merge_op_blocks->size() + other_ops.size());
     for (auto block : other_ops) {
         merge_op_blocks->emplace_back(block);
