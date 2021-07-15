@@ -222,7 +222,7 @@ TEST(BasicUtilTest, ListFiles) {
     base::FilePath test_dir;
     ASSERT_TRUE(base::CreateTemporaryDirInDir(tmp_dir, "list-file-tests.", &test_dir));
 
-    // Generates dummy files to list.
+    // Generates test files to list.
     base::FilePath file_path_1 = test_dir.Append("1.txt");
     ASSERT_TRUE(base::WriteFile(file_path_1, "1", 1));
     base::FilePath file_path_2 = test_dir.Append("2.txt");
@@ -253,7 +253,7 @@ TEST(BasicUtilTest, ListFilesShouldDiscardSymlink) {
     base::FilePath test_dir;
     ASSERT_TRUE(base::CreateTemporaryDirInDir(tmp_dir, "list-file-tests.", &test_dir));
 
-    // Generates dummy files to list.
+    // Generates test files to list.
     base::FilePath file_path_1 = test_dir.Append("1.txt");
     ASSERT_TRUE(base::WriteFile(file_path_1, "1", 1));
     base::FilePath file_path_2 = test_dir.Append("2.txt");
@@ -281,7 +281,7 @@ TEST(BasicUtilTest, ListFilesOpenDirFailure) {
     base::FilePath tmp_dir;
     ASSERT_TRUE(GetTempDir(&tmp_dir));
 
-    // Generates dummy files to list.
+    // Generates test files to list.
     base::FilePath no_such_dir = tmp_dir.Append("not_such_dir");
 
     auto fail = ListFiles(no_such_dir.value());

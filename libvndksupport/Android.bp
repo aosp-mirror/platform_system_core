@@ -1,6 +1,13 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_library {
     name: "libvndksupport",
     native_bridge_supported: true,
+    llndk: {
+        symbol_file: "libvndksupport.map.txt",
+    },
     srcs: ["linker.cpp"],
     cflags: [
         "-Wall",
@@ -17,11 +24,4 @@ cc_library {
         symbol_file: "libvndksupport.map.txt",
         versions: ["29"],
     },
-}
-
-llndk_library {
-    name: "libvndksupport",
-    native_bridge_supported: true,
-    symbol_file: "libvndksupport.map.txt",
-    export_include_dirs: ["include"],
 }
