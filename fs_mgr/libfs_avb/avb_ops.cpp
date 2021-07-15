@@ -52,16 +52,16 @@ static AvbIOResult read_from_partition(AvbOps* ops, const char* partition, int64
             partition, offset, num_bytes, buffer, out_num_read);
 }
 
-static AvbIOResult dummy_read_rollback_index(AvbOps* ops ATTRIBUTE_UNUSED,
-                                             size_t rollback_index_location ATTRIBUTE_UNUSED,
-                                             uint64_t* out_rollback_index) {
+static AvbIOResult no_op_read_rollback_index(AvbOps* ops ATTRIBUTE_UNUSED,
+                                            size_t rollback_index_location ATTRIBUTE_UNUSED,
+                                            uint64_t* out_rollback_index) {
     // rollback_index has been checked in bootloader phase.
     // In user-space, returns the smallest value 0 to pass the check.
     *out_rollback_index = 0;
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_validate_vbmeta_public_key(
+static AvbIOResult no_op_validate_vbmeta_public_key(
         AvbOps* ops ATTRIBUTE_UNUSED, const uint8_t* public_key_data ATTRIBUTE_UNUSED,
         size_t public_key_length ATTRIBUTE_UNUSED,
         const uint8_t* public_key_metadata ATTRIBUTE_UNUSED,
@@ -76,8 +76,8 @@ static AvbIOResult dummy_validate_vbmeta_public_key(
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_read_is_device_unlocked(AvbOps* ops ATTRIBUTE_UNUSED,
-                                                 bool* out_is_unlocked) {
+static AvbIOResult no_op_read_is_device_unlocked(AvbOps* ops ATTRIBUTE_UNUSED,
+                                                bool* out_is_unlocked) {
     // The function is for bootloader to update the value into
     // androidboot.vbmeta.device_state in kernel cmdline.
     // In user-space, returns true as we don't need to update it anymore.
@@ -85,9 +85,9 @@ static AvbIOResult dummy_read_is_device_unlocked(AvbOps* ops ATTRIBUTE_UNUSED,
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNUSED,
-                                                       const char* partition ATTRIBUTE_UNUSED,
-                                                       char* guid_buf, size_t guid_buf_size) {
+static AvbIOResult no_op_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNUSED,
+                                                      const char* partition ATTRIBUTE_UNUSED,
+                                                      char* guid_buf, size_t guid_buf_size) {
     // The function is for bootloader to set the correct UUID
     // for a given partition in kernel cmdline.
     // In user-space, returns a faking one as we don't need to update
@@ -96,9 +96,9 @@ static AvbIOResult dummy_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNU
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult dummy_get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
-                                               const char* partition ATTRIBUTE_UNUSED,
-                                               uint64_t* out_size_num_byte) {
+static AvbIOResult no_op_get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
+                                              const char* partition ATTRIBUTE_UNUSED,
+                                              uint64_t* out_size_num_byte) {
     // The function is for bootloader to load entire content of AVB HASH partitions.
     // In user-space, returns 0 as we only need to set up AVB HASHTHREE partitions.
     *out_size_num_byte = 0;
@@ -123,15 +123,15 @@ FsManagerAvbOps::FsManagerAvbOps() {
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
     // Other I/O operations are only required in bootloader but not in
-    // user-space so we set them as dummy operations. Also zero the entire
+    // user-space so we set them as no-op operations. Also zero the entire
     // struct so operations added in the future will be set to NULL.
     memset(&avb_ops_, 0, sizeof(AvbOps));
     avb_ops_.read_from_partition = read_from_partition;
-    avb_ops_.read_rollback_index = dummy_read_rollback_index;
-    avb_ops_.validate_vbmeta_public_key = dummy_validate_vbmeta_public_key;
-    avb_ops_.read_is_device_unlocked = dummy_read_is_device_unlocked;
-    avb_ops_.get_unique_guid_for_partition = dummy_get_unique_guid_for_partition;
-    avb_ops_.get_size_of_partition = dummy_get_size_of_partition;
+    avb_ops_.read_rollback_index = no_op_read_rollback_index;
+    avb_ops_.validate_vbmeta_public_key = no_op_validate_vbmeta_public_key;
+    avb_ops_.read_is_device_unlocked = no_op_read_is_device_unlocked;
+    avb_ops_.get_unique_guid_for_partition = no_op_get_unique_guid_for_partition;
+    avb_ops_.get_size_of_partition = no_op_get_size_of_partition;
 
     // Sets user_data for GetInstanceFromAvbOps() to convert it back to FsManagerAvbOps.
     avb_ops_.user_data = this;

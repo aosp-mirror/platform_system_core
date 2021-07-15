@@ -1,3 +1,20 @@
+package {
+    default_applicable_licenses: ["system_core_libnetutils_license"],
+}
+
+// Added automatically by a large-scale-change
+// See: http://go/android-license-faq
+license {
+    name: "system_core_libnetutils_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+    ],
+    license_text: [
+        "NOTICE",
+    ],
+}
+
 cc_library_shared {
     name: "libnetutils",
     vendor_available: true,
@@ -21,6 +38,11 @@ cc_library_shared {
     cflags: ["-Werror"],
 
     export_include_dirs: ["include"],
+    // TODO: remove connectivity module dependency, or have this lib build against the ndk
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.tethering",
+    ],
 }
 
 cc_library_static {
