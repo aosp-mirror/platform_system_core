@@ -349,9 +349,9 @@ def print_summary(record_list, end_tag):
     # Filter out invalid data.
     end_times = [get_last_value(record, end_tag) for record in record_list
                  if get_last_value(record, end_tag) != 0]
-    print 'mean: ', mean(end_times)
-    print 'median:', median(end_times)
-    print 'standard deviation:', stddev(end_times)
+    print 'mean:', int(round(mean(end_times))), 'ms'
+    print 'median:', int(round(median(end_times))), 'ms'
+    print 'standard deviation:', int(round(stddev(end_times))), 'ms'
 
 
 def do_iteration(device, interval_adjuster, event_tags_re, end_tag):

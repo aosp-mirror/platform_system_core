@@ -34,10 +34,13 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 
+#include "utility.h"
+
 using namespace android::dm;
 using namespace std::literals;
 using android::base::unique_fd;
 using android::fiemap::ImageManager;
+using android::fiemap::IsSubdir;
 using android::fs_mgr::BlockDeviceInfo;
 using android::fs_mgr::PartitionOpener;
 using android::fs_mgr::WaitForFile;
@@ -130,6 +133,51 @@ TEST_F(NativeTest, GetMappedImageDevice) {
 
     ASSERT_TRUE(manager_->UnmapImageDevice(base_name_));
 }
+
+namespace {
+
+struct IsSubdirTestParam {
+    std::string child;
+    std::string parent;
+    bool result;
+};
+
+class IsSubdirTest : public ::testing::TestWithParam<IsSubdirTestParam> {};
+
+TEST_P(IsSubdirTest, Test) {
+    const auto& param = GetParam();
+    EXPECT_EQ(param.result, IsSubdir(param.child, param.parent))
+            << "IsSubdir(child=\"" << param.child << "\", parent=\"" << param.parent
+            << "\") != " << (param.result ? "true" : "false");
+}
+
+std::vector<IsSubdirTestParam> IsSubdirTestValues() {
+    // clang-format off
+    std::vector<IsSubdirTestParam> base_cases{
+            {"/foo/bar",     "/foo",     true},
+            {"/foo/bar/baz", "/foo",     true},
+            {"/foo",         "/foo",     true},
+            {"/foo",         "/",        true},
+            {"/",            "/",        true},
+            {"/foo",         "/foo/bar", false},
+            {"/foo",         "/bar",     false},
+            {"/foo-bar",     "/foo",     false},
+            {"/",            "/foo",     false},
+    };
+    // clang-format on
+    std::vector<IsSubdirTestParam> ret;
+    for (const auto& e : base_cases) {
+        ret.push_back(e);
+        ret.push_back({e.child + "/", e.parent, e.result});
+        ret.push_back({e.child, e.parent + "/", e.result});
+        ret.push_back({e.child + "/", e.parent + "/", e.result});
+    }
+    return ret;
+}
+
+INSTANTIATE_TEST_SUITE_P(IsSubdirTest, IsSubdirTest, ::testing::ValuesIn(IsSubdirTestValues()));
+
+}  // namespace
 
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {

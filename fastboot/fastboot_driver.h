@@ -34,6 +34,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <bootimg.h>
 #include <inttypes.h>
 #include <sparse/sparse.h>
@@ -76,9 +77,9 @@ class FastBootDriver {
     RetCode Continue(std::string* response = nullptr, std::vector<std::string>* info = nullptr);
     RetCode CreatePartition(const std::string& partition, const std::string& size);
     RetCode DeletePartition(const std::string& partition);
-    RetCode Download(const std::string& name, int fd, size_t size, std::string* response = nullptr,
-                     std::vector<std::string>* info = nullptr);
-    RetCode Download(int fd, size_t size, std::string* response = nullptr,
+    RetCode Download(const std::string& name, android::base::borrowed_fd fd, size_t size,
+                     std::string* response = nullptr, std::vector<std::string>* info = nullptr);
+    RetCode Download(android::base::borrowed_fd fd, size_t size, std::string* response = nullptr,
                      std::vector<std::string>* info = nullptr);
     RetCode Download(const std::string& name, const std::vector<char>& buf,
                      std::string* response = nullptr, std::vector<std::string>* info = nullptr);
@@ -106,10 +107,14 @@ class FastBootDriver {
                    std::vector<std::string>* info = nullptr);
     RetCode SnapshotUpdateCommand(const std::string& command, std::string* response = nullptr,
                                   std::vector<std::string>* info = nullptr);
+    RetCode FetchToFd(const std::string& partition, android::base::borrowed_fd fd,
+                      int64_t offset = -1, int64_t size = -1, std::string* response = nullptr,
+                      std::vector<std::string>* info = nullptr);
 
     /* HIGHER LEVEL COMMANDS -- Composed of the commands above */
     RetCode FlashPartition(const std::string& partition, const std::vector<char>& data);
-    RetCode FlashPartition(const std::string& partition, int fd, uint32_t sz);
+    RetCode FlashPartition(const std::string& partition, android::base::borrowed_fd fd,
+                           uint32_t sz);
     RetCode FlashPartition(const std::string& partition, sparse_file* s, uint32_t sz,
                            size_t current, size_t total);
 
@@ -145,15 +150,17 @@ class FastBootDriver {
     Transport* transport_;
 
   private:
-    RetCode SendBuffer(int fd, size_t size);
+    RetCode SendBuffer(android::base::borrowed_fd fd, size_t size);
     RetCode SendBuffer(const std::vector<char>& buf);
     RetCode SendBuffer(const void* buf, size_t size);
 
-    RetCode ReadBuffer(std::vector<char>& buf);
     RetCode ReadBuffer(void* buf, size_t size);
 
     RetCode UploadInner(const std::string& outfile, std::string* response = nullptr,
                         std::vector<std::string>* info = nullptr);
+    RetCode RunAndReadBuffer(const std::string& cmd, std::string* response,
+                             std::vector<std::string>* info,
+                             const std::function<RetCode(const char*, uint64_t)>& write_fn);
 
     int SparseWriteCallback(std::vector<char>& tpbuf, const char* data, size_t len);
 

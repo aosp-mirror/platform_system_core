@@ -35,6 +35,10 @@
 
 #include "utility.h"
 
+#ifndef DM_DEFERRED_REMOVE
+#define DM_DEFERRED_REMOVE (1 << 17)
+#endif
+
 namespace android {
 namespace dm {
 
@@ -111,8 +115,10 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
 
     // Check to make sure appropriate uevent is generated so ueventd will
     // do the right thing and remove the corresponding device node and symlinks.
-    CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
-            << "Didn't generate uevent for [" << name << "] removal";
+    if ((io.flags & DM_UEVENT_GENERATED_FLAG) == 0) {
+        LOG(ERROR) << "Didn't generate uevent for [" << name << "] removal";
+        return false;
+    }
 
     if (timeout_ms <= std::chrono::milliseconds::zero()) {
         return true;
@@ -129,6 +135,25 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
 
 bool DeviceMapper::DeleteDevice(const std::string& name) {
     return DeleteDevice(name, 0ms);
+}
+
+bool DeviceMapper::DeleteDeviceDeferred(const std::string& name) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+
+    io.flags |= DM_DEFERRED_REMOVE;
+    if (ioctl(fd_, DM_DEV_REMOVE, &io)) {
+        PLOG(ERROR) << "DM_DEV_REMOVE with DM_DEFERRED_REMOVE failed for [" << name << "]";
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::DeleteDeviceIfExistsDeferred(const std::string& name) {
+    if (GetState(name) == DmDeviceState::INVALID) {
+        return true;
+    }
+    return DeleteDeviceDeferred(name);
 }
 
 static std::string GenerateUuid() {
@@ -424,6 +449,20 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
 
     uint32_t dev_num = minor(io.dev);
     *path = "/dev/block/dm-" + std::to_string(dev_num);
+    return true;
+}
+
+// Accepts a device mapper device name (like system_a, vendor_b etc) and
+// returns its UUID.
+bool DeviceMapper::GetDmDeviceUuidByName(const std::string& name, std::string* uuid) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+
+    *uuid = std::string(io.uuid);
     return true;
 }
 
