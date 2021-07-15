@@ -56,6 +56,8 @@ enum keymaster_command : uint32_t {
     KM_GET_VERSION_2                = (28 << KEYMASTER_REQ_SHIFT),
     KM_EARLY_BOOT_ENDED             = (29 << KEYMASTER_REQ_SHIFT),
     KM_DEVICE_LOCKED                = (30 << KEYMASTER_REQ_SHIFT),
+    KM_GENERATE_RKP_KEY             = (31 << KEYMASTER_REQ_SHIFT),
+    KM_GENERATE_CSR                 = (32 << KEYMASTER_REQ_SHIFT),
 
     // Bootloader/provisioning calls.
     KM_SET_BOOT_PARAMS = (0x1000 << KEYMASTER_REQ_SHIFT),
