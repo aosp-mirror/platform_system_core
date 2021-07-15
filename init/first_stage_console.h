@@ -28,8 +28,8 @@ enum FirstStageConsoleParam {
     MAX_PARAM_VALUE = IGNORE_FAILURE,
 };
 
-void StartConsole();
-int FirstStageConsole(const std::string& cmdline);
+void StartConsole(const std::string& cmdline);
+int FirstStageConsole(const std::string& cmdline, const std::string& bootconfig);
 
 }  // namespace init
 }  // namespace android

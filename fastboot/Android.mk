@@ -21,6 +21,7 @@ LOCAL_PATH:= $(call my-dir)
 my_dist_files := $(SOONG_HOST_OUT_EXECUTABLES)/mke2fs
 my_dist_files += $(SOONG_HOST_OUT_EXECUTABLES)/e2fsdroid
 my_dist_files += $(SOONG_HOST_OUT_EXECUTABLES)/make_f2fs
+my_dist_files += $(SOONG_HOST_OUT_EXECUTABLES)/make_f2fs_casefold
 my_dist_files += $(SOONG_HOST_OUT_EXECUTABLES)/sload_f2fs
 $(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
 my_dist_files :=

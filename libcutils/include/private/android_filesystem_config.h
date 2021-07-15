@@ -34,16 +34,9 @@
  * partition, from which the system reads passwd and group files.
  */
 
-#ifndef _ANDROID_FILESYSTEM_CONFIG_H_
-#define _ANDROID_FILESYSTEM_CONFIG_H_
+#pragma once
 
-#include <sys/types.h>
-
-#if !defined(__ANDROID_VNDK__) && !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
-#include <private/fs_config.h>
-#endif
-
-/* This is the master Users and Groups config for the platform.
+/* This is the main Users and Groups config for the platform.
  * DO NOT EVER RENUMBER
  */
 
@@ -134,6 +127,9 @@
 #define AID_EXT_DATA_RW 1078      /* GID for app-private data directories on external storage */
 #define AID_EXT_OBB_RW 1079       /* GID for OBB directories on external storage */
 #define AID_CONTEXT_HUB 1080      /* GID for access to the Context Hub */
+#define AID_VIRTMANAGER 1081      /* VirtManager daemon */
+#define AID_ARTD 1082             /* ART Service daemon */
+#define AID_UWB 1083              /* UWB subsystem */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
@@ -224,5 +220,3 @@
  * documented at the top of this header file.
  * Also see build/tools/fs_config for more details.
  */
-
-#endif

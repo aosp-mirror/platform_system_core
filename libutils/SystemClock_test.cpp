@@ -29,15 +29,23 @@ static const int64_t SLACK_NS = SLACK_MS * MS_IN_NS;
 
 TEST(SystemClock, SystemClock) {
     auto startUptimeMs = android::uptimeMillis();
+    auto startUptimeNs = android::uptimeNanos();
     auto startRealtimeMs = android::elapsedRealtime();
     auto startRealtimeNs = android::elapsedRealtimeNano();
 
     ASSERT_GT(startUptimeMs, 0)
             << "uptimeMillis() reported an impossible uptime";
+    ASSERT_GT(startUptimeNs, 0)
+            << "uptimeNanos() reported an impossible uptime";
     ASSERT_GE(startRealtimeMs, startUptimeMs)
             << "elapsedRealtime() thinks we've suspended for negative time";
-    ASSERT_GE(startRealtimeNs, startUptimeMs * MS_IN_NS)
+    ASSERT_GE(startRealtimeNs, startUptimeNs)
             << "elapsedRealtimeNano() thinks we've suspended for negative time";
+
+    ASSERT_GE(startUptimeNs, startUptimeMs * MS_IN_NS)
+            << "uptimeMillis() and uptimeNanos() are inconsistent";
+    ASSERT_LT(startUptimeNs, (startUptimeMs + SLACK_MS) * MS_IN_NS)
+            << "uptimeMillis() and uptimeNanos() are inconsistent";
 
     ASSERT_GE(startRealtimeNs, startRealtimeMs * MS_IN_NS)
             << "elapsedRealtime() and elapsedRealtimeNano() are inconsistent";
@@ -51,6 +59,7 @@ TEST(SystemClock, SystemClock) {
     ASSERT_EQ(nanosleepErr, 0) << "nanosleep() failed: " << strerror(errno);
 
     auto endUptimeMs = android::uptimeMillis();
+    auto endUptimeNs = android::uptimeNanos();
     auto endRealtimeMs = android::elapsedRealtime();
     auto endRealtimeNs = android::elapsedRealtimeNano();
 
@@ -58,6 +67,10 @@ TEST(SystemClock, SystemClock) {
             << "uptimeMillis() advanced too little after nanosleep()";
     EXPECT_LT(endUptimeMs - startUptimeMs, SLEEP_MS + SLACK_MS)
             << "uptimeMillis() advanced too much after nanosleep()";
+    EXPECT_GE(endUptimeNs - startUptimeNs, SLEEP_NS)
+            << "uptimeNanos() advanced too little after nanosleep()";
+    EXPECT_LT(endUptimeNs - startUptimeNs, SLEEP_NS + SLACK_NS)
+            << "uptimeNanos() advanced too much after nanosleep()";
     EXPECT_GE(endRealtimeMs - startRealtimeMs, SLEEP_MS)
             << "elapsedRealtime() advanced too little after nanosleep()";
     EXPECT_LT(endRealtimeMs - startRealtimeMs, SLEEP_MS + SLACK_MS)
@@ -66,6 +79,11 @@ TEST(SystemClock, SystemClock) {
             << "elapsedRealtimeNano() advanced too little after nanosleep()";
     EXPECT_LT(endRealtimeNs - startRealtimeNs, SLEEP_NS + SLACK_NS)
             << "elapsedRealtimeNano() advanced too much after nanosleep()";
+
+    EXPECT_GE(endUptimeNs, endUptimeMs * MS_IN_NS)
+            << "uptimeMillis() and uptimeNanos() are inconsistent after nanosleep()";
+    EXPECT_LT(endUptimeNs, (endUptimeMs + SLACK_MS) * MS_IN_NS)
+            << "uptimeMillis() and uptimeNanos() are inconsistent after nanosleep()";
 
     EXPECT_GE(endRealtimeNs, endRealtimeMs * MS_IN_NS)
             << "elapsedRealtime() and elapsedRealtimeNano() are inconsistent after nanosleep()";
