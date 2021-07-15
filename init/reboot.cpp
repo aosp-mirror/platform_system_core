@@ -450,10 +450,22 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
 
 // zram is able to use backing device on top of a loopback device.
 // In order to unmount /data successfully, we have to kill the loopback device first
-#define ZRAM_DEVICE   "/dev/block/zram0"
-#define ZRAM_RESET    "/sys/block/zram0/reset"
-#define ZRAM_BACK_DEV "/sys/block/zram0/backing_dev"
+#define ZRAM_DEVICE       "/dev/block/zram0"
+#define ZRAM_RESET        "/sys/block/zram0/reset"
+#define ZRAM_BACK_DEV     "/sys/block/zram0/backing_dev"
+#define ZRAM_INITSTATE    "/sys/block/zram0/initstate"
 static Result<void> KillZramBackingDevice() {
+    std::string zram_initstate;
+    if (!android::base::ReadFileToString(ZRAM_INITSTATE, &zram_initstate)) {
+        return ErrnoError() << "Failed to read " << ZRAM_INITSTATE;
+    }
+
+    zram_initstate.erase(zram_initstate.length() - 1);
+    if (zram_initstate == "0") {
+        LOG(INFO) << "Zram has not been swapped on";
+        return {};
+    }
+
     if (access(ZRAM_BACK_DEV, F_OK) != 0 && errno == ENOENT) {
         LOG(INFO) << "No zram backing device configured";
         return {};
@@ -533,8 +545,8 @@ static void StopServices(const std::set<std::string>& services, std::chrono::mil
 
 // Like StopServices, but also logs all the services that failed to stop after the provided timeout.
 // Returns number of violators.
-static int StopServicesAndLogViolations(const std::set<std::string>& services,
-                                        std::chrono::milliseconds timeout, bool terminate) {
+int StopServicesAndLogViolations(const std::set<std::string>& services,
+                                 std::chrono::milliseconds timeout, bool terminate) {
     StopServices(services, timeout, terminate);
     int still_running = 0;
     for (const auto& s : ServiceList::GetInstance()) {
@@ -546,6 +558,18 @@ static int StopServicesAndLogViolations(const std::set<std::string>& services,
         }
     }
     return still_running;
+}
+
+static Result<void> UnmountAllApexes() {
+    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
+    int status;
+    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
+        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        return {};
+    }
+    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
 }
 
 //* Reboot / shutdown the system.
@@ -646,6 +670,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
         if (do_shutdown_animation) {
             SetProperty("service.bootanim.exit", "0");
+            SetProperty("service.bootanim.progress", "0");
             // Could be in the middle of animation. Stop and start so that it can pick
             // up the right mode.
             boot_anim->Stop();
@@ -704,6 +729,11 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // 5. drop caches and disable zram backing device, if exist
     KillZramBackingDevice();
 
+    LOG(INFO) << "Ready to unmount apexes. So far shutdown sequence took " << t;
+    // 6. unmount active apexes, otherwise they might prevent clean unmount of /data.
+    if (auto ret = UnmountAllApexes(); !ret.ok()) {
+        LOG(ERROR) << ret.error();
+    }
     UmountStat stat =
             TryUmountAndFsck(cmd, run_fsck, shutdown_timeout - t.duration(), &reboot_semaphore);
     // Follow what linux shutdown is doing: one more sync with little bit delay
@@ -740,18 +770,6 @@ static void LeaveShutdown() {
     LOG(INFO) << "Leaving shutdown mode";
     shutting_down = false;
     StartSendingMessages();
-}
-
-static Result<void> UnmountAllApexes() {
-    const char* args[] = {"/system/bin/apexd", "--unmount-all"};
-    int status;
-    if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
-        return ErrnoError() << "Failed to call '/system/bin/apexd --unmount-all'";
-    }
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        return {};
-    }
-    return Error() << "'/system/bin/apexd --unmount-all' failed : " << status;
 }
 
 static std::chrono::milliseconds GetMillisProperty(const std::string& name,
@@ -805,11 +823,19 @@ static Result<void> DoUserspaceReboot() {
     auto sigkill_timeout = GetMillisProperty("init.userspace_reboot.sigkill.timeoutmillis", 10s);
     LOG(INFO) << "Timeout to terminate services: " << sigterm_timeout.count() << "ms "
               << "Timeout to kill services: " << sigkill_timeout.count() << "ms";
+    std::string services_file_name = "/metadata/userspacereboot/services.txt";
+    const int flags = O_RDWR | O_CREAT | O_SYNC | O_APPEND | O_CLOEXEC;
     StopServicesAndLogViolations(stop_first, sigterm_timeout, true /* SIGTERM */);
     if (int r = StopServicesAndLogViolations(stop_first, sigkill_timeout, false /* SIGKILL */);
         r > 0) {
+        auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
+        android::base::WriteStringToFd("Post-data services still running: \n", fd);
+        for (const auto& s : ServiceList::GetInstance()) {
+            if (s->IsRunning() && stop_first.count(s->name())) {
+                android::base::WriteStringToFd(s->name() + "\n", fd);
+            }
+        }
         sub_reason = "sigkill";
-        // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " post-data services are still running";
     }
     if (auto result = KillZramBackingDevice(); !result.ok()) {
@@ -824,8 +850,14 @@ static Result<void> DoUserspaceReboot() {
     if (int r = StopServicesAndLogViolations(debugging_services, sigkill_timeout,
                                              false /* SIGKILL */);
         r > 0) {
+        auto fd = unique_fd(TEMP_FAILURE_RETRY(open(services_file_name.c_str(), flags, 0666)));
+        android::base::WriteStringToFd("Debugging services still running: \n", fd);
+        for (const auto& s : ServiceList::GetInstance()) {
+            if (s->IsRunning() && debugging_services.count(s->name())) {
+                android::base::WriteStringToFd(s->name() + "\n", fd);
+            }
+        }
         sub_reason = "sigkill_debug";
-        // TODO(b/135984674): store information about offending services for debugging.
         return Error() << r << " debugging services are still running";
     }
     {
@@ -838,7 +870,7 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "apex";
         return result;
     }
-    if (!SwitchToBootstrapMountNamespaceIfNeeded()) {
+    if (!SwitchToMountNamespaceIfNeeded(NS_BOOTSTRAP).ok()) {
         sub_reason = "ns_switch";
         return Error() << "Failed to switch to bootstrap namespace";
     }

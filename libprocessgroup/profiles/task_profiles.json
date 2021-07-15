@@ -31,16 +31,6 @@
       "File": "memory.swappiness"
     },
     {
-      "Name": "STuneBoost",
-      "Controller": "schedtune",
-      "File": "schedtune.boost"
-    },
-    {
-      "Name": "STunePreferIdle",
-      "Controller": "schedtune",
-      "File": "schedtune.prefer_idle"
-    },
-    {
       "Name": "UClampMin",
       "Controller": "cpu",
       "File": "cpu.uclamp.min"
@@ -51,9 +41,14 @@
       "File": "cpu.uclamp.max"
     },
     {
+      "Name": "UClampLatencySensitive",
+      "Controller": "cpu",
+      "File": "cpu.uclamp.latency_sensitive"
+    },
+    {
       "Name": "FreezerState",
       "Controller": "freezer",
-      "File": "frozen/freezer.state"
+      "File": "cgroup.freeze"
     }
   ],
 
@@ -65,7 +60,7 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
+            "Controller": "cpu",
             "Path": "background"
           }
         }
@@ -75,11 +70,11 @@
       "Name": "Frozen",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "freezer",
-            "Path": "frozen"
+            "Name": "FreezerState",
+            "Value": "1"
           }
         }
       ]
@@ -88,11 +83,11 @@
       "Name": "Unfrozen",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "freezer",
-            "Path": ""
+            "Name": "FreezerState",
+            "Value": "0"
           }
         }
       ]
@@ -104,8 +99,21 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
-            "Path": ""
+            "Controller": "cpu",
+            "Path": "system"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "ServicePerformance",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "system-background"
           }
         }
       ]
@@ -117,7 +125,7 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
+            "Controller": "cpu",
             "Path": "foreground"
           }
         }
@@ -130,7 +138,7 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
+            "Controller": "cpu",
             "Path": "top-app"
           }
         }
@@ -143,7 +151,7 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
+            "Controller": "cpu",
             "Path": "rt"
           }
         }
@@ -156,8 +164,21 @@
           "Name": "JoinCgroup",
           "Params":
           {
-            "Controller": "schedtune",
+            "Controller": "cpu",
             "Path": "camera-daemon"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "NNApiHALPerformance",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpu",
+            "Path": "nnapi-hal"
           }
         }
       ]
@@ -170,7 +191,7 @@
           "Name": "SetAttribute",
           "Params":
           {
-            "Name": "STunePreferIdle",
+            "Name": "UClampLatencySensitive",
             "Value": "1"
           }
         }
@@ -183,7 +204,7 @@
           "Name": "SetAttribute",
           "Params":
           {
-            "Name": "STunePreferIdle",
+            "Name": "UClampLatencySensitive",
             "Value": "0"
           }
         }
@@ -455,6 +476,33 @@
     },
 
     {
+      "Name": "SFMainPolicy",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "system-background"
+          }
+        }
+      ]
+    },
+    {
+      "Name": "SFRenderEnginePolicy",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "cpuset",
+            "Path": "system-background"
+          }
+        }
+      ]
+    },
+
+    {
       "Name": "PerfBoost",
       "Actions": [
         {
@@ -536,32 +584,6 @@
           }
         }
       ]
-    },
-    {
-      "Name": "FreezerThawed",
-      "Actions": [
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "FreezerState",
-            "Value": "THAWED"
-          }
-        }
-      ]
-    },
-    {
-      "Name": "FreezerFrozen",
-      "Actions": [
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "FreezerState",
-            "Value": "FROZEN"
-          }
-        }
-      ]
     }
   ],
 
@@ -581,6 +603,10 @@
     {
       "Name": "SCHED_SP_TOP_APP",
       "Profiles": [ "MaxPerformance", "MaxIoPriority", "TimerSlackNormal" ]
+    },
+    {
+      "Name": "SCHED_SP_SYSTEM",
+      "Profiles": [ "ServicePerformance", "LowIoPriority", "TimerSlackNormal" ]
     },
     {
       "Name": "SCHED_SP_RT_APP",
@@ -609,6 +635,10 @@
     {
       "Name": "CPUSET_SP_RESTRICTED",
       "Profiles": [ "ServiceCapacityRestricted", "TimerSlackNormal" ]
+    },
+    {
+      "Name": "Dex2OatBootComplete",
+      "Profiles": [ "SCHED_SP_BACKGROUND" ]
     }
   ]
 }

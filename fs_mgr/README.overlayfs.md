@@ -8,8 +8,8 @@ Users working with userdebug or eng builds expect to be able to remount the
 system partition as read-write and then add or modify any number of files
 without reflashing the system image, which is efficient for a development cycle.
 
-Limited memory systems use read-only types of file systems or logical resizable
-Android partitions (LRAPs). These file systems land system partition images
+Limited memory systems use read-only types of file systems or dynamic
+Android partitions (DAPs). These file systems land system partition images
 right-sized, and have been deduped at the block level to compress the content.
 This means that a remount either isn’t possible, or isn't useful because of
 space limitations or support logistics.
@@ -42,7 +42,7 @@ Then enter one of the following sequences:
     $ adb push <source> <destination>
     $ adb reboot
 
-Note that you can replace these two lines:
+Note that you can replace these two lines in the above sequence:
 
     $ adb disable-verity
     $ adb reboot
@@ -51,7 +51,7 @@ with this line:
 
     $ adb remount -R
 
-**Note:** _adb reboot -R_ won’t reboot if the device is already in the adb remount state.
+**Note:** _adb remount -R_ won’t reboot if the device is already in the adb remount state.
 
 None of this changes if OverlayFS needs to be engaged.
 The decisions whether to use traditional direct file-system remount,

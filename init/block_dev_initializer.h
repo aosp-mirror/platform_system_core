@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <memory>
 #include <set>
 #include <string>
@@ -27,11 +29,14 @@ class BlockDevInitializer final {
     BlockDevInitializer();
 
     bool InitDeviceMapper();
+    bool InitDmUser(const std::string& name);
     bool InitDevices(std::set<std::string> devices);
     bool InitDmDevice(const std::string& device);
 
   private:
     ListenerAction HandleUevent(const Uevent& uevent, std::set<std::string>* devices);
+
+    bool InitMiscDevice(const std::string& name);
 
     std::unique_ptr<DeviceHandler> device_handler_;
     UeventListener uevent_listener_;

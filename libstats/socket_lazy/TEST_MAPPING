@@ -1,0 +1,7 @@
+{
+  "presubmit" : [
+    {
+      "name" : "libstatssocket_lazy_test"
+    }
+  ]
+}

@@ -16,12 +16,17 @@
 
 #pragma once
 
+#include <android-base/result.h>
+
 namespace android {
 namespace init {
 
+enum MountNamespace { NS_BOOTSTRAP, NS_DEFAULT };
+
 bool SetupMountNamespaces();
-bool SwitchToDefaultMountNamespace();
-bool SwitchToBootstrapMountNamespaceIfNeeded();
+base::Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace);
+
+base::Result<MountNamespace> GetCurrentMountNamespace();
 
 }  // namespace init
 }  // namespace android

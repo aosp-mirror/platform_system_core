@@ -56,7 +56,7 @@ on early-init
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
     # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/linkerconfig --target /linkerconfig/bootstrap
+    exec -- /system/bin/bootstrap/linkerconfig --target /linkerconfig/bootstrap
     chmod 644 /linkerconfig/bootstrap/ld.config.txt
     copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
     chmod 644 /linkerconfig/default/ld.config.txt
@@ -80,6 +80,11 @@ on early-init
 
     # Mount tracefs
     mount tracefs tracefs /sys/kernel/tracing
+
+    # create sys dirctory
+    mkdir /dev/sys 0755 system system
+    mkdir /dev/sys/fs 0755 system system
+    mkdir /dev/sys/block 0755 system system
 
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
@@ -143,6 +148,55 @@ on init
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
 
+    # cpuctl hierarchy for devices using utilclamp
+    mkdir /dev/cpuctl/foreground
+    mkdir /dev/cpuctl/background
+    mkdir /dev/cpuctl/top-app
+    mkdir /dev/cpuctl/rt
+    mkdir /dev/cpuctl/system
+    mkdir /dev/cpuctl/system-background
+    chown system system /dev/cpuctl
+    chown system system /dev/cpuctl/foreground
+    chown system system /dev/cpuctl/background
+    chown system system /dev/cpuctl/top-app
+    chown system system /dev/cpuctl/rt
+    chown system system /dev/cpuctl/system
+    chown system system /dev/cpuctl/system-background
+    chown system system /dev/cpuctl/tasks
+    chown system system /dev/cpuctl/foreground/tasks
+    chown system system /dev/cpuctl/background/tasks
+    chown system system /dev/cpuctl/top-app/tasks
+    chown system system /dev/cpuctl/rt/tasks
+    chown system system /dev/cpuctl/system/tasks
+    chown system system /dev/cpuctl/system-background/tasks
+    chmod 0664 /dev/cpuctl/tasks
+    chmod 0664 /dev/cpuctl/foreground/tasks
+    chmod 0664 /dev/cpuctl/background/tasks
+    chmod 0664 /dev/cpuctl/top-app/tasks
+    chmod 0664 /dev/cpuctl/rt/tasks
+    chmod 0664 /dev/cpuctl/system/tasks
+    chmod 0664 /dev/cpuctl/system-background/tasks
+
+    # Create a cpu group for NNAPI HAL processes
+    mkdir /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal
+    chown system system /dev/cpuctl/nnapi-hal/tasks
+    chmod 0664 /dev/cpuctl/nnapi-hal/tasks
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
+    write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
+
+    # Create a cpu group for camera daemon processes
+    mkdir /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon
+    chown system system /dev/cpuctl/camera-daemon/tasks
+    chmod 0664 /dev/cpuctl/camera-daemon/tasks
+
+    # Create an stune group for camera-specific processes
+    mkdir /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon
+    chown system system /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/tasks
+
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal
@@ -163,6 +217,7 @@ on init
     chmod 0664 /dev/blkio/background/tasks
     write /dev/blkio/blkio.weight 1000
     write /dev/blkio/background/blkio.weight 200
+    write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
 
@@ -241,8 +296,6 @@ on init
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
     write /proc/sys/net/unix/max_dgram_qlen 600
-    write /proc/sys/kernel/sched_rt_runtime_us 950000
-    write /proc/sys/kernel/sched_rt_period_us 1000000
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -264,13 +317,6 @@ on init
     # /proc/net/fib_trie leaks interface IP addresses
     chmod 0400 /proc/net/fib_trie
 
-    # Create cgroup mount points for process groups
-    chown system system /dev/cpuctl
-    chown system system /dev/cpuctl/tasks
-    chmod 0666 /dev/cpuctl/tasks
-    write /dev/cpuctl/cpu.rt_period_us 1000000
-    write /dev/cpuctl/cpu.rt_runtime_us 950000
-
     # sets up initial cpusets for ActivityManager
     # this ensures that the cpusets are present and usable, but the device's
     # init.rc must actually set the correct cpus
@@ -283,7 +329,6 @@ on init
 
     # system-background is for system tasks that should only run on
     # little cores, not on bigs
-    # to be used only by init, so don't change system-bg permissions
     mkdir /dev/cpuset/system-background
     copy /dev/cpuset/cpus /dev/cpuset/system-background/cpus
     copy /dev/cpuset/mems /dev/cpuset/system-background/mems
@@ -298,6 +343,11 @@ on init
     copy /dev/cpuset/cpus /dev/cpuset/top-app/cpus
     copy /dev/cpuset/mems /dev/cpuset/top-app/mems
 
+    # create a cpuset for camera daemon processes
+    mkdir /dev/cpuset/camera-daemon
+    copy /dev/cpuset/cpus /dev/cpuset/camera-daemon/cpus
+    copy /dev/cpuset/mems /dev/cpuset/camera-daemon/mems
+
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
@@ -305,12 +355,14 @@ on init
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
     chown system system /dev/cpuset/restricted
+    chown system system /dev/cpuset/camera-daemon
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
     chown system system /dev/cpuset/restricted/tasks
+    chown system system /dev/cpuset/camera-daemon/tasks
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -321,16 +373,7 @@ on init
     chmod 0664 /dev/cpuset/top-app/tasks
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
-
-    # freezer cgroup entries
-    mkdir /dev/freezer/frozen
-    write /dev/freezer/frozen/freezer.state FROZEN
-    chown system system /dev/freezer/cgroup.procs
-    chown system system /dev/freezer/frozen
-    chown system system /dev/freezer/frozen/freezer.state
-    chown system system /dev/freezer/frozen/cgroup.procs
-
-    chmod 0664 /dev/freezer/frozen/freezer.state
+    chmod 0664 /dev/cpuset/camera-daemon/tasks
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
@@ -346,8 +389,6 @@ on init
     # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
-    chown root root /dev/cg2_bpf
-    chmod 0600 /dev/cg2_bpf
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # Create location for fs_mgr to store abbreviated output from filesystem
@@ -471,6 +512,10 @@ on post-fs
     # The bind+remount combination allows this to work in containers.
     mount rootfs rootfs / remount bind ro nodev
 
+    # Mount default storage into root namespace
+    mount none /mnt/user/0 /storage bind rec
+    mount none none /storage slave rec
+
     # Make sure /sys/kernel/debug (if present) is labeled properly
     # Note that tracefs may be mounted under debug, so we need to cross filesystems
     restorecon --recursive --cross-filesystems /sys/kernel/debug
@@ -496,6 +541,9 @@ on post-fs
     chown root log /proc/slabinfo
     chmod 0440 /proc/slabinfo
 
+    chown root log /proc/pagetypeinfo
+    chmod 0440 /proc/pagetypeinfo
+
     #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
     chown root system /proc/kmsg
     chmod 0440 /proc/kmsg
@@ -517,6 +565,8 @@ on post-fs
     mkdir /metadata/bootstat 0750 system log
     mkdir /metadata/ota 0700 root system
     mkdir /metadata/ota/snapshots 0700 root system
+    mkdir /metadata/userspacereboot 0770 root system
+    mkdir /metadata/watchdog 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
@@ -537,7 +587,20 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE/FDE)
     class_start early_hal
 
+    # Load trusted keys from dm-verity protected partitions
+    exec -- /system/bin/fsverity_init --load-verified-keys
+
+    # Set up a tracing instance for system_server to monitor error_report_end events.
+    # These are sent by kernel tools like KASAN and KFENCE when a memory corruption
+    # is detected.
+    mkdir /sys/kernel/tracing/instances/bootreceiver 0700 system system
+    restorecon_recursive /sys/kernel/tracing/instances/bootreceiver
+    write /sys/kernel/tracing/instances/bootreceiver/buffer_size_kb 1
+    write /sys/kernel/tracing/instances/bootreceiver/trace_options disable_on_free
+    write /sys/kernel/tracing/instances/bootreceiver/events/error_report/error_report_end/enable 1
+
 on post-fs-data
+
     mark_post_data
 
     # Start checkpoint before we touch data
@@ -557,23 +620,60 @@ on post-fs-data
     mkdir /data/bootchart 0755 shell shell encryption=Require
     bootchart start
 
-    # Make sure that apexd is started in the default namespace
-    enter_default_mount_ns
-
-    # /data/apex is now available. Start apexd to scan and activate APEXes.
-    mkdir /data/apex 0755 root system encryption=None
-    mkdir /data/apex/active 0755 root system
-    mkdir /data/apex/backup 0700 root system
-    mkdir /data/apex/hashtree 0700 root system
-    mkdir /data/apex/sessions 0700 root system
-    mkdir /data/app-staging 0750 system system encryption=None
-    start apexd
-
     # Avoid predictable entropy pool. Carry over entropy from previous boot.
     copy /data/system/entropy.dat /dev/urandom
 
-    # create basic filesystem structure
+    mkdir /data/vendor 0771 root root encryption=Require
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
+    mkdir /data/vendor/hardware 0771 root root
+
+    # Start tombstoned early to be able to store tombstones.
+    mkdir /data/anr 0775 system system encryption=Require
+    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/vendor/tombstones 0771 root root
+    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
+    start tombstoned
+
+    # Make sure that apexd is started in the default namespace
+    enter_default_mount_ns
+
+    # set up keystore directory structure first so that we can end early boot
+    # and start apexd
     mkdir /data/misc 01771 system misc encryption=Require
+    mkdir /data/misc/keystore 0700 keystore keystore
+    # work around b/183668221
+    restorecon /data/misc /data/misc/keystore
+
+    # Boot level 30
+    # odsign signing keys have MAX_BOOT_LEVEL=30
+    # This is currently the earliest boot level, but we start at 30
+    # to leave room for earlier levels.
+    setprop keystore.boot_level 30
+
+    # Now that /data is mounted and we have created /data/misc/keystore,
+    # we can tell keystore to stop allowing use of early-boot keys,
+    # and access its database for the first time to support creation and
+    # use of MAX_BOOT_LEVEL keys.
+    exec - system system -- /system/bin/vdc keymaster earlyBootEnded
+
+    # /data/apex is now available. Start apexd to scan and activate APEXes.
+    #
+    # To handle userspace reboots as well as devices that use FDE, make sure
+    # that apexd is started cleanly here (set apexd.status="") and that it is
+    # restarted if it's already running.
+    mkdir /data/apex 0755 root system encryption=None
+    mkdir /data/apex/active 0755 root system
+    mkdir /data/apex/backup 0700 root system
+    mkdir /data/apex/decompressed 0755 root system encryption=Require
+    mkdir /data/apex/hashtree 0700 root system
+    mkdir /data/apex/sessions 0700 root system
+    mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
+    mkdir /data/apex/ota_reserved 0700 root system encryption=Require
+    setprop apexd.status ""
+    restart apexd
+
+    # create rest of basic filesystem structure
     mkdir /data/misc/recovery 0770 system log
     copy /data/misc/recovery/ro.build.fingerprint /data/misc/recovery/ro.build.fingerprint.1
     chmod 0440 /data/misc/recovery/ro.build.fingerprint.1
@@ -594,8 +694,9 @@ on post-fs-data
     chown bluetooth bluetooth /data/misc/bluedroid/bt_config.conf
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth/logs 0770 bluetooth bluetooth
+    mkdir /data/misc/nfc 0770 nfc nfc
+    mkdir /data/misc/nfc/logs 0770 nfc nfc
     mkdir /data/misc/credstore 0700 credstore credstore
-    mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
     mkdir /data/misc/net 0750 root shell
@@ -629,25 +730,27 @@ on post-fs-data
     mkdir /data/misc/trace 0700 root root
     # create location to store surface and window trace files
     mkdir /data/misc/wmtrace 0700 system system
+    # create location to store accessibility trace files
+    mkdir /data/misc/a11ytrace 0700 system system
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
-    mkdir /data/misc/profiles/ref 0770 system system
+    mkdir /data/misc/profiles/ref 0771 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
+    mkdir /data/misc/appcompat/ 0700 system system
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
+    # directory used for on-device refresh metrics file.
+    mkdir /data/misc/odrefresh 0777 system system
+    # directory used for on-device signing key blob
+    mkdir /data/misc/odsign 0700 root root
 
     mkdir /data/preloads 0775 system system encryption=None
-
-    mkdir /data/vendor 0771 root root encryption=Require
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
-    mkdir /data/vendor/hardware 0771 root root
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
@@ -660,9 +763,20 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
     mkdir /data/property 0700 root root encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
-    mkdir /data/vendor/tombstones 0771 root root
-    mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
+
+    # create directory for updated font files.
+    mkdir /data/fonts/ 0771 root root encryption=Require
+    mkdir /data/fonts/files 0771 system system
+    mkdir /data/fonts/config 0770 system system
+
+    # Create directories to push tests to for each linker namespace.
+    # Create the subdirectories in case the first test is run as root
+    # so it doesn't end up owned by root.
+    mkdir /data/local/tests 0700 shell shell
+    mkdir /data/local/tests/product 0700 shell shell
+    mkdir /data/local/tests/system 0700 shell shell
+    mkdir /data/local/tests/unrestricted 0700 shell shell
+    mkdir /data/local/tests/vendor 0700 shell shell
 
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root encryption=Require
@@ -689,8 +803,6 @@ on post-fs-data
     # the following directory.
     mkdir /data/mediadrm 0770 mediadrm mediadrm encryption=Require
 
-    mkdir /data/anr 0775 system system encryption=Require
-
     # NFC: create data/nfc for nv storage
     mkdir /data/nfc 0770 nfc nfc encryption=Require
     mkdir /data/nfc/param 0770 nfc nfc
@@ -701,6 +813,9 @@ on post-fs-data
     mkdir /data/ss 0700 system system encryption=Require
 
     mkdir /data/system 0775 system system encryption=Require
+    mkdir /data/system/environ 0700 system system
+    # b/183861600 attempt to fix selinux label before running derive_classpath service
+    restorecon /data/system/environ
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
@@ -739,6 +854,8 @@ on post-fs-data
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
     mount none /data/misc/profiles/cur /data_mirror/cur_profiles bind rec
+    mkdir /data_mirror/ref_profiles 0700 root root
+    mount none /data/misc/profiles/ref /data_mirror/ref_profiles bind rec
 
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
@@ -748,6 +865,7 @@ on post-fs-data
     # Delete these if need be, per b/139193659
     mkdir /data/rollback 0700 system system encryption=DeleteIfNecessary
     mkdir /data/rollback-observer 0700 system system encryption=DeleteIfNecessary
+    mkdir /data/rollback-history 0700 system system encryption=DeleteIfNecessary
 
     # Create root dir for Incremental Service
     mkdir /data/incremental 0771 system system encryption=Require
@@ -772,14 +890,36 @@ on post-fs-data
 
     init_user0
 
+    # Set SELinux security contexts on upgrade or policy update.
+    restorecon --recursive --skip-ce /data
+
+    # Define and export *CLASSPATH variables
+    # Must start before 'odsign', as odsign depends on *CLASSPATH variables
+    exec_start derive_classpath
+    load_exports /data/system/environ/classpath
+
+    # Start the on-device signing daemon, and wait for it to finish, to ensure
+    # ART artifacts are generated if needed.
+    # Must start after 'derive_classpath' to have *CLASSPATH variables set.
+    start odsign
+
+    # Before we can lock keys and proceed to the next boot stage, wait for
+    # odsign to be done with the key
+    wait_for_prop odsign.key.done 1
+
+    # Lock the fs-verity keyring, so no more keys can be added
+    exec -- /system/bin/fsverity_init --lock
+
+    # Bump the boot level to 1000000000; this prevents further on-device signing.
+    # This is a special value that shuts down the thread which listens for
+    # further updates.
+    setprop keystore.boot_level 1000000000
+
     # Allow apexd to snapshot and restore device encrypted apex data in the case
     # of a rollback. This should be done immediately after DE_user data keys
     # are loaded. APEXes should not access this data until this has been
     # completed and apexd.status becomes "ready".
     exec_start apexd-snapshotde
-
-    # Set SELinux security contexts on upgrade or policy update.
-    restorecon --recursive --skip-ce /data
 
     # Check any timezone data in /data is newer than the copy in the time zone data
     # module, delete if not.
@@ -803,25 +943,10 @@ on post-fs-data
     # Enable FUSE by default
     setprop persist.sys.fuse true
 
-# Switch between sdcardfs and FUSE depending on persist property
-# TODO: Move this to ro property before launch because FDE devices
-# interact with persistent properties differently during boot
-on zygote-start && property:persist.sys.fuse=true
-  # Mount default storage into root namespace
-  mount none /mnt/user/0 /storage bind rec
-  mount none none /storage slave rec
-on zygote-start && property:persist.sys.fuse=false
-  # Mount default storage into root namespace
-  mount none /mnt/runtime/default /storage bind rec
-  mount none none /storage slave rec
-on zygote-start && property:persist.sys.fuse=""
-  # Mount default storage into root namespace
-  mount none /mnt/runtime/default /storage bind rec
-  mount none none /storage slave rec
-
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
@@ -830,6 +955,7 @@ on zygote-start && property:ro.crypto.state=unencrypted
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
@@ -838,12 +964,18 @@ on zygote-start && property:ro.crypto.state=unsupported
     start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
+    wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier_nonencrypted
     start statsd
     start netd
     start zygote
     start zygote_secondary
+
+on boot && property:ro.config.low_ram=true
+    # Tweak background writeout
+    write /proc/sys/vm/dirty_expire_centisecs 200
+    write /proc/sys/vm/dirty_background_ratio  5
 
 on boot
     # basic network init
@@ -866,22 +998,26 @@ on boot
     chown root system /sys/block/zram0/writeback
     chmod 0664 /sys/block/zram0/writeback
 
-    # Tweak background writeout
-    write /proc/sys/vm/dirty_expire_centisecs 200
-    write /proc/sys/vm/dirty_background_ratio  5
+    # to access F2FS sysfs on dm-<num> directly
+    mkdir /dev/sys/fs/by-name 0755 system system
+    symlink /sys/fs/f2fs/${dev.mnt.blk.data} /dev/sys/fs/by-name/userdata
 
-    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs
+    # to access dm-<num> sysfs
+    mkdir /dev/sys/block/by-name 0755 system system
+    symlink /sys/devices/virtual/block/${dev.mnt.blk.data} /dev/sys/block/by-name/userdata
+
+    # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
     # to make it too large, since it may bring userdata loss, if they
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/cp_interval 200
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/gc_urgent_sleep_time 50
-    write /sys/fs/f2fs/${dev.mnt.blk.data}/iostat_enable 1
+    write /dev/sys/fs/by-name/userdata/cp_interval 200
+    write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
+    write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
     # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
-    write /sys/devices/virtual/block/${dev.mnt.blk.data}/queue/discard_max_bytes 134217728
+    write /dev/sys/block/by-name/userdata/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
@@ -940,15 +1076,12 @@ on boot
     chown root radio /proc/cmdline
 
     # Define default initial receive window size in segments.
-    setprop net.tcp.default_init_rwnd 60
+    setprop net.tcp_def_init_rwnd 60
 
     # Start standard binderized HAL daemons
     class_start hal
 
     class_start core
-
-    # Requires keystore (currently a core service) to be ready first.
-    exec -- /system/bin/fsverity_init
 
 on nonencrypted
     class_start main
@@ -982,6 +1115,7 @@ on property:vold.decrypt=trigger_restart_framework
     class_start main
     class_start late_start
     setprop service.bootanim.exit 0
+    setprop service.bootanim.progress 0
     start bootanim
 
 on property:vold.decrypt=trigger_shutdown_framework
@@ -1002,9 +1136,14 @@ on property:sys.boot_completed=1
 on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
 
+# Allow users to drop caches
+on property:perf.drop_caches=3
+    write /proc/sys/vm/drop_caches 3
+    setprop perf.drop_caches 0
+
 # "tcp_default_init_rwnd" Is too long!
-on property:sys.sysctl.tcp_def_init_rwnd=*
-    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
+on property:net.tcp_def_init_rwnd=*
+    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
 
 # perf_event_open syscall security:
 # Newer kernels have the ability to control the use of the syscall via SELinux
@@ -1032,6 +1171,14 @@ on property:security.perf_harden=1
     write /proc/sys/kernel/perf_event_max_sample_rate 100000
     write /proc/sys/kernel/perf_cpu_time_max_percent 25
     write /proc/sys/kernel/perf_event_mlock_kb 516
+
+# This property can be set only on userdebug/eng. See neverallow rule in
+# /system/sepolicy/private/property.te .
+on property:security.lower_kptr_restrict=1
+    write /proc/sys/kernel/kptr_restrict 0
+
+on property:security.lower_kptr_restrict=0
+    write /proc/sys/kernel/kptr_restrict 2
 
 
 # on shutdown
@@ -1061,6 +1208,8 @@ on property:ro.debuggable=1
     chmod 0773 /data/misc/trace
     # Give reads to anyone for the window trace folder on debug builds.
     chmod 0775 /data/misc/wmtrace
+    # Give reads to anyone for the accessibility trace folder on debug builds.
+    chmod 0775 /data/misc/a11ytrace
 
 on init && property:ro.debuggable=1
     start console
@@ -1071,10 +1220,10 @@ on userspace-reboot-requested
   setprop dev.bootcomplete ""
   setprop sys.init.updatable_crashing ""
   setprop sys.init.updatable_crashing_process_name ""
-  setprop apexd.status ""
   setprop sys.user.0.ce_available ""
   setprop sys.shutdown.requested ""
   setprop service.bootanim.exit ""
+  setprop service.bootanim.progress ""
 
 on userspace-reboot-fs-remount
   # Make sure that vold is running.
@@ -1088,6 +1237,7 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
   umount /data_mirror/cur_profiles
+  umount /data_mirror/ref_profiles
   umount /data_mirror
   remount_userdata
   start bootanim
