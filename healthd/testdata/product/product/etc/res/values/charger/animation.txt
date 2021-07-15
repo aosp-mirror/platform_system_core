@@ -1,0 +1,9 @@
+# Sample Animation file for testing.
+
+# animation: num_cycles, first_frame_repeats, animation_file
+animation: 2 1 charger/battery_scale
+
+fail: charger/battery_fail
+
+# frame: disp_time min_level max_level
+frame: 15 0 100

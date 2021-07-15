@@ -40,6 +40,7 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
@@ -152,14 +153,14 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
   }
 
   struct timeval tv = {
-    .tv_sec = 1,
-    .tv_usec = 0,
+      .tv_sec = 1 * android::base::HwTimeoutMultiplier(),
+      .tv_usec = 0,
   };
   if (setsockopt(amfd.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
     PLOG(ERROR) << "failed to set send timeout on activity manager socket";
     return false;
   }
-  tv.tv_sec = 3;  // 3 seconds on handshake read
+  tv.tv_sec = 3 * android::base::HwTimeoutMultiplier();  // 3 seconds on handshake read
   if (setsockopt(amfd.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
     PLOG(ERROR) << "failed to set receive timeout on activity manager socket";
     return false;
@@ -194,6 +195,7 @@ static pid_t g_target_thread = -1;
 static bool g_tombstoned_connected = false;
 static unique_fd g_tombstoned_socket;
 static unique_fd g_output_fd;
+static unique_fd g_proto_fd;
 
 static void DefuseSignalHandlers() {
   // Don't try to dump ourselves.
@@ -214,7 +216,7 @@ static void Initialize(char** argv) {
     // If we abort before we get an output fd, contact tombstoned to let any
     // potential listeners know that we failed.
     if (!g_tombstoned_connected) {
-      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
+      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, &g_proto_fd,
                               kDebuggerdAnyIntercept)) {
         // We failed to connect, not much we can do.
         LOG(ERROR) << "failed to connected to tombstoned to report failure";
@@ -247,16 +249,24 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
   }
 
   int dump_type_int;
-  if (!android::base::ParseInt(argv[3], &dump_type_int, 0, 1)) {
+  if (!android::base::ParseInt(argv[3], &dump_type_int, 0)) {
     LOG(FATAL) << "invalid requested dump type: " << argv[3];
   }
+
   *dump_type = static_cast<DebuggerdDumpType>(dump_type_int);
+  switch (*dump_type) {
+    case kDebuggerdNativeBacktrace:
+    case kDebuggerdTombstone:
+    case kDebuggerdTombstoneProto:
+      break;
+
+    default:
+      LOG(FATAL) << "invalid requested dump type: " << dump_type_int;
+  }
 }
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
-                          std::unique_ptr<unwindstack::Regs>* regs, uintptr_t* abort_msg_address,
-                          uintptr_t* fdsan_table_address, uintptr_t* gwp_asan_state,
-                          uintptr_t* gwp_asan_metadata) {
+                          std::unique_ptr<unwindstack::Regs>* regs, ProcessInfo* process_info) {
   std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
   CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
   ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
@@ -266,15 +276,13 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
     ssize_t expected_size = 0;
     switch (crash_info->header.version) {
       case 1:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV1);
-        break;
-
       case 2:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV2);
+      case 3:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
         break;
 
-      case 3:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV3);
+      case 4:
+        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
         break;
 
       default:
@@ -282,28 +290,34 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
         break;
     };
 
-    if (rc != expected_size) {
+    if (rc < expected_size) {
       LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
                  << expected_size;
     }
   }
 
-  *fdsan_table_address = 0;
-  *gwp_asan_state = 0;
-  *gwp_asan_metadata = 0;
   switch (crash_info->header.version) {
-    case 3:
-      *gwp_asan_state = crash_info->data.v3.gwp_asan_state;
-      *gwp_asan_metadata = crash_info->data.v3.gwp_asan_metadata;
-      FALLTHROUGH_INTENDED;
-    case 2:
-      *fdsan_table_address = crash_info->data.v2.fdsan_table_address;
+    case 4:
+      process_info->fdsan_table_address = crash_info->data.d.fdsan_table_address;
+      process_info->gwp_asan_state = crash_info->data.d.gwp_asan_state;
+      process_info->gwp_asan_metadata = crash_info->data.d.gwp_asan_metadata;
+      process_info->scudo_stack_depot = crash_info->data.d.scudo_stack_depot;
+      process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
+      process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
       FALLTHROUGH_INTENDED;
     case 1:
-      *abort_msg_address = crash_info->data.v1.abort_msg_address;
-      *siginfo = crash_info->data.v1.siginfo;
+    case 2:
+    case 3:
+      process_info->abort_msg_address = crash_info->data.s.abort_msg_address;
+      *siginfo = crash_info->data.s.siginfo;
+      if (signal_has_si_addr(siginfo)) {
+        process_info->has_fault_address = true;
+        process_info->maybe_tagged_fault_address = reinterpret_cast<uintptr_t>(siginfo->si_addr);
+        process_info->untagged_fault_address =
+            untag_address(reinterpret_cast<uintptr_t>(siginfo->si_addr));
+      }
       regs->reset(unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(),
-                                                        &crash_info->data.v1.ucontext));
+                                                        &crash_info->data.s.ucontext));
       break;
 
     default:
@@ -377,7 +391,7 @@ int main(int argc, char** argv) {
 
   // There appears to be a bug in the kernel where our death causes SIGHUP to
   // be sent to our process group if we exit while it has stopped jobs (e.g.
-  // because of wait_for_gdb). Use setsid to create a new process group to
+  // because of wait_for_debugger). Use setsid to create a new process group to
   // avoid hitting this.
   setsid();
 
@@ -425,10 +439,7 @@ int main(int argc, char** argv) {
   ATRACE_NAME("after reparent");
   pid_t pseudothread_tid;
   DebuggerdDumpType dump_type;
-  uintptr_t abort_msg_address = 0;
-  uintptr_t fdsan_table_address = 0;
-  uintptr_t gwp_asan_state = 0;
-  uintptr_t gwp_asan_metadata = 0;
+  ProcessInfo process_info;
 
   Initialize(argv);
   ParseArgs(argc, argv, &pseudothread_tid, &dump_type);
@@ -437,10 +448,7 @@ int main(int argc, char** argv) {
   //
   // Note: processes with many threads and minidebug-info can take a bit to
   //       unwind, do not make this too small. b/62828735
-  alarm(30);
-
-  // Get the process name (aka cmdline).
-  std::string process_name = get_process_name(g_target_thread);
+  alarm(30 * android::base::HwTimeoutMultiplier());
 
   // Collect the list of open files.
   OpenFilesList open_files;
@@ -478,8 +486,12 @@ int main(int argc, char** argv) {
       info.pid = target_process;
       info.tid = thread;
       info.uid = getuid();
-      info.process_name = process_name;
       info.thread_name = get_thread_name(thread);
+
+      unique_fd attr_fd(openat(target_proc_fd, "attr/current", O_RDONLY | O_CLOEXEC));
+      if (!android::base::ReadFdToString(attr_fd, &info.selinux_label)) {
+        PLOG(WARNING) << "failed to read selinux label";
+      }
 
       if (!ptrace_interrupt(thread, &info.signo)) {
         PLOG(WARNING) << "failed to ptrace interrupt thread " << thread;
@@ -487,12 +499,22 @@ int main(int argc, char** argv) {
         continue;
       }
 
+      struct iovec iov = {
+          &info.tagged_addr_ctrl,
+          sizeof(info.tagged_addr_ctrl),
+      };
+      if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_TAGGED_ADDR_CTRL,
+                 reinterpret_cast<void*>(&iov)) == -1) {
+        info.tagged_addr_ctrl = -1;
+      }
+
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
-        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &abort_msg_address,
-                      &fdsan_table_address, &gwp_asan_state, &gwp_asan_metadata);
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
+
+        info.command_line = get_command_line(g_target_thread);
       } else {
         info.registers.reset(unwindstack::Regs::RemoteGet(thread));
         if (!info.registers) {
@@ -524,15 +546,17 @@ int main(int argc, char** argv) {
   fork_exit_write.reset();
 
   // Defer the message until later, for readability.
-  bool wait_for_gdb = android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false);
+  bool wait_for_debugger = android::base::GetBoolProperty(
+      "debug.debuggerd.wait_for_debugger",
+      android::base::GetBoolProperty("debug.debuggerd.wait_for_gdb", false));
   if (siginfo.si_signo == BIONIC_SIGNAL_DEBUGGER) {
-    wait_for_gdb = false;
+    wait_for_debugger = false;
   }
 
   // Detach from all of our attached threads before resuming.
   for (const auto& [tid, thread] : thread_info) {
     int resume_signal = thread.signo == BIONIC_SIGNAL_DEBUGGER ? 0 : thread.signo;
-    if (wait_for_gdb) {
+    if (wait_for_debugger) {
       resume_signal = 0;
       if (tgkill(target_process, tid, SIGSTOP) != 0) {
         PLOG(WARNING) << "failed to send SIGSTOP to " << tid;
@@ -551,8 +575,8 @@ int main(int argc, char** argv) {
   {
     ATRACE_NAME("tombstoned_connect");
     LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type;
-    g_tombstoned_connected =
-        tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, dump_type);
+    g_tombstoned_connected = tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
+                                                &g_proto_fd, dump_type);
   }
 
   if (g_tombstoned_connected) {
@@ -587,8 +611,8 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Use seccomp to lock ourselves down.
-  unwindstack::UnwinderFromPid unwinder(256, vm_pid);
-  if (!unwinder.Init(unwindstack::Regs::CurrentArch())) {
+  unwindstack::UnwinderFromPid unwinder(256, vm_pid, unwindstack::Regs::CurrentArch());
+  if (!unwinder.Init()) {
     LOG(FATAL) << "Failed to init unwinder object.";
   }
 
@@ -599,14 +623,14 @@ int main(int argc, char** argv) {
   } else {
     {
       ATRACE_NAME("fdsan table dump");
-      populate_fdsan_table(&open_files, unwinder.GetProcessMemory(), fdsan_table_address);
+      populate_fdsan_table(&open_files, unwinder.GetProcessMemory(),
+                           process_info.fdsan_table_address);
     }
 
     {
       ATRACE_NAME("engrave_tombstone");
-      engrave_tombstone(std::move(g_output_fd), &unwinder, thread_info, g_target_thread,
-                        abort_msg_address, &open_files, &amfd_data, gwp_asan_state,
-                        gwp_asan_metadata);
+      engrave_tombstone(std::move(g_output_fd), std::move(g_proto_fd), &unwinder, thread_info,
+                        g_target_thread, process_info, &open_files, &amfd_data);
     }
   }
 
@@ -617,12 +641,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (wait_for_gdb) {
+  if (wait_for_debugger) {
     // Use ALOGI to line up with output from engrave_tombstone.
     ALOGI(
         "***********************************************************\n"
         "* Process %d has been suspended while crashing.\n"
-        "* To attach gdbserver and start gdb, run this on the host:\n"
+        "* To attach the debugger, run this on the host:\n"
         "*\n"
         "*     gdbclient.py -p %d\n"
         "*\n"
