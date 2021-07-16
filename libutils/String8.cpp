@@ -431,17 +431,24 @@ void String8::toLower()
 // ---------------------------------------------------------------------------
 // Path functions
 
-static void setPathName(String8& s, const char* name) {
-    size_t len = strlen(name);
-    char* buf = s.lockBuffer(len);
+void String8::setPathName(const char* name)
+{
+    setPathName(name, strlen(name));
+}
+
+void String8::setPathName(const char* name, size_t len)
+{
+    char* buf = lockBuffer(len);
 
     memcpy(buf, name, len);
 
     // remove trailing path separator, if present
-    if (len > 0 && buf[len - 1] == OS_PATH_SEPARATOR) len--;
+    if (len > 0 && buf[len-1] == OS_PATH_SEPARATOR)
+        len--;
+
     buf[len] = '\0';
 
-    s.unlockBuffer(len);
+    unlockBuffer(len);
 }
 
 String8 String8::getPathLeaf(void) const
@@ -554,7 +561,7 @@ String8& String8::appendPath(const char* name)
         size_t len = length();
         if (len == 0) {
             // no existing filename, just use the new one
-            setPathName(*this, name);
+            setPathName(name);
             return *this;
         }
 
@@ -574,7 +581,7 @@ String8& String8::appendPath(const char* name)
 
         return *this;
     } else {
-        setPathName(*this, name);
+        setPathName(name);
         return *this;
     }
 }
