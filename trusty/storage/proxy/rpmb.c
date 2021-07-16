@@ -212,6 +212,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         rc = ioctl(sg_fd, SG_IO, &io_hdr);
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+            goto err_op;
         }
         write_buf += req->reliable_write_size;
     }
@@ -225,6 +226,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         rc = ioctl(sg_fd, SG_IO, &io_hdr);
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+            goto err_op;
         }
         write_buf += req->write_size;
     }
@@ -240,6 +242,8 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
         }
     }
+
+err_op:
     return rc;
 }
 
