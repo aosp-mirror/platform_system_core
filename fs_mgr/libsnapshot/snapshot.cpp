@@ -2556,6 +2556,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         SnapshotUpdateStatus old_status = ReadSnapshotUpdateStatus(lock);
         status.set_compression_enabled(old_status.compression_enabled());
         status.set_source_build_fingerprint(old_status.source_build_fingerprint());
+        status.set_merge_phase(old_status.merge_phase());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
