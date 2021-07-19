@@ -1193,11 +1193,7 @@ MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const 
             return MergeFailureCode::ParseCowConsistencyCheck;
         }
 
-        for (auto iter = reader.GetOpIter(); !iter->Done(); iter->Next()) {
-            if (!IsMetadataOp(iter->Get())) {
-                num_ops++;
-            }
-        }
+        num_ops = reader.get_num_total_data_ops();
     }
 
     // Second pass, try as hard as we can to get the actual number of blocks
