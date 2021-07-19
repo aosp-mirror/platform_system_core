@@ -136,6 +136,7 @@ FiemapStatus SplitFiemap::Create(const std::string& file_path, uint64_t file_siz
             return FiemapStatus::FromErrno(errno);
         }
     }
+    fsync(fd.get());
 
     // Unset this bit, so we don't unlink on destruction.
     out->creating_ = false;
