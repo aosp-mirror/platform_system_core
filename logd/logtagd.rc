@@ -1,9 +1,0 @@
-#
-# logtagd event log tag service (debug only)
-#
-on post-fs-data
-    mkdir /data/misc/logd 0750 logd log
-    write /data/misc/logd/event-log-tags ""
-    chown logd log /data/misc/logd/event-log-tags
-    chmod 0600 /data/misc/logd/event-log-tags
-    restorecon /data/misc/logd/event-log-tags

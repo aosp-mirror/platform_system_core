@@ -79,7 +79,7 @@ static void initHealthInfo(HealthInfo_2_1* health_info_2_1) {
 
     // HIDL enum values are zero initialized, so they need to be initialized
     // properly.
-    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNKNOWN;
+    health_info_2_1->batteryCapacityLevel = BatteryCapacityLevel::UNSUPPORTED;
     health_info_2_1->batteryChargeTimeToFullNowSeconds =
             (int64_t)Constants::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED;
     auto* props = &health_info_2_1->legacy.legacy;
@@ -349,9 +349,14 @@ void BatteryMonitor::updateValues(void) {
 }
 
 void BatteryMonitor::logValues(void) {
+    logValues(*mHealthInfo, *mHealthdConfig);
+}
+
+void BatteryMonitor::logValues(const android::hardware::health::V2_1::HealthInfo& health_info,
+                               const struct healthd_config& healthd_config) {
     char dmesgline[256];
     size_t len;
-    const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
+    const HealthInfo_1_0& props = health_info.legacy.legacy;
     if (props.batteryPresent) {
         snprintf(dmesgline, sizeof(dmesgline), "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
                  props.batteryLevel, props.batteryVoltage, props.batteryTemperature < 0 ? "-" : "",
@@ -359,17 +364,17 @@ void BatteryMonitor::logValues(void) {
                  props.batteryHealth, props.batteryStatus);
 
         len = strlen(dmesgline);
-        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+        if (!healthd_config.batteryCurrentNowPath.isEmpty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " c=%d",
                             props.batteryCurrent);
         }
 
-        if (!mHealthdConfig->batteryFullChargePath.isEmpty()) {
+        if (!healthd_config.batteryFullChargePath.isEmpty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " fc=%d",
                             props.batteryFullCharge);
         }
 
-        if (!mHealthdConfig->batteryCycleCountPath.isEmpty()) {
+        if (!healthd_config.batteryCycleCountPath.isEmpty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " cc=%d",
                             props.batteryCycleCount);
         }

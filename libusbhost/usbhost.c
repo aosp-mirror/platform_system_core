@@ -597,6 +597,11 @@ struct usb_descriptor_header *usb_descriptor_iter_next(struct usb_descriptor_ite
     if (iter->curr_desc >= iter->config_end)
         return NULL;
     next = (struct usb_descriptor_header*)iter->curr_desc;
+    // Corrupt descriptor with zero length, cannot continue iterating
+    if (next->bLength == 0) {
+       D("usb_descriptor_iter_next got zero length USB descriptor, ending iteration\n");
+       return NULL;
+    }
     iter->curr_desc += next->bLength;
     return next;
 }
