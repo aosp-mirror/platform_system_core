@@ -73,6 +73,7 @@ cc_defaults {
         "libbrotli",
         "libcutils_sockets",
         "libdm",
+        "libfs_mgr",
         "libgflags",
         "liblog",
         "libsnapshot_cow",
