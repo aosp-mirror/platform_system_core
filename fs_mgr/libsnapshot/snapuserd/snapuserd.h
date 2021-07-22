@@ -38,6 +38,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <ext4_utils/ext4_utils.h>
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
@@ -284,6 +285,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     // Total number of blocks to be merged in a given read-ahead buffer region
     void SetTotalRaBlocksMerged(int x) { total_ra_blocks_merged_ = x; }
     int GetTotalRaBlocksMerged() { return total_ra_blocks_merged_; }
+    void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
 
   private:
     bool IsChunkIdMetadata(chunk_t chunk);
@@ -295,6 +297,10 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
     bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
     struct BufferState* GetBufferState();
+
+    void ReadBlocks(const std::string partition_name, const std::string& dm_block_device);
+    void ReadBlocksToCache(const std::string& dm_block_device, const std::string partition_name,
+                           off_t offset, size_t size);
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -335,6 +341,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
 
     bool merge_initiated_ = false;
     bool attached_ = false;
+    bool is_socket_present_;
 };
 
 }  // namespace snapshot

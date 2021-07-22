@@ -78,6 +78,7 @@ cc_defaults {
         "liblog",
         "libsnapshot_cow",
         "libz",
+        "libext4_utils",
     ],
 }
 
@@ -121,6 +122,7 @@ cc_test {
         "libz",
         "libfs_mgr",
         "libdm",
+        "libext4_utils",
     ],
     header_libs: [
         "libstorage_literals_headers",
