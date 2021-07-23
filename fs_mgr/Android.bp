@@ -144,6 +144,7 @@ cc_library {
     // It does not have a stable interface.
     name: "libfs_mgr",
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     defaults: [
         "libfs_mgr_defaults",
@@ -169,6 +170,7 @@ cc_library_static {
     name: "libfstab",
     vendor_available: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     defaults: ["fs_mgr_defaults"],
