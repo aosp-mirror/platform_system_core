@@ -31,6 +31,7 @@ cc_library {
     name: "liblp",
     host_supported: true,
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     defaults: ["fs_mgr_defaults"],
     cppflags: [
