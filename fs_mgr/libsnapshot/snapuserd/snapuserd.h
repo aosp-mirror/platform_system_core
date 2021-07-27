@@ -41,7 +41,7 @@
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
-#include <libsnapshot/snapuserd_kernel.h>
+#include <snapuserd/snapuserd_kernel.h>
 
 namespace android {
 namespace snapshot {

@@ -19,7 +19,7 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <gflags/gflags.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 #include "snapuserd_server.h"
 
