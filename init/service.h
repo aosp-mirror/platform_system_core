@@ -99,6 +99,8 @@ class Service {
     void AddReapCallback(std::function<void(const siginfo_t& siginfo)> callback) {
         reap_callbacks_.emplace_back(std::move(callback));
     }
+    void SetStartedInFirstStage(pid_t pid);
+    bool MarkSocketPersistent(const std::string& socket_name);
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
@@ -144,6 +146,7 @@ class Service {
     void StopOrReset(int how);
     void KillProcessGroup(int signal, bool report_oneshot = false);
     void SetProcessAttributesAndCaps();
+    void ResetFlagsForStart();
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
