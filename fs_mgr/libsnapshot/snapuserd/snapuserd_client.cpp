@@ -33,7 +33,7 @@
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {

@@ -331,12 +331,6 @@ bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
     if (devices.empty()) {
         return true;
     }
-    // excluding overlays
-    for (auto iter = devices.begin(); iter != devices.end(); ) {
-        if (*iter=="overlay")  iter = devices.erase(iter);
-        else iter++;
-    }
-
     return block_dev_init_.InitDevices(std::move(devices));
 }
 
@@ -424,6 +418,10 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
     // Sets end to begin + 1, so we can just return on failure below.
     if (end) {
         *end = begin + 1;
+    }
+
+    if (!fs_mgr_create_canonical_mount_point(begin->mount_point)) {
+        return false;
     }
 
     if (begin->fs_mgr_flags.logical) {
@@ -548,6 +546,7 @@ bool FirstStageMount::MountPartitions() {
             continue;
         }
 
+        // Handle overlayfs entries later.
         if (current->fs_type == "overlay") {
             ++current;
             continue;
@@ -577,6 +576,12 @@ bool FirstStageMount::MountPartitions() {
         current = end;
     }
 
+    for (const auto& entry : fstab_) {
+        if (entry.fs_type == "overlay") {
+            fs_mgr_mount_overlayfs_fstab_entry(entry);
+        }
+    }
+
     // If we don't see /system or / in the fstab, then we need to create an root entry for
     // overlayfs.
     if (!GetEntryForMountPoint(&fstab_, "/system") && !GetEntryForMountPoint(&fstab_, "/")) {
@@ -601,13 +606,6 @@ bool FirstStageMount::MountPartitions() {
         return InitRequiredDevices(std::move(devices));
     };
     MapScratchPartitionIfNeeded(&fstab_, init_devices);
-
-    for (auto current = fstab_.begin(); current != fstab_.end(); ) {
-        if (current->fs_type == "overlay") {
-            fs_mgr_overlayfs_mount_fstab_entry(current->lowerdir, current->mount_point);
-        }
-        ++current;
-    }
 
     fs_mgr_overlayfs_mount_all(&fstab_);
 
@@ -695,6 +693,10 @@ bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) 
     // Includes the partition names of fstab records.
     // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
     for (const auto& fstab_entry : fstab_) {
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
+        }
         if (!fstab_entry.fs_mgr_flags.logical) {
             devices->emplace(basename(fstab_entry.blk_device.c_str()));
         }
@@ -756,6 +758,10 @@ bool FirstStageMountVBootV2::GetDmVerityDevices(std::set<std::string>* devices) 
     for (const auto& fstab_entry : fstab_) {
         if (fstab_entry.fs_mgr_flags.avb) {
             need_dm_verity_ = true;
+        }
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
         }
         if (fstab_entry.fs_mgr_flags.logical) {
             // Don't try to find logical partitions via uevent regeneration.

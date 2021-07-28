@@ -42,4 +42,4 @@ service llkd-0 /system/bin/llkd
     capabilities KILL IPC_LOCK
     file /dev/kmsg w
     file /proc/sysrq-trigger w
-    writepid /dev/cpuset/system-background/tasks
+    task_profiles ServiceCapacityLow

@@ -1,0 +1,4 @@
+service vendor.keymint-trusty /vendor/bin/hw/android.hardware.security.keymint-service.trusty
+    class early_hal
+    user nobody
+    group drmrpc

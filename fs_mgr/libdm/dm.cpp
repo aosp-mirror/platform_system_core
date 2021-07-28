@@ -35,6 +35,10 @@
 
 #include "utility.h"
 
+#ifndef DM_DEFERRED_REMOVE
+#define DM_DEFERRED_REMOVE (1 << 17)
+#endif
+
 namespace android {
 namespace dm {
 
@@ -133,6 +137,25 @@ bool DeviceMapper::DeleteDevice(const std::string& name) {
     return DeleteDevice(name, 0ms);
 }
 
+bool DeviceMapper::DeleteDeviceDeferred(const std::string& name) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+
+    io.flags |= DM_DEFERRED_REMOVE;
+    if (ioctl(fd_, DM_DEV_REMOVE, &io)) {
+        PLOG(ERROR) << "DM_DEV_REMOVE with DM_DEFERRED_REMOVE failed for [" << name << "]";
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::DeleteDeviceIfExistsDeferred(const std::string& name) {
+    if (GetState(name) == DmDeviceState::INVALID) {
+        return true;
+    }
+    return DeleteDeviceDeferred(name);
+}
+
 static std::string GenerateUuid() {
     uuid_t uuid_bytes;
     uuid_generate(uuid_bytes);
@@ -147,19 +170,18 @@ static bool IsRecovery() {
     return access("/system/bin/recovery", F_OK) == 0;
 }
 
-bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
-                                const std::chrono::milliseconds& timeout_ms) {
+bool DeviceMapper::CreateEmptyDevice(const std::string& name) {
     std::string uuid = GenerateUuid();
-    if (!CreateDevice(name, uuid)) {
-        return false;
-    }
+    return CreateDevice(name, uuid);
+}
 
+bool DeviceMapper::WaitForDevice(const std::string& name,
+                                 const std::chrono::milliseconds& timeout_ms, std::string* path) {
     // We use the unique path for testing whether the device is ready. After
     // that, it's safe to use the dm-N path which is compatible with callers
     // that expect it to be formatted as such.
     std::string unique_path;
-    if (!LoadTableAndActivate(name, table) || !GetDeviceUniquePath(name, &unique_path) ||
-        !GetDmDevicePathByName(name, path)) {
+    if (!GetDeviceUniquePath(name, &unique_path) || !GetDmDevicePathByName(name, path)) {
         DeleteDevice(name);
         return false;
     }
@@ -182,6 +204,25 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, s
         DeleteDevice(name);
         return false;
     }
+    return true;
+}
+
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                                const std::chrono::milliseconds& timeout_ms) {
+    if (!CreateEmptyDevice(name)) {
+        return false;
+    }
+
+    if (!LoadTableAndActivate(name, table)) {
+        DeleteDevice(name);
+        return false;
+    }
+
+    if (!WaitForDevice(name, timeout_ms, path)) {
+        DeleteDevice(name);
+        return false;
+    }
+
     return true;
 }
 
