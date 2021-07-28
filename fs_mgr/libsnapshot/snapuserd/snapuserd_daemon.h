@@ -36,8 +36,8 @@ class Daemon {
     }
 
     bool StartServer(int argc, char** argv);
-    void Run();
     void Interrupt();
+    void ReceivedSocketSignal();
 
   private:
     // Signal mask used with ppoll()

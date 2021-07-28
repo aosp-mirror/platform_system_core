@@ -725,6 +725,40 @@ void SendLoadPersistentPropertiesMessage() {
     }
 }
 
+static Result<void> ConnectEarlyStageSnapuserdAction(const BuiltinArguments& args) {
+    auto pid = GetSnapuserdFirstStagePid();
+    if (!pid) {
+        return {};
+    }
+
+    auto info = GetSnapuserdFirstStageInfo();
+    if (auto iter = std::find(info.begin(), info.end(), "socket"s); iter == info.end()) {
+        // snapuserd does not support socket handoff, so exit early.
+        return {};
+    }
+
+    // Socket handoff is supported.
+    auto svc = ServiceList::GetInstance().FindService("snapuserd");
+    if (!svc) {
+        LOG(FATAL) << "Failed to find snapuserd service entry";
+    }
+
+    svc->SetShutdownCritical();
+    svc->SetStartedInFirstStage(*pid);
+
+    svc = ServiceList::GetInstance().FindService("snapuserd_proxy");
+    if (!svc) {
+        LOG(FATAL) << "Failed find snapuserd_proxy service entry, merge will never initiate";
+    }
+    if (!svc->MarkSocketPersistent("snapuserd")) {
+        LOG(FATAL) << "Could not find snapuserd socket in snapuserd_proxy service entry";
+    }
+    if (auto result = svc->Start(); !result.ok()) {
+        LOG(FATAL) << "Could not start snapuserd_proxy: " << result.error();
+    }
+    return {};
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -852,6 +886,7 @@ int SecondStageMain(int argc, char** argv) {
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
+    am.QueueBuiltinAction(ConnectEarlyStageSnapuserdAction, "ConnectEarlyStageSnapuserd");
     am.QueueEventTrigger("early-init");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...

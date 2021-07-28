@@ -31,6 +31,7 @@ namespace snapshot {
 static constexpr uint32_t PACKET_SIZE = 512;
 
 static constexpr char kSnapuserdSocket[] = "snapuserd";
+static constexpr char kSnapuserdSocketProxy[] = "snapuserd_proxy";
 
 // Ensure that the second-stage daemon for snapuserd is running.
 bool EnsureSnapuserdStarted();
@@ -75,6 +76,9 @@ class SnapuserdClient {
     // snapuserd to gracefully exit once all handler threads have terminated.
     // This should only be used on first-stage instances of snapuserd.
     bool DetachSnapuserd();
+
+    // Returns true if the snapuserd instance supports bridging a socket to second-stage init.
+    bool SupportsSecondStageSocketHandoff();
 };
 
 }  // namespace snapshot
