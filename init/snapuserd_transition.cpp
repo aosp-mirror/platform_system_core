@@ -33,10 +33,10 @@
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <libsnapshot/snapshot.h>
-#include <libsnapshot/snapuserd_client.h>
 #include <private/android_filesystem_config.h>
 #include <procinfo/process_map.h>
 #include <selinux/android.h>
+#include <snapuserd/snapuserd_client.h>
 
 #include "block_dev_initializer.h"
 #include "service_utils.h"

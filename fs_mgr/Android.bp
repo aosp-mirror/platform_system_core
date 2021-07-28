@@ -15,7 +15,10 @@
 //
 
 package {
-    default_applicable_licenses: ["system_core_fs_mgr_license"],
+    default_applicable_licenses: [
+        "Android-Apache-2.0",
+        "system_core_fs_mgr_license",
+    ],
 }
 
 // Added automatically by a large-scale-change that took the approach of
@@ -36,10 +39,9 @@ license {
     name: "system_core_fs_mgr_license",
     visibility: [":__subpackages__"],
     license_kinds: [
-        "SPDX-license-identifier-Apache-2.0",
         "SPDX-license-identifier-MIT",
     ],
-    // large-scale-change unable to identify any license_text files
+    license_text: ["NOTICE"],
 }
 
 cc_defaults {
@@ -141,6 +143,8 @@ cc_library {
     // Do not ever allow this library to be vendor_available as a shared library.
     // It does not have a stable interface.
     name: "libfs_mgr",
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     defaults: [
         "libfs_mgr_defaults",
@@ -165,6 +169,8 @@ cc_library_static {
     // It does not have a stable interface.
     name: "libfstab",
     vendor_available: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     defaults: ["fs_mgr_defaults"],

@@ -31,6 +31,7 @@
 
 #include "capabilities.h"
 #include "reboot_utils.h"
+#include "util.h"
 
 namespace android {
 namespace init {
@@ -38,31 +39,51 @@ namespace init {
 static std::string init_fatal_reboot_target = "bootloader";
 static bool init_fatal_panic = false;
 
+// this needs to read the /proc/* files directly because it is called before
+// ro.boot.* properties are initialized
 void SetFatalRebootTarget(const std::optional<std::string>& reboot_target) {
     std::string cmdline;
     android::base::ReadFileToString("/proc/cmdline", &cmdline);
     cmdline = android::base::Trim(cmdline);
 
-    const char kInitFatalPanicString[] = "androidboot.init_fatal_panic=true";
-    init_fatal_panic = cmdline.find(kInitFatalPanicString) != std::string::npos;
+    const std::string kInitFatalPanicParamString = "androidboot.init_fatal_panic";
+    if (cmdline.find(kInitFatalPanicParamString) == std::string::npos) {
+        init_fatal_panic = false;
+        ImportBootconfig(
+                [kInitFatalPanicParamString](const std::string& key, const std::string& value) {
+                    if (key == kInitFatalPanicParamString && value == "true") {
+                        init_fatal_panic = true;
+                    }
+                });
+    } else {
+        const std::string kInitFatalPanicString = kInitFatalPanicParamString + "=true";
+        init_fatal_panic = cmdline.find(kInitFatalPanicString) != std::string::npos;
+    }
 
     if (reboot_target) {
         init_fatal_reboot_target = *reboot_target;
         return;
     }
 
-    const char kRebootTargetString[] = "androidboot.init_fatal_reboot_target=";
+    const std::string kRebootTargetString = "androidboot.init_fatal_reboot_target";
     auto start_pos = cmdline.find(kRebootTargetString);
     if (start_pos == std::string::npos) {
-        return;  // We already default to bootloader if no setting is provided.
-    }
-    start_pos += sizeof(kRebootTargetString) - 1;
+        ImportBootconfig([kRebootTargetString](const std::string& key, const std::string& value) {
+            if (key == kRebootTargetString) {
+                init_fatal_reboot_target = value;
+            }
+        });
+        // We already default to bootloader if no setting is provided.
+    } else {
+        const std::string kRebootTargetStringPattern = kRebootTargetString + "=";
+        start_pos += sizeof(kRebootTargetStringPattern) - 1;
 
-    auto end_pos = cmdline.find(' ', start_pos);
-    // if end_pos isn't found, then we've run off the end, but this is okay as this is the last
-    // entry, and -1 is a valid size for string::substr();
-    auto size = end_pos == std::string::npos ? -1 : end_pos - start_pos;
-    init_fatal_reboot_target = cmdline.substr(start_pos, size);
+        auto end_pos = cmdline.find(' ', start_pos);
+        // if end_pos isn't found, then we've run off the end, but this is okay as this is the last
+        // entry, and -1 is a valid size for string::substr();
+        auto size = end_pos == std::string::npos ? -1 : end_pos - start_pos;
+        init_fatal_reboot_target = cmdline.substr(start_pos, size);
+    }
 }
 
 bool IsRebootCapable() {

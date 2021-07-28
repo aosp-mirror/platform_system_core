@@ -30,7 +30,6 @@ cc_defaults {
         "libhidlbase",
         "liblog",
         "libprotobuf-cpp-lite",
-        "libsysutils",
         "libutils",
         "libz",
     ],

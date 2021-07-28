@@ -41,7 +41,7 @@
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
-#include <libsnapshot/snapuserd_kernel.h>
+#include <snapuserd/snapuserd_kernel.h>
 
 namespace android {
 namespace snapshot {
@@ -99,6 +99,7 @@ class BufferSink : public IByteSink {
     struct dm_user_header* GetHeaderPtr();
     bool ReturnData(void*, size_t) override { return true; }
     void ResetBufferOffset() { buffer_offset_ = 0; }
+    void* GetPayloadBufPtr();
 
   private:
     std::unique_ptr<uint8_t[]> buffer_;
@@ -171,7 +172,7 @@ class WorkerThread {
     bool DmuserReadRequest();
     bool DmuserWriteRequest();
     bool ReadDmUserPayload(void* buffer, size_t size);
-    bool WriteDmUserPayload(size_t size);
+    bool WriteDmUserPayload(size_t size, bool header_response);
 
     bool ReadDiskExceptions(chunk_t chunk, size_t size);
     bool ZerofillDiskExceptions(size_t read_size);
@@ -305,8 +306,6 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     uint32_t exceptions_per_area_;
     uint64_t num_sectors_;
 
-    std::unique_ptr<ICowOpIter> cowop_iter_;
-    std::unique_ptr<ICowOpReverseIter> cowop_riter_;
     std::unique_ptr<CowReader> reader_;
 
     // Vector of disk exception which is a

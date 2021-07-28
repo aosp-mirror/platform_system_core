@@ -20,6 +20,8 @@ package {
 
 cc_library_headers {
     name: "libfiemap_headers",
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
 }
