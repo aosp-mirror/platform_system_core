@@ -194,8 +194,6 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
                   << ") process group...";
         int max_processes = 0;
         int r;
-
-        flags_ |= SVC_STOPPING;
         if (signal == SIGTERM) {
             r = killProcessGroupOnce(proc_attr_.uid, pid_, signal, &max_processes);
         } else {
@@ -271,6 +269,9 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     // Remove any socket resources we may have created.
     for (const auto& socket : sockets_) {
+        if (socket.persist) {
+            continue;
+        }
         auto path = ANDROID_SOCKET_DIR "/" + socket.name;
         unlink(path.c_str());
     }
@@ -279,8 +280,7 @@ void Service::Reap(const siginfo_t& siginfo) {
         f(siginfo);
     }
 
-    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_ &&
-        !(flags_ & SVC_STOPPING)) {
+    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
         LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
         trigger_shutdown(*on_failure_reboot_target_);
     }
@@ -290,7 +290,7 @@ void Service::Reap(const siginfo_t& siginfo) {
     if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
-    flags_ &= ~(SVC_RUNNING | SVC_STOPPING);
+    flags_ &= (~SVC_RUNNING);
     start_order_ = 0;
 
     // Oneshot processes go into the disabled state on exit,
@@ -412,10 +412,7 @@ Result<void> Service::Start() {
     }
 
     bool disabled = (flags_ & (SVC_DISABLED | SVC_RESET));
-    // Starting a service removes it from the disabled or reset state and
-    // immediately takes it out of the restarting state if it was in there.
-    flags_ &= (~(SVC_DISABLED | SVC_RESTARTING | SVC_RESET | SVC_RESTART | SVC_DISABLED_START |
-                 SVC_STOPPING));
+    ResetFlagsForStart();
 
     // Running processes require no additional work --- if they're in the
     // process of exiting, we've ensured that they will immediately restart
@@ -626,6 +623,23 @@ Result<void> Service::Start() {
     return {};
 }
 
+void Service::SetStartedInFirstStage(pid_t pid) {
+    LOG(INFO) << "adding first-stage service '" << name_ << "'...";
+
+    time_started_ = boot_clock::now();  // not accurate, but doesn't matter here
+    pid_ = pid;
+    flags_ |= SVC_RUNNING;
+    start_order_ = next_start_order_++;
+
+    NotifyStateChange("running");
+}
+
+void Service::ResetFlagsForStart() {
+    // Starting a service removes it from the disabled or reset state and
+    // immediately takes it out of the restarting state if it was in there.
+    flags_ &= ~(SVC_DISABLED | SVC_RESTARTING | SVC_RESET | SVC_RESTART | SVC_DISABLED_START);
+}
+
 Result<void> Service::StartIfNotDisabled() {
     if (!(flags_ & SVC_DISABLED)) {
         return Start();
@@ -794,6 +808,19 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
                                      nullptr, str_args, false);
+}
+
+// This is used for snapuserd_proxy, which hands off a socket to snapuserd. It's
+// a special case to support the daemon launched in first-stage init. The persist
+// feature is not part of the init language and is only used here.
+bool Service::MarkSocketPersistent(const std::string& socket_name) {
+    for (auto& socket : sockets_) {
+        if (socket.name == socket_name) {
+            socket.persist = true;
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace init

@@ -20,7 +20,7 @@
 #include <optional>
 #include <set>
 
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {
