@@ -23,6 +23,9 @@ namespace fs_mgr {
 // Wait at most |relative_timeout| milliseconds for |path| to exist. dirname(path)
 // must already exist. For example, to wait on /dev/block/dm-6, /dev/block must
 // be a valid directory.
+//
+// If relative_timeout is std::chrono::milliseconds::max(), then the wait will
+// block indefinitely.
 bool WaitForFile(const std::string& path, const std::chrono::milliseconds relative_timeout);
 
 // Wait at most |relative_timeout| milliseconds for |path| to stop existing.

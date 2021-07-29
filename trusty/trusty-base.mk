@@ -28,5 +28,6 @@ PRODUCT_PACKAGES += \
 	trusty_apploader
 
 PRODUCT_PROPERTY_OVERRIDES += \
+	ro.hardware.keystore_desede=true \
 	ro.hardware.keystore=trusty \
 	ro.hardware.gatekeeper=trusty

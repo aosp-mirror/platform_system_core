@@ -33,10 +33,10 @@
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
 #include <libsnapshot/snapshot.h>
-#include <libsnapshot/snapuserd_client.h>
 #include <private/android_filesystem_config.h>
 #include <procinfo/process_map.h>
 #include <selinux/android.h>
+#include <snapuserd/snapuserd_client.h>
 
 #include "block_dev_initializer.h"
 #include "service_utils.h"
@@ -54,6 +54,7 @@ using android::snapshot::SnapuserdClient;
 static constexpr char kSnapuserdPath[] = "/system/bin/snapuserd";
 static constexpr char kSnapuserdFirstStagePidVar[] = "FIRST_STAGE_SNAPUSERD_PID";
 static constexpr char kSnapuserdFirstStageFdVar[] = "FIRST_STAGE_SNAPUSERD_FD";
+static constexpr char kSnapuserdFirstStageInfoVar[] = "FIRST_STAGE_SNAPUSERD_INFO";
 static constexpr char kSnapuserdLabel[] = "u:object_r:snapuserd_exec:s0";
 static constexpr char kSnapuserdSocketLabel[] = "u:object_r:snapuserd_socket:s0";
 
@@ -85,6 +86,14 @@ void LaunchFirstStageSnapuserd() {
             PLOG(FATAL) << "Cannot launch snapuserd; execv failed";
         }
         _exit(127);
+    }
+
+    auto client = SnapuserdClient::Connect(android::snapshot::kSnapuserdSocket, 10s);
+    if (!client) {
+        LOG(FATAL) << "Could not connect to first-stage snapuserd";
+    }
+    if (client->SupportsSecondStageSocketHandoff()) {
+        setenv(kSnapuserdFirstStageInfoVar, "socket", 1);
     }
 
     setenv(kSnapuserdFirstStagePidVar, std::to_string(pid).c_str(), 1);
@@ -326,6 +335,14 @@ void SaveRamdiskPathToSnapuserd() {
 
 bool IsFirstStageSnapuserdRunning() {
     return GetSnapuserdFirstStagePid().has_value();
+}
+
+std::vector<std::string> GetSnapuserdFirstStageInfo() {
+    const char* pid_str = getenv(kSnapuserdFirstStageInfoVar);
+    if (!pid_str) {
+        return {};
+    }
+    return android::base::Split(pid_str, ",");
 }
 
 }  // namespace init

@@ -33,7 +33,7 @@
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
 #include <libsnapshot/cow_writer.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 #include <storage_literals/storage_literals.h>
 
 #include "snapuserd.h"
