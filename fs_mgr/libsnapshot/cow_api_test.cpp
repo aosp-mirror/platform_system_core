@@ -1013,6 +1013,27 @@ TEST_F(CowTest, BigSeqOp) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, MissingSeqOp) {
+    CowOptions options;
+    CowWriter writer(options);
+    const int seq_len = 10;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len - 1));
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_FALSE(reader.Parse(cow_->fd));
+}
+
 TEST_F(CowTest, RevMergeOpItrTest) {
     CowOptions options;
     options.cluster_ops = 5;
