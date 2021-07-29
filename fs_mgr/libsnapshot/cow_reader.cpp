@@ -413,6 +413,13 @@ bool CowReader::PrepMergeOps() {
         }
         block_map->insert({current_op.new_block, i});
     }
+    for (auto block : *merge_op_blocks) {
+        if (block_map->count(block) == 0) {
+            LOG(ERROR) << "Invalid Sequence Ops. Could not find Cow Op for new block " << block;
+            return false;
+        }
+    }
+
     if (merge_op_blocks->size() > header_.num_merge_ops) {
         num_ordered_ops_to_merge_ = merge_op_blocks->size() - header_.num_merge_ops;
     } else {
