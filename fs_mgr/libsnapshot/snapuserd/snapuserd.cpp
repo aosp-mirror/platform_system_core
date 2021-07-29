@@ -20,7 +20,7 @@
 #include <optional>
 #include <set>
 
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {
@@ -404,7 +404,6 @@ bool Snapuserd::ReadMetadata() {
         // Construct the disk-exception
         de->old_chunk = cow_op->new_block;
         de->new_chunk = data_chunk_id;
-
 
         // Store operation pointer.
         chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), cow_op));

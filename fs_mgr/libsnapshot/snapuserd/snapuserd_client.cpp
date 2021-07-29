@@ -33,7 +33,7 @@
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {
@@ -139,6 +139,16 @@ bool SnapuserdClient::WaitForDeviceDelete(const std::string& control_device) {
         return false;
     }
     return true;
+}
+
+bool SnapuserdClient::SupportsSecondStageSocketHandoff() {
+    std::string msg = "supports,second_stage_socket_handoff";
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
 }
 
 std::string SnapuserdClient::Receivemsg() {
