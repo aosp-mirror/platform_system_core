@@ -82,6 +82,21 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
+static bool IsMicrodroid() {
+    static bool is_microdroid = android::base::GetProperty("ro.hardware", "") == "microdroid";
+    return is_microdroid;
+}
+
+// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
+// namespaces.
+static bool NeedsTwoMountNamespaces() {
+    if (!IsApexUpdatable()) return false;
+    if (IsRecoveryMode()) return false;
+    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
+    if (IsMicrodroid()) return false;
+    return true;
+}
+
 #ifdef ACTIVATE_FLATTENED_APEX
 
 static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
@@ -260,7 +275,7 @@ bool SetupMountNamespaces() {
     // number of essential APEXes (e.g. com.android.runtime) are activated.
     // In the namespace for post-apexd processes, all APEXes are activated.
     bool success = true;
-    if (IsApexUpdatable() && !IsRecoveryMode()) {
+    if (NeedsTwoMountNamespaces()) {
         // Creating a new namespace by cloning, saving, and switching back to
         // the original namespace.
         if (unshare(CLONE_NEWNS) == -1) {
