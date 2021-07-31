@@ -34,7 +34,11 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
+CowReader::CowReader()
+    : fd_(-1),
+      header_(),
+      fd_size_(0),
+      merge_op_blocks_(std::make_shared<std::vector<uint32_t>>()) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -150,6 +154,8 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     if (!ParseOps(label)) {
         return false;
     }
+    // If we're resuming a write, we're not ready to merge
+    if (label.has_value()) return true;
     return PrepMergeOps();
 }
 

@@ -1113,6 +1113,54 @@ TEST_F(CowTest, MissingSeqOp) {
     ASSERT_FALSE(reader.Parse(cow_->fd));
 }
 
+TEST_F(CowTest, ResumeSeqOp) {
+    CowOptions options;
+    auto writer = std::make_unique<CowWriter>(options);
+    const int seq_len = 10;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer->AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer->AddZeroBlocks(1, seq_len / 2));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->AddZeroBlocks(1 + seq_len / 2, 1));
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+    auto reader = std::make_unique<CowReader>();
+    ASSERT_TRUE(reader->Parse(cow_->fd, 1));
+    auto itr = reader->GetRevMergeOpIter();
+    ASSERT_TRUE(itr->Done());
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->AddZeroBlocks(1 + seq_len / 2, seq_len / 2));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    reader = std::make_unique<CowReader>();
+    ASSERT_TRUE(reader->Parse(cow_->fd));
+
+    auto iter = reader->GetRevMergeOpIter();
+
+    uint64_t expected_block = 10;
+    while (!iter->Done() && expected_block > 0) {
+        ASSERT_FALSE(iter->Done());
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, expected_block);
+
+        iter->Next();
+        expected_block--;
+    }
+    ASSERT_EQ(expected_block, 0);
+    ASSERT_TRUE(iter->Done());
+}
+
 TEST_F(CowTest, RevMergeOpItrTest) {
     CowOptions options;
     options.cluster_ops = 5;
