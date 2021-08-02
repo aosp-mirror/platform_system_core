@@ -42,13 +42,15 @@ using namespace std::chrono_literals;
 using android::base::unique_fd;
 
 bool EnsureSnapuserdStarted() {
-    if (android::base::GetProperty("init.svc.snapuserd", "") == "running") {
-        return true;
+    if (android::base::GetProperty("init.svc.snapuserd", "") != "running") {
+        android::base::SetProperty("ctl.start", "snapuserd");
+        if (!android::base::WaitForProperty("init.svc.snapuserd", "running", 10s)) {
+            LOG(ERROR) << "Timed out waiting for snapuserd to start.";
+            return false;
+        }
     }
-
-    android::base::SetProperty("ctl.start", "snapuserd");
-    if (!android::base::WaitForProperty("init.svc.snapuserd", "running", 10s)) {
-        LOG(ERROR) << "Timed out waiting for snapuserd to start.";
+    if (!android::base::WaitForProperty("snapuserd.ready", "true", 10s)) {
+        LOG(ERROR) << "Timed out waiting for snapuserd to be ready.";
         return false;
     }
     return true;

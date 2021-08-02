@@ -291,6 +291,14 @@ bool SnapuserdServer::StartWithSocket(bool start_listening) {
 
     AddWatchedFd(sockfd_, POLLIN);
 
+    // If started in first-stage init, the property service won't be online.
+    if (access("/dev/socket/property_service", F_OK) == 0) {
+        if (!android::base::SetProperty("snapuserd.ready", "true")) {
+            LOG(ERROR) << "Failed to set snapuserd.ready property";
+            return false;
+        }
+    }
+
     LOG(DEBUG) << "Snapuserd server now accepting connections";
     return true;
 }
