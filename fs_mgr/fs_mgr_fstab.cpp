@@ -180,6 +180,7 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("slotselect_other", slot_select_other);
         CheckFlag("fsverity", fs_verity);
         CheckFlag("metadata_csum", ext_meta_csum);
+        CheckFlag("overlayfs_remove_missing_lowerdir", overlayfs_remove_missing_lowerdir);
 
 #undef CheckFlag
 
