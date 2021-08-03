@@ -2328,7 +2328,24 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
         return false;
     }
 
-    auto options = "lowerdir=" + entry.lowerdir;
+    auto lowerdir = entry.lowerdir;
+    if (entry.fs_mgr_flags.overlayfs_remove_missing_lowerdir) {
+        bool removed_any = false;
+        std::vector<std::string> lowerdirs;
+        for (const auto& dir : android::base::Split(entry.lowerdir, ":")) {
+            if (access(dir.c_str(), F_OK)) {
+                PWARNING << __FUNCTION__ << "(): remove missing lowerdir '" << dir << "'";
+                removed_any = true;
+            } else {
+                lowerdirs.push_back(dir);
+            }
+        }
+        if (removed_any) {
+            lowerdir = android::base::Join(lowerdirs, ":");
+        }
+    }
+
+    auto options = "lowerdir=" + lowerdir;
     if (overlayfs_valid_result == OverlayfsValidResult::kOverrideCredsRequired) {
         options += ",override_creds=off";
     }
