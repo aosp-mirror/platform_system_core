@@ -34,7 +34,11 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
+CowReader::CowReader()
+    : fd_(-1),
+      header_(),
+      fd_size_(0),
+      merge_op_blocks_(std::make_shared<std::vector<uint32_t>>()) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -43,6 +47,23 @@ static void SHA256(const void*, size_t, uint8_t[]) {
     SHA256_Update(&c, data, length);
     SHA256_Final(out, &c);
 #endif
+}
+
+std::unique_ptr<CowReader> CowReader::CloneCowReader() {
+    auto cow = std::make_unique<CowReader>();
+    cow->owned_fd_.reset();
+    cow->header_ = header_;
+    cow->footer_ = footer_;
+    cow->fd_size_ = fd_size_;
+    cow->last_label_ = last_label_;
+    cow->ops_ = ops_;
+    cow->merge_op_blocks_ = merge_op_blocks_;
+    cow->block_map_ = block_map_;
+    cow->num_total_data_ops_ = num_total_data_ops_;
+    cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
+    cow->has_seq_ops_ = has_seq_ops_;
+    cow->data_loc_ = data_loc_;
+    return cow;
 }
 
 bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
@@ -133,11 +154,14 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     if (!ParseOps(label)) {
         return false;
     }
+    // If we're resuming a write, we're not ready to merge
+    if (label.has_value()) return true;
     return PrepMergeOps();
 }
 
 bool CowReader::ParseOps(std::optional<uint64_t> label) {
     uint64_t pos;
+    auto data_loc = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
     // Skip the scratch space
     if (header_.major_version >= 2 && (header_.buffer_size > 0)) {
@@ -156,6 +180,13 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         }
         // Reading a v1 version of COW which doesn't have buffer_size.
         header_.buffer_size = 0;
+    }
+    uint64_t data_pos = 0;
+
+    if (header_.cluster_ops) {
+        data_pos = pos + header_.cluster_ops * sizeof(CowOperation);
+    } else {
+        data_pos = pos + sizeof(CowOperation);
     }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
@@ -177,7 +208,11 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         while (current_op_num < ops_buffer->size()) {
             auto& current_op = ops_buffer->data()[current_op_num];
             current_op_num++;
+            if (current_op.type == kCowXorOp) {
+                data_loc->insert({current_op.new_block, data_pos});
+            }
             pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
+            data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
 
             if (current_op.type == kCowClusterOp) {
                 break;
@@ -268,6 +303,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 
     ops_ = ops_buffer;
     ops_->shrink_to_fit();
+    data_loc_ = data_loc;
 
     return true;
 }
@@ -606,7 +642,13 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
             return false;
     }
 
-    CowDataStream stream(this, op.source, op.data_length);
+    uint64_t offset;
+    if (op.type == kCowXorOp) {
+        offset = data_loc_->at(op.new_block);
+    } else {
+        offset = op.source;
+    }
+    CowDataStream stream(this, offset, op.data_length);
     decompressor->set_stream(&stream);
     decompressor->set_sink(sink);
     return decompressor->Decompress(header_.block_size);

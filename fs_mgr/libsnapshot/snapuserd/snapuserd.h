@@ -107,6 +107,20 @@ class BufferSink : public IByteSink {
     size_t buffer_size_;
 };
 
+class XorSink : public IByteSink {
+  public:
+    void Initialize(BufferSink* sink, size_t size);
+    void Reset();
+    void* GetBuffer(size_t requested, size_t* actual) override;
+    bool ReturnData(void* buffer, size_t len) override;
+
+  private:
+    BufferSink* bufsink_;
+    std::unique_ptr<uint8_t[]> buffer_;
+    size_t buffer_size_;
+    size_t returned_;
+};
+
 class Snapuserd;
 
 class ReadAheadThread {
@@ -116,10 +130,10 @@ class ReadAheadThread {
     bool RunThread();
 
   private:
-    void InitializeIter();
-    bool IterDone();
-    void IterNext();
-    const CowOperation* GetIterOp();
+    void InitializeRAIter();
+    bool RAIterDone();
+    void RAIterNext();
+    const CowOperation* GetRAOpIter();
     void InitializeBuffer();
 
     bool InitializeFds();
@@ -129,7 +143,7 @@ class ReadAheadThread {
     }
 
     bool ReadAheadIOStart();
-    void PrepareReadAhead(uint64_t* source_block, int* pending_ops, std::vector<uint64_t>& blocks);
+    void PrepareReadAhead(uint64_t* source_offset, int* pending_ops, std::vector<uint64_t>& blocks);
     bool ReconstructDataFromCow();
     void CheckOverlap(const CowOperation* cow_op);
 
@@ -187,7 +201,9 @@ class WorkerThread {
     // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
     bool ProcessReplaceOp(const CowOperation* cow_op);
+    // Handles Copy and Xor
     bool ProcessCopyOp(const CowOperation* cow_op);
+    bool ProcessXorOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
 
     bool ReadFromBaseDevice(const CowOperation* cow_op);
@@ -206,6 +222,7 @@ class WorkerThread {
 
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
+    XorSink xorsink_;
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -244,6 +261,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
 
     bool InitializeWorkers();
+    std::unique_ptr<CowReader> CloneReaderForWorker();
     std::shared_ptr<Snapuserd> GetSharedPtr() { return shared_from_this(); }
 
     std::vector<std::pair<sector_t, const CowOperation*>>& GetChunkVec() { return chunk_vec_; }
