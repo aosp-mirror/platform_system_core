@@ -138,6 +138,8 @@ struct CowOperation {
     // For Label operations, this is the value of the applied label.
     //
     // For Cluster operations, this is the length of the following data region
+    //
+    // For Xor operations, this is the byte location in the source image.
     uint64_t source;
 } __attribute__((packed));
 
@@ -148,6 +150,7 @@ static constexpr uint8_t kCowReplaceOp = 2;
 static constexpr uint8_t kCowZeroOp = 3;
 static constexpr uint8_t kCowLabelOp = 4;
 static constexpr uint8_t kCowClusterOp = 5;
+static constexpr uint8_t kCowXorOp = 6;
 static constexpr uint8_t kCowSequenceOp = 7;
 static constexpr uint8_t kCowFooterOp = -1;
 
