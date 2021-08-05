@@ -43,6 +43,7 @@
 using android::base::GetBoolProperty;
 using android::base::StringPrintf;
 using android::base::unique_fd;
+using android::base::WriteStringToFile;
 
 static constexpr const char* CGROUP_PROCS_FILE = "/cgroup.procs";
 static constexpr const char* CGROUP_TASKS_FILE = "/tasks";
@@ -201,4 +202,22 @@ CgroupController CgroupMap::FindController(const std::string& name) const {
     }
 
     return CgroupController(nullptr);
+}
+
+int CgroupMap::ActivateControllers(const std::string& path) const {
+    if (__builtin_available(android 30, *)) {
+        auto controller_count = ACgroupFile_getControllerCount();
+        for (uint32_t i = 0; i < controller_count; ++i) {
+            const ACgroupController* controller = ACgroupFile_getController(i);
+            if (ACgroupController_getFlags(controller) &
+                CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+                std::string str = std::string("+") + ACgroupController_getName(controller);
+                if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
+                    return -errno;
+                }
+            }
+        }
+        return 0;
+    }
+    return -ENOSYS;
 }
