@@ -96,6 +96,7 @@ class SnapuserdServer : public Stoppable {
     bool terminating_;
     volatile bool received_socket_signal_ = false;
     std::vector<struct pollfd> watched_fds_;
+    bool is_socket_present_ = false;
 
     std::mutex lock_;
 
