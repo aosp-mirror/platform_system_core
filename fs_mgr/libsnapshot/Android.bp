@@ -504,3 +504,13 @@ cc_binary {
         "inspect_cow.cpp",
     ],
 }
+
+python_library_host {
+    name: "snapshot_proto_python",
+    srcs: [
+        "android/snapshot/snapshot.proto",
+    ],
+    proto: {
+        canonical_path_from_root: false,
+    },
+}
