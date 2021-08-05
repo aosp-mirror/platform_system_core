@@ -14,3 +14,6 @@ service snapuserd_proxy /system/bin/snapuserd -socket-handoff
     user root
     group root system
     seclabel u:r:snapuserd:s0
+
+on property:init.svc.snapuserd=stopped
+    setprop snapuserd.ready false

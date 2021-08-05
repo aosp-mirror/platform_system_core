@@ -106,6 +106,11 @@ bool CompressedSnapshotWriter::EmitRawBlocks(uint64_t new_block_start, const voi
     return cow_->AddRawBlocks(new_block_start, data, size);
 }
 
+bool CompressedSnapshotWriter::EmitXorBlocks(uint32_t new_block_start, const void* data,
+                                             size_t size, uint32_t old_block, uint16_t offset) {
+    return cow_->AddXorBlocks(new_block_start, data, size, old_block, offset);
+}
+
 bool CompressedSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     return cow_->AddZeroBlocks(new_block_start, num_blocks);
 }
@@ -155,6 +160,11 @@ bool OnlineKernelSnapshotWriter::EmitRawBlocks(uint64_t new_block_start, const v
         return false;
     }
     return true;
+}
+
+bool OnlineKernelSnapshotWriter::EmitXorBlocks(uint32_t, const void*, size_t, uint32_t, uint16_t) {
+    LOG(ERROR) << "EmitXorBlocks not implemented.";
+    return false;
 }
 
 bool OnlineKernelSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {

@@ -122,6 +122,12 @@ class DeviceHandler : public UeventHandler {
 
     std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
 
+    // `androidboot.partition_map` allows associating a partition name for a raw block device
+    // through a comma separated and semicolon deliminated list. For example,
+    // `androidboot.partition_map=vdb,metadata;vdc,userdata` maps `vdb` to `metadata` and `vdc` to
+    // `userdata`.
+    static std::string GetPartitionNameForDevice(const std::string& device);
+
   private:
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
