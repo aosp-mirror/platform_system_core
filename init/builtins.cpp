@@ -1305,20 +1305,8 @@ static Result<void> MountLinkerConfigForDefaultNamespace() {
 
     return {};
 }
-
-static bool IsApexUpdatable() {
-    static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
-    return updatable;
-}
-
 static Result<void> do_update_linker_config(const BuiltinArguments&) {
-    // If APEX is not updatable, then all APEX information are already included in the first
-    // linker config generation, so there is no need to update linker configuration again.
-    if (IsApexUpdatable()) {
-        return GenerateLinkerConfiguration();
-    }
-
-    return {};
+    return GenerateLinkerConfiguration();
 }
 
 static Result<void> parse_apex_configs() {
