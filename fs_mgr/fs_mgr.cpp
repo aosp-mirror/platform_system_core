@@ -34,11 +34,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -101,6 +103,7 @@ using android::base::GetUintProperty;
 using android::base::Realpath;
 using android::base::SetProperty;
 using android::base::StartsWith;
+using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
@@ -2044,6 +2047,35 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
     return 0;
 }
 
+static bool ConfigureIoScheduler(const std::string& device_path) {
+    if (!StartsWith(device_path, "/dev/")) {
+        LERROR << __func__ << ": invalid argument " << device_path;
+        return false;
+    }
+
+    const std::string iosched_path =
+            StringPrintf("/sys/block/%s/queue/scheduler", Basename(device_path).c_str());
+    unique_fd iosched_fd(open(iosched_path.c_str(), O_RDWR | O_CLOEXEC));
+    if (iosched_fd.get() == -1) {
+        PERROR << __func__ << ": failed to open " << iosched_path;
+        return false;
+    }
+
+    // Kernels before v4.1 only support 'noop'. Kernels [v4.1, v5.0) support
+    // 'noop' and 'none'. Kernels v5.0 and later only support 'none'.
+    static constexpr const std::array<std::string_view, 2> kNoScheduler = {"none", "noop"};
+
+    for (const std::string_view& scheduler : kNoScheduler) {
+        int ret = write(iosched_fd.get(), scheduler.data(), scheduler.size());
+        if (ret > 0) {
+            return true;
+        }
+    }
+
+    PERROR << __func__ << ": failed to write to " << iosched_path;
+    return false;
+}
+
 static bool InstallZramDevice(const std::string& device) {
     if (!android::base::WriteStringToFile(device, ZRAM_BACK_DEV)) {
         PERROR << "Cannot write " << device << " in: " << ZRAM_BACK_DEV;
@@ -2071,22 +2103,24 @@ static bool PrepareZramBackingDevice(off64_t size) {
 
     // Allocate loop device and attach it to file_path.
     LoopControl loop_control;
-    std::string device;
-    if (!loop_control.Attach(target_fd.get(), 5s, &device)) {
+    std::string loop_device;
+    if (!loop_control.Attach(target_fd.get(), 5s, &loop_device)) {
         return false;
     }
+
+    ConfigureIoScheduler(loop_device);
 
     // set block size & direct IO
-    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
-    if (device_fd.get() == -1) {
-        PERROR << "Cannot open " << device;
+    unique_fd loop_fd(TEMP_FAILURE_RETRY(open(loop_device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (loop_fd.get() == -1) {
+        PERROR << "Cannot open " << loop_device;
         return false;
     }
-    if (!LoopControl::EnableDirectIo(device_fd.get())) {
+    if (!LoopControl::EnableDirectIo(loop_fd.get())) {
         return false;
     }
 
-    return InstallZramDevice(device);
+    return InstallZramDevice(loop_device);
 }
 
 bool fs_mgr_swapon_all(const Fstab& fstab) {
