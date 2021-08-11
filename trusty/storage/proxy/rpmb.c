@@ -29,6 +29,8 @@
 #include <linux/major.h>
 #include <linux/mmc/ioctl.h>
 
+#include <hardware_legacy/power.h>
+
 #include "ipc.h"
 #include "log.h"
 #include "rpmb.h"
@@ -99,6 +101,8 @@ struct sec_proto_cdb {
 static int rpmb_fd = -1;
 static uint8_t read_buf[4096];
 static enum dev_type dev_type = UNKNOWN_RPMB;
+
+static const char* UFS_WAKE_LOCK_NAME = "ufs_seq_wakelock";
 
 #ifdef RPMB_DEBUG
 
@@ -194,6 +198,7 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
 
 static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req) {
     int rc;
+    int wl_rc;
     const uint8_t* write_buf = req->payload;
     /*
      * Meaning of member values are stated on the definition of struct sec_proto_cdb.
@@ -201,6 +206,12 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
     struct sec_proto_cdb in_cdb = {0xA2, 0xEC, 0x00, 0x01, 0x00, 0x00, 0, 0x00, 0x00};
     struct sec_proto_cdb out_cdb = {0xB5, 0xEC, 0x00, 0x01, 0x00, 0x00, 0, 0x00, 0x00};
     unsigned char sense_buffer[32];
+
+    wl_rc = acquire_wake_lock(PARTIAL_WAKE_LOCK, UFS_WAKE_LOCK_NAME);
+    if (wl_rc < 0) {
+        ALOGE("%s: failed to acquire wakelock: %d, %s\n", __func__, wl_rc, strerror(errno));
+        return wl_rc;
+    }
 
     if (req->reliable_write_size) {
         /* Prepare SECURITY PROTOCOL OUT command. */
@@ -212,6 +223,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         rc = ioctl(sg_fd, SG_IO, &io_hdr);
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+            goto err_op;
         }
         write_buf += req->reliable_write_size;
     }
@@ -225,6 +237,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         rc = ioctl(sg_fd, SG_IO, &io_hdr);
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
+            goto err_op;
         }
         write_buf += req->write_size;
     }
@@ -240,6 +253,13 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
         }
     }
+
+err_op:
+    wl_rc = release_wake_lock(UFS_WAKE_LOCK_NAME);
+    if (wl_rc < 0) {
+        ALOGE("%s: failed to release wakelock: %d, %s\n", __func__, wl_rc, strerror(errno));
+    }
+
     return rc;
 }
 
