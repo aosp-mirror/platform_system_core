@@ -941,7 +941,8 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_bo
         // Tries to locate top-level vbmeta from boot.img footer.
         uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
         if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
-            die("Failed to find AVB_FOOTER at offset: %" PRId64, footer_offset);
+            die("Failed to find AVB_FOOTER at offset: %" PRId64 ", is BOARD_AVB_ENABLE true?",
+                footer_offset);
         }
         const AvbFooter* footer = reinterpret_cast<const AvbFooter*>(data.c_str() + footer_offset);
         vbmeta_offset = be64toh(footer->vbmeta_offset);
@@ -1021,6 +1022,24 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
         return;
     }
 
+    // If overflows and negative, it should be < buf->sz.
+    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
+
+    if (partition_size == buf->sz) {
+        return;
+    }
+    // Some device bootloaders might not implement `fastboot getvar partition-size:boot[_a|_b]`.
+    // In this case, partition_size will be zero.
+    if (partition_size < buf->sz) {
+        fprintf(stderr,
+                "Warning: skip copying boot image avb footer"
+                " (boot partition size: %" PRId64 ", boot image size: %" PRId64 ").\n",
+                partition_size, buf->sz);
+        return;
+    }
+
+    // IMPORTANT: after the following read, we need to reset buf->fd before return (if not die).
+    // Because buf->fd will still be used afterwards.
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
         die("Failed reading from boot");
@@ -1028,16 +1047,8 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
 
     uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
     if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
+        lseek(buf->fd.get(), 0, SEEK_SET);  // IMPORTANT: resets buf->fd before return.
         return;
-    }
-    // If overflows and negative, it should be < buf->sz.
-    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
-
-    if (partition_size == buf->sz) {
-        return;
-    }
-    if (partition_size < buf->sz) {
-        die("boot partition is smaller than boot image");
     }
 
     unique_fd fd(make_temporary_fd("boot rewriting"));
