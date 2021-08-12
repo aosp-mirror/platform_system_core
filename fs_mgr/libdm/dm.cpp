@@ -578,7 +578,7 @@ std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
     return std::string{spec.target_type, sizeof(spec.target_type)};
 }
 
-static std::optional<std::string> ExtractBlockDeviceName(const std::string& path) {
+std::optional<std::string> ExtractBlockDeviceName(const std::string& path) {
     static constexpr std::string_view kDevBlockPrefix("/dev/block/");
     if (android::base::StartsWith(path, kDevBlockPrefix)) {
         return path.substr(kDevBlockPrefix.length());
