@@ -13,6 +13,7 @@ cc_defaults {
         "-Wno-unused-function",
         "-Wno-nullability-completeness",
         "-Os",
+        "-fno-finite-loops",
     ],
 
     local_include_dirs: ["include"],

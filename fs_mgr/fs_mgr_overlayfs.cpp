@@ -1133,7 +1133,7 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
     if (!images->BackingImageExists(partition_name)) {
-        static constexpr uint64_t kMinimumSize = 16_MiB;
+        static constexpr uint64_t kMinimumSize = 64_MiB;
         static constexpr uint64_t kMaximumSize = 2_GiB;
 
         uint64_t size = std::clamp(info.size / 2, kMinimumSize, kMaximumSize);
