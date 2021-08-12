@@ -38,6 +38,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <ext4_utils/ext4_utils.h>
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
@@ -107,6 +108,20 @@ class BufferSink : public IByteSink {
     size_t buffer_size_;
 };
 
+class XorSink : public IByteSink {
+  public:
+    void Initialize(BufferSink* sink, size_t size);
+    void Reset();
+    void* GetBuffer(size_t requested, size_t* actual) override;
+    bool ReturnData(void* buffer, size_t len) override;
+
+  private:
+    BufferSink* bufsink_;
+    std::unique_ptr<uint8_t[]> buffer_;
+    size_t buffer_size_;
+    size_t returned_;
+};
+
 class Snapuserd;
 
 class ReadAheadThread {
@@ -116,10 +131,10 @@ class ReadAheadThread {
     bool RunThread();
 
   private:
-    void InitializeIter();
-    bool IterDone();
-    void IterNext();
-    const CowOperation* GetIterOp();
+    void InitializeRAIter();
+    bool RAIterDone();
+    void RAIterNext();
+    const CowOperation* GetRAOpIter();
     void InitializeBuffer();
 
     bool InitializeFds();
@@ -129,7 +144,7 @@ class ReadAheadThread {
     }
 
     bool ReadAheadIOStart();
-    void PrepareReadAhead(uint64_t* source_block, int* pending_ops, std::vector<uint64_t>& blocks);
+    void PrepareReadAhead(uint64_t* source_offset, int* pending_ops, std::vector<uint64_t>& blocks);
     bool ReconstructDataFromCow();
     void CheckOverlap(const CowOperation* cow_op);
 
@@ -187,7 +202,9 @@ class WorkerThread {
     // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
     bool ProcessReplaceOp(const CowOperation* cow_op);
+    // Handles Copy and Xor
     bool ProcessCopyOp(const CowOperation* cow_op);
+    bool ProcessXorOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
 
     bool ReadFromBaseDevice(const CowOperation* cow_op);
@@ -206,6 +223,7 @@ class WorkerThread {
 
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
+    XorSink xorsink_;
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -244,6 +262,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     void* GetExceptionBuffer(size_t i) { return vec_[i].get(); }
 
     bool InitializeWorkers();
+    std::unique_ptr<CowReader> CloneReaderForWorker();
     std::shared_ptr<Snapuserd> GetSharedPtr() { return shared_from_this(); }
 
     std::vector<std::pair<sector_t, const CowOperation*>>& GetChunkVec() { return chunk_vec_; }
@@ -284,6 +303,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     // Total number of blocks to be merged in a given read-ahead buffer region
     void SetTotalRaBlocksMerged(int x) { total_ra_blocks_merged_ = x; }
     int GetTotalRaBlocksMerged() { return total_ra_blocks_merged_; }
+    void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
 
   private:
     bool IsChunkIdMetadata(chunk_t chunk);
@@ -295,6 +315,10 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
     bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
     struct BufferState* GetBufferState();
+
+    void ReadBlocks(const std::string partition_name, const std::string& dm_block_device);
+    void ReadBlocksToCache(const std::string& dm_block_device, const std::string partition_name,
+                           off_t offset, size_t size);
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -335,6 +359,7 @@ class Snapuserd : public std::enable_shared_from_this<Snapuserd> {
 
     bool merge_initiated_ = false;
     bool attached_ = false;
+    bool is_socket_present_;
 };
 
 }  // namespace snapshot

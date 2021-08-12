@@ -93,8 +93,18 @@ int main(int argc, char* argv[]) {
     errx(1, "process %d is a zombie", pid);
   }
 
-  if (kill(pid, 0) != 0) {
-    err(1, "cannot send signal to process %d", pid);
+  // Send a signal to the main thread pid, not a side thread. The signal
+  // handler always sets the crashing tid to the main thread pid when sent this
+  // signal. This is to avoid a problem where the signal is sent to a process,
+  // but happens on a side thread and the intercept mismatches since it
+  // is looking for the main thread pid, not the tid of this random thread.
+  // See b/194346289 for extra details.
+  if (kill(proc_info.pid, 0) != 0) {
+    if (pid == proc_info.pid) {
+      err(1, "cannot send signal to process %d", pid);
+    } else {
+      err(1, "cannot send signal to main thread %d (requested thread %d)", proc_info.pid, pid);
+    }
   }
 
   unique_fd piperead, pipewrite;
@@ -103,9 +113,13 @@ int main(int argc, char* argv[]) {
   }
 
   std::thread redirect_thread = spawn_redirect_thread(std::move(piperead));
-  if (!debuggerd_trigger_dump(pid, dump_type, 0, std::move(pipewrite))) {
+  if (!debuggerd_trigger_dump(proc_info.pid, dump_type, 0, std::move(pipewrite))) {
     redirect_thread.join();
-    errx(1, "failed to dump process %d", pid);
+    if (pid == proc_info.pid) {
+      errx(1, "failed to dump process %d", pid);
+    } else {
+      errx(1, "failed to dump main thread %d (requested thread %d)", proc_info.pid, pid);
+    }
   }
 
   redirect_thread.join();

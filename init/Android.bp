@@ -228,17 +228,19 @@ cc_binary {
     stem: "init",
     defaults: ["init_defaults"],
     static_libs: ["libinit"],
-    required: [
-        "e2fsdroid",
-        "init.rc",
-        "mke2fs",
-        "sload_f2fs",
-        "make_f2fs",
-        "ueventd.rc",
-    ],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
     target: {
+        platform: {
+            required: [
+                "init.rc",
+                "ueventd.rc",
+                "e2fsdroid",
+                "make_f2fs",
+                "mke2fs",
+                "sload_f2fs",
+            ],
+        },
         recovery: {
             cflags: ["-DRECOVERY"],
             exclude_static_libs: [
@@ -247,6 +249,14 @@ cc_binary {
             exclude_shared_libs: [
                 "libbinder",
                 "libutils",
+            ],
+            required: [
+                "init_recovery.rc",
+                "ueventd.rc.recovery",
+                "e2fsdroid.recovery",
+                "make_f2fs.recovery",
+                "mke2fs.recovery",
+                "sload_f2fs.recovery",
             ],
         },
     },

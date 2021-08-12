@@ -25,13 +25,25 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <android-base/cmsg.h>
 #include <android-base/logging.h>
-
+#include <android-base/properties.h>
+#include <android-base/scopeguard.h>
+#include <fs_mgr/file_wait.h>
+#include <snapuserd/snapuserd_client.h>
 #include "snapuserd.h"
 #include "snapuserd_server.h"
 
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
+
 namespace android {
 namespace snapshot {
+
+using namespace std::string_literals;
+
+using android::base::borrowed_fd;
+using android::base::unique_fd;
 
 DaemonOperations SnapuserdServer::Resolveop(std::string& input) {
     if (input == "init") return DaemonOperations::INIT;
@@ -40,6 +52,7 @@ DaemonOperations SnapuserdServer::Resolveop(std::string& input) {
     if (input == "query") return DaemonOperations::QUERY;
     if (input == "delete") return DaemonOperations::DELETE;
     if (input == "detach") return DaemonOperations::DETACH;
+    if (input == "supports") return DaemonOperations::SUPPORTS;
 
     return DaemonOperations::INVALID;
 }
@@ -193,6 +206,16 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
             terminating_ = true;
             return true;
         }
+        case DaemonOperations::SUPPORTS: {
+            if (out.size() != 2) {
+                LOG(ERROR) << "Malformed supports message, " << out.size() << " parts";
+                return Sendmsg(fd, "fail");
+            }
+            if (out[1] == "second_stage_socket_handoff") {
+                return Sendmsg(fd, "success");
+            }
+            return Sendmsg(fd, "fail");
+        }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
             Sendmsg(fd, "fail");
@@ -204,6 +227,7 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
 void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
+    handler->snapuserd()->SetSocketPresent(is_socket_present_);
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -245,28 +269,45 @@ void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
 }
 
 bool SnapuserdServer::Start(const std::string& socketname) {
+    bool start_listening = true;
+
     sockfd_.reset(android_get_control_socket(socketname.c_str()));
-    if (sockfd_ >= 0) {
-        if (listen(sockfd_.get(), 4) < 0) {
-            PLOG(ERROR) << "listen socket failed: " << socketname;
-            return false;
-        }
-    } else {
+    if (sockfd_ < 0) {
         sockfd_.reset(socket_local_server(socketname.c_str(), ANDROID_SOCKET_NAMESPACE_RESERVED,
                                           SOCK_STREAM));
         if (sockfd_ < 0) {
             PLOG(ERROR) << "Failed to create server socket " << socketname;
             return false;
         }
+        start_listening = false;
+    }
+    return StartWithSocket(start_listening);
+}
+
+bool SnapuserdServer::StartWithSocket(bool start_listening) {
+    if (start_listening && listen(sockfd_.get(), 4) < 0) {
+        PLOG(ERROR) << "listen socket failed";
+        return false;
     }
 
-    AddWatchedFd(sockfd_);
+    AddWatchedFd(sockfd_, POLLIN);
+    is_socket_present_ = true;
 
-    LOG(DEBUG) << "Snapuserd server successfully started with socket name " << socketname;
+    // If started in first-stage init, the property service won't be online.
+    if (access("/dev/socket/property_service", F_OK) == 0) {
+        if (!android::base::SetProperty("snapuserd.ready", "true")) {
+            LOG(ERROR) << "Failed to set snapuserd.ready property";
+            return false;
+        }
+    }
+
+    LOG(DEBUG) << "Snapuserd server now accepting connections";
     return true;
 }
 
 bool SnapuserdServer::Run() {
+    LOG(INFO) << "Now listening on snapuserd socket";
+
     while (!IsTerminating()) {
         int rv = TEMP_FAILURE_RETRY(poll(watched_fds_.data(), watched_fds_.size(), -1));
         if (rv < 0) {
@@ -311,10 +352,10 @@ void SnapuserdServer::JoinAllThreads() {
     }
 }
 
-void SnapuserdServer::AddWatchedFd(android::base::borrowed_fd fd) {
+void SnapuserdServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
     struct pollfd p = {};
     p.fd = fd.get();
-    p.events = POLLIN;
+    p.events = events;
     watched_fds_.emplace_back(std::move(p));
 }
 
@@ -325,7 +366,7 @@ void SnapuserdServer::AcceptClient() {
         return;
     }
 
-    AddWatchedFd(fd);
+    AddWatchedFd(fd, POLLIN);
 }
 
 bool SnapuserdServer::HandleClient(android::base::borrowed_fd fd, int revents) {
@@ -418,6 +459,98 @@ bool SnapuserdServer::RemoveAndJoinHandler(const std::string& misc_name) {
     auto& th = handler->thread();
     if (th.joinable()) {
         th.join();
+    }
+    return true;
+}
+
+bool SnapuserdServer::WaitForSocket() {
+    auto scope_guard = android::base::make_scope_guard([this]() -> void { JoinAllThreads(); });
+
+    auto socket_path = ANDROID_SOCKET_DIR "/"s + kSnapuserdSocketProxy;
+
+    if (!android::fs_mgr::WaitForFile(socket_path, std::chrono::milliseconds::max())) {
+        LOG(ERROR)
+                << "Failed to wait for proxy socket, second-stage snapuserd will fail to connect";
+        return false;
+    }
+
+    // We must re-initialize property service access, since we launched before
+    // second-stage init.
+    __system_properties_init();
+
+    if (!android::base::WaitForProperty("snapuserd.proxy_ready", "true")) {
+        LOG(ERROR)
+                << "Failed to wait for proxy property, second-stage snapuserd will fail to connect";
+        return false;
+    }
+
+    unique_fd fd(socket_local_client(kSnapuserdSocketProxy, ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                     SOCK_SEQPACKET));
+    if (fd < 0) {
+        PLOG(ERROR) << "Failed to connect to socket proxy";
+        return false;
+    }
+
+    char code[1];
+    std::vector<unique_fd> fds;
+    ssize_t rv = android::base::ReceiveFileDescriptorVector(fd, code, sizeof(code), 1, &fds);
+    if (rv < 0) {
+        PLOG(ERROR) << "Failed to receive server socket over proxy";
+        return false;
+    }
+    if (fds.empty()) {
+        LOG(ERROR) << "Expected at least one file descriptor from proxy";
+        return false;
+    }
+
+    // We don't care if the ACK is received.
+    code[0] = 'a';
+    if (TEMP_FAILURE_RETRY(send(fd, code, sizeof(code), MSG_NOSIGNAL) < 0)) {
+        PLOG(ERROR) << "Failed to send ACK to proxy";
+        return false;
+    }
+
+    sockfd_ = std::move(fds[0]);
+    if (!StartWithSocket(true)) {
+        return false;
+    }
+    return Run();
+}
+
+bool SnapuserdServer::RunForSocketHandoff() {
+    unique_fd proxy_fd(android_get_control_socket(kSnapuserdSocketProxy));
+    if (proxy_fd < 0) {
+        PLOG(FATAL) << "Proxy could not get android control socket " << kSnapuserdSocketProxy;
+    }
+    borrowed_fd server_fd(android_get_control_socket(kSnapuserdSocket));
+    if (server_fd < 0) {
+        PLOG(FATAL) << "Proxy could not get android control socket " << kSnapuserdSocket;
+    }
+
+    if (listen(proxy_fd.get(), 4) < 0) {
+        PLOG(FATAL) << "Proxy listen socket failed";
+    }
+
+    if (!android::base::SetProperty("snapuserd.proxy_ready", "true")) {
+        LOG(FATAL) << "Proxy failed to set ready property";
+    }
+
+    unique_fd client_fd(
+            TEMP_FAILURE_RETRY(accept4(proxy_fd.get(), nullptr, nullptr, SOCK_CLOEXEC)));
+    if (client_fd < 0) {
+        PLOG(FATAL) << "Proxy accept failed";
+    }
+
+    char code[1] = {'a'};
+    std::vector<int> fds = {server_fd.get()};
+    ssize_t rv = android::base::SendFileDescriptorVector(client_fd, code, sizeof(code), fds);
+    if (rv < 0) {
+        PLOG(FATAL) << "Proxy could not send file descriptor to snapuserd";
+    }
+    // Wait for an ACK - results don't matter, we just don't want to risk closing
+    // the proxy socket too early.
+    if (recv(client_fd, code, sizeof(code), 0) < 0) {
+        PLOG(FATAL) << "Proxy could not receive terminating code from snapuserd";
     }
     return true;
 }
