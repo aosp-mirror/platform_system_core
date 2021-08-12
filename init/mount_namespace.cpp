@@ -82,109 +82,20 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
-#ifdef ACTIVATE_FLATTENED_APEX
-
-static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
-    if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && errno != EEXIST) {
-        return ErrnoError() << "Could not create mount point " << mount_path;
-    }
-    if (mount(path.c_str(), mount_path.c_str(), nullptr, MS_BIND, nullptr) != 0) {
-        return ErrnoError() << "Could not bind mount " << path << " to " << mount_path;
-    }
-    return {};
+static bool IsMicrodroid() {
+    static bool is_microdroid = android::base::GetProperty("ro.hardware", "") == "microdroid";
+    return is_microdroid;
 }
 
-static Result<apex::proto::ApexManifest> GetApexManifest(const std::string& apex_dir) {
-    const std::string manifest_path = apex_dir + "/apex_manifest.pb";
-    std::string content;
-    if (!android::base::ReadFileToString(manifest_path, &content)) {
-        return Error() << "Failed to read manifest file: " << manifest_path;
-    }
-    apex::proto::ApexManifest manifest;
-    if (!manifest.ParseFromString(content)) {
-        return Error() << "Can't parse manifest file: " << manifest_path;
-    }
-    return manifest;
-}
-
-template <typename Fn>
-static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
-                                                const std::string& to_dir, Fn on_activate) {
-    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(from_dir.c_str()), closedir);
-    if (!dir) {
-        return {};
-    }
-    dirent* entry;
-    std::vector<std::string> entries;
-
-    while ((entry = readdir(dir.get())) != nullptr) {
-        if (entry->d_name[0] == '.') continue;
-        if (entry->d_type == DT_DIR) {
-            entries.push_back(entry->d_name);
-        }
-    }
-
-    std::sort(entries.begin(), entries.end());
-    for (const auto& name : entries) {
-        const std::string apex_path = from_dir + "/" + name;
-        const auto apex_manifest = GetApexManifest(apex_path);
-        if (!apex_manifest.ok()) {
-            LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_manifest.error();
-            continue;
-        }
-        const std::string mount_path = to_dir + "/" + apex_manifest->name();
-        if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
-            return result;
-        }
-        on_activate(apex_path, *apex_manifest);
-    }
-    return {};
-}
-
-static bool ActivateFlattenedApexesIfPossible() {
-    if (IsRecoveryMode() || IsApexUpdatable()) {
-        return true;
-    }
-
-    const std::string kApexTop = "/apex";
-    const std::vector<std::string> kBuiltinDirsForApexes = {
-            "/system/apex",
-            "/system_ext/apex",
-            "/product/apex",
-            "/vendor/apex",
-    };
-
-    std::vector<com::android::apex::ApexInfo> apex_infos;
-    auto on_activate = [&](const std::string& apex_path,
-                           const apex::proto::ApexManifest& apex_manifest) {
-        apex_infos.emplace_back(apex_manifest.name(), apex_path, apex_path, apex_manifest.version(),
-                                apex_manifest.versionname(), /*isFactory=*/true, /*isActive=*/true,
-                                /* lastUpdateMillis= */ 0);
-    };
-
-    for (const auto& dir : kBuiltinDirsForApexes) {
-        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop, on_activate); !result.ok()) {
-            LOG(ERROR) << result.error();
-            return false;
-        }
-    }
-
-    std::ostringstream oss;
-    com::android::apex::ApexInfoList apex_info_list(apex_infos);
-    com::android::apex::write(oss, apex_info_list);
-    const std::string kApexInfoList = kApexTop + "/apex-info-list.xml";
-    if (!android::base::WriteStringToFile(oss.str(), kApexInfoList)) {
-        PLOG(ERROR) << "Failed to write " << kApexInfoList;
-        return false;
-    }
-    if (selinux_android_restorecon(kApexInfoList.c_str(), 0) != 0) {
-        PLOG(ERROR) << "selinux_android_restorecon(" << kApexInfoList << ") failed";
-    }
-
+// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
+// namespaces.
+static bool NeedsTwoMountNamespaces() {
+    if (!IsApexUpdatable()) return false;
+    if (IsRecoveryMode()) return false;
+    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
+    if (IsMicrodroid()) return false;
     return true;
 }
-
-#endif  // ACTIVATE_FLATTENED_APEX
 
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
@@ -260,7 +171,7 @@ bool SetupMountNamespaces() {
     // number of essential APEXes (e.g. com.android.runtime) are activated.
     // In the namespace for post-apexd processes, all APEXes are activated.
     bool success = true;
-    if (IsApexUpdatable() && !IsRecoveryMode()) {
+    if (NeedsTwoMountNamespaces()) {
         // Creating a new namespace by cloning, saving, and switching back to
         // the original namespace.
         if (unshare(CLONE_NEWNS) == -1) {
@@ -279,9 +190,7 @@ bool SetupMountNamespaces() {
         default_ns_fd.reset(OpenMountNamespace());
         default_ns_id = GetMountNamespaceId();
     }
-#ifdef ACTIVATE_FLATTENED_APEX
-    success &= ActivateFlattenedApexesIfPossible();
-#endif
+
     LOG(INFO) << "SetupMountNamespaces done";
     return success;
 }

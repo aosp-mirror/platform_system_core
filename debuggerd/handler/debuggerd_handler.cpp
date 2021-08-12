@@ -155,18 +155,14 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * could allocate memory or hold a lock.
  */
 static void log_signal_summary(const siginfo_t* info) {
-  char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
-  if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
-    strcpy(thread_name, "<name unknown>");
-  } else {
-    // short names are null terminated by prctl, but the man page
-    // implies that 16 byte names are not.
-    thread_name[MAX_TASK_NAME_LEN] = 0;
+  char main_thread_name[MAX_TASK_NAME_LEN + 1];
+  if (!get_main_thread_name(main_thread_name, sizeof(main_thread_name))) {
+    strncpy(main_thread_name, "<unknown>", sizeof(main_thread_name));
   }
 
   if (info->si_signo == BIONIC_SIGNAL_DEBUGGER) {
-    async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for tid %d (%s)", __gettid(),
-                          thread_name);
+    async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for pid %d (%s)", __getpid(),
+                          main_thread_name);
     return;
   }
 
@@ -181,9 +177,13 @@ static void log_signal_summary(const siginfo_t* info) {
     get_signal_sender(sender_desc, sizeof(sender_desc), info);
   }
 
-  char main_thread_name[MAX_TASK_NAME_LEN + 1];
-  if (!get_main_thread_name(main_thread_name, sizeof(main_thread_name))) {
-    strncpy(main_thread_name, "<unknown>", sizeof(main_thread_name));
+  char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
+  if (prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(thread_name), 0, 0, 0) != 0) {
+    strcpy(thread_name, "<name unknown>");
+  } else {
+    // short names are null terminated by prctl, but the man page
+    // implies that 16 byte names are not.
+    thread_name[MAX_TASK_NAME_LEN] = 0;
   }
 
   async_safe_format_log(ANDROID_LOG_FATAL, "libc",
@@ -532,8 +532,13 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
 
   log_signal_summary(info);
 
+  // If we got here due to the signal BIONIC_SIGNAL_DEBUGGER, it's possible
+  // this is not the main thread, which can cause the intercept logic to fail
+  // since the intercept is only looking for the main thread. In this case,
+  // setting crashing_tid to pid instead of the current thread's tid avoids
+  // the problem.
   debugger_thread_info thread_info = {
-      .crashing_tid = __gettid(),
+      .crashing_tid = (signal_number == BIONIC_SIGNAL_DEBUGGER) ? __getpid() : __gettid(),
       .pseudothread_tid = -1,
       .siginfo = info,
       .ucontext = context,

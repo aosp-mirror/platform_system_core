@@ -206,6 +206,9 @@ bool OneShotInotify::ConsumeEvents() {
 }
 
 int64_t OneShotInotify::RemainingMs() const {
+    if (relative_timeout_ == std::chrono::milliseconds::max()) {
+        return std::chrono::milliseconds::max().count();
+    }
     auto remaining = (std::chrono::steady_clock::now() - start_time_);
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
     return (relative_timeout_ - elapsed).count();

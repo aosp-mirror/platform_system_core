@@ -17,8 +17,9 @@
 #include <android-base/logging.h>
 #include <stdint.h>
 
+#include <limits>
 #include <optional>
-#include <vector>
+#include <unordered_set>
 
 namespace android {
 namespace snapshot {
@@ -37,21 +38,16 @@ class DmSnapCowSizeCalculator {
             return;
         }
 
-        if (modified_chunks_.size() <= chunk_id) {
-            if (modified_chunks_.max_size() <= chunk_id) {
-                LOG(ERROR) << "Invalid COW size, chunk_id is too large.";
-                valid_ = false;
-                return;
-            }
-            modified_chunks_.resize(chunk_id + 1, false);
-            if (modified_chunks_.size() <= chunk_id) {
-                LOG(ERROR) << "Invalid COW size, chunk_id is too large.";
-                valid_ = false;
-                return;
-            }
+        if (chunk_id > std::numeric_limits<uint32_t>::max()) {
+            LOG(ERROR) << "Chunk exceeds maximum size: " << chunk_id;
+            valid_ = false;
+            return;
+        }
+        if (modified_chunks_.count(chunk_id) > 0) {
+            return;
         }
 
-        modified_chunks_[chunk_id] = true;
+        modified_chunks_.emplace(chunk_id);
     }
 
     std::optional<uint64_t> cow_size_bytes() const {
@@ -91,23 +87,16 @@ class DmSnapCowSizeCalculator {
             return std::nullopt;
         }
 
-        uint64_t modified_chunks_count = 0;
         uint64_t cow_chunks = 0;
-
-        for (const auto& c : modified_chunks_) {
-            if (c) {
-                ++modified_chunks_count;
-            }
-        }
 
         /* disk header + padding = 1 chunk */
         cow_chunks += 1;
 
         /* snapshot modified chunks */
-        cow_chunks += modified_chunks_count;
+        cow_chunks += modified_chunks_.size();
 
         /* snapshot chunks index metadata */
-        cow_chunks += 1 + modified_chunks_count / exceptions_per_chunk;
+        cow_chunks += 1 + modified_chunks_.size() / exceptions_per_chunk;
 
         return cow_chunks;
     }
@@ -150,30 +139,8 @@ class DmSnapCowSizeCalculator {
     /*
      * |modified_chunks_| is a container that keeps trace of the modified
      * chunks.
-     * Multiple options were considered when choosing the most appropriate data
-     * structure for this container. Here follows a summary of why vector<bool>
-     * has been chosen, taking as a reference a snapshot partition of 4 GiB and
-     * chunk size of 4 KiB.
-     * - std::set<uint64_t> is very space-efficient for a small number of
-     *   operations, but if the whole snapshot is changed, it would need to
-     *   store
-     *     4 GiB / 4 KiB * (64 bit / 8) = 8 MiB
-     *   just for the data, plus the additional data overhead for the red-black
-     *   tree used for data sorting (if each rb-tree element stores 3 address
-     *   and the word-aligne color, the total size grows to 32 MiB).
-     * - std::bitset<N> is not a good fit because requires a priori knowledge,
-     *   at compile time, of the bitset size.
-     * - std::vector<bool> is a special case of vector, which uses a data
-     *   compression that allows reducing the space utilization of each element
-     *   to 1 bit. In detail, this data structure is composed of a resizable
-     *   array of words, each of them representing a bitmap. On a 64 bit
-     *   device, modifying the whole 4 GiB snapshot grows this container up to
-     *     4 * GiB / 4 KiB / 64 = 64 KiB
-     *   that, even if is the same space requirement to change a single byte at
-     *   the highest address of the snapshot, is a very affordable space
-     *   requirement.
      */
-    std::vector<bool> modified_chunks_;
+    std::unordered_set<uint32_t> modified_chunks_;
 };
 
 }  // namespace snapshot
