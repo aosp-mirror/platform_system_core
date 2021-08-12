@@ -227,6 +227,7 @@ bool SnapuserdServer::Receivemsg(android::base::borrowed_fd fd, const std::strin
 void SnapuserdServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
+    handler->snapuserd()->SetSocketPresent(is_socket_present_);
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -290,6 +291,7 @@ bool SnapuserdServer::StartWithSocket(bool start_listening) {
     }
 
     AddWatchedFd(sockfd_, POLLIN);
+    is_socket_present_ = true;
 
     // If started in first-stage init, the property service won't be online.
     if (access("/dev/socket/property_service", F_OK) == 0) {
