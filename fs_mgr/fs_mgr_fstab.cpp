@@ -413,17 +413,24 @@ std::string ReadFstabFromDt() {
     return fstab_result;
 }
 
-// Identify path to fstab file. Lookup is based on pattern
-// fstab.<fstab_suffix>, fstab.<hardware>, fstab.<hardware.platform> in
-// folders /odm/etc, vendor/etc, or /.
+// Return the path to the fstab file.  There may be multiple fstab files; the
+// one that is returned will be the first that exists of fstab.<fstab_suffix>,
+// fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
+// in /odm/etc/ and /vendor/etc/, as well as in the locations where it may be in
+// the first stage ramdisk during early boot.  Previously, the first stage
+// ramdisk's copy of the fstab had to be located in the root directory, but now
+// the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;
 
         if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
-        for (const char* prefix :
-             {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab.", "/first_stage_ramdisk/fstab."}) {
+        for (const char* prefix : {// late-boot/post-boot locations
+                                   "/odm/etc/fstab.", "/vendor/etc/fstab.",
+                                   // early boot locations
+                                   "/system/etc/fstab.", "/first_stage_ramdisk/system/etc/fstab.",
+                                   "/fstab.", "/first_stage_ramdisk/fstab."}) {
             std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
