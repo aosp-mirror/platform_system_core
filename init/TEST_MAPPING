@@ -1,0 +1,10 @@
+{
+  "presubmit": [
+    {
+      "name": "CtsInitTestCases"
+    },
+    {
+      "name": "init_kill_services_test"
+    }
+  ]
+}
