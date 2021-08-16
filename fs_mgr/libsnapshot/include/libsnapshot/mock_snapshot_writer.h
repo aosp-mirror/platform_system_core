@@ -36,6 +36,8 @@ class MockSnapshotWriter : public ISnapshotWriter {
 
     MOCK_METHOD(bool, EmitCopy, (uint64_t, uint64_t), (override));
     MOCK_METHOD(bool, EmitRawBlocks, (uint64_t, const void*, size_t), (override));
+    MOCK_METHOD(bool, EmitXorBlocks, (uint32_t, const void*, size_t, uint32_t, uint16_t),
+                (override));
     MOCK_METHOD(bool, EmitZeroBlocks, (uint64_t, uint64_t), (override));
     MOCK_METHOD(bool, EmitLabel, (uint64_t), (override));
     MOCK_METHOD(bool, EmitSequenceData, (size_t, const uint32_t*), (override));
