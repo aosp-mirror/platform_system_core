@@ -67,6 +67,27 @@ enum class MERGE_IO_TRANSITION {
 
 class SnapshotHandler;
 
+enum class MERGE_GROUP_STATE {
+    GROUP_MERGE_PENDING,
+    GROUP_MERGE_RA_READY,
+    GROUP_MERGE_IN_PROGRESS,
+    GROUP_MERGE_COMPLETED,
+    GROUP_MERGE_FAILED,
+    GROUP_INVALID,
+};
+
+struct MergeGroupState {
+    MERGE_GROUP_STATE merge_state_;
+    // Ref count I/O when group state
+    // is in "GROUP_MERGE_PENDING"
+    size_t num_ios_in_progress;
+    std::mutex m_lock;
+    std::condition_variable m_cv;
+
+    MergeGroupState(MERGE_GROUP_STATE state, size_t n_ios)
+        : merge_state_(state), num_ios_in_progress(n_ios) {}
+};
+
 class ReadAhead {
   public:
     ReadAhead(const std::string& cow_device, const std::string& backing_device,
@@ -133,16 +154,30 @@ class Worker {
         base_path_merge_fd_ = {};
     }
 
+    // Functions interacting with dm-user
+    bool ReadDmUserHeader();
+    bool WriteDmUserPayload(size_t size, bool header_response);
+    bool DmuserReadRequest();
+
     // IO Path
     bool ProcessIORequest();
+    bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
+
+    bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
+    bool ReadFromSourceDevice(const CowOperation* cow_op);
+
+    bool ReadAlignedSector(sector_t sector, size_t sz, bool header_response);
+    bool RespondIOError(bool header_response);
 
     // Processing COW operations
+    bool ProcessCowOp(const CowOperation* cow_op);
     bool ProcessReplaceOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
 
     // Handles Copy and Xor
     bool ProcessCopyOp(const CowOperation* cow_op);
     bool ProcessXorOp(const CowOperation* cow_op);
+    bool ProcessOrderedOp(const CowOperation* cow_op);
 
     // Merge related ops
     bool Merge();
@@ -151,6 +186,9 @@ class Worker {
     int PrepareMerge(uint64_t* source_offset, int* pending_ops,
                      const std::unique_ptr<ICowOpIter>& cowop_iter,
                      std::vector<const CowOperation*>* replace_zero_vec = nullptr);
+
+    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
 
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
@@ -210,6 +248,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     // Read-ahead related functions
     void* GetMappedAddr() { return mapped_addr_; }
     void PrepareReadAhead();
+    std::unordered_map<uint64_t, void*>& GetReadAheadMap() { return read_ahead_buffer_map_; }
 
     // State transitions for merge
     void InitiateMerge();
@@ -239,10 +278,19 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
     bool MergeInitiated() { return merge_initiated_; }
 
+    // Merge Block State Transitions
+    void SetMergeCompleted(size_t block_index);
+    void SetMergeInProgress(size_t block_index);
+    void SetMergeFailed(size_t block_index);
+    void NotifyIOCompletion(uint64_t new_block);
+    bool GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t block, void* buffer);
+    MERGE_GROUP_STATE ProcessMergingBlock(uint64_t new_block, void* buffer);
+
   private:
     bool ReadMetadata();
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
+    bool IsBlockAligned(int read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
     struct BufferState* GetBufferState();
 
     void ReadBlocks(const std::string partition_name, const std::string& dm_block_device);
@@ -261,7 +309,6 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     unique_fd cow_fd_;
 
-    // Number of sectors required when initializing dm-user
     uint64_t num_sectors_;
 
     std::unique_ptr<CowReader> reader_;
@@ -283,6 +330,13 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     int total_ra_blocks_merged_ = 0;
     MERGE_IO_TRANSITION io_state_;
     std::unique_ptr<ReadAhead> read_ahead_thread_;
+    std::unordered_map<uint64_t, void*> read_ahead_buffer_map_;
+
+    // user-space-merging
+    std::unordered_map<uint64_t, int> block_to_ra_index_;
+
+    // Merge Block state
+    std::vector<std::unique_ptr<MergeGroupState>> merge_blk_state_;
 
     std::unique_ptr<Worker> merge_thread_;
 

@@ -155,13 +155,43 @@ bool SnapshotHandler::ReadMetadata() {
     // Initialize the iterator for reading metadata
     std::unique_ptr<ICowOpIter> cowop_iter = reader_->GetMergeOpIter();
 
+    int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
+    int ra_index = 0;
+
+    size_t copy_ops = 0, replace_ops = 0, zero_ops = 0, xor_ops = 0;
+
     while (!cowop_iter->Done()) {
         const CowOperation* cow_op = &cowop_iter->Get();
 
+        if (cow_op->type == kCowCopyOp) {
+            copy_ops += 1;
+        } else if (cow_op->type == kCowReplaceOp) {
+            replace_ops += 1;
+        } else if (cow_op->type == kCowZeroOp) {
+            zero_ops += 1;
+        } else if (cow_op->type == kCowXorOp) {
+            xor_ops += 1;
+        }
+
         chunk_vec_.push_back(std::make_pair(ChunkToSector(cow_op->new_block), cow_op));
 
-        if (!ra_thread_ && IsOrderedOp(*cow_op)) {
+        if (IsOrderedOp(*cow_op)) {
             ra_thread_ = true;
+            block_to_ra_index_[cow_op->new_block] = ra_index;
+            num_ra_ops_per_iter -= 1;
+
+            if ((ra_index + 1) - merge_blk_state_.size() == 1) {
+                std::unique_ptr<MergeGroupState> blk_state = std::make_unique<MergeGroupState>(
+                        MERGE_GROUP_STATE::GROUP_MERGE_PENDING, 0);
+
+                merge_blk_state_.push_back(std::move(blk_state));
+            }
+
+            // Move to next RA block
+            if (num_ra_ops_per_iter == 0) {
+                num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
+                ra_index += 1;
+            }
         }
         cowop_iter->Next();
     }
@@ -172,6 +202,12 @@ bool SnapshotHandler::ReadMetadata() {
     std::sort(chunk_vec_.begin(), chunk_vec_.end(), compare);
 
     PrepareReadAhead();
+
+    SNAP_LOG(INFO) << "Merged-ops: " << header.num_merge_ops
+                   << " Total-data-ops: " << reader_->get_num_total_data_ops()
+                   << " Unmerged-ops: " << chunk_vec_.size() << " Copy-ops: " << copy_ops
+                   << " Zero-ops: " << zero_ops << " Replace-ops: " << replace_ops
+                   << " Xor-ops: " << xor_ops;
 
     return true;
 }

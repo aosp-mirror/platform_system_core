@@ -26,8 +26,8 @@ static constexpr uint32_t kCowVersionMinor = 0;
 
 static constexpr uint32_t kCowVersionManifest = 2;
 
-static constexpr uint32_t BLOCK_SZ = 4096;
-static constexpr uint32_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
+static constexpr size_t BLOCK_SZ = 4096;
+static constexpr size_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
 
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
