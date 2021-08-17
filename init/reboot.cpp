@@ -1035,6 +1035,20 @@ void HandlePowerctlMessage(const std::string& command) {
                         return;
                     }
                 }
+            } else if (reboot_target == "quiescent") {
+                bootloader_message boot = {};
+                if (std::string err; !read_bootloader_message(&boot, &err)) {
+                    LOG(ERROR) << "Failed to read bootloader message: " << err;
+                }
+                // Update the boot command field if it's empty, and preserve
+                // the other arguments in the bootloader message.
+                if (!CommandIsPresent(&boot)) {
+                    strlcpy(boot.command, "boot-quiescent", sizeof(boot.command));
+                    if (std::string err; !write_bootloader_message(boot, &err)) {
+                        LOG(ERROR) << "Failed to set bootloader message: " << err;
+                        return;
+                    }
+                }
             } else if (reboot_target == "sideload" || reboot_target == "sideload-auto-reboot" ||
                        reboot_target == "fastboot") {
                 std::string arg = reboot_target == "sideload-auto-reboot" ? "sideload_auto_reboot"

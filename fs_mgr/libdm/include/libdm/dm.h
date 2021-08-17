@@ -17,6 +17,7 @@
 #ifndef _LIBDM_DM_H_
 #define _LIBDM_DM_H_
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
 #include <linux/kdev_t.h>
@@ -26,6 +27,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -48,6 +50,10 @@ namespace dm {
 enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
 
 static constexpr uint64_t kSectorSize = 512;
+
+// Returns `path` without /dev/block prefix if and only if `path` starts with
+// that prefix.
+std::optional<std::string> ExtractBlockDeviceName(const std::string& path);
 
 class DeviceMapper final {
   public:
@@ -254,6 +260,12 @@ class DeviceMapper final {
     //  * A dm device is based on top of more than one block devices.
     //  * A failure occurred.
     std::optional<std::string> GetParentBlockDeviceByPath(const std::string& path);
+
+    // Iterate the content over "/sys/block/dm-x/dm/name" and find
+    // all the dm-wrapped block devices.
+    //
+    // Returns mapping <partition-name, /dev/block/dm-x>
+    std::map<std::string, std::string> FindDmPartitions();
 
   private:
     // Maximum possible device mapper targets registered in the kernel.
