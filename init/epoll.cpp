@@ -38,11 +38,12 @@ Result<void> Epoll::Open() {
     return {};
 }
 
-Result<void> Epoll::RegisterHandler(int fd, std::function<void()> handler, uint32_t events) {
+Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
     if (!events) {
         return Error() << "Must specify events";
     }
-    auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(handler));
+    auto sp = std::make_shared<decltype(handler)>(std::move(handler));
+    auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(sp));
     if (!inserted) {
         return Error() << "Cannot specify two epoll handlers for a given FD";
     }
@@ -69,7 +70,7 @@ Result<void> Epoll::UnregisterHandler(int fd) {
     return {};
 }
 
-Result<std::vector<std::function<void()>*>> Epoll::Wait(
+Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
         std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
     if (timeout && timeout->count() < INT_MAX) {
@@ -81,9 +82,10 @@ Result<std::vector<std::function<void()>*>> Epoll::Wait(
     if (num_events == -1) {
         return ErrnoError() << "epoll_wait failed";
     }
-    std::vector<std::function<void()>*> pending_functions;
+    std::vector<std::shared_ptr<Handler>> pending_functions;
     for (int i = 0; i < num_events; ++i) {
-        pending_functions.emplace_back(reinterpret_cast<std::function<void()>*>(ev[i].data.ptr));
+        auto sp = *reinterpret_cast<std::shared_ptr<Handler>*>(ev[i].data.ptr);
+        pending_functions.emplace_back(std::move(sp));
     }
 
     return pending_functions;
