@@ -61,6 +61,11 @@ cc_defaults {
         "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
         "snapuserd_daemon.cpp",
+	"user-space-merge/snapuserd_core.cpp",
+	"user-space-merge/snapuserd_dm_user.cpp",
+	"user-space-merge/snapuserd_merge.cpp",
+	"user-space-merge/snapuserd_readahead.cpp",
+	"user-space-merge/snapuserd_transitions.cpp",
     ],
 
     cflags: [
