@@ -231,5 +231,26 @@ bool SnapuserdClient::DetachSnapuserd() {
     return true;
 }
 
+bool SnapuserdClient::InitiateMerge(const std::string& misc_name) {
+    std::string msg = "initiate_merge," + misc_name;
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
+}
+
+double SnapuserdClient::GetMergePercent() {
+    std::string msg = "merge_percent";
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+
+    return std::stod(response);
+}
+
 }  // namespace snapshot
 }  // namespace android

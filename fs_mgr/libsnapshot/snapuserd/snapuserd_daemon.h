@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "snapuserd_server.h"
+#include "dm-snapshot-merge/snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
