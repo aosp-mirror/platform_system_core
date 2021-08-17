@@ -1825,3 +1825,29 @@ TEST(tombstoned, proto_intercept) {
   ASSERT_TRUE(android::base::ReadFdToString(output_fd, &output));
   ASSERT_EQ("foo", output);
 }
+
+// Verify that when an intercept is present for the main thread, and the signal
+// is received on a different thread, the intercept still works.
+TEST_F(CrasherTest, intercept_for_main_thread_signal_on_side_thread) {
+  StartProcess([]() {
+    std::thread thread([]() {
+      // Raise the signal on the side thread.
+      raise_debugger_signal(kDebuggerdNativeBacktrace);
+    });
+    thread.join();
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd, kDebuggerdNativeBacktrace);
+  FinishCrasher();
+  AssertDeath(0);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}

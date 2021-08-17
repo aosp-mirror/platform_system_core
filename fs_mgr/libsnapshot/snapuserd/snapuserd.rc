@@ -1,0 +1,19 @@
+service snapuserd /system/bin/snapuserd
+    socket snapuserd stream 0660 system system
+    oneshot
+    disabled
+    user root
+    group root system
+    seclabel u:r:snapuserd:s0
+
+service snapuserd_proxy /system/bin/snapuserd -socket-handoff
+    socket snapuserd stream 0660 system system
+    socket snapuserd_proxy seqpacket 0660 system root
+    oneshot
+    disabled
+    user root
+    group root system
+    seclabel u:r:snapuserd:s0
+
+on property:init.svc.snapuserd=stopped
+    setprop snapuserd.ready false

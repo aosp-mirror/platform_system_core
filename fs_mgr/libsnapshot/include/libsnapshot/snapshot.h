@@ -38,7 +38,7 @@
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/return.h>
 #include <libsnapshot/snapshot_writer.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
