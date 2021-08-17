@@ -139,7 +139,7 @@ void SnapshotHandler::CheckMergeCompletionStatus() {
 }
 
 bool SnapshotHandler::ReadMetadata() {
-    reader_ = std::make_unique<CowReader>();
+    reader_ = std::make_unique<CowReader>(CowReader::ReaderFlags::USERSPACE_MERGE);
     CowHeader header;
     CowOptions options;
 
