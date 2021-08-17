@@ -25,6 +25,8 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <variant>
+#include <vector>
 
 #include <log/log.h>
 #include <trusty/tipc.h>
@@ -46,8 +48,27 @@ int trusty_keymaster_connect() {
     return 0;
 }
 
-int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out,
-                          uint32_t* out_size) {
+class VectorEraser {
+  public:
+    VectorEraser(std::vector<uint8_t>* v) : _v(v) {}
+    ~VectorEraser() {
+        if (_v) {
+            std::fill(const_cast<volatile uint8_t*>(_v->data()),
+                      const_cast<volatile uint8_t*>(_v->data() + _v->size()), 0);
+        }
+    }
+    void disarm() { _v = nullptr; }
+    VectorEraser(const VectorEraser&) = delete;
+    VectorEraser& operator=(const VectorEraser&) = delete;
+    VectorEraser(VectorEraser&& other) = delete;
+    VectorEraser& operator=(VectorEraser&&) = delete;
+
+  private:
+    std::vector<uint8_t>* _v;
+};
+
+std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, void* in,
+                                                                uint32_t in_size) {
     if (handle_ < 0) {
         ALOGE("not connected\n");
         return -EINVAL;
@@ -70,15 +91,38 @@ int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out
         ALOGE("failed to send cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT, strerror(errno));
         return -errno;
     }
-    size_t out_max_size = *out_size;
-    *out_size = 0;
+
+    std::vector<uint8_t> out(TRUSTY_KEYMASTER_RECV_BUF_SIZE);
+    VectorEraser out_eraser(&out);
+    uint8_t* write_pos = out.data();
+    uint8_t* out_end = out.data() + out.size();
+
     struct iovec iov[2];
     struct keymaster_message header;
     iov[0] = {.iov_base = &header, .iov_len = sizeof(struct keymaster_message)};
     while (true) {
-        iov[1] = {.iov_base = out + *out_size,
-                  .iov_len = std::min<uint32_t>(KEYMASTER_MAX_BUFFER_LENGTH,
-                                                out_max_size - *out_size)};
+        if (out_end - write_pos < KEYMASTER_MAX_BUFFER_LENGTH) {
+            // In stead of using std::vector.resize(), allocate a new one to have chance
+            // at zeroing the old buffer.
+            std::vector<uint8_t> new_out(out.size() + KEYMASTER_MAX_BUFFER_LENGTH);
+            // After the swap below this erases the old out buffer.
+            VectorEraser new_out_eraser(&new_out);
+            std::copy(out.data(), write_pos, new_out.begin());
+
+            auto write_offset = write_pos - out.data();
+
+            std::swap(new_out, out);
+
+            write_pos = out.data() + write_offset;
+            out_end = out.data() + out.size();
+        }
+        size_t buffer_size = 0;
+        if (__builtin_sub_overflow(reinterpret_cast<uintptr_t>(out_end),
+                                   reinterpret_cast<uintptr_t>(write_pos), &buffer_size)) {
+            return -EOVERFLOW;
+        }
+        iov[1] = {.iov_base = write_pos, .iov_len = buffer_size};
+
         rc = readv(handle_, iov, 2);
         if (rc < 0) {
             ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT,
@@ -95,13 +139,36 @@ int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out
             ALOGE("invalid command (%d)", header.cmd);
             return -EINVAL;
         }
-        *out_size += ((size_t)rc - sizeof(struct keymaster_message));
+        write_pos += ((size_t)rc - sizeof(struct keymaster_message));
         if (header.cmd & KEYMASTER_STOP_BIT) {
             break;
         }
     }
 
-    return rc;
+    out.resize(write_pos - out.data());
+    out_eraser.disarm();
+    return out;
+}
+
+int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out,
+                          uint32_t* out_size) {
+    auto result = trusty_keymaster_call_2(cmd, in, in_size);
+    if (auto out_buffer = std::get_if<std::vector<uint8_t>>(&result)) {
+        if (out_buffer->size() <= *out_size) {
+            std::copy(out_buffer->begin(), out_buffer->end(), out);
+            std::fill(const_cast<volatile uint8_t*>(&*out_buffer->begin()),
+                      const_cast<volatile uint8_t*>(&*out_buffer->end()), 0);
+
+            *out_size = out_buffer->size();
+            return 0;
+        } else {
+            ALOGE("Message was to large (%zu) for the provided buffer (%u)", out_buffer->size(),
+                  *out_size);
+            return -EMSGSIZE;
+        }
+    } else {
+        return std::get<int>(result);
+    }
 }
 
 void trusty_keymaster_disconnect() {
@@ -155,28 +222,27 @@ keymaster_error_t trusty_keymaster_send(uint32_t command, const keymaster::Seria
     req.Serialize(send_buf, send_buf + req_size);
 
     // Send it
-    uint8_t recv_buf[TRUSTY_KEYMASTER_RECV_BUF_SIZE];
-    keymaster::Eraser recv_buf_eraser(recv_buf, TRUSTY_KEYMASTER_RECV_BUF_SIZE);
-    uint32_t rsp_size = TRUSTY_KEYMASTER_RECV_BUF_SIZE;
-    int rc = trusty_keymaster_call(command, send_buf, req_size, recv_buf, &rsp_size);
-    if (rc < 0) {
+    auto response = trusty_keymaster_call_2(command, send_buf, req_size);
+    if (auto response_buffer = std::get_if<std::vector<uint8_t>>(&response)) {
+        keymaster::Eraser response_buffer_erasor(response_buffer->data(), response_buffer->size());
+        ALOGV("Received %zu byte response\n", response_buffer->size());
+
+        const uint8_t* p = response_buffer->data();
+        if (!rsp->Deserialize(&p, p + response_buffer->size())) {
+            ALOGE("Error deserializing response of size %zu\n", response_buffer->size());
+            return KM_ERROR_UNKNOWN_ERROR;
+        } else if (rsp->error != KM_ERROR_OK) {
+            ALOGE("Response of size %zu contained error code %d\n", response_buffer->size(),
+                  (int)rsp->error);
+        }
+        return rsp->error;
+    } else {
+        auto rc = std::get<int>(response);
         // Reset the connection on tipc error
         trusty_keymaster_disconnect();
         trusty_keymaster_connect();
         ALOGE("tipc error: %d\n", rc);
         // TODO(swillden): Distinguish permanent from transient errors and set error_ appropriately.
         return translate_error(rc);
-    } else {
-        ALOGV("Received %d byte response\n", rsp_size);
     }
-
-    const uint8_t* p = recv_buf;
-    if (!rsp->Deserialize(&p, p + rsp_size)) {
-        ALOGE("Error deserializing response of size %d\n", (int)rsp_size);
-        return KM_ERROR_UNKNOWN_ERROR;
-    } else if (rsp->error != KM_ERROR_OK) {
-        ALOGE("Response of size %d contained error code %d\n", (int)rsp_size, (int)rsp->error);
-        return rsp->error;
-    }
-    return rsp->error;
 }
