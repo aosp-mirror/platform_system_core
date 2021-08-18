@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 # Copyright (C) 2012 The Android Open Source Project
 #
@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
 import csv
 import getopt
 import hashlib
@@ -47,7 +46,7 @@ def main():
     opts, args = getopt.getopt(sys.argv[1:],
                                "vsc:",
                                ["verbose", "showhash", "csvfile"])
-  except getopt.GetoptError, e:
+  except getopt.GetoptError as e:
     print(e)
     usage(me)
   for o, a in opts:
