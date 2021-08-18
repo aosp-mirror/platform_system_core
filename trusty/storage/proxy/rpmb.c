@@ -105,17 +105,16 @@ static enum dev_type dev_type = UNKNOWN_RPMB;
 static const char* UFS_WAKE_LOCK_NAME = "ufs_seq_wakelock";
 
 #ifdef RPMB_DEBUG
-
-static void print_buf(const char* prefix, const uint8_t* buf, size_t size) {
+static void print_buf(FILE* handle, const char* prefix, const uint8_t* buf, size_t size) {
     size_t i;
 
-    printf("%s @%p [%zu]", prefix, buf, size);
+    fprintf(handle, "%s @%p [%zu]", prefix, buf, size);
     for (i = 0; i < size; i++) {
-        if (i && i % 32 == 0) printf("\n%*s", (int)strlen(prefix), "");
-        printf(" %02x", buf[i]);
+        if (i && i % 32 == 0) fprintf(handle, "\n%*s", (int)strlen(prefix), "");
+        fprintf(handle, " %02x", buf[i]);
     }
-    printf("\n");
-    fflush(stdout);
+    fprintf(handle, "\n");
+    fflush(handle);
 }
 
 #endif
@@ -153,7 +152,7 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
         mmc_ioc_cmd_set_data((*cmd), write_buf);
 #ifdef RPMB_DEBUG
         ALOGI("opcode: 0x%x, write_flag: 0x%x\n", cmd->opcode, cmd->write_flag);
-        print_buf("request: ", write_buf, req->reliable_write_size);
+        print_buf(stdout, "request: ", write_buf, req->reliable_write_size);
 #endif
         write_buf += req->reliable_write_size;
         mmc.multi.num_of_cmds++;
@@ -169,7 +168,7 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
         mmc_ioc_cmd_set_data((*cmd), write_buf);
 #ifdef RPMB_DEBUG
         ALOGI("opcode: 0x%x, write_flag: 0x%x\n", cmd->opcode, cmd->write_flag);
-        print_buf("request: ", write_buf, req->write_size);
+        print_buf(stdout, "request: ", write_buf, req->write_size);
 #endif
         write_buf += req->write_size;
         mmc.multi.num_of_cmds++;
@@ -353,7 +352,7 @@ int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
         goto err_response;
     }
 #ifdef RPMB_DEBUG
-    if (req->read_size) print_buf("response: ", read_buf, req->read_size);
+    if (req->read_size) print_buf(stdout, "response: ", read_buf, req->read_size);
 #endif
 
     if (msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) {
