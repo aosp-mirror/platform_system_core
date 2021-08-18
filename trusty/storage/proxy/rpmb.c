@@ -16,7 +16,10 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <scsi/scsi.h>
+#include <scsi/scsi_proto.h>
 #include <scsi/sg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,7 +107,6 @@ static enum dev_type dev_type = UNKNOWN_RPMB;
 
 static const char* UFS_WAKE_LOCK_NAME = "ufs_seq_wakelock";
 
-#ifdef RPMB_DEBUG
 static void print_buf(FILE* handle, const char* prefix, const uint8_t* buf, size_t size) {
     size_t i;
 
@@ -116,8 +118,6 @@ static void print_buf(FILE* handle, const char* prefix, const uint8_t* buf, size
     fprintf(handle, "\n");
     fflush(handle);
 }
-
-#endif
 
 static void set_sg_io_hdr(sg_io_hdr_t* io_hdrp, int dxfer_direction, unsigned char cmd_len,
                           unsigned char mx_sb_len, unsigned int dxfer_len, void* dxferp,
@@ -132,6 +132,111 @@ static void set_sg_io_hdr(sg_io_hdr_t* io_hdrp, int dxfer_direction, unsigned ch
     io_hdrp->cmdp = cmdp;
     io_hdrp->sbp = sbp;
     io_hdrp->timeout = TIMEOUT;
+}
+
+/* Returns false if the sense data was valid and no errors were present */
+static bool check_scsi_sense(const uint8_t* sense_buf, size_t len) {
+    uint8_t response_code = 0;
+    uint8_t sense_key = 0;
+    uint8_t additional_sense_code = 0;
+    uint8_t additional_sense_code_qualifier = 0;
+    uint8_t additional_length = 0;
+
+    if (!sense_buf || len == 0) {
+        ALOGE("Invalid SCSI sense buffer, length: %zu\n", len);
+        return false;
+    }
+
+    response_code = 0x7f & sense_buf[0];
+
+    if (response_code < 0x70 || response_code > 0x73) {
+        ALOGE("Invalid SCSI sense response code: %hhu\n", response_code);
+        return false;
+    }
+
+    if (response_code >= 0x72) {
+        /* descriptor format, SPC-6 4.4.2 */
+        if (len > 1) {
+            sense_key = 0xf & sense_buf[1];
+        }
+        if (len > 2) {
+            additional_sense_code = sense_buf[2];
+        }
+        if (len > 3) {
+            additional_sense_code_qualifier = sense_buf[3];
+        }
+        if (len > 7) {
+            additional_length = sense_buf[7];
+        }
+    } else {
+        /* fixed format, SPC-6 4.4.3 */
+        if (len > 2) {
+            sense_key = 0xf & sense_buf[2];
+        }
+        if (len > 7) {
+            additional_length = sense_buf[7];
+        }
+        if (len > 12) {
+            additional_sense_code = sense_buf[12];
+        }
+        if (len > 13) {
+            additional_sense_code_qualifier = sense_buf[13];
+        }
+    }
+
+    switch (sense_key) {
+        case NO_SENSE:
+        case 0x0f: /* COMPLETED, not present in kernel headers */
+            ALOGD("SCSI success with sense data: key=%hhu, asc=%hhu, ascq=%hhu\n", sense_key,
+                  additional_sense_code, additional_sense_code_qualifier);
+            return true;
+    }
+
+    ALOGE("Unexpected SCSI sense data: key=%hhu, asc=%hhu, ascq=%hhu\n", sense_key,
+          additional_sense_code, additional_sense_code_qualifier);
+    print_buf(stderr, "sense buffer: ", sense_buf, len);
+    return false;
+}
+
+static void check_sg_io_hdr(const sg_io_hdr_t* io_hdrp) {
+    if (io_hdrp->status == 0 && io_hdrp->host_status == 0 && io_hdrp->driver_status == 0) {
+        return;
+    }
+
+    if (io_hdrp->status & 0x01) {
+        ALOGE("SG_IO received unknown status, LSB is set: %hhu", io_hdrp->status);
+    }
+
+    if (io_hdrp->masked_status != GOOD && io_hdrp->sb_len_wr > 0) {
+        bool sense_error = check_scsi_sense(io_hdrp->sbp, io_hdrp->sb_len_wr);
+        if (sense_error) {
+            ALOGE("Unexpected SCSI sense. masked_status: %hhu, host_status: %hu, driver_status: "
+                  "%hu\n",
+                  io_hdrp->masked_status, io_hdrp->host_status, io_hdrp->driver_status);
+            return;
+        }
+    }
+
+    switch (io_hdrp->masked_status) {
+        case GOOD:
+            break;
+        case CHECK_CONDITION:
+            /* handled by check_sg_sense above */
+            break;
+        default:
+            ALOGE("SG_IO failed with masked_status: %hhu, host_status: %hu, driver_status: %hu\n",
+                  io_hdrp->masked_status, io_hdrp->host_status, io_hdrp->driver_status);
+            return;
+    }
+
+    if (io_hdrp->host_status != 0) {
+        ALOGE("SG_IO failed with host_status: %hu, driver_status: %hu\n", io_hdrp->host_status,
+              io_hdrp->driver_status);
+    }
+
+    if (io_hdrp->resid != 0) {
+        ALOGE("SG_IO resid was non-zero: %d\n", io_hdrp->resid);
+    }
 }
 
 static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req) {
@@ -224,6 +329,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
             goto err_op;
         }
+        check_sg_io_hdr(&io_hdr);
         write_buf += req->reliable_write_size;
     }
 
@@ -238,6 +344,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
             goto err_op;
         }
+        check_sg_io_hdr(&io_hdr);
         write_buf += req->write_size;
     }
 
@@ -251,6 +358,7 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
         }
+        check_sg_io_hdr(&io_hdr);
     }
 
 err_op:
