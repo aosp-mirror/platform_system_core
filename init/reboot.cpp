@@ -639,6 +639,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         abort();
     }
 
+    bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
     std::set<std::string> stop_first;
@@ -652,6 +653,8 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
                            << "': " << result.error();
             }
             s->SetShutdownCritical();
+        } else if (do_shutdown_animation) {
+            continue;
         } else if (s->IsShutdownCritical()) {
             // Start shutdown critical service if not started.
             if (auto result = s->Start(); !result.ok()) {
@@ -664,14 +667,13 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     }
 
     // remaining operations (specifically fsck) may take a substantial duration
-    if (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown) {
+    if (!do_shutdown_animation && (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown)) {
         TurnOffBacklight();
     }
 
     Service* boot_anim = ServiceList::GetInstance().FindService("bootanim");
     Service* surface_flinger = ServiceList::GetInstance().FindService("surfaceflinger");
     if (boot_anim != nullptr && surface_flinger != nullptr && surface_flinger->IsRunning()) {
-        bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
 
         if (do_shutdown_animation) {
             SetProperty("service.bootanim.exit", "0");
@@ -1030,6 +1032,20 @@ void HandlePowerctlMessage(const std::string& command) {
                 // the other arguments in the bootloader message.
                 if (!CommandIsPresent(&boot)) {
                     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
+                    if (std::string err; !write_bootloader_message(boot, &err)) {
+                        LOG(ERROR) << "Failed to set bootloader message: " << err;
+                        return;
+                    }
+                }
+            } else if (reboot_target == "quiescent") {
+                bootloader_message boot = {};
+                if (std::string err; !read_bootloader_message(&boot, &err)) {
+                    LOG(ERROR) << "Failed to read bootloader message: " << err;
+                }
+                // Update the boot command field if it's empty, and preserve
+                // the other arguments in the bootloader message.
+                if (!CommandIsPresent(&boot)) {
+                    strlcpy(boot.command, "boot-quiescent", sizeof(boot.command));
                     if (std::string err; !write_bootloader_message(boot, &err)) {
                         LOG(ERROR) << "Failed to set bootloader message: " << err;
                         return;
