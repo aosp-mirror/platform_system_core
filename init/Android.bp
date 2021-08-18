@@ -236,6 +236,7 @@ cc_binary {
                 "init.rc",
                 "ueventd.rc",
                 "e2fsdroid",
+                "extra_free_kbytes.sh",
                 "make_f2fs",
                 "mke2fs",
                 "sload_f2fs",
@@ -551,4 +552,9 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+sh_binary {
+    name: "extra_free_kbytes.sh",
+    src: "extra_free_kbytes.sh",
 }
