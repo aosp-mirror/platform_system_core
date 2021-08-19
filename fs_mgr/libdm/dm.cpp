@@ -560,34 +560,30 @@ std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
     return std::string{spec.target_type, sizeof(spec.target_type)};
 }
 
-static bool ExtractBlockDeviceName(const std::string& path, std::string* name) {
+std::optional<std::string> ExtractBlockDeviceName(const std::string& path) {
     static constexpr std::string_view kDevBlockPrefix("/dev/block/");
     if (android::base::StartsWith(path, kDevBlockPrefix)) {
-        *name = path.substr(kDevBlockPrefix.length());
-        return true;
+        return path.substr(kDevBlockPrefix.length());
     }
-    return false;
+    return {};
 }
 
 bool DeviceMapper::IsDmBlockDevice(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
-        return false;
-    }
-    return android::base::StartsWith(name, "dm-");
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    return name && android::base::StartsWith(*name, "dm-");
 }
 
 std::optional<std::string> DeviceMapper::GetDmDeviceNameByPath(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    if (!name) {
         LOG(WARNING) << path << " is not a block device";
         return std::nullopt;
     }
-    if (!android::base::StartsWith(name, "dm-")) {
+    if (!android::base::StartsWith(*name, "dm-")) {
         LOG(WARNING) << path << " is not a dm device";
         return std::nullopt;
     }
-    std::string dm_name_file = "/sys/block/" + name + "/dm/name";
+    std::string dm_name_file = "/sys/block/" + *name + "/dm/name";
     std::string dm_name;
     if (!android::base::ReadFileToString(dm_name_file, &dm_name)) {
         PLOG(ERROR) << "Failed to read file " << dm_name_file;
@@ -598,16 +594,16 @@ std::optional<std::string> DeviceMapper::GetDmDeviceNameByPath(const std::string
 }
 
 std::optional<std::string> DeviceMapper::GetParentBlockDeviceByPath(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    if (!name) {
         LOG(WARNING) << path << " is not a block device";
         return std::nullopt;
     }
-    if (!android::base::StartsWith(name, "dm-")) {
+    if (!android::base::StartsWith(*name, "dm-")) {
         // Reached bottom of the device mapper stack.
         return std::nullopt;
     }
-    auto slaves_dir = "/sys/block/" + name + "/slaves";
+    auto slaves_dir = "/sys/block/" + *name + "/slaves";
     auto dir = std::unique_ptr<DIR, decltype(&closedir)>(opendir(slaves_dir.c_str()), closedir);
     if (dir == nullptr) {
         PLOG(ERROR) << "Failed to open: " << slaves_dir;
