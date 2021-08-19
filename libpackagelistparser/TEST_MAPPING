@@ -1,0 +1,7 @@
+{
+  "presubmit": [
+    {
+      "name": "libpackagelistparser_test"
+    }
+  ]
+}
