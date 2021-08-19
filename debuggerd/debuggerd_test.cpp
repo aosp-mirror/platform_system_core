@@ -961,6 +961,44 @@ TEST_F(CrasherTest, abort_message) {
   ASSERT_MATCH(result, R"(Abort message: 'x{4045}')");
 }
 
+TEST_F(CrasherTest, abort_message_newline_trimmed) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_set_abort_message("Message with a newline.\n");
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(Abort message: 'Message with a newline.')");
+}
+
+TEST_F(CrasherTest, abort_message_multiple_newlines_trimmed) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_set_abort_message("Message with multiple newlines.\n\n\n\n\n");
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(Abort message: 'Message with multiple newlines.')");
+}
+
 TEST_F(CrasherTest, abort_message_backtrace) {
   int intercept_result;
   unique_fd output_fd;
