@@ -1138,7 +1138,7 @@ on property:sys.boot_completed=1
 # and chown/chmod does not work for /proc/sys/ entries.
 # So proxy writes through init.
 on property:sys.sysctl.extra_free_kbytes=*
-    write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
+    exec -- /system/bin/extra_free_kbytes.sh ${sys.sysctl.extra_free_kbytes}
 
 # Allow users to drop caches
 on property:perf.drop_caches=3

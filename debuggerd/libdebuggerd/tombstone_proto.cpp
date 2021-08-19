@@ -271,6 +271,13 @@ static void dump_abort_message(Tombstone* tombstone, unwindstack::Unwinder* unwi
     return;
   }
 
+  // Remove any trailing newlines.
+  size_t index = msg.size();
+  while (index > 0 && (msg[index - 1] == '\0' || msg[index - 1] == '\n')) {
+    --index;
+  }
+  msg.resize(index);
+
   tombstone->set_abort_message(msg);
 }
 
