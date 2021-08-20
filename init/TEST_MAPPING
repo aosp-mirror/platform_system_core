@@ -5,6 +5,9 @@
     },
     {
       "name": "init_kill_services_test"
+    },
+    {
+      "name": "MicrodroidHostTestCases"
     }
   ]
 }
