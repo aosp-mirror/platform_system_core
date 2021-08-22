@@ -104,8 +104,6 @@ static std::string g_dtb_path;
 static bool g_disable_verity = false;
 static bool g_disable_verification = false;
 
-static const std::string convert_fbe_marker_filename("convert_fbe");
-
 fastboot::FastBootDriver* fb = nullptr;
 
 enum fb_buffer_type {
@@ -165,6 +163,11 @@ static Image images[] = {
                   "vbmeta_system.img",
                                       "vbmeta_system.sig",
                                                       "vbmeta_system",
+                                                                  true,  ImageType::BootCritical },
+    { "vbmeta_vendor",
+                  "vbmeta_vendor.img",
+                                      "vbmeta_vendor.sig",
+                                                      "vbmeta_vendor",
                                                                   true,  ImageType::BootCritical },
     { "vendor",   "vendor.img",       "vendor.sig",   "vendor",   true,  ImageType::Normal },
     { "vendor_boot",
@@ -424,7 +427,7 @@ static int show_help() {
             " snapshot-update merge      On devices that support snapshot-based updates, finish\n"
             "                            an in-progress update if it is in the \"merging\"\n"
             "                            phase.\n"
-            " fetch PARTITION            Fetch a partition image from the device."
+            " fetch PARTITION OUT_FILE   Fetch a partition image from the device."
             "\n"
             "boot image:\n"
             " boot KERNEL [RAMDISK [SECOND]]\n"
@@ -468,9 +471,6 @@ static int show_help() {
             " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
             " --fs-options=OPTION[,OPTION]\n"
             "                            Enable filesystem features. OPTION supports casefold, projid, compress\n"
-#if !defined(_WIN32)
-            " --wipe-and-use-fbe         Enable file-based encryption, wiping userdata.\n"
-#endif
             // TODO: remove --unbuffered?
             " --unbuffered               Don't buffer input or output.\n"
             " --verbose, -v              Verbose output.\n"
@@ -588,10 +588,6 @@ static FILE* win32_tmpfile() {
 
 #define tmpfile win32_tmpfile
 
-static std::string make_temporary_directory() {
-    die("make_temporary_directory not supported under Windows, sorry!");
-}
-
 static int make_temporary_fd(const char* /*what*/) {
     // TODO: reimplement to avoid leaking a FILE*.
     return fileno(tmpfile());
@@ -603,15 +599,6 @@ static std::string make_temporary_template() {
     const char* tmpdir = getenv("TMPDIR");
     if (tmpdir == nullptr) tmpdir = P_tmpdir;
     return std::string(tmpdir) + "/fastboot_userdata_XXXXXX";
-}
-
-static std::string make_temporary_directory() {
-    std::string result(make_temporary_template());
-    if (mkdtemp(&result[0]) == nullptr) {
-        die("unable to create temporary directory with template %s: %s",
-            result.c_str(), strerror(errno));
-    }
-    return result;
 }
 
 static int make_temporary_fd(const char* what) {
@@ -626,32 +613,6 @@ static int make_temporary_fd(const char* what) {
 }
 
 #endif
-
-static std::string create_fbemarker_tmpdir() {
-    std::string dir = make_temporary_directory();
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    int fd = open(marker_file.c_str(), O_CREAT | O_WRONLY | O_CLOEXEC, 0666);
-    if (fd == -1) {
-        die("unable to create FBE marker file %s locally: %s",
-            marker_file.c_str(), strerror(errno));
-    }
-    close(fd);
-    return dir;
-}
-
-static void delete_fbemarker_tmpdir(const std::string& dir) {
-    std::string marker_file = dir + "/" + convert_fbe_marker_filename;
-    if (unlink(marker_file.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker file %s locally: %d, %s\n",
-            marker_file.c_str(), errno, strerror(errno));
-        return;
-    }
-    if (rmdir(dir.c_str()) == -1) {
-        fprintf(stderr, "Unable to delete FBE marker directory %s locally: %d, %s\n",
-            dir.c_str(), errno, strerror(errno));
-        return;
-    }
-}
 
 static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
@@ -980,7 +941,8 @@ static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_bo
         // Tries to locate top-level vbmeta from boot.img footer.
         uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
         if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
-            die("Failed to find AVB_FOOTER at offset: %" PRId64, footer_offset);
+            die("Failed to find AVB_FOOTER at offset: %" PRId64 ", is BOARD_AVB_ENABLE true?",
+                footer_offset);
         }
         const AvbFooter* footer = reinterpret_cast<const AvbFooter*>(data.c_str() + footer_offset);
         vbmeta_offset = be64toh(footer->vbmeta_offset);
@@ -1060,6 +1022,24 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
         return;
     }
 
+    // If overflows and negative, it should be < buf->sz.
+    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
+
+    if (partition_size == buf->sz) {
+        return;
+    }
+    // Some device bootloaders might not implement `fastboot getvar partition-size:boot[_a|_b]`.
+    // In this case, partition_size will be zero.
+    if (partition_size < buf->sz) {
+        fprintf(stderr,
+                "Warning: skip copying boot image avb footer"
+                " (boot partition size: %" PRId64 ", boot image size: %" PRId64 ").\n",
+                partition_size, buf->sz);
+        return;
+    }
+
+    // IMPORTANT: after the following read, we need to reset buf->fd before return (if not die).
+    // Because buf->fd will still be used afterwards.
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
         die("Failed reading from boot");
@@ -1067,16 +1047,8 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
 
     uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
     if (0 != data.compare(footer_offset, AVB_FOOTER_MAGIC_LEN, AVB_FOOTER_MAGIC)) {
+        lseek(buf->fd.get(), 0, SEEK_SET);  // IMPORTANT: resets buf->fd before return.
         return;
-    }
-    // If overflows and negative, it should be < buf->sz.
-    int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
-
-    if (partition_size == buf->sz) {
-        return;
-    }
-    if (partition_size < buf->sz) {
-        die("boot partition is smaller than boot image");
     }
 
     unique_fd fd(make_temporary_fd("boot rewriting"));
@@ -1890,7 +1862,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
-    bool set_fbe_marker = false;
     bool force_flash = false;
     unsigned fs_options = 0;
     int longindex;
@@ -1928,9 +1899,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
         {"unbuffered", no_argument, 0, 0},
         {"verbose", no_argument, 0, 'v'},
         {"version", no_argument, 0, 0},
-#if !defined(_WIN32)
-        {"wipe-and-use-fbe", no_argument, 0, 0},
-#endif
         {0, 0, 0, 0}
     };
 
@@ -1984,11 +1952,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fprintf(stdout, "fastboot version %s-%s\n", PLATFORM_TOOLS_VERSION, android::build::GetBuildNumber().c_str());
                 fprintf(stdout, "Installed as %s\n", android::base::GetExecutablePath().c_str());
                 return 0;
-#if !defined(_WIN32)
-            } else if (name == "wipe-and-use-fbe") {
-                wants_wipe = true;
-                set_fbe_marker = true;
-#endif
             } else {
                 die("unknown option %s", longopts[longindex].name);
             }
@@ -2300,14 +2263,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             if (partition_type.empty()) continue;
             fb->Erase(partition);
-            if (partition == "userdata" && set_fbe_marker) {
-                fprintf(stderr, "setting FBE marker on initial userdata...\n");
-                std::string initial_userdata_dir = create_fbemarker_tmpdir();
-                fb_perform_format(partition, 1, partition_type, "", initial_userdata_dir, fs_options);
-                delete_fbemarker_tmpdir(initial_userdata_dir);
-            } else {
-                fb_perform_format(partition, 1, partition_type, "", "", fs_options);
-            }
+            fb_perform_format(partition, 1, partition_type, "", "", fs_options);
         }
     }
     if (wants_set_active) {

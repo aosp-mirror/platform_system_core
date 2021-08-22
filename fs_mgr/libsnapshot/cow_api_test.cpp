@@ -140,6 +140,85 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_TRUE(iter->Done());
 }
 
+TEST_F(CowTest, ReadWriteXor) {
+    CowOptions options;
+    options.cluster_ops = 0;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_TRUE(writer.AddCopy(10, 20));
+    ASSERT_TRUE(writer.AddXorBlocks(50, data.data(), data.size(), 24, 10));
+    ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    CowHeader header;
+    CowFooter footer;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_TRUE(reader.GetHeader(&header));
+    ASSERT_TRUE(reader.GetFooter(&footer));
+    ASSERT_EQ(header.magic, kCowMagicNumber);
+    ASSERT_EQ(header.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.block_size, options.block_size);
+    ASSERT_EQ(footer.op.num_ops, 4);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->Done());
+    auto op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowCopyOp);
+    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_EQ(op->data_length, 0);
+    ASSERT_EQ(op->new_block, 10);
+    ASSERT_EQ(op->source, 20);
+
+    StringSink sink;
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowXorOp);
+    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_EQ(op->data_length, 4096);
+    ASSERT_EQ(op->new_block, 50);
+    ASSERT_EQ(op->source, 98314);  // 4096 * 24 + 10
+    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_EQ(sink.stream(), data);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    // Note: the zero operation gets split into two blocks.
+    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_EQ(op->data_length, 0);
+    ASSERT_EQ(op->new_block, 51);
+    ASSERT_EQ(op->source, 0);
+
+    iter->Next();
+    ASSERT_FALSE(iter->Done());
+    op = &iter->Get();
+
+    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_EQ(op->data_length, 0);
+    ASSERT_EQ(op->new_block, 52);
+    ASSERT_EQ(op->source, 0);
+
+    iter->Next();
+    ASSERT_TRUE(iter->Done());
+}
+
 TEST_F(CowTest, CompressGz) {
     CowOptions options;
     options.cluster_ops = 0;
@@ -979,6 +1058,206 @@ TEST_F(CowTest, DeleteMidCluster) {
     ASSERT_EQ(num_replace, 3);
     ASSERT_EQ(max_in_cluster, 5);  // 3 data, 1 label, 1 cluster op
     ASSERT_EQ(num_clusters, 1);
+}
+
+TEST_F(CowTest, BigSeqOp) {
+    CowOptions options;
+    CowWriter writer(options);
+    const int seq_len = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t) + 1;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len));
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+
+    for (int i = 0; i < seq_len; i++) {
+        ASSERT_TRUE(!iter->Done());
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, seq_len - i);
+
+        iter->Next();
+    }
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, MissingSeqOp) {
+    CowOptions options;
+    CowWriter writer(options);
+    const int seq_len = 10;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len - 1));
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_FALSE(reader.Parse(cow_->fd));
+}
+
+TEST_F(CowTest, ResumeSeqOp) {
+    CowOptions options;
+    auto writer = std::make_unique<CowWriter>(options);
+    const int seq_len = 10;
+    uint32_t sequence[seq_len];
+    for (int i = 0; i < seq_len; i++) {
+        sequence[i] = i + 1;
+    }
+
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer->AddSequenceData(seq_len, sequence));
+    ASSERT_TRUE(writer->AddZeroBlocks(1, seq_len / 2));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->AddZeroBlocks(1 + seq_len / 2, 1));
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+    auto reader = std::make_unique<CowReader>();
+    ASSERT_TRUE(reader->Parse(cow_->fd, 1));
+    auto itr = reader->GetRevMergeOpIter();
+    ASSERT_TRUE(itr->Done());
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->AddZeroBlocks(1 + seq_len / 2, seq_len / 2));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    reader = std::make_unique<CowReader>();
+    ASSERT_TRUE(reader->Parse(cow_->fd));
+
+    auto iter = reader->GetRevMergeOpIter();
+
+    uint64_t expected_block = 10;
+    while (!iter->Done() && expected_block > 0) {
+        ASSERT_FALSE(iter->Done());
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, expected_block);
+
+        iter->Next();
+        expected_block--;
+    }
+    ASSERT_EQ(expected_block, 0);
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, RevMergeOpItrTest) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    CowWriter writer(options);
+    uint32_t sequence[] = {2, 10, 6, 7, 3, 5};
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddSequenceData(6, sequence));
+    ASSERT_TRUE(writer.AddCopy(6, 3));
+    ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
+    ASSERT_TRUE(writer.AddCopy(3, 5));
+    ASSERT_TRUE(writer.AddCopy(2, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(4, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(9, 1));
+    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, 1));
+    ASSERT_TRUE(writer.AddCopy(10, 2));
+    ASSERT_TRUE(writer.AddCopy(7, 4));
+    ASSERT_TRUE(writer.Finalize());
+
+    // New block in cow order is 6, 12, 8, 11, 3, 2, 4, 9, 5, 1, 10, 7
+    // New block in merge order is 2, 10, 6, 7, 3, 5, 12, 11, 9, 8, 4, 1
+    // RevMergeOrder is 1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10, 2
+    // new block 2 is "already merged", so will be left out.
+
+    std::vector<uint64_t> revMergeOpSequence = {1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10};
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+    auto expected_new_block = revMergeOpSequence.begin();
+
+    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, *expected_new_block);
+
+        iter->Next();
+        expected_new_block++;
+    }
+    ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
+    ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, LegacyRevMergeOpItrTest) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddCopy(2, 1));
+    ASSERT_TRUE(writer.AddCopy(10, 2));
+    ASSERT_TRUE(writer.AddCopy(6, 3));
+    ASSERT_TRUE(writer.AddCopy(7, 4));
+    ASSERT_TRUE(writer.AddCopy(3, 5));
+    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(4, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(9, 1));
+    ASSERT_TRUE(writer.AddZeroBlocks(1, 1));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    // New block in cow order is 2, 10, 6, 7, 3, 5, 12, 8, 11, 4, 9, 1
+    // New block in merge order is 2, 10, 6, 7, 3, 5, 12, 11, 9, 8, 4, 1
+    // RevMergeOrder is 1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10, 2
+    // new block 2 is "already merged", so will be left out.
+
+    std::vector<uint64_t> revMergeOpSequence = {1, 4, 8, 9, 11, 12, 5, 3, 7, 6, 10};
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    auto iter = reader.GetRevMergeOpIter();
+    auto expected_new_block = revMergeOpSequence.begin();
+
+    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+        const auto& op = iter->Get();
+
+        ASSERT_EQ(op.new_block, *expected_new_block);
+
+        iter->Next();
+        expected_new_block++;
+    }
+    ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
+    ASSERT_TRUE(iter->Done());
 }
 
 }  // namespace snapshot

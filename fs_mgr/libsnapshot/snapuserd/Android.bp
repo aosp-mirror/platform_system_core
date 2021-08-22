@@ -1,0 +1,134 @@
+//
+// Copyright (C) 2018 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_defaults {
+    name: "libsnapshot_snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    export_include_dirs: ["include"],
+    srcs: [
+        "snapuserd_client.cpp",
+    ],
+}
+
+cc_library_static {
+    name: "libsnapshot_snapuserd",
+    defaults: [
+        "libsnapshot_snapuserd_defaults",
+    ],
+    recovery_available: true,
+    static_libs: [
+        "libcutils_sockets",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    ramdisk_available: true,
+}
+
+cc_defaults {
+    name: "snapuserd_defaults",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "snapuserd_server.cpp",
+        "snapuserd.cpp",
+        "snapuserd_daemon.cpp",
+        "snapuserd_worker.cpp",
+        "snapuserd_readahead.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror"
+    ],
+
+    static_libs: [
+        "libbase",
+        "libbrotli",
+        "libcutils_sockets",
+        "libdm",
+        "libfs_mgr",
+        "libgflags",
+        "liblog",
+        "libsnapshot_cow",
+        "libz",
+        "libext4_utils",
+    ],
+}
+
+cc_binary {
+    name: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+    init_rc: [
+        "snapuserd.rc",
+    ],
+    static_executable: true,
+    system_shared_libs: [],
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
+    recovery_available: true,
+}
+
+cc_test {
+    name: "cow_snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "cow_snapuserd_test.cpp",
+        "snapuserd.cpp",
+        "snapuserd_worker.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libgtest",
+        "libsnapshot_cow",
+        "libsnapshot_snapuserd",
+        "libcutils_sockets",
+        "libz",
+        "libfs_mgr",
+        "libdm",
+        "libext4_utils",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+        "libfiemap_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
+}

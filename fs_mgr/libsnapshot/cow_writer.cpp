@@ -58,6 +58,26 @@ bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t
     return EmitRawBlocks(new_block_start, data, size);
 }
 
+bool ICowWriter::AddXorBlocks(uint32_t new_block_start, const void* data, size_t size,
+                              uint32_t old_block, uint16_t offset) {
+    if (size % options_.block_size != 0) {
+        LOG(ERROR) << "AddRawBlocks: size " << size << " is not a multiple of "
+                   << options_.block_size;
+        return false;
+    }
+
+    uint64_t num_blocks = size / options_.block_size;
+    uint64_t last_block = new_block_start + num_blocks - 1;
+    if (!ValidateNewBlock(last_block)) {
+        return false;
+    }
+    if (offset >= options_.block_size) {
+        LOG(ERROR) << "AddXorBlocks: offset " << offset << " is not less than "
+                   << options_.block_size;
+    }
+    return EmitXorBlocks(new_block_start, data, size, old_block, offset);
+}
+
 bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     uint64_t last_block = new_block_start + num_blocks - 1;
     if (!ValidateNewBlock(last_block)) {
@@ -68,6 +88,10 @@ bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
 
 bool ICowWriter::AddLabel(uint64_t label) {
     return EmitLabel(label);
+}
+
+bool ICowWriter::AddSequenceData(size_t num_ops, const uint32_t* data) {
+    return EmitSequenceData(num_ops, data);
 }
 
 bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
@@ -92,7 +116,7 @@ void CowWriter::SetupHeaders() {
     header_.footer_size = sizeof(CowFooter);
     header_.op_size = sizeof(CowOperation);
     header_.block_size = options_.block_size;
-    header_.num_merge_ops = 0;
+    header_.num_merge_ops = options_.num_merge_ops;
     header_.cluster_ops = options_.cluster_ops;
     header_.buffer_size = 0;
     footer_ = {};
@@ -268,13 +292,27 @@ bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
 }
 
 bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
+    return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
+}
+
+bool CowWriter::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
+                              uint32_t old_block, uint16_t offset) {
+    return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
+}
+
+bool CowWriter::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
+                           uint64_t old_block, uint16_t offset, uint8_t type) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
     CHECK(!merge_in_progress_);
     for (size_t i = 0; i < size / header_.block_size; i++) {
         CowOperation op = {};
-        op.type = kCowReplaceOp;
         op.new_block = new_block_start + i;
-        op.source = next_data_pos_;
+        op.type = type;
+        if (type == kCowXorOp) {
+            op.source = (old_block + i) * header_.block_size + offset;
+        } else {
+            op.source = next_data_pos_;
+        }
 
         if (compression_) {
             auto data = Compress(iter, header_.block_size);
@@ -324,6 +362,26 @@ bool CowWriter::EmitLabel(uint64_t label) {
     op.type = kCowLabelOp;
     op.source = label;
     return WriteOperation(op) && Sync();
+}
+
+bool CowWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
+    CHECK(!merge_in_progress_);
+    size_t to_add = 0;
+    size_t max_ops = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t);
+    while (num_ops > 0) {
+        CowOperation op = {};
+        op.type = kCowSequenceOp;
+        op.source = next_data_pos_;
+        to_add = std::min(num_ops, max_ops);
+        op.data_length = static_cast<uint16_t>(to_add * sizeof(uint32_t));
+        if (!WriteOperation(op, data, op.data_length)) {
+            PLOG(ERROR) << "AddSequenceData: write failed";
+            return false;
+        }
+        num_ops -= to_add;
+        data += to_add;
+    }
+    return true;
 }
 
 bool CowWriter::EmitCluster() {

@@ -63,7 +63,9 @@ class OfflineSnapshotTest : public ::testing::Test {
 
     void WriteCow(ISnapshotWriter* writer) {
         std::string new_block = MakeNewBlockString();
+        std::string xor_block = MakeXorBlockString();
 
+        ASSERT_TRUE(writer->AddXorBlocks(1, xor_block.data(), xor_block.size(), 0, kBlockSize / 2));
         ASSERT_TRUE(writer->AddCopy(3, 0));
         ASSERT_TRUE(writer->AddRawBlocks(5, new_block.data(), new_block.size()));
         ASSERT_TRUE(writer->AddZeroBlocks(7, 2));
@@ -75,7 +77,7 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_NE(reader, nullptr);
 
         // Test that unchanged blocks are not modified.
-        std::unordered_set<size_t> changed_blocks = {3, 5, 7, 8};
+        std::unordered_set<size_t> changed_blocks = {1, 3, 5, 7, 8};
         for (size_t i = 0; i < kBlockCount; i++) {
             if (changed_blocks.count(i)) {
                 continue;
@@ -88,6 +90,17 @@ class OfflineSnapshotTest : public ::testing::Test {
         }
 
         // Test that we can read back our modified blocks.
+        std::string data(kBlockSize, 0);
+        std::string offsetblock = base_blocks_[0].substr(kBlockSize / 2, kBlockSize / 2) +
+                                  base_blocks_[1].substr(0, kBlockSize / 2);
+        ASSERT_EQ(offsetblock.size(), kBlockSize);
+        ASSERT_EQ(reader->Seek(1 * kBlockSize, SEEK_SET), 1 * kBlockSize);
+        ASSERT_EQ(reader->Read(data.data(), data.size()), kBlockSize);
+        for (int i = 0; i < 100; i++) {
+            data[i] = (char)~(data[i]);
+        }
+        ASSERT_EQ(data, offsetblock);
+
         std::string block(kBlockSize, 0);
         ASSERT_EQ(reader->Seek(3 * kBlockSize, SEEK_SET), 3 * kBlockSize);
         ASSERT_EQ(reader->Read(block.data(), block.size()), kBlockSize);
@@ -139,6 +152,12 @@ class OfflineSnapshotTest : public ::testing::Test {
         new_block.resize(kBlockSize / 2, '*');
         new_block.resize(kBlockSize, '!');
         return new_block;
+    }
+
+    std::string MakeXorBlockString() {
+        std::string data(100, -1);
+        data.resize(kBlockSize, 0);
+        return data;
     }
 
     std::unique_ptr<TemporaryFile> base_;

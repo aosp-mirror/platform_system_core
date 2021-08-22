@@ -20,7 +20,7 @@
 #include <optional>
 #include <set>
 
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 namespace android {
 namespace snapshot {
@@ -172,24 +172,37 @@ ReadAheadThread::ReadAheadThread(const std::string& cow_device, const std::strin
 }
 
 void ReadAheadThread::CheckOverlap(const CowOperation* cow_op) {
-    if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(cow_op->source)) {
+    uint64_t source_block = cow_op->source;
+    uint64_t source_offset = 0;
+    if (cow_op->type == kCowXorOp) {
+        source_block /= BLOCK_SZ;
+        source_offset = cow_op->source % BLOCK_SZ;
+    }
+    if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block) ||
+        (source_offset > 0 && source_blocks_.count(source_block + 1))) {
         overlap_ = true;
     }
 
-    dest_blocks_.insert(cow_op->source);
+    dest_blocks_.insert(source_block);
+    if (source_offset > 0) {
+        dest_blocks_.insert(source_block + 1);
+    }
     source_blocks_.insert(cow_op->new_block);
 }
 
-void ReadAheadThread::PrepareReadAhead(uint64_t* source_block, int* pending_ops,
+void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops,
                                        std::vector<uint64_t>& blocks) {
     int num_ops = *pending_ops;
     int nr_consecutive = 0;
 
-    if (!IterDone() && num_ops) {
-        // Get the first block
-        const CowOperation* cow_op = GetIterOp();
-        *source_block = cow_op->source;
-        IterNext();
+    if (!RAIterDone() && num_ops) {
+        // Get the first block with offset
+        const CowOperation* cow_op = GetRAOpIter();
+        *source_offset = cow_op->source;
+        if (cow_op->type == kCowCopyOp) {
+            *source_offset *= BLOCK_SZ;
+        }
+        RAIterNext();
         num_ops -= 1;
         nr_consecutive = 1;
         blocks.push_back(cow_op->new_block);
@@ -201,15 +214,19 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_block, int* pending_ops,
         /*
          * Find number of consecutive blocks working backwards.
          */
-        while (!IterDone() && num_ops) {
-            const CowOperation* op = GetIterOp();
-            if (op->source != (*source_block - nr_consecutive)) {
+        while (!RAIterDone() && num_ops) {
+            const CowOperation* op = GetRAOpIter();
+            uint64_t next_offset = op->source;
+            if (cow_op->type == kCowCopyOp) {
+                next_offset *= BLOCK_SZ;
+            }
+            if (next_offset != (*source_offset - nr_consecutive * BLOCK_SZ)) {
                 break;
             }
             nr_consecutive += 1;
             num_ops -= 1;
             blocks.push_back(op->new_block);
-            IterNext();
+            RAIterNext();
 
             if (!overlap_) {
                 CheckOverlap(op);
@@ -247,12 +264,12 @@ bool ReadAheadThread::ReconstructDataFromCow() {
     // We are done re-constructing the mapping; however, we need to make sure
     // all the COW operations to-be merged are present in the re-constructed
     // mapping.
-    while (!IterDone()) {
-        const CowOperation* op = GetIterOp();
+    while (!RAIterDone()) {
+        const CowOperation* op = GetRAOpIter();
         if (read_ahead_buffer_map.find(op->new_block) != read_ahead_buffer_map.end()) {
             num_ops -= 1;
             snapuserd_->SetFinalBlockMerged(op->new_block);
-            IterNext();
+            RAIterNext();
         } else {
             // Verify that we have covered all the ops which were re-constructed
             // from COW device - These are the ops which are being
@@ -312,10 +329,10 @@ bool ReadAheadThread::ReadAheadIOStart() {
     source_blocks_.clear();
 
     while (true) {
-        uint64_t source_block;
+        uint64_t source_offset;
         int linear_blocks;
 
-        PrepareReadAhead(&source_block, &num_ops, blocks);
+        PrepareReadAhead(&source_offset, &num_ops, blocks);
         linear_blocks = blocks.size();
         if (linear_blocks == 0) {
             // No more blocks to read
@@ -324,7 +341,7 @@ bool ReadAheadThread::ReadAheadIOStart() {
         }
 
         // Get the first block in the consecutive set of blocks
-        source_block = source_block + 1 - linear_blocks;
+        source_offset = source_offset - (linear_blocks - 1) * BLOCK_SZ;
         size_t io_size = (linear_blocks * BLOCK_SZ);
         num_ops -= linear_blocks;
         total_blocks_merged += linear_blocks;
@@ -358,10 +375,12 @@ bool ReadAheadThread::ReadAheadIOStart() {
         // Read from the base device consecutive set of blocks in one shot
         if (!android::base::ReadFullyAtOffset(backing_store_fd_,
                                               (char*)read_ahead_buffer_ + buffer_offset, io_size,
-                                              source_block * BLOCK_SZ)) {
-            SNAP_PLOG(ERROR) << "Copy-op failed. Read from backing store: " << backing_store_device_
-                             << "at block :" << source_block << " buffer_offset : " << buffer_offset
-                             << " io_size : " << io_size << " buf-addr : " << read_ahead_buffer_;
+                                              source_offset)) {
+            SNAP_PLOG(ERROR) << "Ordered-op failed. Read from backing store: "
+                             << backing_store_device_ << "at block :" << source_offset / BLOCK_SZ
+                             << " offset :" << source_offset % BLOCK_SZ
+                             << " buffer_offset : " << buffer_offset << " io_size : " << io_size
+                             << " buf-addr : " << read_ahead_buffer_;
 
             snapuserd_->ReadAheadIOFailed();
             return false;
@@ -394,10 +413,10 @@ bool ReadAheadThread::RunThread() {
         return false;
     }
 
-    InitializeIter();
+    InitializeRAIter();
     InitializeBuffer();
 
-    while (!IterDone()) {
+    while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
             return false;
         }
@@ -433,21 +452,21 @@ bool ReadAheadThread::InitializeFds() {
     return true;
 }
 
-void ReadAheadThread::InitializeIter() {
+void ReadAheadThread::InitializeRAIter() {
     std::vector<const CowOperation*>& read_ahead_ops = snapuserd_->GetReadAheadOpsVec();
     read_ahead_iter_ = read_ahead_ops.rbegin();
 }
 
-bool ReadAheadThread::IterDone() {
+bool ReadAheadThread::RAIterDone() {
     std::vector<const CowOperation*>& read_ahead_ops = snapuserd_->GetReadAheadOpsVec();
     return read_ahead_iter_ == read_ahead_ops.rend();
 }
 
-void ReadAheadThread::IterNext() {
+void ReadAheadThread::RAIterNext() {
     read_ahead_iter_++;
 }
 
-const CowOperation* ReadAheadThread::GetIterOp() {
+const CowOperation* ReadAheadThread::GetRAOpIter() {
     return *read_ahead_iter_;
 }
 

@@ -32,6 +32,7 @@
 #include <set>
 #include <vector>
 
+#include <android-base/errno_restorer.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
@@ -67,8 +68,9 @@
 #include "protocol.h"
 #include "util.h"
 
-using android::base::unique_fd;
+using android::base::ErrnoRestorer;
 using android::base::StringPrintf;
+using android::base::unique_fd;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -89,10 +91,11 @@ static pid_t get_tracer(pid_t tracee) {
 static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error, int flags = 0) {
   if (ptrace(PTRACE_SEIZE, tid, 0, flags) != 0) {
     if (errno == EPERM) {
-      pid_t tracer = get_tracer(tid);
-      if (tracer != -1) {
+      ErrnoRestorer errno_restorer;  // In case get_tracer() fails and we fall through.
+      pid_t tracer_pid = get_tracer(tid);
+      if (tracer_pid > 0) {
         *error = StringPrintf("failed to attach to thread %d, already traced by %d (%s)", tid,
-                              tracer, get_process_name(tracer).c_str());
+                              tracer_pid, get_process_name(tracer_pid).c_str());
         return false;
       }
     }
