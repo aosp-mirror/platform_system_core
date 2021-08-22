@@ -165,8 +165,7 @@ class CrashQueue {
 
     switch (dump_type) {
       case kDebuggerdNativeBacktrace:
-      case kDebuggerdJavaBacktrace:
-        // Don't generate tombstones for backtrace requests.
+        // Don't generate tombstones for native backtrace requests.
         return {};
 
       case kDebuggerdTombstoneProto:
@@ -178,6 +177,7 @@ class CrashQueue {
         result.text = create_temporary_file();
         break;
 
+      case kDebuggerdJavaBacktrace:
       case kDebuggerdTombstone:
         result.text = create_temporary_file();
         break;
@@ -448,8 +448,10 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
     return;
   }
 
-  if (crash->output.text.fd == -1) {
-    LOG(WARNING) << "missing output fd";
+  if (crash->output.text.fd < 0) {
+    if (crash->output.text.fd == -1) {
+      LOG(WARNING) << "skipping tombstone file creation due to intercept";
+    }
     return;
   }
 

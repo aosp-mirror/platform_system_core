@@ -277,8 +277,6 @@ runs the service.
   CLD_EXITED or an status other than '0', reboot the system with the target specified in
   _target_. _target_ takes the same format as the parameter to sys.powerctl. This is particularly
   intended to be used with the `exec_start` builtin for any must-have checks during boot.
-  A service being stopped by init (e.g. using the `stop` or `class_reset` commands) is not
-  considered a failure for the purpose of this setting.
 
 `restart_period <seconds>`
 > If a non-oneshot service exits, it will be restarted at its start time plus
@@ -405,6 +403,33 @@ at three times:
    2. Any time that property a transitions to value b, while property c already equals d.
    3. Any time that property c transitions to value d, while property a already equals b.
 
+
+Trigger Sequence
+----------------
+
+Init uses the following sequence of triggers during early boot. These are the
+built-in triggers defined in init.cpp.
+
+   1. `early-init` - The first in the sequence, triggered after cgroups has been configured
+      but before ueventd's coldboot is complete.
+   2. `init` - Triggered after coldboot is complete.
+   3. `charger` - Triggered if `ro.bootmode == "charger"`.
+   4. `late-init` - Triggered if `ro.bootmode != "charger"`, or via healthd triggering a boot
+      from charging mode.
+
+Remaining triggers are configured in `init.rc` and are not built-in. The default sequence for
+these is specified under the "on late-init" event in `init.rc`. Actions internal to `init.rc`
+have been omitted.
+
+   1. `early-fs` - Start vold.
+   2. `fs` - Vold is up. Mount partitions not marked as first-stage or latemounted.
+   3. `post-fs` - Configure anything dependent on early mounts.
+   4. `late-fs` - Mount partitions marked as latemounted.
+   5. `post-fs-data` - Mount and configure `/data`; set up encryption. `/metadata` is
+      reformatted here if it couldn't mount in first-stage init.
+   6. `zygote-start` - Start the zygote.
+   7. `early-boot` - After zygote has started.
+   8. `boot` - After `early-boot` actions have completed.
 
 Commands
 --------

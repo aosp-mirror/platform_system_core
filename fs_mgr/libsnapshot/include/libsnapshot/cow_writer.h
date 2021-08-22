@@ -38,6 +38,9 @@ struct CowOptions {
     uint32_t cluster_ops = 200;
 
     bool scratch_space = true;
+
+    // Preset the number of merged ops. Only useful for testing.
+    uint64_t num_merge_ops = 0;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -55,11 +58,18 @@ class ICowWriter {
     // Encode a sequence of raw blocks. |size| must be a multiple of the block size.
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size);
 
+    // Add a sequence of xor'd blocks. |size| must be a multiple of the block size.
+    bool AddXorBlocks(uint32_t new_block_start, const void* data, size_t size, uint32_t old_block,
+                      uint16_t offset);
+
     // Encode a sequence of zeroed blocks. |size| must be a multiple of the block size.
     bool AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks);
 
     // Add a label to the op sequence.
     bool AddLabel(uint64_t label);
+
+    // Add sequence data for op merging. Data is a list of the destination block numbers.
+    bool AddSequenceData(size_t num_ops, const uint32_t* data);
 
     // Flush all pending writes. This must be called before closing the writer
     // to ensure that the correct headers and footers are written.
@@ -76,8 +86,11 @@ class ICowWriter {
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) = 0;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
+    virtual bool EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
+                               uint32_t old_block, uint16_t offset) = 0;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) = 0;
     virtual bool EmitLabel(uint64_t label) = 0;
+    virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) = 0;
 
     bool ValidateNewBlock(uint64_t new_block);
 
@@ -111,12 +124,17 @@ class CowWriter : public ICowWriter {
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
+    virtual bool EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
+                               uint32_t old_block, uint16_t offset) override;
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
     virtual bool EmitLabel(uint64_t label) override;
+    virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
 
   private:
     bool EmitCluster();
     bool EmitClusterIfNeeded();
+    bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
+                    uint16_t offset, uint8_t type);
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();

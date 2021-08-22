@@ -19,13 +19,15 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <gflags/gflags.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 #include "snapuserd_server.h"
 
 DEFINE_string(socket, android::snapshot::kSnapuserdSocket, "Named socket or socket path.");
 DEFINE_bool(no_socket, false,
             "If true, no socket is used. Each additional argument is an INIT message.");
+DEFINE_bool(socket_handoff, false,
+            "If true, perform a socket hand-off with an existing snapuserd instance, then exit.");
 
 namespace android {
 namespace snapshot {
@@ -33,8 +35,28 @@ namespace snapshot {
 bool Daemon::StartServer(int argc, char** argv) {
     int arg_start = gflags::ParseCommandLineFlags(&argc, &argv, true);
 
+    sigfillset(&signal_mask_);
+    sigdelset(&signal_mask_, SIGINT);
+    sigdelset(&signal_mask_, SIGTERM);
+    sigdelset(&signal_mask_, SIGUSR1);
+
+    // Masking signals here ensure that after this point, we won't handle INT/TERM
+    // until after we call into ppoll()
+    signal(SIGINT, Daemon::SignalHandler);
+    signal(SIGTERM, Daemon::SignalHandler);
+    signal(SIGPIPE, Daemon::SignalHandler);
+    signal(SIGUSR1, Daemon::SignalHandler);
+
+    MaskAllSignalsExceptIntAndTerm();
+
+    if (FLAGS_socket_handoff) {
+        return server_.RunForSocketHandoff();
+    }
     if (!FLAGS_no_socket) {
-        return server_.Start(FLAGS_socket);
+        if (!server_.Start(FLAGS_socket)) {
+            return false;
+        }
+        return server_.Run();
     }
 
     for (int i = arg_start; i < argc; i++) {
@@ -51,8 +73,7 @@ bool Daemon::StartServer(int argc, char** argv) {
 
     // Skip the accept() call to avoid spurious log spam. The server will still
     // run until all handlers have completed.
-    server_.SetTerminating();
-    return true;
+    return server_.WaitForSocket();
 }
 
 void Daemon::MaskAllSignalsExceptIntAndTerm() {
@@ -61,6 +82,7 @@ void Daemon::MaskAllSignalsExceptIntAndTerm() {
     sigdelset(&signal_mask, SIGINT);
     sigdelset(&signal_mask, SIGTERM);
     sigdelset(&signal_mask, SIGPIPE);
+    sigdelset(&signal_mask, SIGUSR1);
     if (sigprocmask(SIG_SETMASK, &signal_mask, NULL) != 0) {
         PLOG(ERROR) << "Failed to set sigprocmask";
     }
@@ -74,26 +96,12 @@ void Daemon::MaskAllSignals() {
     }
 }
 
-void Daemon::Run() {
-    sigfillset(&signal_mask_);
-    sigdelset(&signal_mask_, SIGINT);
-    sigdelset(&signal_mask_, SIGTERM);
-
-    // Masking signals here ensure that after this point, we won't handle INT/TERM
-    // until after we call into ppoll()
-    signal(SIGINT, Daemon::SignalHandler);
-    signal(SIGTERM, Daemon::SignalHandler);
-    signal(SIGPIPE, Daemon::SignalHandler);
-
-    LOG(DEBUG) << "Snapuserd-server: ready to accept connections";
-
-    MaskAllSignalsExceptIntAndTerm();
-
-    server_.Run();
-}
-
 void Daemon::Interrupt() {
     server_.Interrupt();
+}
+
+void Daemon::ReceivedSocketSignal() {
+    server_.ReceivedSocketSignal();
 }
 
 void Daemon::SignalHandler(int signal) {
@@ -106,6 +114,11 @@ void Daemon::SignalHandler(int signal) {
         }
         case SIGPIPE: {
             LOG(ERROR) << "Received SIGPIPE signal";
+            break;
+        }
+        case SIGUSR1: {
+            LOG(INFO) << "Received SIGUSR1, attaching to proxy socket";
+            Daemon::Instance().ReceivedSocketSignal();
             break;
         }
         default:
@@ -126,7 +139,5 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "Snapuserd daemon failed to start.";
         exit(EXIT_FAILURE);
     }
-    daemon.Run();
-
     return 0;
 }

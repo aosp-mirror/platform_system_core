@@ -40,7 +40,17 @@ static void usage(void) {
     LOG(ERROR) << "\t -s Run Silent";
     LOG(ERROR) << "\t -d Attempt to decompress";
     LOG(ERROR) << "\t -b Show data for failed decompress\n";
+    LOG(ERROR) << "\t -m Show ops in reverse merge order\n";
 }
+
+enum OpIter { Normal, RevMerge };
+
+struct Options {
+    bool silent;
+    bool decompress;
+    bool show_bad;
+    OpIter iter_type;
+};
 
 // Sink that always appends to the end of a string.
 class StringSink : public IByteSink {
@@ -78,7 +88,7 @@ static void ShowBad(CowReader& reader, const struct CowOperation& op) {
     }
 }
 
-static bool Inspect(const std::string& path, bool silent, bool decompress, bool show_bad) {
+static bool Inspect(const std::string& path, Options opt) {
     android::base::unique_fd fd(open(path.c_str(), O_RDONLY));
     if (fd < 0) {
         PLOG(ERROR) << "open failed: " << path;
@@ -100,12 +110,14 @@ static bool Inspect(const std::string& path, bool silent, bool decompress, bool 
     bool has_footer = false;
     if (reader.GetFooter(&footer)) has_footer = true;
 
-    if (!silent) {
+    if (!opt.silent) {
         std::cout << "Major version: " << header.major_version << "\n";
         std::cout << "Minor version: " << header.minor_version << "\n";
         std::cout << "Header size: " << header.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
+        std::cout << "Num merge ops: " << header.num_merge_ops << "\n";
+        std::cout << "RA buffer size: " << header.buffer_size << "\n";
         std::cout << "\n";
         if (has_footer) {
             std::cout << "Total Ops size: " << footer.op.ops_size << "\n";
@@ -114,19 +126,24 @@ static bool Inspect(const std::string& path, bool silent, bool decompress, bool 
         }
     }
 
-    auto iter = reader.GetOpIter();
+    std::unique_ptr<ICowOpIter> iter;
+    if (opt.iter_type == Normal) {
+        iter = reader.GetOpIter();
+    } else if (opt.iter_type == RevMerge) {
+        iter = reader.GetRevMergeOpIter();
+    }
     StringSink sink;
     bool success = true;
     while (!iter->Done()) {
         const CowOperation& op = iter->Get();
 
-        if (!silent) std::cout << op << "\n";
+        if (!opt.silent) std::cout << op << "\n";
 
-        if (decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
+        if (opt.decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
             if (!reader.ReadData(op, &sink)) {
                 std::cerr << "Failed to decompress for :" << op << "\n";
                 success = false;
-                if (show_bad) ShowBad(reader, op);
+                if (opt.show_bad) ShowBad(reader, op);
             }
             sink.Reset();
         }
@@ -142,19 +159,24 @@ static bool Inspect(const std::string& path, bool silent, bool decompress, bool 
 
 int main(int argc, char** argv) {
     int ch;
-    bool silent = false;
-    bool decompress = false;
-    bool show_bad = false;
-    while ((ch = getopt(argc, argv, "sdb")) != -1) {
+    struct android::snapshot::Options opt;
+    opt.silent = false;
+    opt.decompress = false;
+    opt.show_bad = false;
+    opt.iter_type = android::snapshot::Normal;
+    while ((ch = getopt(argc, argv, "sdbm")) != -1) {
         switch (ch) {
             case 's':
-                silent = true;
+                opt.silent = true;
                 break;
             case 'd':
-                decompress = true;
+                opt.decompress = true;
                 break;
             case 'b':
-                show_bad = true;
+                opt.show_bad = true;
+                break;
+            case 'm':
+                opt.iter_type = android::snapshot::RevMerge;
                 break;
             default:
                 android::snapshot::usage();
@@ -167,7 +189,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (!android::snapshot::Inspect(argv[optind], silent, decompress, show_bad)) {
+    if (!android::snapshot::Inspect(argv[optind], opt)) {
         return 1;
     }
     return 0;

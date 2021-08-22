@@ -138,6 +138,8 @@ struct CowOperation {
     // For Label operations, this is the value of the applied label.
     //
     // For Cluster operations, this is the length of the following data region
+    //
+    // For Xor operations, this is the byte location in the source image.
     uint64_t source;
 } __attribute__((packed));
 
@@ -148,6 +150,8 @@ static constexpr uint8_t kCowReplaceOp = 2;
 static constexpr uint8_t kCowZeroOp = 3;
 static constexpr uint8_t kCowLabelOp = 4;
 static constexpr uint8_t kCowClusterOp = 5;
+static constexpr uint8_t kCowXorOp = 6;
+static constexpr uint8_t kCowSequenceOp = 7;
 static constexpr uint8_t kCowFooterOp = -1;
 
 static constexpr uint8_t kCowCompressNone = 0;
@@ -184,7 +188,10 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
 int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
 
+// Ops that are internal to the Cow Format and not OTA data
 bool IsMetadataOp(const CowOperation& op);
+// Ops that have dependencies on old blocks, and must take care in their merge order
+bool IsOrderedOp(const CowOperation& op);
 
 }  // namespace snapshot
 }  // namespace android

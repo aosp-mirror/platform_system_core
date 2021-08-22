@@ -46,6 +46,7 @@ using android::base::Dirname;
 using android::base::ReadFileToString;
 using android::base::Readlink;
 using android::base::Realpath;
+using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::Trim;
@@ -187,6 +188,36 @@ void SysfsPermissions::SetPermissions(const std::string& path) const {
     }
 }
 
+std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_device) {
+    static const auto partition_map = [] {
+        std::vector<std::pair<std::string, std::string>> partition_map;
+        auto parser = [&partition_map](const std::string& key, const std::string& value) {
+            if (key != "androidboot.partition_map") {
+                return;
+            }
+            for (const auto& map : Split(value, ";")) {
+                auto map_pieces = Split(map, ",");
+                if (map_pieces.size() != 2) {
+                    LOG(ERROR) << "Expected a comma separated device,partition mapping, but found '"
+                               << map << "'";
+                    continue;
+                }
+                partition_map.emplace_back(map_pieces[0], map_pieces[1]);
+            }
+        };
+        ImportKernelCmdline(parser);
+        ImportBootconfig(parser);
+        return partition_map;
+    }();
+
+    for (const auto& [device, partition] : partition_map) {
+        if (query_device == device) {
+            return partition;
+        }
+    }
+    return {};
+}
+
 // Given a path that may start with a platform device, find the parent platform device by finding a
 // parent directory with a 'subsystem' symlink that points to the platform bus.
 // If it doesn't start with a platform device, return false
@@ -264,6 +295,8 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
         setfscreatecon(secontext.c_str());
     }
 
+    gid_t new_group = -1;
+
     dev_t dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
@@ -291,10 +324,21 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             PLOG(ERROR) << "Cannot set '" << secontext << "' SELinux label on '" << path
                         << "' device";
         }
+
+        struct stat s;
+        if (stat(path.c_str(), &s) == 0) {
+            if (gid != s.st_gid) {
+                new_group = gid;
+            }
+        } else {
+            PLOG(ERROR) << "Cannot stat " << path;
+        }
     }
 
 out:
-    chown(path.c_str(), uid, -1);
+    if (chown(path.c_str(), uid, new_group) < 0) {
+        PLOG(ERROR) << "Cannot chown " << path << " " << uid << " " << new_group;
+    }
     if (setegid(AID_ROOT)) {
         PLOG(FATAL) << "setegid(AID_ROOT) failed";
     }
@@ -376,6 +420,10 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         // If we don't have a partition name but we are a partition on a boot device, create a
         // symlink of /dev/block/by-name/<device_name> for symmetry.
         links.emplace_back("/dev/block/by-name/" + uevent.device_name);
+        auto partition_name = GetPartitionNameForDevice(uevent.device_name);
+        if (!partition_name.empty()) {
+            links.emplace_back("/dev/block/by-name/" + partition_name);
+        }
     }
 
     auto last_slash = uevent.path.rfind('/');

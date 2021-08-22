@@ -35,12 +35,14 @@ class ISnapshotMergeStats {
     virtual void set_boot_complete_time_ms(uint32_t ms) = 0;
     virtual void set_boot_complete_to_merge_start_time_ms(uint32_t ms) = 0;
     virtual void set_merge_failure_code(MergeFailureCode code) = 0;
+    virtual void set_source_build_fingerprint(const std::string& fingerprint) = 0;
     virtual uint64_t cow_file_size() = 0;
     virtual uint64_t total_cow_size_bytes() = 0;
     virtual uint64_t estimated_cow_size_bytes() = 0;
     virtual uint32_t boot_complete_time_ms() = 0;
     virtual uint32_t boot_complete_to_merge_start_time_ms() = 0;
     virtual MergeFailureCode merge_failure_code() = 0;
+    virtual std::string source_build_fingerprint() = 0;
 
     // Called when merge ends. Properly clean up permanent storage.
     class Result {
@@ -52,6 +54,10 @@ class ISnapshotMergeStats {
     };
     // Return nullptr if any failure.
     virtual std::unique_ptr<Result> Finish() = 0;
+
+    // Write out the current state. This should be called when data might be lost that
+    // cannot be recovered (eg the COW sizes).
+    virtual bool WriteState() = 0;
 };
 
 class SnapshotMergeStats : public ISnapshotMergeStats {
@@ -74,11 +80,13 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
     uint32_t boot_complete_to_merge_start_time_ms() override;
     void set_merge_failure_code(MergeFailureCode code) override;
     MergeFailureCode merge_failure_code() override;
+    void set_source_build_fingerprint(const std::string& fingerprint) override;
+    std::string source_build_fingerprint() override;
     std::unique_ptr<Result> Finish() override;
+    bool WriteState() override;
 
   private:
     bool ReadState();
-    bool WriteState();
     bool DeleteState();
     SnapshotMergeStats(const std::string& path);
 

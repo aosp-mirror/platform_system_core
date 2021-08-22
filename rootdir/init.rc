@@ -191,33 +191,6 @@ on init
     chown system system /dev/cpuctl/camera-daemon/tasks
     chmod 0664 /dev/cpuctl/camera-daemon/tasks
 
-    # Android only use global RT throttling and doesn't use CONFIG_RT_GROUP_SCHED
-    # for RT group throttling. These values here are just to make sure RT threads
-    # can be migrated to those groups. These settings can be removed once we migrate
-    # to GKI kernel.
-    write /dev/cpuctl/cpu.rt_period_us 1000000
-    write /dev/cpuctl/cpu.rt_runtime_us 950000
-    # Surfaceflinger is in FG group so giving it a bit more
-    write /dev/cpuctl/foreground/cpu.rt_runtime_us 450000
-    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
-    write /dev/cpuctl/background/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/background/cpu.rt_period_us 1000000
-    write /dev/cpuctl/top-app/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/top-app/cpu.rt_period_us 1000000
-    write /dev/cpuctl/rt/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/rt/cpu.rt_period_us 1000000
-    write /dev/cpuctl/system/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/system/cpu.rt_period_us 1000000
-    write /dev/cpuctl/system-background/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/system-background/cpu.rt_period_us 1000000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/nnapi-hal/cpu.rt_period_us 1000000
-    write /dev/cpuctl/camera-daemon/cpu.rt_runtime_us 50000
-    write /dev/cpuctl/camera-daemon/cpu.rt_period_us 1000000
-
-    # Migrate root group to system subgroup
-    copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks
-
     # Create an stune group for camera-specific processes
     mkdir /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon
@@ -465,6 +438,7 @@ on init
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
     # Start lmkd before any other services run so that it can register them
+    write /proc/sys/vm/watermark_boost_factor 0
     chown root system /sys/module/lowmemorykiller/parameters/adj
     chmod 0664 /sys/module/lowmemorykiller/parameters/adj
     chown root system /sys/module/lowmemorykiller/parameters/minfree
@@ -617,9 +591,10 @@ on late-fs
     # Load trusted keys from dm-verity protected partitions
     exec -- /system/bin/fsverity_init --load-verified-keys
 
+on late-fs && property:ro.product.cpu.abilist64=*
     # Set up a tracing instance for system_server to monitor error_report_end events.
     # These are sent by kernel tools like KASAN and KFENCE when a memory corruption
-    # is detected.
+    # is detected. This is only needed for 64-bit systems.
     mkdir /sys/kernel/tracing/instances/bootreceiver 0700 system system
     restorecon_recursive /sys/kernel/tracing/instances/bootreceiver
     write /sys/kernel/tracing/instances/bootreceiver/buffer_size_kb 1
@@ -762,7 +737,7 @@ on post-fs-data
     # profile file layout
     mkdir /data/misc/profiles 0771 system system
     mkdir /data/misc/profiles/cur 0771 system system
-    mkdir /data/misc/profiles/ref 0770 system system
+    mkdir /data/misc/profiles/ref 0771 system system
     mkdir /data/misc/profman 0770 system shell
     mkdir /data/misc/gcov 0770 root root
     mkdir /data/misc/installd 0700 root root
@@ -776,6 +751,8 @@ on post-fs-data
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
     mkdir /data/misc/odsign 0700 root root
+    # Directory for VirtualizationService temporary image files.
+    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -881,6 +858,8 @@ on post-fs-data
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
     mount none /data/misc/profiles/cur /data_mirror/cur_profiles bind rec
+    mkdir /data_mirror/ref_profiles 0700 root root
+    mount none /data/misc/profiles/ref /data_mirror/ref_profiles bind rec
 
     mkdir /data/cache 0770 system cache encryption=Require
     mkdir /data/cache/recovery 0770 system cache
@@ -1025,11 +1004,11 @@ on boot
 
     # to access F2FS sysfs on dm-<num> directly
     mkdir /dev/sys/fs/by-name 0755 system system
-    symlink /sys/fs/f2fs/${dev.mnt.blk.data} /dev/sys/fs/by-name/userdata
+    symlink /sys/fs/f2fs/${dev.mnt.dev.data} /dev/sys/fs/by-name/userdata
 
     # to access dm-<num> sysfs
     mkdir /dev/sys/block/by-name 0755 system system
-    symlink /sys/devices/virtual/block/${dev.mnt.blk.data} /dev/sys/block/by-name/userdata
+    symlink /sys/devices/virtual/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
 
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
@@ -1159,7 +1138,7 @@ on property:sys.boot_completed=1
 # and chown/chmod does not work for /proc/sys/ entries.
 # So proxy writes through init.
 on property:sys.sysctl.extra_free_kbytes=*
-    write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
+    exec -- /system/bin/extra_free_kbytes.sh ${sys.sysctl.extra_free_kbytes}
 
 # Allow users to drop caches
 on property:perf.drop_caches=3
@@ -1262,6 +1241,7 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
   umount /data_mirror/cur_profiles
+  umount /data_mirror/ref_profiles
   umount /data_mirror
   remount_userdata
   start bootanim
@@ -1275,7 +1255,3 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
-
-# Migrate tasks again in case kernel threads are created during boot
-on property:sys.boot_completed=1
-  copy_per_line /dev/cpuctl/tasks /dev/cpuctl/system/tasks

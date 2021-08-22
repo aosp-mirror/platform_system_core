@@ -91,7 +91,6 @@ void SnapshotMergeStats::set_state(android::snapshot::UpdateState state, bool us
 
 void SnapshotMergeStats::set_cow_file_size(uint64_t cow_file_size) {
     report_.set_cow_file_size(cow_file_size);
-    WriteState();
 }
 
 uint64_t SnapshotMergeStats::cow_file_size() {
@@ -136,6 +135,14 @@ void SnapshotMergeStats::set_merge_failure_code(MergeFailureCode code) {
 
 MergeFailureCode SnapshotMergeStats::merge_failure_code() {
     return report_.merge_failure_code();
+}
+
+void SnapshotMergeStats::set_source_build_fingerprint(const std::string& fingerprint) {
+    report_.set_source_build_fingerprint(fingerprint);
+}
+
+std::string SnapshotMergeStats::source_build_fingerprint() {
+    return report_.source_build_fingerprint();
 }
 
 class SnapshotMergeStatsResultImpl : public SnapshotMergeStats::Result {

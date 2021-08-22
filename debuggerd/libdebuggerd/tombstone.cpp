@@ -232,6 +232,12 @@ static void dump_abort_message(log_t* log, unwindstack::Memory* process_memory, 
     return;
   }
 
+  // Remove any trailing newlines.
+  size_t index = length;
+  while (index > 0 && (msg[index - 1] == '\0' || msg[index - 1] == '\n')) {
+    --index;
+  }
+  msg[index] = '\0';
   _LOG(log, logtype::HEADER, "Abort message: '%s'\n", &msg[0]);
 }
 
@@ -593,6 +599,9 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   };
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
+  auto process_memory =
+      unwindstack::Memory::CreateProcessMemoryCached(getpid());
+  unwinder.SetProcessMemory(process_memory);
   if (!unwinder.Init()) {
     async_safe_fatal("failed to init unwinder object");
   }

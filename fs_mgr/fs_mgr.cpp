@@ -34,11 +34,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -70,6 +72,7 @@
 #include <log/log_properties.h>
 #include <logwrap/logwrap.h>
 
+#include "blockdev.h"
 #include "fs_mgr_priv.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
@@ -101,6 +104,7 @@ using android::base::GetUintProperty;
 using android::base::Realpath;
 using android::base::SetProperty;
 using android::base::StartsWith;
+using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
@@ -790,20 +794,26 @@ static int __mount(const std::string& source, const std::string& target, const F
     int save_errno = 0;
     int gc_allowance = 0;
     std::string opts;
+    std::string checkpoint_opts;
     bool try_f2fs_gc_allowance = is_f2fs(entry.fs_type) && entry.fs_checkpoint_opts.length() > 0;
+    bool try_f2fs_fallback = false;
     Timer t;
 
     do {
-        if (save_errno == EINVAL && try_f2fs_gc_allowance) {
-            PINFO << "Kernel does not support checkpoint=disable:[n]%, trying without.";
+        if (save_errno == EINVAL && (try_f2fs_gc_allowance || try_f2fs_fallback)) {
+            PINFO << "Kernel does not support " << checkpoint_opts << ", trying without.";
             try_f2fs_gc_allowance = false;
+            // Attempt without gc allowance before dropping.
+            try_f2fs_fallback = !try_f2fs_fallback;
         }
         if (try_f2fs_gc_allowance) {
-            opts = entry.fs_options + entry.fs_checkpoint_opts + ":" +
-                   std::to_string(gc_allowance) + "%";
+            checkpoint_opts = entry.fs_checkpoint_opts + ":" + std::to_string(gc_allowance) + "%";
+        } else if (try_f2fs_fallback) {
+            checkpoint_opts = entry.fs_checkpoint_opts;
         } else {
-            opts = entry.fs_options;
+            checkpoint_opts = "";
         }
+        opts = entry.fs_options + checkpoint_opts;
         if (save_errno == EAGAIN) {
             PINFO << "Retrying mount (source=" << source << ",target=" << target
                   << ",type=" << entry.fs_type << ", gc_allowance=" << gc_allowance << "%)=" << ret
@@ -814,7 +824,7 @@ static int __mount(const std::string& source, const std::string& target, const F
         save_errno = errno;
         if (try_f2fs_gc_allowance) gc_allowance += 10;
     } while ((ret && save_errno == EAGAIN && gc_allowance <= 100) ||
-             (ret && save_errno == EINVAL && try_f2fs_gc_allowance));
+             (ret && save_errno == EINVAL && (try_f2fs_gc_allowance || try_f2fs_fallback)));
     const char* target_missing = "";
     const char* source_missing = "";
     if (save_errno == ENOENT) {
@@ -2038,6 +2048,35 @@ int fs_mgr_do_tmpfs_mount(const char *n_name)
     return 0;
 }
 
+static bool ConfigureIoScheduler(const std::string& device_path) {
+    if (!StartsWith(device_path, "/dev/")) {
+        LERROR << __func__ << ": invalid argument " << device_path;
+        return false;
+    }
+
+    const std::string iosched_path =
+            StringPrintf("/sys/block/%s/queue/scheduler", Basename(device_path).c_str());
+    unique_fd iosched_fd(open(iosched_path.c_str(), O_RDWR | O_CLOEXEC));
+    if (iosched_fd.get() == -1) {
+        PERROR << __func__ << ": failed to open " << iosched_path;
+        return false;
+    }
+
+    // Kernels before v4.1 only support 'noop'. Kernels [v4.1, v5.0) support
+    // 'noop' and 'none'. Kernels v5.0 and later only support 'none'.
+    static constexpr const std::array<std::string_view, 2> kNoScheduler = {"none", "noop"};
+
+    for (const std::string_view& scheduler : kNoScheduler) {
+        int ret = write(iosched_fd.get(), scheduler.data(), scheduler.size());
+        if (ret > 0) {
+            return true;
+        }
+    }
+
+    PERROR << __func__ << ": failed to write to " << iosched_path;
+    return false;
+}
+
 static bool InstallZramDevice(const std::string& device) {
     if (!android::base::WriteStringToFile(device, ZRAM_BACK_DEV)) {
         PERROR << "Cannot write " << device << " in: " << ZRAM_BACK_DEV;
@@ -2065,22 +2104,26 @@ static bool PrepareZramBackingDevice(off64_t size) {
 
     // Allocate loop device and attach it to file_path.
     LoopControl loop_control;
-    std::string device;
-    if (!loop_control.Attach(target_fd.get(), 5s, &device)) {
+    std::string loop_device;
+    if (!loop_control.Attach(target_fd.get(), 5s, &loop_device)) {
         return false;
     }
+
+    ConfigureIoScheduler(loop_device);
+
+    ConfigureQueueDepth(loop_device, "/");
 
     // set block size & direct IO
-    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
-    if (device_fd.get() == -1) {
-        PERROR << "Cannot open " << device;
+    unique_fd loop_fd(TEMP_FAILURE_RETRY(open(loop_device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (loop_fd.get() == -1) {
+        PERROR << "Cannot open " << loop_device;
         return false;
     }
-    if (!LoopControl::EnableDirectIo(device_fd.get())) {
+    if (!LoopControl::EnableDirectIo(loop_fd.get())) {
         return false;
     }
 
-    return InstallZramDevice(device);
+    return InstallZramDevice(loop_device);
 }
 
 bool fs_mgr_swapon_all(const Fstab& fstab) {
@@ -2092,7 +2135,7 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
         }
 
         if (entry.zram_size > 0) {
-	    if (!PrepareZramBackingDevice(entry.zram_backingdev_size)) {
+            if (!PrepareZramBackingDevice(entry.zram_backingdev_size)) {
                 LERROR << "Failure of zram backing device file for '" << entry.blk_device << "'";
             }
             // A zram_size was specified, so we need to configure the
@@ -2264,4 +2307,99 @@ std::string fs_mgr_get_super_partition_name(int slot) {
         return super_partition + suffix;
     }
     return LP_METADATA_DEFAULT_PARTITION_NAME;
+}
+
+bool fs_mgr_create_canonical_mount_point(const std::string& mount_point) {
+    auto saved_errno = errno;
+    auto ok = true;
+    auto created_mount_point = !mkdir(mount_point.c_str(), 0755);
+    std::string real_mount_point;
+    if (!Realpath(mount_point, &real_mount_point)) {
+        ok = false;
+        PERROR << "failed to realpath(" << mount_point << ")";
+    } else if (mount_point != real_mount_point) {
+        ok = false;
+        LERROR << "mount point is not canonical: realpath(" << mount_point << ") -> "
+               << real_mount_point;
+    }
+    if (!ok && created_mount_point) {
+        rmdir(mount_point.c_str());
+    }
+    errno = saved_errno;
+    return ok;
+}
+
+bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
+    auto overlayfs_valid_result = fs_mgr_overlayfs_valid();
+    if (overlayfs_valid_result == OverlayfsValidResult::kNotSupported) {
+        LERROR << __FUNCTION__ << "(): kernel does not support overlayfs";
+        return false;
+    }
+
+#if ALLOW_ADBD_DISABLE_VERITY == 0
+    // Allowlist the mount point if user build.
+    static const std::vector<const std::string> kAllowedPaths = {
+            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+    };
+    static const std::vector<const std::string> kAllowedPrefixes = {
+            "/mnt/product/",
+            "/mnt/vendor/",
+    };
+    if (std::none_of(kAllowedPaths.begin(), kAllowedPaths.end(),
+                     [&entry](const auto& path) -> bool {
+                         return entry.mount_point == path ||
+                                StartsWith(entry.mount_point, path + "/");
+                     }) &&
+        std::none_of(kAllowedPrefixes.begin(), kAllowedPrefixes.end(),
+                     [&entry](const auto& prefix) -> bool {
+                         return entry.mount_point != prefix &&
+                                StartsWith(entry.mount_point, prefix);
+                     })) {
+        LERROR << __FUNCTION__
+               << "(): mount point is forbidden on user build: " << entry.mount_point;
+        return false;
+    }
+#endif  // ALLOW_ADBD_DISABLE_VERITY == 0
+
+    if (!fs_mgr_create_canonical_mount_point(entry.mount_point)) {
+        return false;
+    }
+
+    auto lowerdir = entry.lowerdir;
+    if (entry.fs_mgr_flags.overlayfs_remove_missing_lowerdir) {
+        bool removed_any = false;
+        std::vector<std::string> lowerdirs;
+        for (const auto& dir : android::base::Split(entry.lowerdir, ":")) {
+            if (access(dir.c_str(), F_OK)) {
+                PWARNING << __FUNCTION__ << "(): remove missing lowerdir '" << dir << "'";
+                removed_any = true;
+            } else {
+                lowerdirs.push_back(dir);
+            }
+        }
+        if (removed_any) {
+            lowerdir = android::base::Join(lowerdirs, ":");
+        }
+    }
+
+    auto options = "lowerdir=" + lowerdir;
+    if (overlayfs_valid_result == OverlayfsValidResult::kOverrideCredsRequired) {
+        options += ",override_creds=off";
+    }
+
+    // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
+    // confuse this with adb remount overlay, whose device name is "overlay".
+    // Overlayfs is a pseudo filesystem, so the source device is a symbolic value and isn't used to
+    // back the filesystem. However the device name would be shown in /proc/mounts.
+    auto source = "overlay-" + entry.blk_device;
+    auto report = "__mount(source=" + source + ",target=" + entry.mount_point + ",type=overlay," +
+                  options + ")=";
+    auto ret = mount(source.c_str(), entry.mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+        return false;
+    }
+    LINFO << report << ret;
+    return true;
 }

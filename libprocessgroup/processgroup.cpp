@@ -146,12 +146,6 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
         std::this_thread::sleep_for(5ms);
     }
 
-    // With the exception of boot or shutdown, system uid_ folders are always populated. Spinning
-    // here would needlessly delay most pid removals. Additionally, once empty a uid_ cgroup won't
-    // have processes hanging on it (we've already spun for all its pid_), so there's no need to
-    // spin anyway.
-    rmdir(uid_path.c_str());
-
     return ret;
 }
 
@@ -230,7 +224,11 @@ void removeAllProcessGroups() {
  * transferred for the user/group passed as uid/gid before system_server can properly access them.
  */
 static bool MkdirAndChown(const std::string& path, mode_t mode, uid_t uid, gid_t gid) {
-    if (mkdir(path.c_str(), mode) == -1 && errno != EEXIST) {
+    if (mkdir(path.c_str(), mode) == -1) {
+        if (errno == EEXIST) {
+            // Directory already exists and permissions have been set at the time it was created
+            return true;
+        }
         return false;
     }
 
@@ -418,13 +416,15 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_process
     return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/, max_processes);
 }
 
-static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup) {
+static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
+                                      bool activate_controllers) {
     auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
     gid_t cgroup_uid = AID_SYSTEM;
     uid_t cgroup_gid = AID_SYSTEM;
+    int ret = 0;
 
     if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
         PLOG(ERROR) << "Failed to get stats for " << cgroup;
@@ -438,6 +438,13 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
         PLOG(ERROR) << "Failed to make and chown " << uid_path;
         return -errno;
     }
+    if (activate_controllers) {
+        ret = CgroupMap::GetInstance().ActivateControllers(uid_path);
+        if (ret) {
+            LOG(ERROR) << "Failed to activate controllers in " << uid_path;
+            return ret;
+        }
+    }
 
     auto uid_pid_path = ConvertUidPidToPath(cgroup.c_str(), uid, initialPid);
 
@@ -448,7 +455,6 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     auto uid_pid_procs_file = uid_pid_path + PROCESSGROUP_CGROUP_PROCS_FILE;
 
-    int ret = 0;
     if (!WriteStringToFile(std::to_string(initialPid), uid_pid_procs_file)) {
         ret = -errno;
         PLOG(ERROR) << "Failed to write '" << initialPid << "' to " << uid_pid_procs_file;
@@ -468,14 +474,14 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     if (isMemoryCgroupSupported() && UsePerAppMemcg()) {
         CgroupGetControllerPath("memory", &cgroup);
         cgroup += "/apps";
-        int ret = createProcessGroupInternal(uid, initialPid, cgroup);
+        int ret = createProcessGroupInternal(uid, initialPid, cgroup, false);
         if (ret != 0) {
             return ret;
         }
     }
 
     CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &cgroup);
-    return createProcessGroupInternal(uid, initialPid, cgroup);
+    return createProcessGroupInternal(uid, initialPid, cgroup, true);
 }
 
 static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t value) {

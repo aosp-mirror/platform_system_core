@@ -19,6 +19,9 @@
 
 #include <limits>
 #include <optional>
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <android-base/file.h>
@@ -31,7 +34,11 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader() : fd_(-1), header_(), fd_size_(0) {}
+CowReader::CowReader()
+    : fd_(-1),
+      header_(),
+      fd_size_(0),
+      merge_op_blocks_(std::make_shared<std::vector<uint32_t>>()) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -40,6 +47,23 @@ static void SHA256(const void*, size_t, uint8_t[]) {
     SHA256_Update(&c, data, length);
     SHA256_Final(out, &c);
 #endif
+}
+
+std::unique_ptr<CowReader> CowReader::CloneCowReader() {
+    auto cow = std::make_unique<CowReader>();
+    cow->owned_fd_.reset();
+    cow->header_ = header_;
+    cow->footer_ = footer_;
+    cow->fd_size_ = fd_size_;
+    cow->last_label_ = last_label_;
+    cow->ops_ = ops_;
+    cow->merge_op_blocks_ = merge_op_blocks_;
+    cow->block_map_ = block_map_;
+    cow->num_total_data_ops_ = num_total_data_ops_;
+    cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
+    cow->has_seq_ops_ = has_seq_ops_;
+    cow->data_loc_ = data_loc_;
+    return cow;
 }
 
 bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
@@ -127,11 +151,17 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         return false;
     }
 
-    return ParseOps(label);
+    if (!ParseOps(label)) {
+        return false;
+    }
+    // If we're resuming a write, we're not ready to merge
+    if (label.has_value()) return true;
+    return PrepMergeOps();
 }
 
 bool CowReader::ParseOps(std::optional<uint64_t> label) {
     uint64_t pos;
+    auto data_loc = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
     // Skip the scratch space
     if (header_.major_version >= 2 && (header_.buffer_size > 0)) {
@@ -150,6 +180,13 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         }
         // Reading a v1 version of COW which doesn't have buffer_size.
         header_.buffer_size = 0;
+    }
+    uint64_t data_pos = 0;
+
+    if (header_.cluster_ops) {
+        data_pos = pos + header_.cluster_ops * sizeof(CowOperation);
+    } else {
+        data_pos = pos + sizeof(CowOperation);
     }
 
     auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
@@ -171,7 +208,11 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         while (current_op_num < ops_buffer->size()) {
             auto& current_op = ops_buffer->data()[current_op_num];
             current_op_num++;
+            if (current_op.type == kCowXorOp) {
+                data_loc->insert({current_op.new_block, data_pos});
+            }
             pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
+            data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
 
             if (current_op.type == kCowClusterOp) {
                 break;
@@ -201,6 +242,8 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
                 current_op_num--;
                 done = true;
                 break;
+            } else if (current_op.type == kCowSequenceOp) {
+                has_seq_ops_ = true;
             }
         }
 
@@ -251,7 +294,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
             LOG(ERROR) << "ops checksum does not match";
             return false;
         }
-        SHA256(ops_buffer.get()->data(), footer_->op.ops_size, csum);
+        SHA256(ops_buffer->data(), footer_->op.ops_size, csum);
         if (memcmp(csum, footer_->data.ops_checksum, sizeof(csum)) != 0) {
             LOG(ERROR) << "ops checksum does not match";
             return false;
@@ -260,142 +303,178 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 
     ops_ = ops_buffer;
     ops_->shrink_to_fit();
+    data_loc_ = data_loc;
 
     return true;
 }
 
-void CowReader::InitializeMerge() {
-    uint64_t num_copy_ops = 0;
+//
+// This sets up the data needed for MergeOpIter. MergeOpIter presents
+// data in the order we intend to merge in.
+//
+// We merge all order sensitive ops up front, and sort the rest to allow for
+// batch merging. Order sensitive ops can either be presented in their proper
+// order in the cow, or be ordered by sequence ops (kCowSequenceOp), in which
+// case we want to merge those ops first, followed by any ops not specified by
+// new_block value by the sequence op, in sorted order.
+// We will re-arrange the vector in such a way that
+// kernel can batch merge. Ex:
+//
+// Existing COW format; All the copy operations
+// are at the beginning.
+// =======================================
+// Copy-op-1    - cow_op->new_block = 1
+// Copy-op-2    - cow_op->new_block = 2
+// Copy-op-3    - cow_op->new_block = 3
+// Replace-op-4 - cow_op->new_block = 6
+// Replace-op-5 - cow_op->new_block = 4
+// Replace-op-6 - cow_op->new_block = 8
+// Replace-op-7 - cow_op->new_block = 9
+// Zero-op-8    - cow_op->new_block = 7
+// Zero-op-9    - cow_op->new_block = 5
+// =======================================
+//
+// First find the operation which isn't a copy-op
+// and then sort all the operations in descending order
+// with the key being cow_op->new_block (source block)
+//
+// The data-structure will look like:
+//
+// =======================================
+// Copy-op-1    - cow_op->new_block = 1
+// Copy-op-2    - cow_op->new_block = 2
+// Copy-op-3    - cow_op->new_block = 3
+// Replace-op-7 - cow_op->new_block = 9
+// Replace-op-6 - cow_op->new_block = 8
+// Zero-op-8    - cow_op->new_block = 7
+// Replace-op-4 - cow_op->new_block = 6
+// Zero-op-9    - cow_op->new_block = 5
+// Replace-op-5 - cow_op->new_block = 4
+// =======================================
+//
+// Daemon will read the above data-structure in reverse-order
+// when reading metadata. Thus, kernel will get the metadata
+// in the following order:
+//
+// ========================================
+// Replace-op-5 - cow_op->new_block = 4
+// Zero-op-9    - cow_op->new_block = 5
+// Replace-op-4 - cow_op->new_block = 6
+// Zero-op-8    - cow_op->new_block = 7
+// Replace-op-6 - cow_op->new_block = 8
+// Replace-op-7 - cow_op->new_block = 9
+// Copy-op-3    - cow_op->new_block = 3
+// Copy-op-2    - cow_op->new_block = 2
+// Copy-op-1    - cow_op->new_block = 1
+// ===========================================
+//
+// When merging begins, kernel will start from the last
+// metadata which was read: In the above format, Copy-op-1
+// will be the first merge operation.
+//
+// Now, batching of the merge operations happens only when
+// 1: origin block numbers in the base device are contiguous
+// (cow_op->new_block) and,
+// 2: cow block numbers which are assigned by daemon in ReadMetadata()
+// are contiguous. These are monotonically increasing numbers.
+//
+// When both (1) and (2) are true, kernel will batch merge the operations.
+// In the above case, we have to ensure that the copy operations
+// are merged first before replace operations are done. Hence,
+// we will not change the order of copy operations. Since,
+// cow_op->new_block numbers are contiguous, we will ensure that the
+// cow block numbers assigned in ReadMetadata() for these respective copy
+// operations are not contiguous forcing kernel to issue merge for each
+// copy operations without batch merging.
+//
+// For all the other operations viz. Replace and Zero op, the cow block
+// numbers assigned by daemon will be contiguous allowing kernel to batch
+// merge.
+//
+// The final format after assiging COW block numbers by the daemon will
+// look something like:
+//
+// =========================================================
+// Replace-op-5 - cow_op->new_block = 4  cow-block-num = 2
+// Zero-op-9    - cow_op->new_block = 5  cow-block-num = 3
+// Replace-op-4 - cow_op->new_block = 6  cow-block-num = 4
+// Zero-op-8    - cow_op->new_block = 7  cow-block-num = 5
+// Replace-op-6 - cow_op->new_block = 8  cow-block-num = 6
+// Replace-op-7 - cow_op->new_block = 9  cow-block-num = 7
+// Copy-op-3    - cow_op->new_block = 3  cow-block-num = 9
+// Copy-op-2    - cow_op->new_block = 2  cow-block-num = 11
+// Copy-op-1    - cow_op->new_block = 1  cow-block-num = 13
+// ==========================================================
+//
+// Merge sequence will look like:
+//
+// Merge-1 - Batch-merge { Copy-op-1, Copy-op-2, Copy-op-3 }
+// Merge-2 - Batch-merge {Replace-op-7, Replace-op-6, Zero-op-8,
+//                        Replace-op-4, Zero-op-9, Replace-op-5 }
+//==============================================================
+bool CowReader::PrepMergeOps() {
+    auto merge_op_blocks = std::make_shared<std::vector<uint32_t>>();
+    std::set<int, std::greater<int>> other_ops;
+    auto seq_ops_set = std::unordered_set<uint32_t>();
+    auto block_map = std::make_shared<std::unordered_map<uint32_t, int>>();
+    size_t num_seqs = 0;
+    size_t read;
 
-    // Remove all the metadata operations
-    ops_->erase(std::remove_if(ops_.get()->begin(), ops_.get()->end(),
-                               [](CowOperation& op) { return IsMetadataOp(op); }),
-                ops_.get()->end());
-
-    set_total_data_ops(ops_->size());
-    // We will re-arrange the vector in such a way that
-    // kernel can batch merge. Ex:
-    //
-    // Existing COW format; All the copy operations
-    // are at the beginning.
-    // =======================================
-    // Copy-op-1    - cow_op->new_block = 1
-    // Copy-op-2    - cow_op->new_block = 2
-    // Copy-op-3    - cow_op->new_block = 3
-    // Replace-op-4 - cow_op->new_block = 6
-    // Replace-op-5 - cow_op->new_block = 4
-    // Replace-op-6 - cow_op->new_block = 8
-    // Replace-op-7 - cow_op->new_block = 9
-    // Zero-op-8    - cow_op->new_block = 7
-    // Zero-op-9    - cow_op->new_block = 5
-    // =======================================
-    //
-    // First find the operation which isn't a copy-op
-    // and then sort all the operations in descending order
-    // with the key being cow_op->new_block (source block)
-    //
-    // The data-structure will look like:
-    //
-    // =======================================
-    // Copy-op-1    - cow_op->new_block = 1
-    // Copy-op-2    - cow_op->new_block = 2
-    // Copy-op-3    - cow_op->new_block = 3
-    // Replace-op-7 - cow_op->new_block = 9
-    // Replace-op-6 - cow_op->new_block = 8
-    // Zero-op-8    - cow_op->new_block = 7
-    // Replace-op-4 - cow_op->new_block = 6
-    // Zero-op-9    - cow_op->new_block = 5
-    // Replace-op-5 - cow_op->new_block = 4
-    // =======================================
-    //
-    // Daemon will read the above data-structure in reverse-order
-    // when reading metadata. Thus, kernel will get the metadata
-    // in the following order:
-    //
-    // ========================================
-    // Replace-op-5 - cow_op->new_block = 4
-    // Zero-op-9    - cow_op->new_block = 5
-    // Replace-op-4 - cow_op->new_block = 6
-    // Zero-op-8    - cow_op->new_block = 7
-    // Replace-op-6 - cow_op->new_block = 8
-    // Replace-op-7 - cow_op->new_block = 9
-    // Copy-op-3    - cow_op->new_block = 3
-    // Copy-op-2    - cow_op->new_block = 2
-    // Copy-op-1    - cow_op->new_block = 1
-    // ===========================================
-    //
-    // When merging begins, kernel will start from the last
-    // metadata which was read: In the above format, Copy-op-1
-    // will be the first merge operation.
-    //
-    // Now, batching of the merge operations happens only when
-    // 1: origin block numbers in the base device are contiguous
-    // (cow_op->new_block) and,
-    // 2: cow block numbers which are assigned by daemon in ReadMetadata()
-    // are contiguous. These are monotonically increasing numbers.
-    //
-    // When both (1) and (2) are true, kernel will batch merge the operations.
-    // In the above case, we have to ensure that the copy operations
-    // are merged first before replace operations are done. Hence,
-    // we will not change the order of copy operations. Since,
-    // cow_op->new_block numbers are contiguous, we will ensure that the
-    // cow block numbers assigned in ReadMetadata() for these respective copy
-    // operations are not contiguous forcing kernel to issue merge for each
-    // copy operations without batch merging.
-    //
-    // For all the other operations viz. Replace and Zero op, the cow block
-    // numbers assigned by daemon will be contiguous allowing kernel to batch
-    // merge.
-    //
-    // The final format after assiging COW block numbers by the daemon will
-    // look something like:
-    //
-    // =========================================================
-    // Replace-op-5 - cow_op->new_block = 4  cow-block-num = 2
-    // Zero-op-9    - cow_op->new_block = 5  cow-block-num = 3
-    // Replace-op-4 - cow_op->new_block = 6  cow-block-num = 4
-    // Zero-op-8    - cow_op->new_block = 7  cow-block-num = 5
-    // Replace-op-6 - cow_op->new_block = 8  cow-block-num = 6
-    // Replace-op-7 - cow_op->new_block = 9  cow-block-num = 7
-    // Copy-op-3    - cow_op->new_block = 3  cow-block-num = 9
-    // Copy-op-2    - cow_op->new_block = 2  cow-block-num = 11
-    // Copy-op-1    - cow_op->new_block = 1  cow-block-num = 13
-    // ==========================================================
-    //
-    // Merge sequence will look like:
-    //
-    // Merge-1 - Batch-merge { Copy-op-1, Copy-op-2, Copy-op-3 }
-    // Merge-2 - Batch-merge {Replace-op-7, Replace-op-6, Zero-op-8,
-    //                        Replace-op-4, Zero-op-9, Replace-op-5 }
-    //==============================================================
-
-    num_copy_ops = FindNumCopyops();
-
-    std::sort(ops_.get()->begin() + num_copy_ops, ops_.get()->end(),
-              [](CowOperation& op1, CowOperation& op2) -> bool {
-                  return op1.new_block > op2.new_block;
-              });
-
-    if (header_.num_merge_ops > 0) {
-        ops_->erase(ops_.get()->begin(), ops_.get()->begin() + header_.num_merge_ops);
-    }
-
-    num_copy_ops = FindNumCopyops();
-    set_copy_ops(num_copy_ops);
-}
-
-uint64_t CowReader::FindNumCopyops() {
-    uint64_t num_copy_ops = 0;
-
-    for (uint64_t i = 0; i < ops_->size(); i++) {
+    for (size_t i = 0; i < ops_->size(); i++) {
         auto& current_op = ops_->data()[i];
-        if (current_op.type != kCowCopyOp) {
-            break;
+
+        if (current_op.type == kCowSequenceOp) {
+            size_t seq_len = current_op.data_length / sizeof(uint32_t);
+
+            merge_op_blocks->resize(merge_op_blocks->size() + seq_len);
+            if (!GetRawBytes(current_op.source, &merge_op_blocks->data()[num_seqs],
+                             current_op.data_length, &read)) {
+                PLOG(ERROR) << "Failed to read sequence op!";
+                return false;
+            }
+            for (size_t j = num_seqs; j < num_seqs + seq_len; j++) {
+                seq_ops_set.insert(merge_op_blocks->data()[j]);
+            }
+            num_seqs += seq_len;
         }
-        num_copy_ops += 1;
+
+        if (IsMetadataOp(current_op)) {
+            continue;
+        }
+
+        if (!has_seq_ops_ && IsOrderedOp(current_op)) {
+            merge_op_blocks->emplace_back(current_op.new_block);
+        } else if (seq_ops_set.count(current_op.new_block) == 0) {
+            other_ops.insert(current_op.new_block);
+        }
+        block_map->insert({current_op.new_block, i});
+    }
+    for (auto block : *merge_op_blocks) {
+        if (block_map->count(block) == 0) {
+            LOG(ERROR) << "Invalid Sequence Ops. Could not find Cow Op for new block " << block;
+            return false;
+        }
     }
 
-    return num_copy_ops;
+    if (merge_op_blocks->size() > header_.num_merge_ops) {
+        num_ordered_ops_to_merge_ = merge_op_blocks->size() - header_.num_merge_ops;
+    } else {
+        num_ordered_ops_to_merge_ = 0;
+    }
+    merge_op_blocks->reserve(merge_op_blocks->size() + other_ops.size());
+    for (auto block : other_ops) {
+        merge_op_blocks->emplace_back(block);
+    }
+
+    num_total_data_ops_ = merge_op_blocks->size();
+    if (header_.num_merge_ops > 0) {
+        merge_op_blocks->erase(merge_op_blocks->begin(),
+                               merge_op_blocks->begin() + header_.num_merge_ops);
+    }
+
+    block_map_ = block_map;
+    merge_op_blocks_ = merge_op_blocks;
+    return true;
 }
 
 bool CowReader::GetHeader(CowHeader* header) {
@@ -430,11 +509,11 @@ class CowOpIter final : public ICowOpIter {
 
 CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops) {
     ops_ = ops;
-    op_iter_ = ops_.get()->begin();
+    op_iter_ = ops_->begin();
 }
 
 bool CowOpIter::Done() {
-    return op_iter_ == ops_.get()->end();
+    return op_iter_ == ops_->end();
 }
 
 void CowOpIter::Next() {
@@ -447,9 +526,11 @@ const CowOperation& CowOpIter::Get() {
     return (*op_iter_);
 }
 
-class CowOpReverseIter final : public ICowOpReverseIter {
+class CowRevMergeOpIter final : public ICowOpIter {
   public:
-    explicit CowOpReverseIter(std::shared_ptr<std::vector<CowOperation>> ops);
+    explicit CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
+                               std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
+                               std::shared_ptr<std::unordered_map<uint32_t, int>> map);
 
     bool Done() override;
     const CowOperation& Get() override;
@@ -457,34 +538,41 @@ class CowOpReverseIter final : public ICowOpReverseIter {
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
-    std::vector<CowOperation>::reverse_iterator op_riter_;
+    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    std::shared_ptr<std::unordered_map<uint32_t, int>> map_;
+    std::vector<uint32_t>::reverse_iterator block_riter_;
 };
 
-CowOpReverseIter::CowOpReverseIter(std::shared_ptr<std::vector<CowOperation>> ops) {
+CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
+                                     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
+                                     std::shared_ptr<std::unordered_map<uint32_t, int>> map) {
     ops_ = ops;
-    op_riter_ = ops_.get()->rbegin();
+    merge_op_blocks_ = merge_op_blocks;
+    map_ = map;
+
+    block_riter_ = merge_op_blocks->rbegin();
 }
 
-bool CowOpReverseIter::Done() {
-    return op_riter_ == ops_.get()->rend();
+bool CowRevMergeOpIter::Done() {
+    return block_riter_ == merge_op_blocks_->rend();
 }
 
-void CowOpReverseIter::Next() {
+void CowRevMergeOpIter::Next() {
     CHECK(!Done());
-    op_riter_++;
+    block_riter_++;
 }
 
-const CowOperation& CowOpReverseIter::Get() {
+const CowOperation& CowRevMergeOpIter::Get() {
     CHECK(!Done());
-    return (*op_riter_);
+    return ops_->data()[map_->at(*block_riter_)];
 }
 
 std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     return std::make_unique<CowOpIter>(ops_);
 }
 
-std::unique_ptr<ICowOpReverseIter> CowReader::GetRevOpIter() {
-    return std::make_unique<CowOpReverseIter>(ops_);
+std::unique_ptr<ICowOpIter> CowReader::GetRevMergeOpIter() {
+    return std::make_unique<CowRevMergeOpIter>(ops_, merge_op_blocks_, block_map_);
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
@@ -554,7 +642,13 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
             return false;
     }
 
-    CowDataStream stream(this, op.source, op.data_length);
+    uint64_t offset;
+    if (op.type == kCowXorOp) {
+        offset = data_loc_->at(op.new_block);
+    } else {
+        offset = op.source;
+    }
+    CowDataStream stream(this, offset, op.data_length);
     decompressor->set_stream(&stream);
     decompressor->set_sink(sink);
     return decompressor->Decompress(header_.block_size);

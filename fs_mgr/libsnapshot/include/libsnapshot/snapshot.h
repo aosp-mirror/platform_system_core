@@ -38,7 +38,7 @@
 #include <libsnapshot/auto_device.h>
 #include <libsnapshot/return.h>
 #include <libsnapshot/snapshot_writer.h>
-#include <libsnapshot/snapuserd_client.h>
+#include <snapuserd/snapuserd_client.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -176,6 +176,9 @@ class ISnapshotManager {
     // If ProcessUpdateState() returned MergeFailed, this returns the appropriate
     // code. Otherwise, MergeFailureCode::Ok is returned.
     virtual MergeFailureCode ReadMergeFailureCode() = 0;
+
+    // If an update is in progress, return the source build fingerprint.
+    virtual std::string ReadSourceBuildFingerprint() = 0;
 
     // Find the status of the current update, if any.
     //
@@ -369,6 +372,7 @@ class SnapshotManager final : public ISnapshotManager {
     ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
     bool UnmapAllSnapshots() override;
+    std::string ReadSourceBuildFingerprint() override;
 
     // We can't use WaitForFile during first-stage init, because ueventd is not
     // running and therefore will not automatically create symlinks. Instead,
@@ -603,6 +607,8 @@ class SnapshotManager final : public ISnapshotManager {
     MergeResult CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     MergeResult CheckTargetMergeState(LockedFile* lock, const std::string& name,
                                       const SnapshotUpdateStatus& update_status);
+    MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
+                                           const SnapshotStatus& update_status);
 
     // Interact with status files under /metadata/ota/snapshots.
     bool WriteSnapshotStatus(LockedFile* lock, const SnapshotStatus& status);

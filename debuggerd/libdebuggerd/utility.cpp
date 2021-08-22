@@ -402,6 +402,8 @@ const char* get_sigcode(const siginfo_t* si) {
         case TRAP_HWBKPT: return "TRAP_HWBKPT";
         case TRAP_UNK:
           return "TRAP_UNDIAGNOSED";
+        case TRAP_PERF:
+          return "TRAP_PERF";
       }
       if ((si->si_code & 0xff) == SIGTRAP) {
         switch ((si->si_code >> 8) & 0xff) {
@@ -423,7 +425,7 @@ const char* get_sigcode(const siginfo_t* si) {
             return "PTRACE_EVENT_STOP";
         }
       }
-      static_assert(NSIGTRAP == TRAP_UNK, "missing TRAP_* si_code");
+      static_assert(NSIGTRAP == TRAP_PERF, "missing TRAP_* si_code");
       break;
   }
   // Then the other codes...
