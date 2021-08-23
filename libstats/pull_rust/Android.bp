@@ -57,3 +57,13 @@ rust_library {
         "libstatspull_bindgen",
     ],
 }
+
+rust_test {
+    name: "libstatspull_bindgen_test",
+    srcs: [":libstatspull_bindgen"],
+    crate_name: "statspull_bindgen_test",
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
+    clippy_lints: "none",
+    lints: "none",
+}
