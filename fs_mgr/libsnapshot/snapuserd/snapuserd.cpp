@@ -691,7 +691,7 @@ bool Snapuserd::InitCowDevice() {
 }
 
 void Snapuserd::ReadBlocksToCache(const std::string& dm_block_device,
-                                  const std::string partition_name, off_t offset, size_t size) {
+                                  const std::string& partition_name, off_t offset, size_t size) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(dm_block_device.c_str(), O_RDONLY)));
     if (fd.get() == -1) {
         SNAP_PLOG(ERROR) << "Error reading " << dm_block_device
@@ -726,7 +726,7 @@ void Snapuserd::ReadBlocksToCache(const std::string& dm_block_device,
                    << " offset: " << offset;
 }
 
-void Snapuserd::ReadBlocks(const std::string partition_name, const std::string& dm_block_device) {
+void Snapuserd::ReadBlocks(const std::string& partition_name, const std::string& dm_block_device) {
     SNAP_LOG(DEBUG) << "Reading partition: " << partition_name
                     << " Block-Device: " << dm_block_device;
 
