@@ -232,6 +232,12 @@ static void dump_abort_message(log_t* log, unwindstack::Memory* process_memory, 
     return;
   }
 
+  // Remove any trailing newlines.
+  size_t index = length;
+  while (index > 0 && (msg[index - 1] == '\0' || msg[index - 1] == '\n')) {
+    --index;
+  }
+  msg[index] = '\0';
   _LOG(log, logtype::HEADER, "Abort message: '%s'\n", &msg[0]);
 }
 
