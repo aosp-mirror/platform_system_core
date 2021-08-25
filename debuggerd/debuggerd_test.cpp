@@ -1889,3 +1889,178 @@ TEST_F(CrasherTest, intercept_for_main_thread_signal_on_side_thread) {
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
 }
+
+static std::string format_pointer(uintptr_t ptr) {
+#if defined(__LP64__)
+  return android::base::StringPrintf("%08x'%08x", static_cast<uint32_t>(ptr >> 32),
+                                     static_cast<uint32_t>(ptr & 0xffffffff));
+#else
+  return android::base::StringPrintf("%08x", static_cast<uint32_t>(ptr & 0xffffffff));
+#endif
+}
+
+static std::string format_pointer(void* ptr) {
+  return format_pointer(reinterpret_cast<uintptr_t>(ptr));
+}
+
+static std::string format_full_pointer(uintptr_t ptr) {
+#if defined(__LP64__)
+  return android::base::StringPrintf("%016" PRIx64, ptr);
+#else
+  return android::base::StringPrintf("%08x", ptr);
+#endif
+}
+
+static std::string format_full_pointer(void* ptr) {
+  return format_full_pointer(reinterpret_cast<uintptr_t>(ptr));
+}
+
+__attribute__((__noinline__)) int crash_call(uintptr_t ptr) {
+  int* crash_ptr = reinterpret_cast<int*>(ptr);
+  *crash_ptr = 1;
+  return *crash_ptr;
+}
+
+// Verify that a fault address before the first map is properly handled.
+TEST_F(CrasherTest, fault_address_before_first_map) {
+  StartProcess([]() {
+    ASSERT_EQ(0, crash_call(0x1024));
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x1024)");
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\):\n)");
+
+  std::string match_str = android::base::StringPrintf(
+      R"(memory map .*:\n--->Fault address falls at %s before any mapped regions\n    )",
+      format_pointer(0x1024).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address after the last map is properly handled.
+TEST_F(CrasherTest, fault_address_after_last_map) {
+  uintptr_t crash_uptr = untag_address(UINTPTR_MAX - 15);
+  StartProcess([crash_uptr]() {
+    ASSERT_EQ(0, crash_call(crash_uptr));
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
+  match_str += android::base::StringPrintf("0x%" PRIxPTR, crash_uptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  // Assumes that the open files section comes after the map section.
+  // If that assumption changes, the regex below needs to change.
+  match_str = android::base::StringPrintf(
+      R"(\n--->Fault address falls at %s after any mapped regions\n\nopen files:)",
+      format_pointer(crash_uptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address between maps is properly handled.
+TEST_F(CrasherTest, fault_address_between_maps) {
+  // Create a map before the fork so it will be present in the child.
+  void* start_ptr =
+      mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, start_ptr);
+  // Unmap the page in the middle.
+  void* middle_ptr =
+      reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(start_ptr) + getpagesize());
+  ASSERT_EQ(0, munmap(middle_ptr, getpagesize()));
+
+  StartProcess([middle_ptr]() {
+    ASSERT_EQ(0, crash_call(reinterpret_cast<uintptr_t>(middle_ptr)));
+    _exit(0);
+  });
+
+  // Unmap the two maps.
+  ASSERT_EQ(0, munmap(start_ptr, getpagesize()));
+  void* end_ptr =
+      reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(start_ptr) + 2 * getpagesize());
+  ASSERT_EQ(0, munmap(end_ptr, getpagesize()));
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
+  match_str += android::base::StringPrintf("%p", middle_ptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  match_str = android::base::StringPrintf(
+      R"(    %s.*\n--->Fault address falls at %s between mapped regions\n    %s)",
+      format_pointer(start_ptr).c_str(), format_pointer(middle_ptr).c_str(),
+      format_pointer(end_ptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address happens in the correct map.
+TEST_F(CrasherTest, fault_address_in_map) {
+  // Create a map before the fork so it will be present in the child.
+  void* ptr = mmap(nullptr, getpagesize(), 0, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, ptr);
+
+  StartProcess([ptr]() {
+    ASSERT_EQ(0, crash_call(reinterpret_cast<uintptr_t>(ptr)));
+    _exit(0);
+  });
+
+  ASSERT_EQ(0, munmap(ptr, getpagesize()));
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\), fault addr )";
+  match_str += android::base::StringPrintf("%p", ptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  match_str = android::base::StringPrintf(R"(\n--->%s.*\n)", format_pointer(ptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
