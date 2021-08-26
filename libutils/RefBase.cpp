@@ -170,7 +170,7 @@ public:
         : mStrong(INITIAL_STRONG_VALUE)
         , mWeak(0)
         , mBase(base)
-        , mFlags(0)
+        , mFlags(OBJECT_LIFETIME_STRONG)
     {
     }
 
@@ -189,7 +189,7 @@ public:
         : mStrong(INITIAL_STRONG_VALUE)
         , mWeak(0)
         , mBase(base)
-        , mFlags(0)
+        , mFlags(OBJECT_LIFETIME_STRONG)
         , mStrongRefs(NULL)
         , mWeakRefs(NULL)
         , mTrackEnabled(!!DEBUG_REFS_ENABLED_BY_DEFAULT)
