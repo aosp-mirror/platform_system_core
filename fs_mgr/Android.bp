@@ -63,6 +63,7 @@ cc_defaults {
         "-D_FILE_OFFSET_BITS=64",
     ],
     srcs: [
+        "blockdev.cpp",
         "file_wait.cpp",
         "fs_mgr.cpp",
         "fs_mgr_format.cpp",
@@ -141,7 +142,6 @@ cc_library {
     // Do not ever allow this library to be vendor_available as a shared library.
     // It does not have a stable interface.
     name: "libfs_mgr",
-    ramdisk_available: true,
     recovery_available: true,
     defaults: [
         "libfs_mgr_defaults",
@@ -166,7 +166,6 @@ cc_library_static {
     // It does not have a stable interface.
     name: "libfstab",
     vendor_available: true,
-    ramdisk_available: true,
     recovery_available: true,
     host_supported: true,
     defaults: ["fs_mgr_defaults"],
