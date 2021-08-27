@@ -16,8 +16,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <iomanip>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
@@ -39,8 +41,9 @@ static void usage(void) {
     LOG(ERROR) << "Usage: inspect_cow [-sd] <COW_FILE>";
     LOG(ERROR) << "\t -s Run Silent";
     LOG(ERROR) << "\t -d Attempt to decompress";
-    LOG(ERROR) << "\t -b Show data for failed decompress\n";
-    LOG(ERROR) << "\t -m Show ops in reverse merge order\n";
+    LOG(ERROR) << "\t -b Show data for failed decompress";
+    LOG(ERROR) << "\t -m Show ops in reverse merge order";
+    LOG(ERROR) << "\t -o Shows sequence op block order\n";
 }
 
 enum OpIter { Normal, RevMerge };
@@ -49,6 +52,7 @@ struct Options {
     bool silent;
     bool decompress;
     bool show_bad;
+    bool show_seq;
     OpIter iter_type;
 };
 
@@ -148,6 +152,24 @@ static bool Inspect(const std::string& path, Options opt) {
             sink.Reset();
         }
 
+        if (op.type == kCowSequenceOp && opt.show_seq) {
+            size_t read;
+            std::vector<uint32_t> merge_op_blocks;
+            size_t seq_len = op.data_length / sizeof(uint32_t);
+            merge_op_blocks.resize(seq_len);
+            if (!reader.GetRawBytes(op.source, merge_op_blocks.data(), op.data_length, &read)) {
+                PLOG(ERROR) << "Failed to read sequence op!";
+                return false;
+            }
+            if (!opt.silent) {
+                std::cout << "Sequence for " << op << " is :\n";
+                for (size_t i = 0; i < seq_len; i++) {
+                    std::cout << std::setfill('0') << std::setw(6) << merge_op_blocks[i] << ", ";
+                    if ((i + 1) % 10 == 0 || i + 1 == seq_len) std::cout << "\n";
+                }
+            }
+        }
+
         iter->Next();
     }
 
@@ -164,7 +186,7 @@ int main(int argc, char** argv) {
     opt.decompress = false;
     opt.show_bad = false;
     opt.iter_type = android::snapshot::Normal;
-    while ((ch = getopt(argc, argv, "sdbm")) != -1) {
+    while ((ch = getopt(argc, argv, "sdbmo")) != -1) {
         switch (ch) {
             case 's':
                 opt.silent = true;
@@ -177,6 +199,9 @@ int main(int argc, char** argv) {
                 break;
             case 'm':
                 opt.iter_type = android::snapshot::RevMerge;
+                break;
+            case 'o':
+                opt.show_seq = true;
                 break;
             default:
                 android::snapshot::usage();
