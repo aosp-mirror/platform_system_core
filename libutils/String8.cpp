@@ -25,6 +25,8 @@
 
 #include <ctype.h>
 
+#include <string>
+
 #include "SharedBuffer.h"
 
 /*
@@ -125,19 +127,6 @@ String8::String8()
 {
 }
 
-String8::String8(StaticLinkage)
-    : mString(nullptr)
-{
-    // this constructor is used when we can't rely on the static-initializers
-    // having run. In this case we always allocate an empty string. It's less
-    // efficient than using getEmptyString(), but we assume it's uncommon.
-
-    char* data = static_cast<char*>(
-            SharedBuffer::alloc(sizeof(char))->data());
-    data[0] = 0;
-    mString = data;
-}
-
 String8::String8(const String8& o)
     : mString(o.mString)
 {
@@ -176,9 +165,7 @@ String8::String8(const char16_t* o, size_t len)
 }
 
 String8::String8(const char32_t* o)
-    : mString(allocFromUTF32(o, strlen32(o)))
-{
-}
+    : mString(allocFromUTF32(o, std::char_traits<char32_t>::length(o))) {}
 
 String8::String8(const char32_t* o, size_t len)
     : mString(allocFromUTF32(o, len))
@@ -326,8 +313,8 @@ status_t String8::appendFormatV(const char* fmt, va_list args)
 
     if (n > 0) {
         size_t oldLength = length();
-        if ((size_t)n > SIZE_MAX - 1 ||
-            oldLength > SIZE_MAX - (size_t)n - 1) {
+        if (n > std::numeric_limits<size_t>::max() - 1 ||
+            oldLength > std::numeric_limits<size_t>::max() - n - 1) {
             return NO_MEMORY;
         }
         char* buf = lockBuffer(oldLength + n);
@@ -340,21 +327,23 @@ status_t String8::appendFormatV(const char* fmt, va_list args)
     return result;
 }
 
-status_t String8::real_append(const char* other, size_t otherLen)
-{
+status_t String8::real_append(const char* other, size_t otherLen) {
     const size_t myLen = bytes();
 
-    SharedBuffer* buf = SharedBuffer::bufferFromData(mString)
-        ->editResize(myLen+otherLen+1);
-    if (buf) {
-        char* str = (char*)buf->data();
-        mString = str;
-        str += myLen;
-        memcpy(str, other, otherLen);
-        str[otherLen] = '\0';
-        return OK;
+    SharedBuffer* buf;
+    size_t newLen;
+    if (__builtin_add_overflow(myLen, otherLen, &newLen) ||
+        __builtin_add_overflow(newLen, 1, &newLen) ||
+        (buf = SharedBuffer::bufferFromData(mString)->editResize(newLen)) == nullptr) {
+        return NO_MEMORY;
     }
-    return NO_MEMORY;
+
+    char* str = (char*)buf->data();
+    mString = str;
+    str += myLen;
+    memcpy(str, other, otherLen);
+    str[otherLen] = '\0';
+    return OK;
 }
 
 char* String8::lockBuffer(size_t size)
@@ -428,50 +417,15 @@ bool String8::removeAll(const char* other) {
 
 void String8::toLower()
 {
-    toLower(0, size());
-}
+    const size_t length = size();
+    if (length == 0) return;
 
-void String8::toLower(size_t start, size_t length)
-{
-    const size_t len = size();
-    if (start >= len) {
-        return;
-    }
-    if (start+length > len) {
-        length = len-start;
-    }
-    char* buf = lockBuffer(len);
-    buf += start;
-    while (length > 0) {
-        *buf = tolower(*buf);
+    char* buf = lockBuffer(length);
+    for (size_t i = length; i > 0; --i) {
+        *buf = static_cast<char>(tolower(*buf));
         buf++;
-        length--;
     }
-    unlockBuffer(len);
-}
-
-void String8::toUpper()
-{
-    toUpper(0, size());
-}
-
-void String8::toUpper(size_t start, size_t length)
-{
-    const size_t len = size();
-    if (start >= len) {
-        return;
-    }
-    if (start+length > len) {
-        length = len-start;
-    }
-    char* buf = lockBuffer(len);
-    buf += start;
-    while (length > 0) {
-        *buf = toupper(*buf);
-        buf++;
-        length--;
-    }
-    unlockBuffer(len);
+    unlockBuffer(length);
 }
 
 // ---------------------------------------------------------------------------

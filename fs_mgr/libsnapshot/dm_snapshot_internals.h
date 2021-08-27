@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <android-base/logging.h>
 #include <stdint.h>
 
+#include <optional>
 #include <vector>
 
 namespace android {
@@ -26,19 +28,46 @@ class DmSnapCowSizeCalculator {
     DmSnapCowSizeCalculator(unsigned int sector_bytes, unsigned int chunk_sectors)
         : sector_bytes_(sector_bytes),
           chunk_sectors_(chunk_sectors),
-          exceptions_per_chunk(chunk_sectors_ * sector_bytes_ / (64 * 2 / 8)) {}
+          exceptions_per_chunk(chunk_sectors_ * sector_bytes_ / exception_size_bytes) {}
 
     void WriteByte(uint64_t address) { WriteSector(address / sector_bytes_); }
     void WriteSector(uint64_t sector) { WriteChunk(sector / chunk_sectors_); }
     void WriteChunk(uint64_t chunk_id) {
-        if (modified_chunks_.size() <= chunk_id) {
-            modified_chunks_.resize(chunk_id + 1, false);
+        if (!valid_) {
+            return;
         }
+
+        if (modified_chunks_.size() <= chunk_id) {
+            if (modified_chunks_.max_size() <= chunk_id) {
+                LOG(ERROR) << "Invalid COW size, chunk_id is too large.";
+                valid_ = false;
+                return;
+            }
+            modified_chunks_.resize(chunk_id + 1, false);
+            if (modified_chunks_.size() <= chunk_id) {
+                LOG(ERROR) << "Invalid COW size, chunk_id is too large.";
+                valid_ = false;
+                return;
+            }
+        }
+
         modified_chunks_[chunk_id] = true;
     }
 
-    uint64_t cow_size_bytes() const { return cow_size_sectors() * sector_bytes_; }
-    uint64_t cow_size_sectors() const { return cow_size_chunks() * chunk_sectors_; }
+    std::optional<uint64_t> cow_size_bytes() const {
+        auto sectors = cow_size_sectors();
+        if (!sectors) {
+            return std::nullopt;
+        }
+        return sectors.value() * sector_bytes_;
+    }
+    std::optional<uint64_t> cow_size_sectors() const {
+        auto chunks = cow_size_chunks();
+        if (!chunks) {
+            return std::nullopt;
+        }
+        return chunks.value() * chunk_sectors_;
+    }
 
     /*
      * The COW device has a precise internal structure as follows:
@@ -56,7 +85,12 @@ class DmSnapCowSizeCalculator {
      *   - chunks addressable by previous map (exceptions_per_chunk)
      * - 1 extra chunk
      */
-    uint64_t cow_size_chunks() const {
+    std::optional<uint64_t> cow_size_chunks() const {
+        if (!valid_) {
+            LOG(ERROR) << "Invalid COW size.";
+            return std::nullopt;
+        }
+
         uint64_t modified_chunks_count = 0;
         uint64_t cow_chunks = 0;
 
@@ -90,17 +124,28 @@ class DmSnapCowSizeCalculator {
     const uint64_t chunk_sectors_;
 
     /*
-     * The COW device stores tables to map the modified chunks. Each table
-     * has the size of exactly 1 chunk.
-     * Each row of the table (also called exception in the kernel) contains two
-     * 64 bit indices to identify the corresponding chunk, and this 128 bit row
-     * size is a constant.
-     * The number of exceptions that each table can contain determines the
-     * number of data chunks that separate two consecutive tables. This value
-     * is then fundamental to compute the space overhead introduced by the
-     * tables in COW devices.
+     * The COW device stores tables to map the modified chunks. Each table has
+     * the size of exactly 1 chunk.
+     * Each entry of the table is called exception and the number of exceptions
+     * that each table can contain determines the number of data chunks that
+     * separate two consecutive tables. This value is then fundamental to
+     * compute the space overhead introduced by the tables in COW devices.
      */
     const uint64_t exceptions_per_chunk;
+
+    /*
+     * Each row of the table (called exception in the kernel) contains two
+     * 64 bit indices to identify the corresponding chunk, and this 128 bit
+     * pair is constant in size.
+     */
+    static constexpr unsigned int exception_size_bytes = 64 * 2 / 8;
+
+    /*
+     * Validity check for the container.
+     * It may happen that the caller attempts the write of an invalid chunk
+     * identifier, and this misbehavior is accounted and stored in this value.
+     */
+    bool valid_ = true;
 
     /*
      * |modified_chunks_| is a container that keeps trace of the modified

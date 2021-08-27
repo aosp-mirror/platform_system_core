@@ -35,6 +35,10 @@
 
 #include "utility.h"
 
+#ifndef DM_DEFERRED_REMOVE
+#define DM_DEFERRED_REMOVE (1 << 17)
+#endif
+
 namespace android {
 namespace dm {
 
@@ -111,8 +115,10 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
 
     // Check to make sure appropriate uevent is generated so ueventd will
     // do the right thing and remove the corresponding device node and symlinks.
-    CHECK(io.flags & DM_UEVENT_GENERATED_FLAG)
-            << "Didn't generate uevent for [" << name << "] removal";
+    if ((io.flags & DM_UEVENT_GENERATED_FLAG) == 0) {
+        LOG(ERROR) << "Didn't generate uevent for [" << name << "] removal";
+        return false;
+    }
 
     if (timeout_ms <= std::chrono::milliseconds::zero()) {
         return true;
@@ -129,6 +135,25 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
 
 bool DeviceMapper::DeleteDevice(const std::string& name) {
     return DeleteDevice(name, 0ms);
+}
+
+bool DeviceMapper::DeleteDeviceDeferred(const std::string& name) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+
+    io.flags |= DM_DEFERRED_REMOVE;
+    if (ioctl(fd_, DM_DEV_REMOVE, &io)) {
+        PLOG(ERROR) << "DM_DEV_REMOVE with DM_DEFERRED_REMOVE failed for [" << name << "]";
+        return false;
+    }
+    return true;
+}
+
+bool DeviceMapper::DeleteDeviceIfExistsDeferred(const std::string& name) {
+    if (GetState(name) == DmDeviceState::INVALID) {
+        return true;
+    }
+    return DeleteDeviceDeferred(name);
 }
 
 static std::string GenerateUuid() {
@@ -427,6 +452,20 @@ bool DeviceMapper::GetDmDevicePathByName(const std::string& name, std::string* p
     return true;
 }
 
+// Accepts a device mapper device name (like system_a, vendor_b etc) and
+// returns its UUID.
+bool DeviceMapper::GetDmDeviceUuidByName(const std::string& name, std::string* uuid) {
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(WARNING) << "DM_DEV_STATUS failed for " << name;
+        return false;
+    }
+
+    *uuid = std::string(io.uuid);
+    return true;
+}
+
 bool DeviceMapper::GetDeviceNumber(const std::string& name, dev_t* dev) {
     struct dm_ioctl io;
     InitIo(&io, name);
@@ -521,34 +560,30 @@ std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
     return std::string{spec.target_type, sizeof(spec.target_type)};
 }
 
-static bool ExtractBlockDeviceName(const std::string& path, std::string* name) {
+std::optional<std::string> ExtractBlockDeviceName(const std::string& path) {
     static constexpr std::string_view kDevBlockPrefix("/dev/block/");
     if (android::base::StartsWith(path, kDevBlockPrefix)) {
-        *name = path.substr(kDevBlockPrefix.length());
-        return true;
+        return path.substr(kDevBlockPrefix.length());
     }
-    return false;
+    return {};
 }
 
 bool DeviceMapper::IsDmBlockDevice(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
-        return false;
-    }
-    return android::base::StartsWith(name, "dm-");
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    return name && android::base::StartsWith(*name, "dm-");
 }
 
 std::optional<std::string> DeviceMapper::GetDmDeviceNameByPath(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    if (!name) {
         LOG(WARNING) << path << " is not a block device";
         return std::nullopt;
     }
-    if (!android::base::StartsWith(name, "dm-")) {
+    if (!android::base::StartsWith(*name, "dm-")) {
         LOG(WARNING) << path << " is not a dm device";
         return std::nullopt;
     }
-    std::string dm_name_file = "/sys/block/" + name + "/dm/name";
+    std::string dm_name_file = "/sys/block/" + *name + "/dm/name";
     std::string dm_name;
     if (!android::base::ReadFileToString(dm_name_file, &dm_name)) {
         PLOG(ERROR) << "Failed to read file " << dm_name_file;
@@ -559,16 +594,16 @@ std::optional<std::string> DeviceMapper::GetDmDeviceNameByPath(const std::string
 }
 
 std::optional<std::string> DeviceMapper::GetParentBlockDeviceByPath(const std::string& path) {
-    std::string name;
-    if (!ExtractBlockDeviceName(path, &name)) {
+    std::optional<std::string> name = ExtractBlockDeviceName(path);
+    if (!name) {
         LOG(WARNING) << path << " is not a block device";
         return std::nullopt;
     }
-    if (!android::base::StartsWith(name, "dm-")) {
+    if (!android::base::StartsWith(*name, "dm-")) {
         // Reached bottom of the device mapper stack.
         return std::nullopt;
     }
-    auto slaves_dir = "/sys/block/" + name + "/slaves";
+    auto slaves_dir = "/sys/block/" + *name + "/slaves";
     auto dir = std::unique_ptr<DIR, decltype(&closedir)>(opendir(slaves_dir.c_str()), closedir);
     if (dir == nullptr) {
         PLOG(ERROR) << "Failed to open: " << slaves_dir;

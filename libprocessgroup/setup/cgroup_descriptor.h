@@ -25,7 +25,7 @@ namespace cgrouprc {
 class CgroupDescriptor {
   public:
     CgroupDescriptor(uint32_t version, const std::string& name, const std::string& path,
-                     mode_t mode, const std::string& uid, const std::string& gid);
+                     mode_t mode, const std::string& uid, const std::string& gid, uint32_t flags);
 
     const format::CgroupController* controller() const { return &controller_; }
     mode_t mode() const { return mode_; }
