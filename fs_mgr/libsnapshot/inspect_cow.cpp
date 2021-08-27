@@ -42,6 +42,7 @@ static void usage(void) {
     LOG(ERROR) << "\t -s Run Silent";
     LOG(ERROR) << "\t -d Attempt to decompress";
     LOG(ERROR) << "\t -b Show data for failed decompress";
+    LOG(ERROR) << "\t -l Show ops";
     LOG(ERROR) << "\t -m Show ops in reverse merge order";
     LOG(ERROR) << "\t -o Shows sequence op block order\n";
 }
@@ -51,6 +52,7 @@ enum OpIter { Normal, RevMerge };
 struct Options {
     bool silent;
     bool decompress;
+    bool show_ops;
     bool show_bad;
     bool show_seq;
     OpIter iter_type;
@@ -141,7 +143,7 @@ static bool Inspect(const std::string& path, Options opt) {
     while (!iter->Done()) {
         const CowOperation& op = iter->Get();
 
-        if (!opt.silent) std::cout << op << "\n";
+        if (!opt.silent && opt.show_ops) std::cout << op << "\n";
 
         if (opt.decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
             if (!reader.ReadData(op, &sink)) {
@@ -186,7 +188,7 @@ int main(int argc, char** argv) {
     opt.decompress = false;
     opt.show_bad = false;
     opt.iter_type = android::snapshot::Normal;
-    while ((ch = getopt(argc, argv, "sdbmo")) != -1) {
+    while ((ch = getopt(argc, argv, "sdbmol")) != -1) {
         switch (ch) {
             case 's':
                 opt.silent = true;
@@ -202,6 +204,9 @@ int main(int argc, char** argv) {
                 break;
             case 'o':
                 opt.show_seq = true;
+                break;
+            case 'l':
+                opt.show_ops = true;
                 break;
             default:
                 android::snapshot::usage();
