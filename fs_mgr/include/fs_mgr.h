@@ -22,6 +22,7 @@
 #include <linux/dm-ioctl.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 
 #include <fstab/fstab.h>
@@ -68,6 +69,13 @@ struct MountAllResult {
     bool userdata_mounted;
 };
 
+struct HashtreeInfo {
+    // The hash algorithm used to build the merkle tree.
+    std::string algorithm;
+    // The root digest of the merkle tree.
+    std::string root_digest;
+};
+
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.
 // Returns a |MountAllResult|. The first element is one of the FS_MNG_MNTALL_* return codes
 // defined above, and the second element tells whether this call to fs_mgr_mount_all was responsible
@@ -88,9 +96,9 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 bool fs_mgr_load_verity_state(int* mode);
 // Returns true if verity is enabled on this particular FstabEntry.
 bool fs_mgr_is_verity_enabled(const android::fs_mgr::FstabEntry& entry);
-// Returns the hash algorithm used to build the hashtree of this particular FstabEntry. Returns an
-// empty string if the input isn't a dm-verity entry, or if there is an error.
-std::string fs_mgr_get_hashtree_algorithm(const android::fs_mgr::FstabEntry& entry);
+// Returns the verity hashtree information of this particular FstabEntry. Returns std::nullopt
+// if the input isn't a dm-verity entry, or if there is an error.
+std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::FstabEntry& entry);
 
 bool fs_mgr_swapon_all(const android::fs_mgr::Fstab& fstab);
 bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
