@@ -215,7 +215,6 @@ cc_binary {
     static_libs: [
         "libavb_user",
         "libgsid",
-        "libutils",
         "libvold_binder",
     ],
     shared_libs: [
@@ -230,6 +229,7 @@ cc_binary {
         "liblog",
         "liblp",
         "libselinux",
+        "libutils",
     ],
     header_libs: [
         "libcutils_headers",
