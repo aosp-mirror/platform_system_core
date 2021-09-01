@@ -894,9 +894,11 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
         std::string partition = entry.mount_point == "/" ? "system" : Basename(entry.mount_point);
         SetProperty("partition." + partition + ".verified", std::to_string(mode));
 
-        std::string hash_alg = fs_mgr_get_hashtree_algorithm(entry);
-        if (!hash_alg.empty()) {
-            SetProperty("partition." + partition + ".verified.hash_alg", hash_alg);
+        auto hashtree_info = fs_mgr_get_hashtree_info(entry);
+        if (hashtree_info) {
+            SetProperty("partition." + partition + ".verified.hash_alg", hashtree_info->algorithm);
+            SetProperty("partition." + partition + ".verified.root_digest",
+                        hashtree_info->root_digest);
         }
     }
 
