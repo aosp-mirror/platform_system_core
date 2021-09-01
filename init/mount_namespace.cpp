@@ -158,7 +158,8 @@ static bool ActivateFlattenedApexesIfPossible() {
     auto on_activate = [&](const std::string& apex_path,
                            const apex::proto::ApexManifest& apex_manifest) {
         apex_infos.emplace_back(apex_manifest.name(), apex_path, apex_path, apex_manifest.version(),
-                                apex_manifest.versionname(), /*isFactory=*/true, /*isActive=*/true);
+                                apex_manifest.versionname(), /*isFactory=*/true, /*isActive=*/true,
+                                /* lastUpdateMillis= */ 0);
     };
 
     for (const auto& dir : kBuiltinDirsForApexes) {
