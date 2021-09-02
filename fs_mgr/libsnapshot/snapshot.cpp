@@ -1456,7 +1456,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
                                             std::vector<std::string>* snapuserd_argv) {
     LOG(INFO) << "Performing transition for snapuserd.";
 
-    // Don't use EnsuerSnapuserdConnected() because this is called from init,
+    // Don't use EnsureSnapuserdConnected() because this is called from init,
     // and attempting to do so will deadlock.
     if (!snapuserd_client_ && transition != InitTransition::SELINUX_DETACH) {
         snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
@@ -1513,8 +1513,15 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
+        std::string source_device_name;
+        if (snapshot_status.old_partition_size() > 0) {
+            source_device_name = GetSourceDeviceName(snapshot);
+        } else {
+            source_device_name = GetBaseDeviceName(snapshot);
+        }
+
         std::string source_device;
-        if (!dm.GetDmDevicePathByName(GetSourceDeviceName(snapshot), &source_device)) {
+        if (!dm.GetDmDevicePathByName(source_device_name, &source_device)) {
             LOG(ERROR) << "Could not get device path for " << GetSourceDeviceName(snapshot);
             continue;
         }
