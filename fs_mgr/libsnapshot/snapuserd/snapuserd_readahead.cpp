@@ -223,7 +223,7 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops
             if (op->type == kCowCopyOp) {
                 next_offset *= BLOCK_SZ;
             }
-            if (next_offset != (*source_offset - nr_consecutive * BLOCK_SZ)) {
+            if (next_offset + nr_consecutive * BLOCK_SZ != *source_offset) {
                 break;
             }
             nr_consecutive += 1;
