@@ -210,6 +210,9 @@ cc_library_static {
         "libcutils",
         "liblog",
     ],
+    runtime_libs: [
+        "libdexfile",           // libdexfile_support dependency
+    ],
 
     whole_static_libs: [
         "libasync_safe",
@@ -225,10 +228,16 @@ cc_library_static {
             exclude_static_libs: [
                 "libdexfile_support",
             ],
+            exclude_runtime_libs: [
+                "libdexfile",
+            ],
         },
         vendor_ramdisk: {
             exclude_static_libs: [
                 "libdexfile_support",
+            ],
+            exclude_runtime_libs: [
+                "libdexfile",
             ],
         },
     },
