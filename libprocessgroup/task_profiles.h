@@ -134,7 +134,7 @@ class SetCgroupAction : public ProfileAction {
     mutable std::mutex fd_mutex_;
 
     static bool IsAppDependentPath(const std::string& path);
-    static bool AddTidToCgroup(int tid, int fd);
+    static bool AddTidToCgroup(int tid, int fd, const char* controller_name);
 
     bool IsFdValid() const { return fd_ > FDS_INACCESSIBLE; }
 };
