@@ -46,6 +46,9 @@ class LoopControl final {
     // Enable Direct I/O on a loop device. This requires kernel 4.9+.
     static bool EnableDirectIo(int fd);
 
+    // Set LO_FLAGS_AUTOCLEAR on a loop device.
+    static bool SetAutoClearStatus(int fd);
+
     LoopControl(const LoopControl&) = delete;
     LoopControl& operator=(const LoopControl&) = delete;
     LoopControl& operator=(LoopControl&&) = default;
