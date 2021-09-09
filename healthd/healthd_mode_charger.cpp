@@ -218,9 +218,7 @@ static void dump_last_kmsg(void) {
     char* ptr;
     size_t len;
 
-    LOGW("\n");
     LOGW("*************** LAST KMSG ***************\n");
-    LOGW("\n");
     const char* kmsg[] = {
         // clang-format off
         "/sys/fs/pstore/console-ramoops-0",
@@ -263,9 +261,7 @@ static void dump_last_kmsg(void) {
     }
 
 out:
-    LOGW("\n");
     LOGW("************* END LAST KMSG *************\n");
-    LOGW("\n");
 }
 
 static int request_suspend(bool enable) {
@@ -325,7 +321,8 @@ void Charger::UpdateScreenState(int64_t now) {
             }
         }
 
-        healthd_draw_.reset(new HealthdDraw(&batt_anim_));
+        healthd_draw_ = HealthdDraw::Create(&batt_anim_);
+        if (healthd_draw_ == nullptr) return;
 
         if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
             healthd_draw_->blank_screen(true);
