@@ -8,6 +8,9 @@
 #include <utils/Looper.h>
 #include <utils/StopWatch.h>
 #include <utils/Timers.h>
+#include <thread>
+#include <unordered_map>
+#include <utility>
 #include "Looper_test_pipe.h"
 
 #include <utils/threads.h>
@@ -708,6 +711,125 @@ TEST_F(LooperTest, RemoveMessage_WhenRemovingSomeMessagesForHandler_ShouldRemove
             << "pollOnce result should be Looper::POLL_TIMEOUT because there was nothing to do";
     EXPECT_EQ(size_t(2), handler->messages.size())
             << "no more messages to handle";
+}
+
+class LooperEventCallback : public LooperCallback {
+  public:
+    using Callback = std::function<int(int fd, int events)>;
+    explicit LooperEventCallback(Callback callback) : mCallback(std::move(callback)) {}
+    int handleEvent(int fd, int events, void* /*data*/) override { return mCallback(fd, events); }
+
+  private:
+    Callback mCallback;
+};
+
+// A utility class that allows for pipes to be added and removed from the looper, and polls the
+// looper from a different thread.
+class ThreadedLooperUtil {
+  public:
+    explicit ThreadedLooperUtil(const sp<Looper>& looper) : mLooper(looper), mRunning(true) {
+        mThread = std::thread([this]() {
+            while (mRunning) {
+                static constexpr std::chrono::milliseconds POLL_TIMEOUT(500);
+                mLooper->pollOnce(POLL_TIMEOUT.count());
+            }
+        });
+    }
+
+    ~ThreadedLooperUtil() {
+        mRunning = false;
+        mThread.join();
+    }
+
+    // Create a new pipe, and return the write end of the pipe and the id used to track the pipe.
+    // The read end of the pipe is added to the looper.
+    std::pair<int /*id*/, base::unique_fd> createPipe() {
+        int pipeFd[2];
+        if (pipe(pipeFd)) {
+            ADD_FAILURE() << "pipe() failed.";
+            return {};
+        }
+        const int readFd = pipeFd[0];
+        const int writeFd = pipeFd[1];
+
+        int id;
+        {  // acquire lock
+            std::scoped_lock l(mLock);
+
+            id = mNextId++;
+            mFds.emplace(id, readFd);
+
+            auto removeCallback = [this, id, readFd](int fd, int events) {
+                EXPECT_EQ(readFd, fd) << "Received callback for incorrect fd.";
+                if ((events & Looper::EVENT_HANGUP) == 0) {
+                    return 1;  // Not a hangup, keep the callback.
+                }
+                removePipe(id);
+                return 0;  // Remove the callback.
+            };
+
+            mLooper->addFd(readFd, 0, Looper::EVENT_INPUT,
+                           new LooperEventCallback(std::move(removeCallback)), nullptr);
+        }  // release lock
+
+        return {id, base::unique_fd(writeFd)};
+    }
+
+    // Remove the pipe with the given id.
+    void removePipe(int id) {
+        std::scoped_lock l(mLock);
+        if (mFds.find(id) == mFds.end()) {
+            return;
+        }
+        mLooper->removeFd(mFds[id].get());
+        mFds.erase(id);
+    }
+
+    // Check if the pipe with the given id exists and has not been removed.
+    bool hasPipe(int id) {
+        std::scoped_lock l(mLock);
+        return mFds.find(id) != mFds.end();
+    }
+
+  private:
+    sp<Looper> mLooper;
+    std::atomic<bool> mRunning;
+    std::thread mThread;
+
+    std::mutex mLock;
+    std::unordered_map<int, base::unique_fd> mFds GUARDED_BY(mLock);
+    int mNextId GUARDED_BY(mLock) = 0;
+};
+
+TEST_F(LooperTest, MultiThreaded_NoUnexpectedFdRemoval) {
+    ThreadedLooperUtil util(mLooper);
+
+    // Iterate repeatedly to try to recreate a flaky instance.
+    for (int i = 0; i < 1000; i++) {
+        auto [firstPipeId, firstPipeFd] = util.createPipe();
+        const int firstFdNumber = firstPipeFd.get();
+
+        // Close the first pipe's fd, causing a fd hangup.
+        firstPipeFd.reset();
+
+        // Request to remove the pipe from this test thread. This causes a race for pipe removal
+        // between the hangup in the looper's thread and this remove request from the test thread.
+        util.removePipe(firstPipeId);
+
+        // Create the second pipe. Since the fds for the first pipe are closed, this pipe should
+        // have the same fd numbers as the first pipe because the lowest unused fd number is used.
+        const auto [secondPipeId, fd] = util.createPipe();
+        EXPECT_EQ(firstFdNumber, fd.get())
+                << "The first and second fds must match for the purposes of this test.";
+
+        // Wait for unexpected hangup to occur.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        ASSERT_TRUE(util.hasPipe(secondPipeId)) << "The second pipe was removed unexpectedly.";
+
+        util.removePipe(secondPipeId);
+    }
+    SUCCEED() << "No unexpectedly removed fds.";
 }
 
 } // namespace android

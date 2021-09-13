@@ -17,15 +17,16 @@
 #ifndef UTILS_LOOPER_H
 #define UTILS_LOOPER_H
 
-#include <utils/threads.h>
 #include <utils/RefBase.h>
-#include <utils/KeyedVector.h>
 #include <utils/Timers.h>
+#include <utils/Vector.h>
+#include <utils/threads.h>
 
 #include <sys/epoll.h>
 
 #include <android-base/unique_fd.h>
 
+#include <unordered_map>
 #include <utility>
 
 namespace android {
@@ -421,18 +422,20 @@ public:
     static sp<Looper> getForThread();
 
 private:
-    struct Request {
-        int fd;
-        int ident;
-        int events;
-        int seq;
-        sp<LooperCallback> callback;
-        void* data;
+  using SequenceNumber = uint64_t;
 
-        void initEventItem(struct epoll_event* eventItem) const;
-    };
+  struct Request {
+      int fd;
+      int ident;
+      int events;
+      sp<LooperCallback> callback;
+      void* data;
+
+      uint32_t getEpollEvents() const;
+  };
 
     struct Response {
+        SequenceNumber seq;
         int events;
         Request request;
     };
@@ -463,9 +466,14 @@ private:
     android::base::unique_fd mEpollFd;  // guarded by mLock but only modified on the looper thread
     bool mEpollRebuildRequired; // guarded by mLock
 
-    // Locked list of file descriptor monitoring requests.
-    KeyedVector<int, Request> mRequests;  // guarded by mLock
-    int mNextRequestSeq;
+    // Locked maps of fds and sequence numbers monitoring requests.
+    // Both maps must be kept in sync at all times.
+    std::unordered_map<SequenceNumber, Request> mRequests;               // guarded by mLock
+    std::unordered_map<int /*fd*/, SequenceNumber> mSequenceNumberByFd;  // guarded by mLock
+
+    // The sequence number to use for the next fd that is added to the looper.
+    // The sequence number 0 is reserved for the WakeEventFd.
+    SequenceNumber mNextRequestSeq;  // guarded by mLock
 
     // This state is only used privately by pollOnce and does not require a lock since
     // it runs on a single thread.
@@ -474,9 +482,8 @@ private:
     nsecs_t mNextMessageUptime; // set to LLONG_MAX when none
 
     int pollInner(int timeoutMillis);
-    int removeFd(int fd, int seq);
+    int removeSequenceNumberLocked(SequenceNumber seq);  // requires mLock
     void awoken();
-    void pushResponse(int events, const Request& request);
     void rebuildEpollLocked();
     void scheduleEpollRebuildLocked();
 
