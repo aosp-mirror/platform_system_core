@@ -114,9 +114,8 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
     return sm;
 }
 
-SnapshotManager::SnapshotManager(IDeviceInfo* device) : device_(device) {
-    metadata_dir_ = device_->GetMetadataDir();
-}
+SnapshotManager::SnapshotManager(IDeviceInfo* device)
+    : dm_(device->GetDeviceMapper()), device_(device), metadata_dir_(device_->GetMetadataDir()) {}
 
 static std::string GetCowName(const std::string& snapshot_name) {
     return snapshot_name + "-cow";
@@ -402,8 +401,6 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
                                    const std::chrono::milliseconds& timeout_ms, std::string* path) {
     CHECK(lock);
 
-    auto& dm = DeviceMapper::Instance();
-
     // Use an extra decoration for first-stage init, so we can transition
     // to a new table entry in second-stage.
     std::string misc_name = name;
@@ -423,7 +420,7 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
 
     DmTable table;
     table.Emplace<DmTargetUser>(0, base_sectors, misc_name);
-    if (!dm.CreateDevice(name, table, path, timeout_ms)) {
+    if (!dm_.CreateDevice(name, table, path, timeout_ms)) {
         return false;
     }
     if (!WaitForDevice(*path, timeout_ms)) {
@@ -490,8 +487,6 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
 
     uint64_t snapshot_sectors = status.snapshot_size() / kSectorSize;
 
-    auto& dm = DeviceMapper::Instance();
-
     // Note that merging is a global state. We do track whether individual devices
     // have completed merging, but the start of the merge process is considered
     // atomic.
@@ -521,7 +516,7 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
     DmTable table;
     table.Emplace<DmTargetSnapshot>(0, snapshot_sectors, base_device, cow_device, mode,
                                     kSnapshotChunkSize);
-    if (!dm.CreateDevice(name, table, dev_path, timeout_ms)) {
+    if (!dm_.CreateDevice(name, table, dev_path, timeout_ms)) {
         LOG(ERROR) << "Could not create snapshot device: " << name;
         return false;
     }
@@ -652,7 +647,6 @@ bool SnapshotManager::InitiateMerge() {
 
     auto other_suffix = device_->GetOtherSlotSuffix();
 
-    auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
         if (android::base::EndsWith(snapshot, other_suffix)) {
             // Allow the merge to continue, but log this unexpected case.
@@ -664,7 +658,7 @@ bool SnapshotManager::InitiateMerge() {
         // the same time. This is a fairly serious error. We could forcefully
         // map everything here, but it should have been mapped during first-
         // stage init.
-        if (dm.GetState(snapshot) == DmDeviceState::INVALID) {
+        if (dm_.GetState(snapshot) == DmDeviceState::INVALID) {
             LOG(ERROR) << "Cannot begin merge; device " << snapshot << " is not mapped.";
             return false;
         }
@@ -797,10 +791,8 @@ MergeFailureCode SnapshotManager::SwitchSnapshotToMerge(LockedFile* lock, const 
 }
 
 MergeFailureCode SnapshotManager::RewriteSnapshotDeviceTable(const std::string& name) {
-    auto& dm = DeviceMapper::Instance();
-
     std::vector<DeviceMapper::TargetInfo> old_targets;
-    if (!dm.GetTableInfo(name, &old_targets)) {
+    if (!dm_.GetTableInfo(name, &old_targets)) {
         LOG(ERROR) << "Could not read snapshot device table: " << name;
         return MergeFailureCode::GetTableInfo;
     }
@@ -818,7 +810,7 @@ MergeFailureCode SnapshotManager::RewriteSnapshotDeviceTable(const std::string& 
     DmTable table;
     table.Emplace<DmTargetSnapshot>(0, old_targets[0].spec.length, base_device, cow_device,
                                     SnapshotStorageMode::Merge, kSnapshotChunkSize);
-    if (!dm.LoadTableAndActivate(name, table)) {
+    if (!dm_.LoadTableAndActivate(name, table)) {
         LOG(ERROR) << "Could not swap device-mapper tables on snapshot device " << name;
         return MergeFailureCode::ActivateNewTable;
     }
@@ -826,24 +818,18 @@ MergeFailureCode SnapshotManager::RewriteSnapshotDeviceTable(const std::string& 
     return MergeFailureCode::Ok;
 }
 
-enum class TableQuery {
-    Table,
-    Status,
-};
-
-static bool GetSingleTarget(const std::string& dm_name, TableQuery query,
-                            DeviceMapper::TargetInfo* target) {
-    auto& dm = DeviceMapper::Instance();
-    if (dm.GetState(dm_name) == DmDeviceState::INVALID) {
+bool SnapshotManager::GetSingleTarget(const std::string& dm_name, TableQuery query,
+                                      DeviceMapper::TargetInfo* target) {
+    if (dm_.GetState(dm_name) == DmDeviceState::INVALID) {
         return false;
     }
 
     std::vector<DeviceMapper::TargetInfo> targets;
     bool result;
     if (query == TableQuery::Status) {
-        result = dm.GetTableStatus(dm_name, &targets);
+        result = dm_.GetTableStatus(dm_name, &targets);
     } else {
-        result = dm.GetTableInfo(dm_name, &targets);
+        result = dm_.GetTableInfo(dm_name, &targets);
     }
     if (!result) {
         LOG(ERROR) << "Could not query device: " << dm_name;
@@ -1169,11 +1155,9 @@ MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const 
         return MergeFailureCode::Ok;
     }
 
-    auto& dm = DeviceMapper::Instance();
-
     std::string cow_image_name = GetMappedCowDeviceName(name, status);
     std::string cow_image_path;
-    if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
+    if (!dm_.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
         LOG(ERROR) << "Failed to get path for cow device: " << cow_image_name;
         return MergeFailureCode::GetCowPathConsistencyCheck;
     }
@@ -1349,8 +1333,6 @@ bool SnapshotManager::OnSnapshotMergeComplete(LockedFile* lock, const std::strin
 
 bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
                                              const SnapshotStatus& status) {
-    auto& dm = DeviceMapper::Instance();
-
     // Verify we have a snapshot-merge device.
     DeviceMapper::TargetInfo target;
     if (!GetSingleTarget(name, TableQuery::Table, &target)) {
@@ -1389,7 +1371,7 @@ bool SnapshotManager::CollapseSnapshotDevice(const std::string& name,
         return false;
     }
 
-    if (!dm.LoadTableAndActivate(name, table)) {
+    if (!dm_.LoadTableAndActivate(name, table)) {
         return false;
     }
 
@@ -1462,8 +1444,6 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
     }
 
-    auto& dm = DeviceMapper::Instance();
-
     auto lock = LockExclusive();
     if (!lock) return false;
 
@@ -1477,7 +1457,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
     size_t ok_cows = 0;
     for (const auto& snapshot : snapshots) {
         std::string user_cow_name = GetDmUserCowName(snapshot);
-        if (dm.GetState(user_cow_name) == DmDeviceState::INVALID) {
+        if (dm_.GetState(user_cow_name) == DmDeviceState::INVALID) {
             continue;
         }
 
@@ -1504,7 +1484,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
 
         DmTable table;
         table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
-        if (!dm.LoadTableAndActivate(user_cow_name, table)) {
+        if (!dm_.LoadTableAndActivate(user_cow_name, table)) {
             LOG(ERROR) << "Unable to swap tables for " << misc_name;
             continue;
         }
@@ -1517,7 +1497,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         }
 
         std::string source_device;
-        if (!dm.GetDmDevicePathByName(source_device_name, &source_device)) {
+        if (!dm_.GetDmDevicePathByName(source_device_name, &source_device)) {
             LOG(ERROR) << "Could not get device path for " << GetSourceDeviceName(snapshot);
             continue;
         }
@@ -1525,7 +1505,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         std::string cow_image_name = GetMappedCowDeviceName(snapshot, snapshot_status);
 
         std::string cow_image_device;
-        if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_device)) {
+        if (!dm_.GetDmDevicePathByName(cow_image_name, &cow_image_device)) {
             LOG(ERROR) << "Could not get device path for " << cow_image_name;
             continue;
         }
@@ -1700,8 +1680,7 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
             // snapshot, but it's on the wrong slot. We can't unmap an active
             // partition. If this is not really a snapshot, skip the unmap
             // step.
-            auto& dm = DeviceMapper::Instance();
-            if (dm.GetState(name) == DmDeviceState::INVALID || !IsSnapshotDevice(name)) {
+            if (dm_.GetState(name) == DmDeviceState::INVALID || !IsSnapshotDevice(name)) {
                 LOG(ERROR) << "Detected snapshot " << name << " on " << current_slot << " slot"
                            << " for source partition; removing without unmap.";
                 should_unmap = false;
@@ -2038,14 +2017,13 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     // Create the base device for the snapshot, or if there is no snapshot, the
     // device itself. This device consists of the real blocks in the super
     // partition that this logical partition occupies.
-    auto& dm = DeviceMapper::Instance();
     std::string base_path;
     if (!CreateLogicalPartition(params, &base_path)) {
         LOG(ERROR) << "Could not create logical partition " << params.GetPartitionName()
                    << " as device " << params.GetDeviceName();
         return false;
     }
-    created_devices.EmplaceBack<AutoUnmapDevice>(&dm, params.GetDeviceName());
+    created_devices.EmplaceBack<AutoUnmapDevice>(&dm_, params.GetDeviceName());
 
     if (paths) {
         paths->target_device = base_path;
@@ -2059,7 +2037,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     // We don't have ueventd in first-stage init, so use device major:minor
     // strings instead.
     std::string base_device;
-    if (!dm.GetDeviceString(params.GetDeviceName(), &base_device)) {
+    if (!dm_.GetDeviceString(params.GetDeviceName(), &base_device)) {
         LOG(ERROR) << "Could not determine major/minor for: " << params.GetDeviceName();
         return false;
     }
@@ -2102,7 +2080,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
             }
 
             auto source_device = GetSourceDeviceName(params.GetPartitionName());
-            created_devices.EmplaceBack<AutoUnmapDevice>(&dm, source_device);
+            created_devices.EmplaceBack<AutoUnmapDevice>(&dm_, source_device);
         } else {
             source_device_path = base_path;
         }
@@ -2129,7 +2107,7 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
                        << params.GetPartitionName();
             return false;
         }
-        created_devices.EmplaceBack<AutoUnmapDevice>(&dm, name);
+        created_devices.EmplaceBack<AutoUnmapDevice>(&dm_, name);
 
         remaining_time = GetRemainingTime(params.timeout_ms, begin);
         if (remaining_time.count() < 0) return false;
@@ -2195,8 +2173,6 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
     std::string cow_image_name = GetCowImageDeviceName(partition_name);
     *cow_name = GetCowName(partition_name);
 
-    auto& dm = DeviceMapper::Instance();
-
     // Map COW image if necessary.
     if (snapshot_status.cow_file_size() > 0) {
         if (!EnsureImageManager()) return false;
@@ -2247,11 +2223,11 @@ bool SnapshotManager::MapCowDevices(LockedFile* lock, const CreateLogicalPartiti
 
     // We have created the DmTable now. Map it.
     std::string cow_path;
-    if (!dm.CreateDevice(*cow_name, table, &cow_path, remaining_time)) {
+    if (!dm_.CreateDevice(*cow_name, table, &cow_path, remaining_time)) {
         LOG(ERROR) << "Could not create COW device: " << *cow_name;
         return false;
     }
-    created_devices->EmplaceBack<AutoUnmapDevice>(&dm, *cow_name);
+    created_devices->EmplaceBack<AutoUnmapDevice>(&dm_, *cow_name);
     LOG(INFO) << "Mapped COW device for " << params.GetPartitionName() << " at " << cow_path;
     return true;
 }
@@ -2278,10 +2254,8 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
 }
 
 bool SnapshotManager::UnmapDmUserDevice(const std::string& snapshot_name) {
-    auto& dm = DeviceMapper::Instance();
-
     auto dm_user_name = GetDmUserCowName(snapshot_name);
-    if (dm.GetState(dm_user_name) == DmDeviceState::INVALID) {
+    if (dm_.GetState(dm_user_name) == DmDeviceState::INVALID) {
         return true;
     }
 
@@ -3501,7 +3475,6 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
         return false;
     }
 
-    auto& dm = DeviceMapper::Instance();
     for (const auto& snapshot : snapshots) {
         SnapshotStatus status;
         if (!ReadSnapshotStatus(lock, snapshot, &status)) {
@@ -3512,7 +3485,7 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
         }
 
         std::vector<DeviceMapper::TargetInfo> targets;
-        if (!dm.GetTableStatus(snapshot, &targets)) {
+        if (!dm_.GetTableStatus(snapshot, &targets)) {
             LOG(ERROR) << "Could not read snapshot device table: " << snapshot;
             return false;
         }
@@ -3605,11 +3578,9 @@ ISnapshotMergeStats* SnapshotManager::GetSnapshotMergeStatsInstance() {
 // isn't running yet.
 bool SnapshotManager::GetMappedImageDevicePath(const std::string& device_name,
                                                std::string* device_path) {
-    auto& dm = DeviceMapper::Instance();
-
     // Try getting the device string if it is a device mapper device.
-    if (dm.GetState(device_name) != DmDeviceState::INVALID) {
-        return dm.GetDmDevicePathByName(device_name, device_path);
+    if (dm_.GetState(device_name) != DmDeviceState::INVALID) {
+        return dm_.GetDmDevicePathByName(device_name, device_path);
     }
 
     // Otherwise, get path from IImageManager.
@@ -3618,10 +3589,9 @@ bool SnapshotManager::GetMappedImageDevicePath(const std::string& device_name,
 
 bool SnapshotManager::GetMappedImageDeviceStringOrPath(const std::string& device_name,
                                                        std::string* device_string_or_mapped_path) {
-    auto& dm = DeviceMapper::Instance();
     // Try getting the device string if it is a device mapper device.
-    if (dm.GetState(device_name) != DmDeviceState::INVALID) {
-        return dm.GetDeviceString(device_name, device_string_or_mapped_path);
+    if (dm_.GetState(device_name) != DmDeviceState::INVALID) {
+        return dm_.GetDeviceString(device_name, device_string_or_mapped_path);
     }
 
     // Otherwise, get path from IImageManager.
@@ -3737,10 +3707,9 @@ void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
 
 bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
                                            const std::chrono::milliseconds& timeout_ms) {
-    auto& dm = DeviceMapper::Instance();
     auto start = std::chrono::steady_clock::now();
     while (true) {
-        if (dm.DeleteDeviceIfExists(name)) {
+        if (dm_.DeleteDeviceIfExists(name)) {
             return true;
         }
         auto now = std::chrono::steady_clock::now();
@@ -3753,7 +3722,7 @@ bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
 
     // Try to diagnose why this failed. First get the actual device path.
     std::string full_path;
-    if (!dm.GetDmDevicePathByName(name, &full_path)) {
+    if (!dm_.GetDmDevicePathByName(name, &full_path)) {
         LOG(ERROR) << "Unable to diagnose DM_DEV_REMOVE failure.";
         return false;
     }
