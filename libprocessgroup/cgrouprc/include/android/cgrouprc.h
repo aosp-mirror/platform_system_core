@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <sys/cdefs.h>
 #include <stdint.h>
 
 __BEGIN_DECLS
