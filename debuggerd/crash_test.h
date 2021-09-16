@@ -14,15 +14,25 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <stdint.h>
 
-#include "crash_test.h"
+// Only support V1 of these structures.
+// See https://sourceware.org/gdb/onlinedocs/gdb/JIT-Interface.html
+// for information on the JIT Compilation Interface.
+// Also, see libunwindstack/GlobalDebugImpl.h for the full definition of
+// these structures.
+struct JITCodeEntry {
+  uintptr_t next;
+  uintptr_t prev;
+  uintptr_t symfile_addr;
+  uint64_t symfile_size;
+};
 
-extern "C" {
-
-JITDescriptor __dex_debug_descriptor = {.version = 1};
-
-void crash() {
-  *reinterpret_cast<volatile char*>(0xdead) = '1';
-}
-}
+struct JITDescriptor {
+  uint32_t version;
+  uint32_t action_flag;
+  uintptr_t relevant_entry;
+  uintptr_t first_entry;
+};
