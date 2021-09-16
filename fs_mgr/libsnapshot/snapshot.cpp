@@ -518,6 +518,13 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
             break;
     }
 
+    if (mode == SnapshotStorageMode::Persistent && status.state() == SnapshotState::MERGING) {
+        LOG(ERROR) << "Snapshot: " << name
+                   << " has snapshot status Merging but mode set to Persistent."
+                   << " Changing mode to Snapshot-Merge.";
+        mode = SnapshotStorageMode::Merge;
+    }
+
     DmTable table;
     table.Emplace<DmTargetSnapshot>(0, snapshot_sectors, base_device, cow_device, mode,
                                     kSnapshotChunkSize);
@@ -885,6 +892,10 @@ bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::strin
     }
     if (target_type) {
         *target_type = DeviceMapper::GetTargetType(target.spec);
+    }
+    if (!status->error.empty()) {
+        LOG(ERROR) << "Snapshot: " << dm_name << " returned error code: " << status->error;
+        return false;
     }
     return true;
 }
@@ -1452,7 +1463,7 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
                                             std::vector<std::string>* snapuserd_argv) {
     LOG(INFO) << "Performing transition for snapuserd.";
 
-    // Don't use EnsuerSnapuserdConnected() because this is called from init,
+    // Don't use EnsureSnapuserdConnected() because this is called from init,
     // and attempting to do so will deadlock.
     if (!snapuserd_client_ && transition != InitTransition::SELINUX_DETACH) {
         snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
@@ -1509,8 +1520,15 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
+        std::string source_device_name;
+        if (snapshot_status.old_partition_size() > 0) {
+            source_device_name = GetSourceDeviceName(snapshot);
+        } else {
+            source_device_name = GetBaseDeviceName(snapshot);
+        }
+
         std::string source_device;
-        if (!dm.GetDmDevicePathByName(GetSourceDeviceName(snapshot), &source_device)) {
+        if (!dm.GetDmDevicePathByName(source_device_name, &source_device)) {
             LOG(ERROR) << "Could not get device path for " << GetSourceDeviceName(snapshot);
             continue;
         }
