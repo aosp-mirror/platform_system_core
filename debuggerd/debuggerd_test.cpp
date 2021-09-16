@@ -57,6 +57,7 @@
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
+#include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "libdebuggerd/utility.h"
 #include "protocol.h"
@@ -2063,4 +2064,125 @@ TEST_F(CrasherTest, fault_address_in_map) {
 
   match_str = android::base::StringPrintf(R"(\n--->%s.*\n)", format_pointer(ptr).c_str());
   ASSERT_MATCH(result, match_str);
+}
+
+static constexpr uint32_t kDexData[] = {
+    0x0a786564, 0x00383330, 0xc98b3ab8, 0xf3749d94, 0xaecca4d8, 0xffc7b09a, 0xdca9ca7f, 0x5be5deab,
+    0x00000220, 0x00000070, 0x12345678, 0x00000000, 0x00000000, 0x0000018c, 0x00000008, 0x00000070,
+    0x00000004, 0x00000090, 0x00000002, 0x000000a0, 0x00000000, 0x00000000, 0x00000003, 0x000000b8,
+    0x00000001, 0x000000d0, 0x00000130, 0x000000f0, 0x00000122, 0x0000012a, 0x00000132, 0x00000146,
+    0x00000151, 0x00000154, 0x00000158, 0x0000016d, 0x00000001, 0x00000002, 0x00000004, 0x00000006,
+    0x00000004, 0x00000002, 0x00000000, 0x00000005, 0x00000002, 0x0000011c, 0x00000000, 0x00000000,
+    0x00010000, 0x00000007, 0x00000001, 0x00000000, 0x00000000, 0x00000001, 0x00000001, 0x00000000,
+    0x00000003, 0x00000000, 0x0000017e, 0x00000000, 0x00010001, 0x00000001, 0x00000173, 0x00000004,
+    0x00021070, 0x000e0000, 0x00010001, 0x00000000, 0x00000178, 0x00000001, 0x0000000e, 0x00000001,
+    0x3c060003, 0x74696e69, 0x4c06003e, 0x6e69614d, 0x4c12003b, 0x6176616a, 0x6e616c2f, 0x624f2f67,
+    0x7463656a, 0x4d09003b, 0x2e6e6961, 0x6176616a, 0x00560100, 0x004c5602, 0x6a4c5b13, 0x2f617661,
+    0x676e616c, 0x7274532f, 0x3b676e69, 0x616d0400, 0x01006e69, 0x000e0700, 0x07000103, 0x0000000e,
+    0x81000002, 0x01f00480, 0x02880901, 0x0000000c, 0x00000000, 0x00000001, 0x00000000, 0x00000001,
+    0x00000008, 0x00000070, 0x00000002, 0x00000004, 0x00000090, 0x00000003, 0x00000002, 0x000000a0,
+    0x00000005, 0x00000003, 0x000000b8, 0x00000006, 0x00000001, 0x000000d0, 0x00002001, 0x00000002,
+    0x000000f0, 0x00001001, 0x00000001, 0x0000011c, 0x00002002, 0x00000008, 0x00000122, 0x00002003,
+    0x00000002, 0x00000173, 0x00002000, 0x00000001, 0x0000017e, 0x00001000, 0x00000001, 0x0000018c,
+};
+
+TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
+  StartProcess([]() {
+    TemporaryDir td;
+    std::string tmp_so_name;
+    if (!CopySharedLibrary(td.path, &tmp_so_name)) {
+      _exit(1);
+    }
+
+    // In order to cause libunwindstack to look for this __dex_debug_descriptor
+    // move the library to which has a basename of libart.so.
+    std::string art_so_name = android::base::Dirname(tmp_so_name) + "/libart.so";
+    ASSERT_EQ(0, rename(tmp_so_name.c_str(), art_so_name.c_str()));
+    void* handle = dlopen(art_so_name.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (handle == nullptr) {
+      _exit(1);
+    }
+
+    void* ptr =
+        mmap(nullptr, sizeof(kDexData), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    ASSERT_TRUE(ptr != MAP_FAILED);
+    memcpy(ptr, kDexData, sizeof(kDexData));
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, ptr, sizeof(kDexData), "dex");
+
+    JITCodeEntry dex_entry = {.symfile_addr = reinterpret_cast<uintptr_t>(ptr),
+                              .symfile_size = sizeof(kDexData)};
+
+    JITDescriptor* dex_debug =
+        reinterpret_cast<JITDescriptor*>(dlsym(handle, "__dex_debug_descriptor"));
+    ASSERT_TRUE(dex_debug != nullptr);
+    dex_debug->version = 1;
+    dex_debug->action_flag = 0;
+    dex_debug->relevant_entry = 0;
+    dex_debug->first_entry = reinterpret_cast<uintptr_t>(&dex_entry);
+
+    // This sets the magic dex pc value for register 0, using the value
+    // of register 1 + 0x102.
+    asm(".cfi_escape "
+        "0x16 /* DW_CFA_val_expression */, 0, 0x0a /* size */,"
+        "0x0c /* DW_OP_const4u */, 0x44, 0x45, 0x58, 0x31, /* magic = 'DEX1' */"
+        "0x13 /* DW_OP_drop */,"
+        "0x92 /* DW_OP_bregx */, 1, 0x82, 0x02 /* 2-byte SLEB128 */");
+
+    // For each different architecture, set register one to the dex ptr mmap
+    // created above. Then do a nullptr dereference to force a crash.
+#if defined(__arm__)
+    asm volatile(
+        "mov r1, %[base]\n"
+        "mov r2, 0\n"
+        "str r3, [r2]\n"
+        : [base] "+r"(ptr)
+        :
+        : "r1", "r2", "r3", "memory");
+#elif defined(__aarch64__)
+    asm volatile(
+        "mov x1, %[base]\n"
+        "mov x2, 0\n"
+        "str x3, [x2]\n"
+        : [base] "+r"(ptr)
+        :
+        : "x1", "x2", "x3", "memory");
+#elif defined(__i386__)
+    asm volatile(
+        "mov %[base], %%ecx\n"
+        "movl $0, %%edi\n"
+        "movl 0(%%edi), %%edx\n"
+        : [base] "+r"(ptr)
+        :
+        : "edi", "ecx", "edx", "memory");
+#elif defined(__x86_64__)
+    asm volatile(
+        "mov %[base], %%rdx\n"
+        "movq 0, %%rdi\n"
+        "movq 0(%%rdi), %%rcx\n"
+        : [base] "+r"(ptr)
+        :
+        : "rcx", "rdx", "rdi", "memory");
+#else
+#error "Unsupported architecture"
+#endif
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // Verify the process crashed properly.
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0)");
+
+  // Now verify that the dex_pc frame includes a proper function name.
+  ASSERT_MATCH(result, R"( \[anon:dex\] \(Main\.\<init\>\+2)");
 }
