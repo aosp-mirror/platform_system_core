@@ -107,16 +107,61 @@ static enum dev_type dev_type = UNKNOWN_RPMB;
 
 static const char* UFS_WAKE_LOCK_NAME = "ufs_seq_wakelock";
 
-static void print_buf(FILE* handle, const char* prefix, const uint8_t* buf, size_t size) {
+/**
+ * log_buf - Log a byte buffer to the android log.
+ * @priority: One of ANDROID_LOG_* priority levels from android_LogPriority in
+ *            android/log.h
+ * @prefix:   A null-terminated string that identifies this buffer. Must be less
+ *            than 128 bytes.
+ * @buf:      Buffer to dump.
+ * @size:     Length of @buf in bytes.
+ */
+#define LOG_BUF_SIZE 256
+static int log_buf(int priority, const char* prefix, const uint8_t* buf, size_t size) {
+    int rc;
     size_t i;
+    char line[LOG_BUF_SIZE] = {0};
+    char* cur = line;
 
-    fprintf(handle, "%s @%p [%zu]", prefix, buf, size);
-    for (i = 0; i < size; i++) {
-        if (i && i % 32 == 0) fprintf(handle, "\n%*s", (int)strlen(prefix), "");
-        fprintf(handle, " %02x", buf[i]);
+    rc = snprintf(line, LOG_BUF_SIZE, "%s @%p [%zu]", prefix, buf, size);
+    if (rc < 0 || rc >= LOG_BUF_SIZE) {
+        goto err;
     }
-    fprintf(handle, "\n");
-    fflush(handle);
+    cur += rc;
+    for (i = 0; i < size; i++) {
+        if (i % 32 == 0) {
+            /*
+             * Flush the line out to the log after we have printed 32 bytes
+             * (also flushes the header line on the first iteration and sets up
+             * for printing the buffer itself)
+             */
+            LOG_PRI(priority, LOG_TAG, "%s", line);
+            memset(line, 0, LOG_BUF_SIZE);
+            cur = line;
+            /* Shift output over by the length of the prefix */
+            rc = snprintf(line, LOG_BUF_SIZE, "%*s", (int)strlen(prefix), "");
+            if (rc < 0 || rc >= LOG_BUF_SIZE) {
+                goto err;
+            }
+            cur += rc;
+        }
+        rc = snprintf(cur, LOG_BUF_SIZE - (cur - line), "%02x ", buf[i]);
+        if (rc < 0 || rc >= LOG_BUF_SIZE - (cur - line)) {
+            goto err;
+        }
+        cur += rc;
+    }
+    LOG_PRI(priority, LOG_TAG, "%s", line);
+
+    return 0;
+
+err:
+    if (rc < 0) {
+        return rc;
+    } else {
+        ALOGE("log_buf prefix was too long");
+        return -1;
+    }
 }
 
 static void set_sg_io_hdr(sg_io_hdr_t* io_hdrp, int dxfer_direction, unsigned char cmd_len,
@@ -194,7 +239,7 @@ static bool check_scsi_sense(const uint8_t* sense_buf, size_t len) {
 
     ALOGE("Unexpected SCSI sense data: key=%hhu, asc=%hhu, ascq=%hhu\n", sense_key,
           additional_sense_code, additional_sense_code_qualifier);
-    print_buf(stderr, "sense buffer: ", sense_buf, len);
+    log_buf(ANDROID_LOG_ERROR, "sense buffer: ", sense_buf, len);
     return false;
 }
 
@@ -257,7 +302,7 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
         mmc_ioc_cmd_set_data((*cmd), write_buf);
 #ifdef RPMB_DEBUG
         ALOGI("opcode: 0x%x, write_flag: 0x%x\n", cmd->opcode, cmd->write_flag);
-        print_buf(stdout, "request: ", write_buf, req->reliable_write_size);
+        log_buf(ANDROID_LOG_INFO, "request: ", write_buf, req->reliable_write_size);
 #endif
         write_buf += req->reliable_write_size;
         mmc.multi.num_of_cmds++;
@@ -273,7 +318,7 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
         mmc_ioc_cmd_set_data((*cmd), write_buf);
 #ifdef RPMB_DEBUG
         ALOGI("opcode: 0x%x, write_flag: 0x%x\n", cmd->opcode, cmd->write_flag);
-        print_buf(stdout, "request: ", write_buf, req->write_size);
+        log_buf(ANDROID_LOG_INFO, "request: ", write_buf, req->write_size);
 #endif
         write_buf += req->write_size;
         mmc.multi.num_of_cmds++;
@@ -460,7 +505,7 @@ int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
         goto err_response;
     }
 #ifdef RPMB_DEBUG
-    if (req->read_size) print_buf(stdout, "response: ", read_buf, req->read_size);
+    if (req->read_size) log_buf(ANDROID_LOG_INFO, "response: ", read_buf, req->read_size);
 #endif
 
     if (msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) {
