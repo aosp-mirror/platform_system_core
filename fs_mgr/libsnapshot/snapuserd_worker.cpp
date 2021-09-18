@@ -287,16 +287,36 @@ int WorkerThread::ReadData(sector_t sector, size_t size) {
     it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
                           Snapuserd::compare);
 
-    if (!(it != chunk_vec.end())) {
-        SNAP_LOG(ERROR) << "ReadData: Sector " << sector << " not found in chunk_vec";
-        return -1;
+    bool read_end_of_device = false;
+    if (it == chunk_vec.end()) {
+        // |-------|-------|-------|
+        // 0       1       2       3
+        //
+        // Block 0 - op 1
+        // Block 1 - op 2
+        // Block 2 - op 3
+        //
+        // chunk_vec will have block 0, 1, 2 which maps to relavant COW ops.
+        //
+        // Each block is 4k bytes. Thus, the last block will span 8 sectors
+        // ranging till block 3 (However, block 3 won't be in chunk_vec as
+        // it doesn't have any mapping to COW ops. Now, if we get an I/O request for a sector
+        // spanning between block 2 and block 3, we need to step back
+        // and get hold of the last element.
+        //
+        // Additionally, dm-snapshot makes sure that I/O request beyond block 3
+        // will not be routed to the daemon. Hence, it is safe to assume that
+        // if a sector is not available in the chunk_vec, the I/O falls in the
+        // end of region.
+        it = std::prev(chunk_vec.end());
+        read_end_of_device = true;
     }
 
     // We didn't find the required sector; hence find the previous sector
     // as lower_bound will gives us the value greater than
     // the requested sector
     if (it->first != sector) {
-        if (it != chunk_vec.begin()) {
+        if (it != chunk_vec.begin() && !read_end_of_device) {
             --it;
         }
 
