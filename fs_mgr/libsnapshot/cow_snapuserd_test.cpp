@@ -108,6 +108,7 @@ class CowSnapuserdTest final {
     void MergeInterruptFixed(int duration);
     void MergeInterruptRandomly(int max_duration);
     void ReadDmUserBlockWithoutDaemon();
+    void ReadLastBlock();
 
     std::string snapshot_dev() const { return snapshot_dev_->path(); }
 
@@ -254,6 +255,73 @@ void CowSnapuserdTest::StartSnapuserdDaemon() {
         client_ = SnapuserdClient::Connect(kSnapuserdSocketTest, 10s);
         ASSERT_NE(client_, nullptr);
     }
+}
+
+void CowSnapuserdTest::ReadLastBlock() {
+    unique_fd rnd_fd;
+    total_base_size_ = BLOCK_SZ * 2;
+
+    base_fd_ = CreateTempFile("base_device", total_base_size_);
+    ASSERT_GE(base_fd_, 0);
+
+    rnd_fd.reset(open("/dev/random", O_RDONLY));
+    ASSERT_TRUE(rnd_fd > 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(BLOCK_SZ);
+
+    for (size_t j = 0; j < ((total_base_size_) / BLOCK_SZ); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), BLOCK_SZ, 0), true);
+        ASSERT_EQ(android::base::WriteFully(base_fd_, random_buffer.get(), BLOCK_SZ), true);
+    }
+
+    ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
+
+    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
+    ASSERT_TRUE(base_loop_->valid());
+
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(total_base_size_);
+    loff_t offset = 0;
+
+    // Fill random data
+    for (size_t j = 0; j < (total_base_size_ / BLOCK_SZ); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, BLOCK_SZ, 0),
+                  true);
+
+        offset += BLOCK_SZ;
+    }
+
+    CowOptions options;
+    options.compression = "gz";
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+
+    ASSERT_TRUE(writer.AddRawBlocks(0, random_buffer_1_.get(), BLOCK_SZ));
+    ASSERT_TRUE(writer.AddRawBlocks(1, (char*)random_buffer_1_.get() + BLOCK_SZ, BLOCK_SZ));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    SetDeviceControlName();
+
+    StartSnapuserdDaemon();
+    InitCowDevice();
+
+    CreateDmUserDevice();
+    InitDaemon();
+
+    CreateSnapshotDevice();
+
+    unique_fd snapshot_fd(open(snapshot_dev_->path().c_str(), O_RDONLY));
+    ASSERT_TRUE(snapshot_fd > 0);
+
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(BLOCK_SZ);
+
+    offset = 7680;
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapuserd_buffer.get(), 512, offset), true);
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)random_buffer_1_.get() + offset, 512), 0);
 }
 
 void CowSnapuserdTest::CreateBaseDevice() {
@@ -1065,6 +1133,12 @@ TEST(Snapuserd_Test, Snapshot_IO_TEST) {
     harness.ReadSnapshotDeviceAndValidate();
     ASSERT_TRUE(harness.Merge());
     harness.ValidateMerge();
+    harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, Snapshot_END_IO_TEST) {
+    CowSnapuserdTest harness;
+    harness.ReadLastBlock();
     harness.Shutdown();
 }
 
