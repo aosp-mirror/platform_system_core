@@ -776,11 +776,13 @@ on post-fs-data
     # Create directories to push tests to for each linker namespace.
     # Create the subdirectories in case the first test is run as root
     # so it doesn't end up owned by root.
-    mkdir /data/local/tests 0700 shell shell
-    mkdir /data/local/tests/product 0700 shell shell
-    mkdir /data/local/tests/system 0700 shell shell
-    mkdir /data/local/tests/unrestricted 0700 shell shell
-    mkdir /data/local/tests/vendor 0700 shell shell
+    # Set directories to be executable by any process so that debuggerd,
+    # aka crash_dump, can read any executables/shared libraries.
+    mkdir /data/local/tests 0701 shell shell
+    mkdir /data/local/tests/product 0701 shell shell
+    mkdir /data/local/tests/system 0701 shell shell
+    mkdir /data/local/tests/unrestricted 0701 shell shell
+    mkdir /data/local/tests/vendor 0701 shell shell
 
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root encryption=Require
