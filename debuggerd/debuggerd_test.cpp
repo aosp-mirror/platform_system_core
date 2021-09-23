@@ -57,6 +57,7 @@
 #include <libminijail.h>
 #include <scoped_minijail.h>
 
+#include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "libdebuggerd/utility.h"
 #include "protocol.h"
@@ -1888,4 +1889,300 @@ TEST_F(CrasherTest, intercept_for_main_thread_signal_on_side_thread) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+}
+
+static std::string format_pointer(uintptr_t ptr) {
+#if defined(__LP64__)
+  return android::base::StringPrintf("%08x'%08x", static_cast<uint32_t>(ptr >> 32),
+                                     static_cast<uint32_t>(ptr & 0xffffffff));
+#else
+  return android::base::StringPrintf("%08x", static_cast<uint32_t>(ptr & 0xffffffff));
+#endif
+}
+
+static std::string format_pointer(void* ptr) {
+  return format_pointer(reinterpret_cast<uintptr_t>(ptr));
+}
+
+static std::string format_full_pointer(uintptr_t ptr) {
+#if defined(__LP64__)
+  return android::base::StringPrintf("%016" PRIx64, ptr);
+#else
+  return android::base::StringPrintf("%08x", ptr);
+#endif
+}
+
+static std::string format_full_pointer(void* ptr) {
+  return format_full_pointer(reinterpret_cast<uintptr_t>(ptr));
+}
+
+__attribute__((__noinline__)) int crash_call(uintptr_t ptr) {
+  int* crash_ptr = reinterpret_cast<int*>(ptr);
+  *crash_ptr = 1;
+  return *crash_ptr;
+}
+
+// Verify that a fault address before the first map is properly handled.
+TEST_F(CrasherTest, fault_address_before_first_map) {
+  StartProcess([]() {
+    ASSERT_EQ(0, crash_call(0x1024));
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x1024)");
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\):\n)");
+
+  std::string match_str = android::base::StringPrintf(
+      R"(memory map .*:\n--->Fault address falls at %s before any mapped regions\n    )",
+      format_pointer(0x1024).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address after the last map is properly handled.
+TEST_F(CrasherTest, fault_address_after_last_map) {
+  uintptr_t crash_uptr = untag_address(UINTPTR_MAX - 15);
+  StartProcess([crash_uptr]() {
+    ASSERT_EQ(0, crash_call(crash_uptr));
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
+  match_str += android::base::StringPrintf("0x%" PRIxPTR, crash_uptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  // Assumes that the open files section comes after the map section.
+  // If that assumption changes, the regex below needs to change.
+  match_str = android::base::StringPrintf(
+      R"(\n--->Fault address falls at %s after any mapped regions\n\nopen files:)",
+      format_pointer(crash_uptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address between maps is properly handled.
+TEST_F(CrasherTest, fault_address_between_maps) {
+  // Create a map before the fork so it will be present in the child.
+  void* start_ptr =
+      mmap(nullptr, 3 * getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, start_ptr);
+  // Unmap the page in the middle.
+  void* middle_ptr =
+      reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(start_ptr) + getpagesize());
+  ASSERT_EQ(0, munmap(middle_ptr, getpagesize()));
+
+  StartProcess([middle_ptr]() {
+    ASSERT_EQ(0, crash_call(reinterpret_cast<uintptr_t>(middle_ptr)));
+    _exit(0);
+  });
+
+  // Unmap the two maps.
+  ASSERT_EQ(0, munmap(start_ptr, getpagesize()));
+  void* end_ptr =
+      reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(start_ptr) + 2 * getpagesize());
+  ASSERT_EQ(0, munmap(end_ptr, getpagesize()));
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
+  match_str += android::base::StringPrintf("%p", middle_ptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  match_str = android::base::StringPrintf(
+      R"(    %s.*\n--->Fault address falls at %s between mapped regions\n    %s)",
+      format_pointer(start_ptr).c_str(), format_pointer(middle_ptr).c_str(),
+      format_pointer(end_ptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that a fault address happens in the correct map.
+TEST_F(CrasherTest, fault_address_in_map) {
+  // Create a map before the fork so it will be present in the child.
+  void* ptr = mmap(nullptr, getpagesize(), 0, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, ptr);
+
+  StartProcess([ptr]() {
+    ASSERT_EQ(0, crash_call(reinterpret_cast<uintptr_t>(ptr)));
+    _exit(0);
+  });
+
+  ASSERT_EQ(0, munmap(ptr, getpagesize()));
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\), fault addr )";
+  match_str += android::base::StringPrintf("%p", ptr);
+  ASSERT_MATCH(result, match_str);
+
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+
+  match_str = android::base::StringPrintf(R"(\n--->%s.*\n)", format_pointer(ptr).c_str());
+  ASSERT_MATCH(result, match_str);
+}
+
+static constexpr uint32_t kDexData[] = {
+    0x0a786564, 0x00383330, 0xc98b3ab8, 0xf3749d94, 0xaecca4d8, 0xffc7b09a, 0xdca9ca7f, 0x5be5deab,
+    0x00000220, 0x00000070, 0x12345678, 0x00000000, 0x00000000, 0x0000018c, 0x00000008, 0x00000070,
+    0x00000004, 0x00000090, 0x00000002, 0x000000a0, 0x00000000, 0x00000000, 0x00000003, 0x000000b8,
+    0x00000001, 0x000000d0, 0x00000130, 0x000000f0, 0x00000122, 0x0000012a, 0x00000132, 0x00000146,
+    0x00000151, 0x00000154, 0x00000158, 0x0000016d, 0x00000001, 0x00000002, 0x00000004, 0x00000006,
+    0x00000004, 0x00000002, 0x00000000, 0x00000005, 0x00000002, 0x0000011c, 0x00000000, 0x00000000,
+    0x00010000, 0x00000007, 0x00000001, 0x00000000, 0x00000000, 0x00000001, 0x00000001, 0x00000000,
+    0x00000003, 0x00000000, 0x0000017e, 0x00000000, 0x00010001, 0x00000001, 0x00000173, 0x00000004,
+    0x00021070, 0x000e0000, 0x00010001, 0x00000000, 0x00000178, 0x00000001, 0x0000000e, 0x00000001,
+    0x3c060003, 0x74696e69, 0x4c06003e, 0x6e69614d, 0x4c12003b, 0x6176616a, 0x6e616c2f, 0x624f2f67,
+    0x7463656a, 0x4d09003b, 0x2e6e6961, 0x6176616a, 0x00560100, 0x004c5602, 0x6a4c5b13, 0x2f617661,
+    0x676e616c, 0x7274532f, 0x3b676e69, 0x616d0400, 0x01006e69, 0x000e0700, 0x07000103, 0x0000000e,
+    0x81000002, 0x01f00480, 0x02880901, 0x0000000c, 0x00000000, 0x00000001, 0x00000000, 0x00000001,
+    0x00000008, 0x00000070, 0x00000002, 0x00000004, 0x00000090, 0x00000003, 0x00000002, 0x000000a0,
+    0x00000005, 0x00000003, 0x000000b8, 0x00000006, 0x00000001, 0x000000d0, 0x00002001, 0x00000002,
+    0x000000f0, 0x00001001, 0x00000001, 0x0000011c, 0x00002002, 0x00000008, 0x00000122, 0x00002003,
+    0x00000002, 0x00000173, 0x00002000, 0x00000001, 0x0000017e, 0x00001000, 0x00000001, 0x0000018c,
+};
+
+TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
+  StartProcess([]() {
+    TemporaryDir td;
+    std::string tmp_so_name;
+    if (!CopySharedLibrary(td.path, &tmp_so_name)) {
+      _exit(1);
+    }
+
+    // In order to cause libunwindstack to look for this __dex_debug_descriptor
+    // move the library to which has a basename of libart.so.
+    std::string art_so_name = android::base::Dirname(tmp_so_name) + "/libart.so";
+    ASSERT_EQ(0, rename(tmp_so_name.c_str(), art_so_name.c_str()));
+    void* handle = dlopen(art_so_name.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (handle == nullptr) {
+      _exit(1);
+    }
+
+    void* ptr =
+        mmap(nullptr, sizeof(kDexData), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    ASSERT_TRUE(ptr != MAP_FAILED);
+    memcpy(ptr, kDexData, sizeof(kDexData));
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, ptr, sizeof(kDexData), "dex");
+
+    JITCodeEntry dex_entry = {.symfile_addr = reinterpret_cast<uintptr_t>(ptr),
+                              .symfile_size = sizeof(kDexData)};
+
+    JITDescriptor* dex_debug =
+        reinterpret_cast<JITDescriptor*>(dlsym(handle, "__dex_debug_descriptor"));
+    ASSERT_TRUE(dex_debug != nullptr);
+    dex_debug->version = 1;
+    dex_debug->action_flag = 0;
+    dex_debug->relevant_entry = 0;
+    dex_debug->first_entry = reinterpret_cast<uintptr_t>(&dex_entry);
+
+    // This sets the magic dex pc value for register 0, using the value
+    // of register 1 + 0x102.
+    asm(".cfi_escape "
+        "0x16 /* DW_CFA_val_expression */, 0, 0x0a /* size */,"
+        "0x0c /* DW_OP_const4u */, 0x44, 0x45, 0x58, 0x31, /* magic = 'DEX1' */"
+        "0x13 /* DW_OP_drop */,"
+        "0x92 /* DW_OP_bregx */, 1, 0x82, 0x02 /* 2-byte SLEB128 */");
+
+    // For each different architecture, set register one to the dex ptr mmap
+    // created above. Then do a nullptr dereference to force a crash.
+#if defined(__arm__)
+    asm volatile(
+        "mov r1, %[base]\n"
+        "mov r2, 0\n"
+        "str r3, [r2]\n"
+        : [base] "+r"(ptr)
+        :
+        : "r1", "r2", "r3", "memory");
+#elif defined(__aarch64__)
+    asm volatile(
+        "mov x1, %[base]\n"
+        "mov x2, 0\n"
+        "str x3, [x2]\n"
+        : [base] "+r"(ptr)
+        :
+        : "x1", "x2", "x3", "memory");
+#elif defined(__i386__)
+    asm volatile(
+        "mov %[base], %%ecx\n"
+        "movl $0, %%edi\n"
+        "movl 0(%%edi), %%edx\n"
+        : [base] "+r"(ptr)
+        :
+        : "edi", "ecx", "edx", "memory");
+#elif defined(__x86_64__)
+    asm volatile(
+        "mov %[base], %%rdx\n"
+        "movq 0, %%rdi\n"
+        "movq 0(%%rdi), %%rcx\n"
+        : [base] "+r"(ptr)
+        :
+        : "rcx", "rdx", "rdi", "memory");
+#else
+#error "Unsupported architecture"
+#endif
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // Verify the process crashed properly.
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0)");
+
+  // Now verify that the dex_pc frame includes a proper function name.
+  ASSERT_MATCH(result, R"( \[anon:dex\] \(Main\.\<init\>\+2)");
 }
