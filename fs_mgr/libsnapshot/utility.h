@@ -57,14 +57,14 @@ struct AutoDeviceList {
 // Automatically unmap a device upon deletion.
 struct AutoUnmapDevice : AutoDevice {
     // On destruct, delete |name| from device mapper.
-    AutoUnmapDevice(android::dm::DeviceMapper* dm, const std::string& name)
+    AutoUnmapDevice(android::dm::IDeviceMapper* dm, const std::string& name)
         : AutoDevice(name), dm_(dm) {}
     AutoUnmapDevice(AutoUnmapDevice&& other) = default;
     ~AutoUnmapDevice();
 
   private:
     DISALLOW_COPY_AND_ASSIGN(AutoUnmapDevice);
-    android::dm::DeviceMapper* dm_ = nullptr;
+    android::dm::IDeviceMapper* dm_ = nullptr;
 };
 
 // Automatically unmap an image upon deletion.
