@@ -332,7 +332,7 @@ TEST_F(TombstoneTest, dump_log_file_error) {
   ASSERT_STREQ("", tombstone_contents.c_str());
 
   ASSERT_STREQ("", getFakeLogBuf().c_str());
-  ASSERT_STREQ("6 DEBUG Unable to open /fake/filename: Permission denied\n\n",
+  ASSERT_STREQ("6 DEBUG Unable to open /fake/filename: Permission denied (EACCES)\n\n",
                getFakeLogPrint().c_str());
 
   ASSERT_STREQ("", amfd_data_.c_str());
