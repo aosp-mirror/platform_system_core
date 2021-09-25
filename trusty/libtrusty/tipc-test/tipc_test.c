@@ -45,13 +45,14 @@ static const char *closer3_name = "com.android.ipc-unittest.srv.closer3";
 static const char *main_ctrl_name = "com.android.ipc-unittest.ctrl";
 static const char* receiver_name = "com.android.trusty.memref.receiver";
 
-static const char *_sopts = "hsvD:t:r:m:b:";
+static const char* _sopts = "hsvDS:t:r:m:b:";
 /* clang-format off */
 static const struct option _lopts[] =  {
     {"help",    no_argument,       0, 'h'},
     {"silent",  no_argument,       0, 's'},
     {"variable",no_argument,       0, 'v'},
     {"dev",     required_argument, 0, 'D'},
+    {"srv",     required_argument, 0, 'S'},
     {"repeat",  required_argument, 0, 'r'},
     {"burst",   required_argument, 0, 'b'},
     {"msgsize", required_argument, 0, 'm'},
@@ -59,24 +60,25 @@ static const struct option _lopts[] =  {
 };
 /* clang-format on */
 
-static const char *usage =
-"Usage: %s [options]\n"
-"\n"
-"options:\n"
-"  -h, --help            prints this message and exit\n"
-"  -D, --dev name        device name\n"
-"  -t, --test name       test to run\n"
-"  -r, --repeat cnt      repeat count\n"
-"  -m, --msgsize size    max message size\n"
-"  -v, --variable        variable message size\n"
-"  -s, --silent          silent\n"
-"\n"
-;
+static const char* usage =
+        "Usage: %s [options]\n"
+        "\n"
+        "options:\n"
+        "  -h, --help            prints this message and exit\n"
+        "  -D, --dev name        device name\n"
+        "  -S, --srv name        service name\n"
+        "  -t, --test name       test to run\n"
+        "  -r, --repeat cnt      repeat count\n"
+        "  -b, --burst cnt       burst count\n"
+        "  -m, --msgsize size    max message size\n"
+        "  -v, --variable        variable message size\n"
+        "  -s, --silent          silent\n"
+        "\n";
 
 static const char* usage_long =
         "\n"
         "The following tests are available:\n"
-        "   connect      - connect to datasink service\n"
+        "   connect      - connect to specified service, defaults to echo+datasink\n"
         "   connect_foo  - connect to non existing service\n"
         "   burst_write  - send messages to datasink service\n"
         "   echo         - send/receive messages to echo service\n"
@@ -98,6 +100,7 @@ static uint opt_msgsize = 32;
 static uint opt_msgburst = 32;
 static bool opt_variable = false;
 static bool opt_silent = false;
+static char* srv_name = NULL;
 
 static void print_usage_and_exit(const char *prog, int code, bool verbose)
 {
@@ -118,6 +121,10 @@ static void parse_options(int argc, char **argv)
         switch (c) {
             case 'D':
                 dev_name = strdup(optarg);
+                break;
+
+            case 'S':
+                srv_name = strdup(optarg);
                 break;
 
             case 't':
@@ -159,26 +166,37 @@ static int connect_test(uint repeat)
     uint i;
     int echo_fd;
     int dsink_fd;
+    int custom_fd;
 
     if (!opt_silent) {
         printf("%s: repeat = %u\n", __func__, repeat);
     }
 
     for (i = 0; i < repeat; i++) {
-        echo_fd = tipc_connect(dev_name, echo_name);
-        if (echo_fd < 0) {
-            fprintf(stderr, "Failed to connect to '%s' service\n", "echo");
-        }
-        dsink_fd = tipc_connect(dev_name, datasink_name);
-        if (dsink_fd < 0) {
-            fprintf(stderr, "Failed to connect to '%s' service\n", "datasink");
-        }
+        if (srv_name) {
+            custom_fd = tipc_connect(dev_name, srv_name);
+            if (custom_fd < 0) {
+                fprintf(stderr, "Failed to connect to '%s' service\n", srv_name);
+            }
+            if (custom_fd >= 0) {
+                tipc_close(custom_fd);
+            }
+        } else {
+            echo_fd = tipc_connect(dev_name, echo_name);
+            if (echo_fd < 0) {
+                fprintf(stderr, "Failed to connect to '%s' service\n", "echo");
+            }
+            dsink_fd = tipc_connect(dev_name, datasink_name);
+            if (dsink_fd < 0) {
+                fprintf(stderr, "Failed to connect to '%s' service\n", "datasink");
+            }
 
-        if (echo_fd >= 0) {
-            tipc_close(echo_fd);
-        }
-        if (dsink_fd >= 0) {
-            tipc_close(dsink_fd);
+            if (echo_fd >= 0) {
+                tipc_close(echo_fd);
+            }
+            if (dsink_fd >= 0) {
+                tipc_close(dsink_fd);
+            }
         }
     }
 

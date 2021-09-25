@@ -58,6 +58,7 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->last_label_ = last_label_;
     cow->ops_ = ops_;
     cow->merge_op_blocks_ = merge_op_blocks_;
+    cow->merge_op_start_ = merge_op_start_;
     cow->block_map_ = block_map_;
     cow->num_total_data_ops_ = num_total_data_ops_;
     cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
@@ -468,12 +469,49 @@ bool CowReader::PrepMergeOps() {
 
     num_total_data_ops_ = merge_op_blocks->size();
     if (header_.num_merge_ops > 0) {
-        merge_op_blocks->erase(merge_op_blocks->begin(),
-                               merge_op_blocks->begin() + header_.num_merge_ops);
+        merge_op_start_ = header_.num_merge_ops;
     }
 
     block_map_ = block_map;
     merge_op_blocks_ = merge_op_blocks;
+    return true;
+}
+
+bool CowReader::VerifyMergeOps() {
+    auto itr = GetMergeOpIter(true);
+    std::unordered_map<uint64_t, CowOperation> overwritten_blocks;
+    while (!itr->Done()) {
+        CowOperation op = itr->Get();
+        uint64_t block;
+        bool offset;
+        if (op.type == kCowCopyOp) {
+            block = op.source;
+            offset = false;
+        } else if (op.type == kCowXorOp) {
+            block = op.source / BLOCK_SZ;
+            offset = (op.source % BLOCK_SZ) != 0;
+        } else {
+            itr->Next();
+            continue;
+        }
+
+        CowOperation* overwrite = nullptr;
+        if (overwritten_blocks.count(block)) {
+            overwrite = &overwritten_blocks[block];
+            LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
+                       << op << "\noverwritten by previously merged op:\n"
+                       << *overwrite;
+        }
+        if (offset && overwritten_blocks.count(block + 1)) {
+            overwrite = &overwritten_blocks[block + 1];
+            LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
+                       << op << "\noverwritten by previously merged op:\n"
+                       << *overwrite;
+        }
+        if (overwrite != nullptr) return false;
+        overwritten_blocks[op.new_block] = op;
+        itr->Next();
+    }
     return true;
 }
 
@@ -530,7 +568,8 @@ class CowRevMergeOpIter final : public ICowOpIter {
   public:
     explicit CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
                                std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
-                               std::shared_ptr<std::unordered_map<uint32_t, int>> map);
+                               std::shared_ptr<std::unordered_map<uint32_t, int>> map,
+                               uint64_t start);
 
     bool Done() override;
     const CowOperation& Get() override;
@@ -541,20 +580,67 @@ class CowRevMergeOpIter final : public ICowOpIter {
     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
     std::shared_ptr<std::unordered_map<uint32_t, int>> map_;
     std::vector<uint32_t>::reverse_iterator block_riter_;
+    uint64_t start_;
 };
 
-CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
-                                     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
-                                     std::shared_ptr<std::unordered_map<uint32_t, int>> map) {
+class CowMergeOpIter final : public ICowOpIter {
+  public:
+    explicit CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
+                            std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
+                            std::shared_ptr<std::unordered_map<uint32_t, int>> map, uint64_t start);
+
+    bool Done() override;
+    const CowOperation& Get() override;
+    void Next() override;
+
+  private:
+    std::shared_ptr<std::vector<CowOperation>> ops_;
+    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    std::shared_ptr<std::unordered_map<uint32_t, int>> map_;
+    std::vector<uint32_t>::iterator block_iter_;
+    uint64_t start_;
+};
+
+CowMergeOpIter::CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
+                               std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
+                               std::shared_ptr<std::unordered_map<uint32_t, int>> map,
+                               uint64_t start) {
     ops_ = ops;
     merge_op_blocks_ = merge_op_blocks;
     map_ = map;
+    start_ = start;
+
+    block_iter_ = merge_op_blocks->begin() + start;
+}
+
+bool CowMergeOpIter::Done() {
+    return block_iter_ == merge_op_blocks_->end();
+}
+
+void CowMergeOpIter::Next() {
+    CHECK(!Done());
+    block_iter_++;
+}
+
+const CowOperation& CowMergeOpIter::Get() {
+    CHECK(!Done());
+    return ops_->data()[map_->at(*block_iter_)];
+}
+
+CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
+                                     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks,
+                                     std::shared_ptr<std::unordered_map<uint32_t, int>> map,
+                                     uint64_t start) {
+    ops_ = ops;
+    merge_op_blocks_ = merge_op_blocks;
+    map_ = map;
+    start_ = start;
 
     block_riter_ = merge_op_blocks->rbegin();
 }
 
 bool CowRevMergeOpIter::Done() {
-    return block_riter_ == merge_op_blocks_->rend();
+    return block_riter_ == merge_op_blocks_->rend() - start_;
 }
 
 void CowRevMergeOpIter::Next() {
@@ -571,8 +657,14 @@ std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
     return std::make_unique<CowOpIter>(ops_);
 }
 
-std::unique_ptr<ICowOpIter> CowReader::GetRevMergeOpIter() {
-    return std::make_unique<CowRevMergeOpIter>(ops_, merge_op_blocks_, block_map_);
+std::unique_ptr<ICowOpIter> CowReader::GetRevMergeOpIter(bool ignore_progress) {
+    return std::make_unique<CowRevMergeOpIter>(ops_, merge_op_blocks_, block_map_,
+                                               ignore_progress ? 0 : merge_op_start_);
+}
+
+std::unique_ptr<ICowOpIter> CowReader::GetMergeOpIter(bool ignore_progress) {
+    return std::make_unique<CowMergeOpIter>(ops_, merge_op_blocks_, block_map_,
+                                            ignore_progress ? 0 : merge_op_start_);
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
