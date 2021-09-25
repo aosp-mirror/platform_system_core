@@ -75,8 +75,11 @@ class ICowReader {
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
+    // Return an iterator for retrieving CowOperation entries in reverse merge order
+    virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress) = 0;
+
     // Return an iterator for retrieving CowOperation entries in merge order
-    virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter() = 0;
+    virtual std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress) = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
@@ -109,6 +112,7 @@ class CowReader : public ICowReader {
     bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool InitForMerge(android::base::unique_fd&& fd);
+    bool VerifyMergeOps();
 
     bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
@@ -120,7 +124,8 @@ class CowReader : public ICowReader {
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
-    std::unique_ptr<ICowOpIter> GetRevMergeOpIter() override;
+    std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
+    std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
@@ -152,6 +157,7 @@ class CowReader : public ICowReader {
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    uint64_t merge_op_start_;
     std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
     uint64_t num_total_data_ops_;
     uint64_t num_ordered_ops_to_merge_;
