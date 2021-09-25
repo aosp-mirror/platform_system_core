@@ -179,8 +179,15 @@ static void set_sg_io_hdr(sg_io_hdr_t* io_hdrp, int dxfer_direction, unsigned ch
     io_hdrp->timeout = TIMEOUT;
 }
 
-/* Returns false if the sense data was valid and no errors were present */
-static bool check_scsi_sense(const uint8_t* sense_buf, size_t len) {
+/**
+ * unexpected_scsi_sense - Check for unexpected codes in the sense buffer.
+ * @sense_buf: buffer containing sense data
+ * @len:       length of @sense_buf
+ *
+ * Return: %true if the sense data is not valid or contains an unexpected sense
+ * code, %false otherwise.
+ */
+static bool unexpected_scsi_sense(const uint8_t* sense_buf, size_t len) {
     uint8_t response_code = 0;
     uint8_t sense_key = 0;
     uint8_t additional_sense_code = 0;
@@ -189,14 +196,14 @@ static bool check_scsi_sense(const uint8_t* sense_buf, size_t len) {
 
     if (!sense_buf || len == 0) {
         ALOGE("Invalid SCSI sense buffer, length: %zu\n", len);
-        return false;
+        return true;
     }
 
     response_code = 0x7f & sense_buf[0];
 
     if (response_code < 0x70 || response_code > 0x73) {
         ALOGE("Invalid SCSI sense response code: %hhu\n", response_code);
-        return false;
+        return true;
     }
 
     if (response_code >= 0x72) {
@@ -234,13 +241,13 @@ static bool check_scsi_sense(const uint8_t* sense_buf, size_t len) {
         case 0x0f: /* COMPLETED, not present in kernel headers */
             ALOGD("SCSI success with sense data: key=%hhu, asc=%hhu, ascq=%hhu\n", sense_key,
                   additional_sense_code, additional_sense_code_qualifier);
-            return true;
+            return false;
     }
 
     ALOGE("Unexpected SCSI sense data: key=%hhu, asc=%hhu, ascq=%hhu\n", sense_key,
           additional_sense_code, additional_sense_code_qualifier);
     log_buf(ANDROID_LOG_ERROR, "sense buffer: ", sense_buf, len);
-    return false;
+    return true;
 }
 
 static void check_sg_io_hdr(const sg_io_hdr_t* io_hdrp) {
@@ -253,7 +260,7 @@ static void check_sg_io_hdr(const sg_io_hdr_t* io_hdrp) {
     }
 
     if (io_hdrp->masked_status != GOOD && io_hdrp->sb_len_wr > 0) {
-        bool sense_error = check_scsi_sense(io_hdrp->sbp, io_hdrp->sb_len_wr);
+        bool sense_error = unexpected_scsi_sense(io_hdrp->sbp, io_hdrp->sb_len_wr);
         if (sense_error) {
             ALOGE("Unexpected SCSI sense. masked_status: %hhu, host_status: %hu, driver_status: "
                   "%hu\n",
