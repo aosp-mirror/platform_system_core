@@ -18,7 +18,9 @@
 
 #include "libdebuggerd/tombstone.h"
 #include "libdebuggerd/gwp_asan.h"
+#if defined(USE_SCUDO)
 #include "libdebuggerd/scudo.h"
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -186,11 +188,13 @@ void set_human_readable_cause(Cause* cause, uint64_t fault_addr) {
 
 static void dump_probable_cause(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                                 const ProcessInfo& process_info, const ThreadInfo& main_thread) {
+#if defined(USE_SCUDO)
   ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
   if (scudo_crash_data.CrashIsMine()) {
     scudo_crash_data.AddCauseProtos(tombstone, unwinder);
     return;
   }
+#endif
 
   GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
                                        main_thread);
