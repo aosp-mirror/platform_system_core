@@ -1171,18 +1171,18 @@ TEST_F(CowTest, RevMergeOpItrTest) {
     ASSERT_TRUE(writer.Initialize(cow_->fd));
 
     ASSERT_TRUE(writer.AddSequenceData(6, sequence));
-    ASSERT_TRUE(writer.AddCopy(6, 3));
+    ASSERT_TRUE(writer.AddCopy(6, 13));
     ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
     ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
     ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
-    ASSERT_TRUE(writer.AddCopy(3, 5));
-    ASSERT_TRUE(writer.AddCopy(2, 1));
+    ASSERT_TRUE(writer.AddCopy(3, 15));
+    ASSERT_TRUE(writer.AddCopy(2, 11));
     ASSERT_TRUE(writer.AddZeroBlocks(4, 1));
     ASSERT_TRUE(writer.AddZeroBlocks(9, 1));
-    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddCopy(5, 16));
     ASSERT_TRUE(writer.AddZeroBlocks(1, 1));
-    ASSERT_TRUE(writer.AddCopy(10, 2));
-    ASSERT_TRUE(writer.AddCopy(7, 4));
+    ASSERT_TRUE(writer.AddCopy(10, 12));
+    ASSERT_TRUE(writer.AddCopy(7, 14));
     ASSERT_TRUE(writer.Finalize());
 
     // New block in cow order is 6, 12, 8, 11, 3, 2, 4, 9, 5, 1, 10, 7
@@ -1219,12 +1219,12 @@ TEST_F(CowTest, LegacyRevMergeOpItrTest) {
 
     ASSERT_TRUE(writer.Initialize(cow_->fd));
 
-    ASSERT_TRUE(writer.AddCopy(2, 1));
-    ASSERT_TRUE(writer.AddCopy(10, 2));
-    ASSERT_TRUE(writer.AddCopy(6, 3));
-    ASSERT_TRUE(writer.AddCopy(7, 4));
-    ASSERT_TRUE(writer.AddCopy(3, 5));
-    ASSERT_TRUE(writer.AddCopy(5, 6));
+    ASSERT_TRUE(writer.AddCopy(2, 11));
+    ASSERT_TRUE(writer.AddCopy(10, 12));
+    ASSERT_TRUE(writer.AddCopy(6, 13));
+    ASSERT_TRUE(writer.AddCopy(7, 14));
+    ASSERT_TRUE(writer.AddCopy(3, 15));
+    ASSERT_TRUE(writer.AddCopy(5, 16));
     ASSERT_TRUE(writer.AddZeroBlocks(12, 1));
     ASSERT_TRUE(writer.AddZeroBlocks(8, 1));
     ASSERT_TRUE(writer.AddZeroBlocks(11, 1));
@@ -1258,6 +1258,39 @@ TEST_F(CowTest, LegacyRevMergeOpItrTest) {
     }
     ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
     ASSERT_TRUE(iter->Done());
+}
+
+TEST_F(CowTest, InvalidMergeOrderTest) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    auto writer = std::make_unique<CowWriter>(options);
+    CowReader reader;
+
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer->AddCopy(3, 2));
+    ASSERT_TRUE(writer->AddCopy(2, 1));
+    ASSERT_TRUE(writer->AddLabel(1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_TRUE(reader.VerifyMergeOps());
+
+    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->AddCopy(4, 2));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_FALSE(reader.VerifyMergeOps());
+
+    writer = std::make_unique<CowWriter>(options);
+    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    ASSERT_TRUE(writer->AddCopy(2, 1));
+    ASSERT_TRUE(writer->AddXorBlocks(3, &data, data.size(), 1, 1));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_FALSE(reader.VerifyMergeOps());
 }
 
 }  // namespace snapshot
