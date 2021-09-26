@@ -57,9 +57,12 @@
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/gwp_asan.h"
 #include "libdebuggerd/open_files_list.h"
-#include "libdebuggerd/scudo.h"
 #include "libdebuggerd/utility.h"
 #include "util.h"
+
+#if defined(USE_SCUDO)
+#include "libdebuggerd/scudo.h"
+#endif
 
 #include "gwp_asan/common.h"
 #include "gwp_asan/crash_handler.h"
@@ -115,8 +118,26 @@ static std::string get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
   return "";
 }
 
-static void dump_probable_cause(log_t* log, const siginfo_t* si, unwindstack::Maps* maps,
-                                unwindstack::Regs* regs) {
+static void dump_probable_cause(log_t* log, unwindstack::Unwinder* unwinder,
+                                const ProcessInfo& process_info, const ThreadInfo& main_thread) {
+#if defined(USE_SCUDO)
+  ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
+  if (scudo_crash_data.CrashIsMine()) {
+    scudo_crash_data.DumpCause(log, unwinder);
+    return;
+  }
+#endif
+
+  GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
+                                       main_thread);
+  if (gwp_asan_crash_data.CrashIsMine()) {
+    gwp_asan_crash_data.DumpCause(log);
+    return;
+  }
+
+  unwindstack::Maps* maps = unwinder->GetMaps();
+  unwindstack::Regs* regs = main_thread.registers.get();
+  const siginfo_t* si = main_thread.siginfo;
   std::string cause;
   if (si->si_signo == SIGSEGV && si->si_code == SEGV_MAPERR) {
     if (si->si_addr < reinterpret_cast<void*>(4096)) {
@@ -395,22 +416,9 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
     dump_signal_info(log, thread_info, process_info, unwinder->GetProcessMemory().get());
   }
 
-  std::unique_ptr<GwpAsanCrashData> gwp_asan_crash_data;
-  std::unique_ptr<ScudoCrashData> scudo_crash_data;
   if (primary_thread) {
-    gwp_asan_crash_data = std::make_unique<GwpAsanCrashData>(unwinder->GetProcessMemory().get(),
-                                                             process_info, thread_info);
-    scudo_crash_data =
-        std::make_unique<ScudoCrashData>(unwinder->GetProcessMemory().get(), process_info);
-  }
+    dump_probable_cause(log, unwinder, process_info, thread_info);
 
-  if (primary_thread && gwp_asan_crash_data->CrashIsMine()) {
-    gwp_asan_crash_data->DumpCause(log);
-  } else if (thread_info.siginfo && !(primary_thread && scudo_crash_data->CrashIsMine())) {
-    dump_probable_cause(log, thread_info.siginfo, unwinder->GetMaps(), thread_info.registers.get());
-  }
-
-  if (primary_thread) {
     dump_abort_message(log, unwinder->GetProcessMemory().get(), process_info.abort_msg_address);
   }
 
@@ -432,15 +440,16 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   }
 
   if (primary_thread) {
-    if (gwp_asan_crash_data->HasDeallocationTrace()) {
-      gwp_asan_crash_data->DumpDeallocationTrace(log, unwinder);
+    GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
+                                         thread_info);
+
+    if (gwp_asan_crash_data.HasDeallocationTrace()) {
+      gwp_asan_crash_data.DumpDeallocationTrace(log, unwinder);
     }
 
-    if (gwp_asan_crash_data->HasAllocationTrace()) {
-      gwp_asan_crash_data->DumpAllocationTrace(log, unwinder);
+    if (gwp_asan_crash_data.HasAllocationTrace()) {
+      gwp_asan_crash_data.DumpAllocationTrace(log, unwinder);
     }
-
-    scudo_crash_data->DumpCause(log, unwinder);
 
     unwindstack::Maps* maps = unwinder->GetMaps();
     dump_memory_and_code(log, maps, unwinder->GetProcessMemory().get(),
