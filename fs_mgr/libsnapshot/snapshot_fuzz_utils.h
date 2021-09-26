@@ -101,7 +101,8 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
         : env_(env),
           data_(&data),
           partition_opener_(std::move(partition_opener)),
-          metadata_dir_(metadata_dir) {}
+          metadata_dir_(metadata_dir),
+          dm_(android::dm::DeviceMapper::Instance()) {}
 
     // Following APIs are mocked.
     std::string GetMetadataDir() const override { return metadata_dir_; }
@@ -125,6 +126,7 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     }
     bool IsRecovery() const override { return data_->is_recovery(); }
     bool IsFirstStageInit() const override { return false; }
+    android::dm::IDeviceMapper& GetDeviceMapper() override { return dm_; }
     std::unique_ptr<IImageManager> OpenImageManager() const {
         return env_->CheckCreateFakeImageManager();
     }
@@ -137,6 +139,7 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     std::unique_ptr<TestPartitionOpener> partition_opener_;
     std::string metadata_dir_;
     bool switched_slot_ = false;
+    android::dm::DeviceMapper& dm_;
 
     bool CurrentSlotIsA() const { return data_->slot_suffix_is_a() != switched_slot_; }
 };
