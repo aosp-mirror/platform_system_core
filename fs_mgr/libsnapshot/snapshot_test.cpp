@@ -56,6 +56,7 @@ namespace snapshot {
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
+using android::dm::IDeviceMapper;
 using android::fiemap::FiemapStatus;
 using android::fiemap::IImageManager;
 using android::fs_mgr::BlockDeviceInfo;
@@ -911,6 +912,11 @@ class SnapshotUpdateTest : public SnapshotTest {
             ASSERT_TRUE(hash.has_value());
             hashes_[name] = *hash;
         }
+
+        // OTA client blindly unmaps all partitions that are possibly mapped.
+        for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+            ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+        }
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
@@ -925,6 +931,14 @@ class SnapshotUpdateTest : public SnapshotTest {
         MountMetadata();
         for (const auto& suffix : {"_a", "_b"}) {
             test_device->set_slot_suffix(suffix);
+
+            // Cheat our way out of merge failed states.
+            if (sm->ProcessUpdateState() == UpdateState::MergeFailed) {
+                ASSERT_TRUE(AcquireLock());
+                ASSERT_TRUE(sm->WriteUpdateState(lock_.get(), UpdateState::None));
+                lock_ = {};
+            }
+
             EXPECT_TRUE(sm->CancelUpdate()) << suffix;
         }
         EXPECT_TRUE(UnmapAll());
@@ -1097,11 +1111,6 @@ class SnapshotUpdateTest : public SnapshotTest {
 // Also test UnmapUpdateSnapshot unmaps everything.
 // Also test first stage mount and merge after this.
 TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
-    }
-
     // Grow all partitions. Set |prd| large enough that |sys| and |vnd|'s COWs
     // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
@@ -1189,11 +1198,6 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
         GTEST_SKIP() << "Compression-only test";
     }
 
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
-    }
-
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
@@ -1237,11 +1241,6 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
     if (!IsCompressionEnabled()) {
         // b/179111359
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
-    }
-
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
     }
 
     auto old_sys_size = GetSize(sys_);
@@ -1629,11 +1628,6 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     auto metadata = src_->Export();
     ASSERT_NE(nullptr, metadata);
     ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
-
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
-    }
 
     // Add operations for sys. The whole device is written.
     AddOperation(sys_);
@@ -2074,11 +2068,6 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
 }
 
 TEST_F(SnapshotUpdateTest, AddPartition) {
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
-    }
-
     group_->add_partition_names("dlkm");
 
     auto dlkm = manifest_.add_partitions();
@@ -2249,6 +2238,60 @@ TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
     ASSERT_TRUE(sm->BeginUpdate());
 }
 
+TEST_F(SnapshotUpdateTest, QueryStatusError) {
+    // Grow all partitions. Set |prd| large enough that |sys| and |vnd|'s COWs
+    // fit in super, but not |prd|.
+    constexpr uint64_t partition_size = 3788_KiB;
+    SetSize(sys_, partition_size);
+
+    AddOperationForPartitions({sys_});
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+    ASSERT_TRUE(UnmapAll());
+
+    class DmStatusFailure final : public DeviceMapperWrapper {
+      public:
+        bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) override {
+            if (!DeviceMapperWrapper::GetTableStatus(name, table)) {
+                return false;
+            }
+            if (name == "sys_b" && !table->empty()) {
+                auto& info = table->at(0);
+                if (DeviceMapper::GetTargetType(info.spec) == "snapshot-merge") {
+                    info.data = "Merge failed";
+                }
+            }
+            return true;
+        }
+    };
+    DmStatusFailure wrapper;
+
+    // After reboot, init does first stage mount.
+    auto info = new TestDeviceInfo(fake_super, "_b");
+    info->set_dm(&wrapper);
+
+    auto init = NewManagerForFirstStageMount(info);
+    ASSERT_NE(init, nullptr);
+
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    // Initiate the merge and wait for it to be completed.
+    ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
+
+    // Simulate a reboot that tries the merge again, with the non-failing dm.
+    ASSERT_TRUE(UnmapAll());
+    init = NewManagerForFirstStageMount("_b");
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:
@@ -2265,11 +2308,6 @@ class FlashAfterUpdateTest : public SnapshotUpdateTest,
 };
 
 TEST_P(FlashAfterUpdateTest, FlashSlotAfterUpdate) {
-    // OTA client blindly unmaps all partitions that are possibly mapped.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
-    }
-
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
