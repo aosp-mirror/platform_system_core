@@ -109,6 +109,7 @@ class CowSnapuserdTest final {
     void MergeInterruptRandomly(int max_duration);
     void ReadDmUserBlockWithoutDaemon();
     void ReadLastBlock();
+    void TestRealTimeSignal();
 
     std::string snapshot_dev() const { return snapshot_dev_->path(); }
 
@@ -152,6 +153,7 @@ class CowSnapuserdTest final {
     size_t size_ = 50_MiB;
     int cow_num_sectors_;
     int total_base_size_;
+    pid_t pid_;
 };
 
 class CowSnapuserdMetadataTest final {
@@ -254,6 +256,7 @@ void CowSnapuserdTest::StartSnapuserdDaemon() {
     } else {
         client_ = SnapuserdClient::Connect(kSnapuserdSocketTest, 10s);
         ASSERT_NE(client_, nullptr);
+        pid_ = pid;
     }
 }
 
@@ -769,6 +772,16 @@ void CowSnapuserdTest::CreateSnapshotDevice() {
     ASSERT_FALSE(snapshot_dev_->path().empty());
 }
 
+void CowSnapuserdTest::TestRealTimeSignal() {
+    StartSnapuserdDaemon();
+    ASSERT_EQ(kill(pid_, 36), 0);  // Real time signal 36
+    ASSERT_EQ(kill(pid_, 0), 0);   // Verify pid exists
+    ASSERT_TRUE(client_->DetachSnapuserd());
+    std::this_thread::sleep_for(1s);
+    client_->CloseConnection();
+    client_ = nullptr;
+}
+
 void CowSnapuserdTest::SetupImpl() {
     CreateBaseDevice();
     CreateCowDevice();
@@ -1276,6 +1289,11 @@ TEST(Snapuserd_Test, Snapshot_Merge_Crash_Random_Inverted) {
     harness.MergeInterruptRandomly(50);
     harness.ValidateMerge();
     harness.Shutdown();
+}
+
+TEST(Snapuserd_Test, Snapshot_TestRealTimeSignal) {
+    CowSnapuserdTest harness;
+    harness.TestRealTimeSignal();
 }
 
 }  // namespace snapshot
