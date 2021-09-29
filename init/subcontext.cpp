@@ -44,6 +44,7 @@
 #endif
 
 using android::base::GetExecutablePath;
+using android::base::GetProperty;
 using android::base::Join;
 using android::base::Socketpair;
 using android::base::Split;
@@ -337,6 +338,11 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 }
 
 void InitializeSubcontext() {
+    if (IsMicrodroid()) {
+        LOG(INFO) << "Not using subcontext for microdroid";
+        return;
+    }
+
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
         subcontext.reset(
                 new Subcontext(std::vector<std::string>{"/vendor", "/odm"}, kVendorContext));
