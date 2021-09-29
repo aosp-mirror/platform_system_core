@@ -180,7 +180,6 @@ cc_library_static {
         "libdebuggerd/backtrace.cpp",
         "libdebuggerd/gwp_asan.cpp",
         "libdebuggerd/open_files_list.cpp",
-        "libdebuggerd/scudo.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/tombstone_proto.cpp",
         "libdebuggerd/tombstone_proto_to_text.cpp",
@@ -193,9 +192,6 @@ cc_library_static {
     include_dirs: [
         // Needed for private/bionic_fdsan.h
         "bionic/libc",
-
-        // Needed for scudo/interface.h
-        "external/scudo/standalone/include",
     ],
     header_libs: [
         "bionic_libc_platform_headers",
@@ -217,7 +213,6 @@ cc_library_static {
     whole_static_libs: [
         "libasync_safe",
         "gwp_asan_crash_handler",
-        "libscudo",
         "libtombstone_proto",
         "libprocinfo",
         "libprotobuf-cpp-lite",
@@ -245,6 +240,13 @@ cc_library_static {
     product_variables: {
         debuggable: {
             cflags: ["-DROOT_POSSIBLE"],
+        },
+
+        malloc_not_svelte: {
+            cflags: ["-DUSE_SCUDO"],
+            whole_static_libs: ["libscudo"],
+            srcs: ["libdebuggerd/scudo.cpp"],
+            header_libs: ["scudo_headers"],
         },
     },
 }
@@ -314,10 +316,6 @@ cc_test {
     header_libs: [
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
-    ],
-
-    include_dirs: [
-        "external/scudo/standalone/include",
     ],
 
     local_include_dirs: [
