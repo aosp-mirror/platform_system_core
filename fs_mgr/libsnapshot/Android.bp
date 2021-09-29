@@ -251,7 +251,9 @@ cc_defaults {
         "vts",
         "device-tests"
     ],
-    test_min_api_level: 29,
+    test_options: {
+        min_shipping_api_level: 29,
+    },
     auto_gen_config: true,
     require_root: true,
 }
@@ -407,7 +409,9 @@ cc_test {
     test_suites: [
         "device-tests"
     ],
-    test_min_api_level: 30,
+    test_options: {
+        min_shipping_api_level: 30,
+    },
     auto_gen_config: true,
     require_root: false,
     host_supported: true,
