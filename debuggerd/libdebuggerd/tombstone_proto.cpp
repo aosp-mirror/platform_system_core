@@ -40,6 +40,7 @@
 #include <async_safe/log.h>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -616,6 +617,8 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
   result.set_tid(main_thread.tid);
   result.set_uid(main_thread.uid);
   result.set_selinux_label(main_thread.selinux_label);
+  // The main thread must have a valid siginfo.
+  CHECK(main_thread.siginfo != nullptr);
 
   struct sysinfo si;
   sysinfo(&si);
