@@ -29,6 +29,8 @@ DEFINE_bool(no_socket, false,
 DEFINE_bool(socket_handoff, false,
             "If true, perform a socket hand-off with an existing snapuserd instance, then exit.");
 
+constexpr int kProfilingSignal = __SIGRTMIN + 4;
+
 namespace android {
 namespace snapshot {
 
@@ -39,6 +41,7 @@ bool Daemon::StartServer(int argc, char** argv) {
     sigdelset(&signal_mask_, SIGINT);
     sigdelset(&signal_mask_, SIGTERM);
     sigdelset(&signal_mask_, SIGUSR1);
+    sigdelset(&signal_mask_, kProfilingSignal);
 
     // Masking signals here ensure that after this point, we won't handle INT/TERM
     // until after we call into ppoll()
@@ -46,6 +49,7 @@ bool Daemon::StartServer(int argc, char** argv) {
     signal(SIGTERM, Daemon::SignalHandler);
     signal(SIGPIPE, Daemon::SignalHandler);
     signal(SIGUSR1, Daemon::SignalHandler);
+    signal(kProfilingSignal, Daemon::SignalHandler);
 
     MaskAllSignalsExceptIntAndTerm();
 
@@ -83,6 +87,7 @@ void Daemon::MaskAllSignalsExceptIntAndTerm() {
     sigdelset(&signal_mask, SIGTERM);
     sigdelset(&signal_mask, SIGPIPE);
     sigdelset(&signal_mask, SIGUSR1);
+    sigdelset(&signal_mask, kProfilingSignal);
     if (sigprocmask(SIG_SETMASK, &signal_mask, NULL) != 0) {
         PLOG(ERROR) << "Failed to set sigprocmask";
     }
@@ -114,6 +119,10 @@ void Daemon::SignalHandler(int signal) {
         }
         case SIGPIPE: {
             LOG(ERROR) << "Received SIGPIPE signal";
+            break;
+        }
+        case kProfilingSignal: {
+            LOG(INFO) << "Received real-time signal SIGRTMIN+4";
             break;
         }
         case SIGUSR1: {
