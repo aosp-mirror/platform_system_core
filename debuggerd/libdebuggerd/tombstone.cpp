@@ -36,6 +36,7 @@
 #include <string>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -417,6 +418,8 @@ static bool dump_thread(log_t* log, unwindstack::Unwinder* unwinder, const Threa
   }
 
   if (primary_thread) {
+    // The main thread must have a valid siginfo.
+    CHECK(thread_info.siginfo != nullptr);
     dump_probable_cause(log, unwinder, process_info, thread_info);
 
     dump_abort_message(log, unwinder->GetProcessMemory().get(), process_info.abort_msg_address);
