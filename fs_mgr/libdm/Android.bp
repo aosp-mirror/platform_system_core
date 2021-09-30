@@ -86,7 +86,9 @@ cc_test {
     name: "vts_libdm_test",
     defaults: ["libdm_test_defaults"],
     test_suites: ["vts"],
-    test_min_api_level: 29,
+    test_options: {
+        min_shipping_api_level: 29,
+    },
 }
 
 cc_fuzz {
