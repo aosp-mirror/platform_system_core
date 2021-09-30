@@ -44,6 +44,7 @@ class MockSnapshotWriter : public ISnapshotWriter {
 
     // Open the writer in write mode (no append).
     MOCK_METHOD(bool, Initialize, (), (override));
+    MOCK_METHOD(bool, VerifyMergeOps, (), (override, const, noexcept));
 
     // Open the writer in append mode, with the last label to resume
     // from. See CowWriter::InitializeAppend.

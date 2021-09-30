@@ -139,5 +139,9 @@ std::unique_ptr<android::fiemap::IImageManager> ISnapshotManager::IDeviceInfo::O
     }
 }
 
+android::dm::IDeviceMapper& DeviceInfo::GetDeviceMapper() {
+    return android::dm::DeviceMapper::Instance();
+}
+
 }  // namespace snapshot
 }  // namespace android

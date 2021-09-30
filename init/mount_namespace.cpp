@@ -82,11 +82,6 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
-static bool IsMicrodroid() {
-    static bool is_microdroid = android::base::GetProperty("ro.hardware", "") == "microdroid";
-    return is_microdroid;
-}
-
 // In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
 // namespaces.
 static bool NeedsTwoMountNamespaces() {

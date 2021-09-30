@@ -152,6 +152,7 @@ cc_test {
     static_libs: [
         "libavb",
         "libdm",
+        "libext2_uuid",
         "libfs_avb",
         "libfstab",
     ],

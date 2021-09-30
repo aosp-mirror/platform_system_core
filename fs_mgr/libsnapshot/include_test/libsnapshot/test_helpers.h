@@ -99,6 +99,9 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::unique_ptr<IImageManager> OpenImageManager() const override {
         return IDeviceInfo::OpenImageManager("ota/test");
     }
+    android::dm::IDeviceMapper& GetDeviceMapper() override {
+        return android::dm::DeviceMapper::Instance();
+    }
 
     bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
 
