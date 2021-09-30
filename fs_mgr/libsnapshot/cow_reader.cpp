@@ -231,7 +231,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
                 memcpy(&footer_->op, &current_op, sizeof(footer->op));
                 off_t offs = lseek(fd_.get(), pos, SEEK_SET);
                 if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
-                    PLOG(ERROR) << "lseek next op failed";
+                    PLOG(ERROR) << "lseek next op failed " << offs;
                     return false;
                 }
                 if (!android::base::ReadFully(fd_, &footer->data, sizeof(footer->data))) {
@@ -251,7 +251,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
         // Position for next cluster read
         off_t offs = lseek(fd_.get(), pos, SEEK_SET);
         if (offs < 0 || pos != static_cast<uint64_t>(offs)) {
-            PLOG(ERROR) << "lseek next op failed";
+            PLOG(ERROR) << "lseek next op failed " << offs;
             return false;
         }
         ops_buffer->resize(current_op_num);
