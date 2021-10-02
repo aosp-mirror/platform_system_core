@@ -45,6 +45,7 @@ enum class DaemonOps {
     SUPPORTS,
     INITIATE,
     PERCENTAGE,
+    GETSTATUS,
     INVALID,
 };
 
@@ -131,6 +132,7 @@ class SnapuserServer {
                                               const std::string& base_path_merge);
     bool StartHandler(const std::shared_ptr<DmUserHandler>& handler);
     bool StartMerge(const std::shared_ptr<DmUserHandler>& handler);
+    std::string GetMergeStatus(const std::shared_ptr<DmUserHandler>& handler);
 
     void SetTerminating() { terminating_ = true; }
     void ReceivedSocketSignal() { received_socket_signal_ = true; }

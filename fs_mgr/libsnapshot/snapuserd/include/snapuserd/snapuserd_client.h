@@ -85,6 +85,9 @@ class SnapuserdClient {
 
     // Returns Merge completion percentage
     double GetMergePercent();
+
+    // Return the status of the snapshot
+    std::string QuerySnapshotStatus(const std::string& misc_name);
 };
 
 }  // namespace snapshot

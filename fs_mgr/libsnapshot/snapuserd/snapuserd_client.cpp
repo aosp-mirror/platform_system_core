@@ -252,5 +252,14 @@ double SnapuserdClient::GetMergePercent() {
     return std::stod(response);
 }
 
+std::string SnapuserdClient::QuerySnapshotStatus(const std::string& misc_name) {
+    std::string msg = "getstatus," + misc_name;
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return "snapshot-merge-failed";
+    }
+    return Receivemsg();
+}
+
 }  // namespace snapshot
 }  // namespace android

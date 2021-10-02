@@ -359,6 +359,61 @@ void SnapshotHandler::WaitForMergeComplete() {
     }
 }
 
+std::string SnapshotHandler::GetMergeStatus() {
+    bool merge_not_initiated = false;
+    bool merge_failed = false;
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (!MergeInitiated()) {
+            merge_not_initiated = true;
+        }
+
+        if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED) {
+            merge_failed = true;
+        }
+    }
+
+    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
+    bool merge_complete = (ch->num_merge_ops == reader_->get_num_total_data_ops());
+
+    if (merge_not_initiated) {
+        // Merge was not initiated yet; however, we have merge completion
+        // recorded in the COW Header. This can happen if the device was
+        // rebooted during merge. During next reboot, libsnapshot will
+        // query the status and if the merge is completed, then snapshot-status
+        // file will be deleted
+        if (merge_complete) {
+            return "snapshot-merge-complete";
+        }
+
+        // Return the state as "snapshot". If the device was rebooted during
+        // merge, we will return the status as "snapshot". This is ok, as
+        // libsnapshot will explicitly resume the merge. This is slightly
+        // different from kernel snapshot wherein once the snapshot was switched
+        // to merge target, during next boot, we immediately switch to merge
+        // target. We don't do that here because, during first stage init, we
+        // don't want to initiate the merge. The problem is that we have daemon
+        // transition between first and second stage init. If the merge was
+        // started, then we will have to quiesce the merge before switching
+        // the dm tables. Instead, we just wait until second stage daemon is up
+        // before resuming the merge.
+        return "snapshot";
+    }
+
+    if (merge_failed) {
+        return "snapshot-merge-failed";
+    }
+
+    // Merge complete
+    if (merge_complete) {
+        return "snapshot-merge-complete";
+    }
+
+    // Merge is in-progress
+    return "snapshot-merge";
+}
+
 //========== End of Read-ahead state transition functions ====================
 
 /*

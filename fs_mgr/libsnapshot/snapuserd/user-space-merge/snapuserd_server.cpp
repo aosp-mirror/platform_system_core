@@ -54,6 +54,7 @@ DaemonOps SnapuserServer::Resolveop(std::string& input) {
     if (input == "supports") return DaemonOps::SUPPORTS;
     if (input == "initiate_merge") return DaemonOps::INITIATE;
     if (input == "merge_percent") return DaemonOps::PERCENTAGE;
+    if (input == "getstatus") return DaemonOps::GETSTATUS;
 
     return DaemonOps::INVALID;
 }
@@ -261,6 +262,25 @@ bool SnapuserServer::Receivemsg(android::base::borrowed_fd fd, const std::string
             double percentage = GetMergePercentage(&lock);
 
             return Sendmsg(fd, std::to_string(percentage));
+        }
+        case DaemonOps::GETSTATUS: {
+            // Message format:
+            // getstatus,<misc_name>
+            if (out.size() != 2) {
+                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+                return Sendmsg(fd, "snapshot-merge-failed");
+            }
+            {
+                std::lock_guard<std::mutex> lock(lock_);
+                auto iter = FindHandler(&lock, out[1]);
+                if (iter == dm_users_.end()) {
+                    LOG(ERROR) << "Could not find handler: " << out[1];
+                    return Sendmsg(fd, "snapshot-merge-failed");
+                }
+
+                std::string merge_status = GetMergeStatus(*iter);
+                return Sendmsg(fd, merge_status);
+            }
         }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
@@ -511,6 +531,10 @@ void SnapuserServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of
             (*iter)->snapuserd()->NotifyIOTerminated();
         }
     }
+}
+
+std::string SnapuserServer::GetMergeStatus(const std::shared_ptr<DmUserHandler>& handler) {
+    return handler->snapuserd()->GetMergeStatus();
 }
 
 double SnapuserServer::GetMergePercentage(std::lock_guard<std::mutex>* proof_of_lock) {
