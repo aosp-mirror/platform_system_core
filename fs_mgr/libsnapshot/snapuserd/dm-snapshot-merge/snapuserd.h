@@ -42,6 +42,7 @@
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
+#include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 
 namespace android {
@@ -87,39 +88,6 @@ enum class READ_AHEAD_IO_TRANSITION {
     IO_IN_PROGRESS,
     IO_TERMINATED,
     READ_AHEAD_FAILURE,
-};
-
-class BufferSink : public IByteSink {
-  public:
-    void Initialize(size_t size);
-    void* GetBufPtr() { return buffer_.get(); }
-    void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
-    void* GetPayloadBuffer(size_t size);
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
-    struct dm_user_header* GetHeaderPtr();
-    bool ReturnData(void*, size_t) override { return true; }
-    void ResetBufferOffset() { buffer_offset_ = 0; }
-    void* GetPayloadBufPtr();
-
-  private:
-    std::unique_ptr<uint8_t[]> buffer_;
-    loff_t buffer_offset_;
-    size_t buffer_size_;
-};
-
-class XorSink : public IByteSink {
-  public:
-    void Initialize(BufferSink* sink, size_t size);
-    void Reset();
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    bool ReturnData(void* buffer, size_t len) override;
-
-  private:
-    BufferSink* bufsink_;
-    std::unique_ptr<uint8_t[]> buffer_;
-    size_t buffer_size_;
-    size_t returned_;
 };
 
 class Snapuserd;

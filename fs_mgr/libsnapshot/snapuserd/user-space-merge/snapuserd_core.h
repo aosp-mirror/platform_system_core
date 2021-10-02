@@ -39,6 +39,7 @@
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
+#include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 
 namespace android {
@@ -62,39 +63,6 @@ enum class MERGE_IO_TRANSITION {
     MERGE_COMPLETE,
     IO_TERMINATED,
     READ_AHEAD_FAILURE,
-};
-
-class Bufsink : public IByteSink {
-  public:
-    void Initialize(size_t size);
-    void* GetBufPtr() { return buffer_.get(); }
-    void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
-    void* GetPayloadBuffer(size_t size);
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
-    struct dm_user_header* GetHeaderPtr();
-    bool ReturnData(void*, size_t) override { return true; }
-    void ResetBufferOffset() { buffer_offset_ = 0; }
-    void* GetPayloadBufPtr();
-
-  private:
-    std::unique_ptr<uint8_t[]> buffer_;
-    loff_t buffer_offset_;
-    size_t buffer_size_;
-};
-
-class XorBufSink : public IByteSink {
-  public:
-    void Initialize(Bufsink* sink, size_t size);
-    void Reset();
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    bool ReturnData(void* buffer, size_t len) override;
-
-  private:
-    Bufsink* bufsink_;
-    std::unique_ptr<uint8_t[]> buffer_;
-    size_t buffer_size_;
-    size_t returned_;
 };
 
 class SnapshotHandler;
@@ -142,7 +110,7 @@ class ReadAhead {
     std::unordered_set<uint64_t> dest_blocks_;
     std::unordered_set<uint64_t> source_blocks_;
     bool overlap_;
-    Bufsink bufsink_;
+    BufferSink bufsink_;
 };
 
 class Worker {
@@ -185,8 +153,8 @@ class Worker {
                      std::vector<const CowOperation*>* replace_zero_vec = nullptr);
 
     std::unique_ptr<CowReader> reader_;
-    Bufsink bufsink_;
-    XorBufSink xorsink_;
+    BufferSink bufsink_;
+    XorSink xorsink_;
 
     std::string cow_device_;
     std::string backing_store_device_;
