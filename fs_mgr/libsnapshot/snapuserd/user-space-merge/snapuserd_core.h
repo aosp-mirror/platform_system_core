@@ -167,6 +167,9 @@ class Worker {
     bool ReadFromSourceDevice(const CowOperation* cow_op);
 
     bool ReadAlignedSector(sector_t sector, size_t sz, bool header_response);
+    bool ReadUnalignedSector(sector_t sector, size_t size);
+    int ReadUnalignedSector(sector_t sector, size_t size,
+                            std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
     bool RespondIOError(bool header_response);
 
     // Processing COW operations

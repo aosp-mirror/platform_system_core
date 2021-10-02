@@ -395,6 +395,185 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz, bool header_response)
     return true;
 }
 
+int Worker::ReadUnalignedSector(
+        sector_t sector, size_t size,
+        std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it) {
+    size_t skip_sector_size = 0;
+
+    SNAP_LOG(DEBUG) << "ReadUnalignedSector: sector " << sector << " size: " << size
+                    << " Aligned sector: " << it->first;
+
+    if (!ProcessCowOp(it->second)) {
+        SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size
+                        << " Aligned sector: " << it->first;
+        return -1;
+    }
+
+    int num_sectors_skip = sector - it->first;
+
+    if (num_sectors_skip > 0) {
+        skip_sector_size = num_sectors_skip << SECTOR_SHIFT;
+        char* buffer = reinterpret_cast<char*>(bufsink_.GetBufPtr());
+        struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
+
+        if (skip_sector_size == BLOCK_SZ) {
+            SNAP_LOG(ERROR) << "Invalid un-aligned IO request at sector: " << sector
+                            << " Base-sector: " << it->first;
+            return -1;
+        }
+
+        memmove(msg->payload.buf, (char*)msg->payload.buf + skip_sector_size,
+                (BLOCK_SZ - skip_sector_size));
+    }
+
+    bufsink_.ResetBufferOffset();
+    return std::min(size, (BLOCK_SZ - skip_sector_size));
+}
+
+bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
+    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+    header->type = DM_USER_RESP_SUCCESS;
+    bufsink_.ResetBufferOffset();
+    std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
+
+    auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
+                               SnapshotHandler::compare);
+
+    // |-------|-------|-------|
+    // 0       1       2       3
+    //
+    // Block 0 - op 1
+    // Block 1 - op 2
+    // Block 2 - op 3
+    //
+    // chunk_vec will have block 0, 1, 2 which maps to relavant COW ops.
+    //
+    // Each block is 4k bytes. Thus, the last block will span 8 sectors
+    // ranging till block 3 (However, block 3 won't be in chunk_vec as
+    // it doesn't have any mapping to COW ops. Now, if we get an I/O request for a sector
+    // spanning between block 2 and block 3, we need to step back
+    // and get hold of the last element.
+    //
+    // Additionally, we need to make sure that the requested sector is
+    // indeed within the range of the final sector. It is perfectly valid
+    // to get an I/O request for block 3 and beyond which are not mapped
+    // to any COW ops. In that case, we just need to read from the base
+    // device.
+    bool merge_complete = false;
+    bool header_response = true;
+    if (it == chunk_vec.end()) {
+        if (chunk_vec.size() > 0) {
+            // I/O request beyond the last mapped sector
+            it = std::prev(chunk_vec.end());
+        } else {
+            // This can happen when a partition merge is complete but snapshot
+            // state in /metadata is not yet deleted; during this window if the
+            // device is rebooted, subsequent attempt will mount the snapshot.
+            // However, since the merge was completed we wouldn't have any
+            // mapping to COW ops thus chunk_vec will be empty. In that case,
+            // mark this as merge_complete and route the I/O to the base device.
+            merge_complete = true;
+        }
+    } else if (it->first != sector) {
+        if (it != chunk_vec.begin()) {
+            --it;
+        }
+    } else {
+        return ReadAlignedSector(sector, size, header_response);
+    }
+
+    loff_t requested_offset = sector << SECTOR_SHIFT;
+
+    loff_t final_offset = 0;
+    if (!merge_complete) {
+        final_offset = it->first << SECTOR_SHIFT;
+    }
+
+    // Since a COW op span 4k block size, we need to make sure that the requested
+    // offset is within the 4k region. Consider the following case:
+    //
+    // |-------|-------|-------|
+    // 0       1       2       3
+    //
+    // Block 0 - op 1
+    // Block 1 - op 2
+    //
+    // We have an I/O request for a sector between block 2 and block 3. However,
+    // we have mapping to COW ops only for block 0 and block 1. Thus, the
+    // requested offset in this case is beyond the last mapped COW op size (which
+    // is block 1 in this case).
+
+    size_t total_bytes_read = 0;
+    size_t remaining_size = size;
+    int ret = 0;
+    if (!merge_complete && (requested_offset >= final_offset) &&
+        (requested_offset - final_offset) < BLOCK_SZ) {
+        // Read the partial un-aligned data
+        ret = ReadUnalignedSector(sector, remaining_size, it);
+        if (ret < 0) {
+            SNAP_LOG(ERROR) << "ReadUnalignedSector failed for sector: " << sector
+                            << " size: " << size << " it->sector: " << it->first;
+            return RespondIOError(header_response);
+        }
+
+        remaining_size -= ret;
+        total_bytes_read += ret;
+        sector += (ret >> SECTOR_SHIFT);
+
+        // Send the data back
+        if (!WriteDmUserPayload(total_bytes_read, header_response)) {
+            return false;
+        }
+
+        header_response = false;
+        // If we still have pending data to be processed, this will be aligned I/O
+        if (remaining_size) {
+            return ReadAlignedSector(sector, remaining_size, header_response);
+        }
+    } else {
+        // This is all about handling I/O request to be routed to base device
+        // as the I/O is not mapped to any of the COW ops.
+        loff_t aligned_offset = requested_offset;
+        // Align to nearest 4k
+        aligned_offset += BLOCK_SZ - 1;
+        aligned_offset &= ~(BLOCK_SZ - 1);
+        // Find the diff of the aligned offset
+        size_t diff_size = aligned_offset - requested_offset;
+        CHECK(diff_size <= BLOCK_SZ);
+        if (remaining_size < diff_size) {
+            if (!ReadDataFromBaseDevice(sector, remaining_size)) {
+                return RespondIOError(header_response);
+            }
+            total_bytes_read += remaining_size;
+
+            if (!WriteDmUserPayload(total_bytes_read, header_response)) {
+                return false;
+            }
+        } else {
+            if (!ReadDataFromBaseDevice(sector, diff_size)) {
+                return RespondIOError(header_response);
+            }
+
+            total_bytes_read += diff_size;
+
+            if (!WriteDmUserPayload(total_bytes_read, header_response)) {
+                return false;
+            }
+
+            remaining_size -= diff_size;
+            size_t num_sectors_read = (diff_size >> SECTOR_SHIFT);
+            sector += num_sectors_read;
+            CHECK(IsBlockAligned(sector << SECTOR_SHIFT));
+            header_response = false;
+
+            // If we still have pending data to be processed, this will be aligned I/O
+            return ReadAlignedSector(sector, remaining_size, header_response);
+        }
+    }
+
+    return true;
+}
+
 bool Worker::RespondIOError(bool header_response) {
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
     header->type = DM_USER_RESP_ERROR;
@@ -423,8 +602,7 @@ bool Worker::DmuserReadRequest() {
 
     // Unaligned I/O request
     if (!IsBlockAligned(header->sector << SECTOR_SHIFT)) {
-        SNAP_LOG(ERROR) << "I/O request is not 4k aligned.";
-        return false;
+        return ReadUnalignedSector(header->sector, header->len);
     }
 
     return ReadAlignedSector(header->sector, header->len, true);
