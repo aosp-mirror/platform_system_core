@@ -1017,6 +1017,31 @@ static void property_initialize_ro_cpu_abilist() {
     }
 }
 
+static void property_initialize_ro_vendor_api_level() {
+    // ro.vendor.api_level shows the api_level that the vendor images (vendor, odm, ...) are
+    // required to support.
+    constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
+    // Candidate api levels. The order of the properties must be kept.
+    const char* VENDOR_API_LEVEL_PROPS[] = {
+            "ro.board.api_level", "ro.board.first_api_level",    "ro.product.first_api_level",
+            "ro.vndk.version",    "ro.vendor.build.version.sdk", "ro.build.version.sdk"};
+
+    for (const auto& api_level_prop : VENDOR_API_LEVEL_PROPS) {
+        int api_level = android::base::GetIntProperty(api_level_prop, 0);
+        if (api_level != 0) {
+            std::string error;
+            uint32_t res = PropertySet(VENDOR_API_LEVEL_PROP, std::to_string(api_level), &error);
+            if (res != PROP_SUCCESS) {
+                LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << api_level
+                           << ": " << error;
+            }
+            return;
+        }
+    }
+    // If no api integers are found from the vendor api level properties, ro.vendor.api_level
+    // will not be set.
+}
+
 void PropertyLoadBootDefaults() {
     // We read the properties and their values into a map, in order to always allow properties
     // loaded in the later property files to override the properties in loaded in the earlier
@@ -1102,6 +1127,7 @@ void PropertyLoadBootDefaults() {
     property_derive_build_fingerprint();
     property_derive_legacy_build_fingerprint();
     property_initialize_ro_cpu_abilist();
+    property_initialize_ro_vendor_api_level();
 
     update_sys_usb_config();
 }
