@@ -63,7 +63,8 @@ class SnapuserdClient {
     // The misc_name must be the "misc_name" given to dm-user in step 2.
     //
     uint64_t InitDmUserCow(const std::string& misc_name, const std::string& cow_device,
-                           const std::string& backing_device);
+                           const std::string& backing_device,
+                           const std::string& base_path_merge = "");
     bool AttachDmUser(const std::string& misc_name);
 
     // Wait for snapuserd to disassociate with a dm-user control device. This
