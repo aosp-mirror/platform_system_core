@@ -241,7 +241,8 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
     bool verification_disabled = ((AvbVBMetaImageFlags)vbmeta_header->flags &
                                   AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED);
     bool hashtree_disabled =
-            ((AvbVBMetaImageFlags)vbmeta_header->flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+            ((AvbVBMetaImageFlags)vbmeta_header->flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED) ||
+            allow_verification_error;
     if (verification_disabled) {
         avb_handle->status_ = AvbHandleStatus::kVerificationDisabled;
     } else if (hashtree_disabled) {
@@ -457,7 +458,8 @@ AvbUniquePtr AvbHandle::Open() {
     //   - vbmeta struct in all partitions are still processed, just disable
     //     dm-verity in the user space.
     bool hashtree_disabled =
-            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED) ||
+            allow_verification_error;
 
     if (verification_disabled) {
         avb_handle->status_ = AvbHandleStatus::kVerificationDisabled;
