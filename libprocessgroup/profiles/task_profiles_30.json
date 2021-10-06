@@ -40,6 +40,19 @@
       ]
     },
     {
+      "Name": "ServicePerformance",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "schedtune",
+            "Path": "background"
+          }
+        }
+      ]
+    },
+    {
       "Name": "HighPerformance",
       "Actions": [
         {
