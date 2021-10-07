@@ -253,8 +253,10 @@ void ImportBootconfig(const std::function<void(const std::string&, const std::st
     for (const auto& entry : android::base::Split(bootconfig, "\n")) {
         std::vector<std::string> pieces = android::base::Split(entry, "=");
         if (pieces.size() == 2) {
-            pieces[1].erase(std::remove(pieces[1].begin(), pieces[1].end(), '"'), pieces[1].end());
-            fn(android::base::Trim(pieces[0]), android::base::Trim(pieces[1]));
+            // get rid of the extra space between a list of values and remove the quotes.
+            std::string value = android::base::StringReplace(pieces[1], "\", \"", ",", true);
+            value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
+            fn(android::base::Trim(pieces[0]), android::base::Trim(value));
         }
     }
 }

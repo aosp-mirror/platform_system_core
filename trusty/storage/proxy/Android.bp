@@ -29,7 +29,10 @@ cc_binary {
         "proxy.c",
     ],
 
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "liblog",
+        "libhardware_legacy",
+    ],
     header_libs: ["libcutils_headers"],
 
     static_libs: [
