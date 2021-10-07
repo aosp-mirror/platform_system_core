@@ -19,12 +19,14 @@
 #include <sys/resource.h>
 #include <sys/types.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <android-base/unique_fd.h>
 #include <cutils/iosched_policy.h>
 
+#include "mount_namespace.h"
 #include "result.h"
 
 namespace android {
@@ -35,6 +37,8 @@ class Descriptor {
     Descriptor(const std::string& name, android::base::unique_fd fd)
         : name_(name), fd_(std::move(fd)){};
 
+    // Publish() unsets FD_CLOEXEC from the FD and publishes its name via setenv().  It should be
+    // called when starting a service after fork() and before exec().
     void Publish() const;
 
   private:
@@ -51,6 +55,9 @@ struct SocketDescriptor {
     std::string context;
     bool passcred = false;
 
+    // Create() creates the named unix domain socket in /dev/socket and returns a Descriptor object.
+    // It should be called when starting a service, before calling fork(), such that the socket is
+    // synchronously created before starting any other services, which may depend on it.
     Result<Descriptor> Create(const std::string& global_context) const;
 };
 
@@ -66,7 +73,8 @@ struct NamespaceInfo {
     // Pair of namespace type, path to name.
     std::vector<std::pair<int, std::string>> namespaces_to_enter;
 };
-Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name, bool pre_apexd);
+Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
+                             std::optional<MountNamespace> override_mount_namespace);
 
 struct ProcessAttributes {
     std::string console;

@@ -51,5 +51,9 @@ bool BlockDeviceToName(uint32_t major, uint32_t minor, std::string* bdev_name);
 // cases (such as snapshots or adb remount).
 bool FilesystemHasReliablePinning(const std::string& file, bool* supported);
 
+// Crude implementation to check if |child| is a subdir of |parent|.
+// Assume both are absolute paths.
+bool IsSubdir(const std::string& child, const std::string& parent);
+
 }  // namespace fiemap
 }  // namespace android

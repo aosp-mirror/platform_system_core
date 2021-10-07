@@ -17,6 +17,7 @@
 #include <android-base/logging.h>
 #include <fs_mgr.h>
 #include <fs_mgr_overlayfs.h>
+#include <libfiemap/image_manager.h>
 
 namespace android {
 namespace snapshot {
@@ -26,6 +27,7 @@ using android::hardware::boot::V1_0::BoolResult;
 using android::hardware::boot::V1_0::CommandResult;
 #endif
 
+using namespace std::chrono_literals;
 using namespace std::string_literals;
 
 #ifdef __ANDROID_RECOVERY__
@@ -33,10 +35,6 @@ constexpr bool kIsRecovery = true;
 #else
 constexpr bool kIsRecovery = false;
 #endif
-
-std::string DeviceInfo::GetGsidDir() const {
-    return "ota"s;
-}
 
 std::string DeviceInfo::GetMetadataDir() const {
     return "/metadata/ota"s;
@@ -100,6 +98,10 @@ bool DeviceInfo::IsRecovery() const {
     return kIsRecovery;
 }
 
+bool DeviceInfo::IsFirstStageInit() const {
+    return first_stage_init_;
+}
+
 bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {
 #ifdef LIBSNAPSHOT_USE_HAL
     if (!EnsureBootHal()) {
@@ -118,6 +120,23 @@ bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {
     LOG(ERROR) << "HAL support not enabled.";
     return false;
 #endif
+}
+
+std::unique_ptr<android::fiemap::IImageManager> DeviceInfo::OpenImageManager() const {
+    return IDeviceInfo::OpenImageManager("ota");
+}
+
+std::unique_ptr<android::fiemap::IImageManager> ISnapshotManager::IDeviceInfo::OpenImageManager(
+        const std::string& gsid_dir) const {
+    if (IsRecovery() || IsFirstStageInit()) {
+        android::fiemap::ImageManager::DeviceInfo device_info = {
+                .is_recovery = {IsRecovery()},
+        };
+        return android::fiemap::ImageManager::Open(gsid_dir, device_info);
+    } else {
+        // For now, use a preset timeout.
+        return android::fiemap::IImageManager::Open(gsid_dir, 15000ms);
+    }
 }
 
 }  // namespace snapshot

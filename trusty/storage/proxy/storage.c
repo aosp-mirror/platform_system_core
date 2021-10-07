@@ -477,7 +477,6 @@ int storage_init(const char *dirname)
     if (ssdir_fd < 0) {
         ALOGE("failed to open ss root dir \"%s\": %s\n",
                dirname, strerror(errno));
-        return -1;
     }
     ssdir_name = dirname;
     return 0;

@@ -1,4 +1,1 @@
-cferris@google.com
-enh@google.com
-jmgao@google.com
-tomcherry@google.com
+include platform/system/core:/janitors/OWNERS

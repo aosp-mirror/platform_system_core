@@ -14,6 +14,10 @@
 // limitations under the License.
 //
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 bootstat_lib_src_files = [
     "boot_event_record_store.cpp",
 ]
@@ -31,7 +35,7 @@ cc_defaults {
         "libcutils",
         "liblog",
     ],
-    static_libs: ["libgtest_prod"],
+    header_libs: ["libgtest_prod_headers"],
 }
 
 // bootstat static library
@@ -93,4 +97,7 @@ cc_test {
         "boot_event_record_store_test.cpp",
         "testrunner.cpp",
     ],
+    test_options: {
+        unit_test: true,
+    },
 }

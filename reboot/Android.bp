@@ -1,5 +1,9 @@
 // Copyright 2013 The Android Open Source Project
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_binary {
     name: "reboot",
     srcs: ["reboot.c"],

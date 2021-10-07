@@ -27,6 +27,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr_overlayfs.h>
@@ -67,7 +68,7 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
 
         if ((partition + device->GetCurrentSlot()) == partition_name) {
             mount_metadata.emplace();
-            fs_mgr_overlayfs_teardown(entry.mount_point.c_str());
+            android::fs_mgr::TeardownAllOverlayForMountPoint(entry.mount_point);
         }
     }
 }
@@ -162,8 +163,12 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
                 partition_name == "boot_b")) {
         CopyAVBFooter(&data, block_device_size);
     }
-    WipeOverlayfsForPartition(device, partition_name);
-    return FlashBlockDevice(handle.fd(), data);
+    if (android::base::GetProperty("ro.system.build.type", "") != "user") {
+        WipeOverlayfsForPartition(device, partition_name);
+    }
+    int result = FlashBlockDevice(handle.fd(), data);
+    sync();
+    return result;
 }
 
 bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe) {
@@ -192,7 +197,8 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
-        fs_mgr_overlayfs_teardown();
+        android::fs_mgr::TeardownAllOverlayForMountPoint();
+        sync();
         return device->WriteOkay("Successfully flashed partition table");
     }
 
@@ -231,6 +237,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     if (!UpdateAllPartitionMetadata(device, super_name, *new_metadata.get())) {
         return device->WriteFail("Unable to write new partition table");
     }
-    fs_mgr_overlayfs_teardown();
+    android::fs_mgr::TeardownAllOverlayForMountPoint();
+    sync();
     return device->WriteOkay("Successfully updated partition table");
 }

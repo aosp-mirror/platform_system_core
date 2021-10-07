@@ -1,0 +1,40 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+filegroup {
+    name: "libtombstone_proto-src",
+    srcs: ["tombstone.proto"],
+}
+
+cc_library_static {
+    name: "libtombstone_proto",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wthread-safety",
+        "-Werror",
+    ],
+
+    compile_multilib: "both",
+
+    proto: {
+        export_proto_headers: true,
+        type: "lite",
+    },
+
+    srcs: [":libtombstone_proto-src"],
+
+    // b/155341058: Soong doesn't automatically add libprotobuf if there aren't any explicitly
+    // listed protos in srcs.
+    static_libs: ["libprotobuf-cpp-lite"],
+
+    stl: "libc++_static",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.runtime",
+    ],
+
+    recovery_available: true,
+    vendor_ramdisk_available: true,
+}

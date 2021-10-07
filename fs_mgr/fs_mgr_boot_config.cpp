@@ -26,7 +26,7 @@
 
 #include "fs_mgr_priv.h"
 
-std::vector<std::pair<std::string, std::string>> fs_mgr_parse_boot_config(const std::string& cmdline) {
+std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std::string& cmdline) {
     static constexpr char quote = '"';
 
     std::vector<std::pair<std::string, std::string>> result;
@@ -60,12 +60,50 @@ std::vector<std::pair<std::string, std::string>> fs_mgr_parse_boot_config(const 
     return result;
 }
 
+std::vector<std::pair<std::string, std::string>> fs_mgr_parse_proc_bootconfig(
+        const std::string& cmdline) {
+    static constexpr char quote = '"';
+
+    std::vector<std::pair<std::string, std::string>> result;
+    for (auto& line : android::base::Split(cmdline, "\n")) {
+        line.erase(std::remove(line.begin(), line.end(), quote), line.end());
+        auto equal_sign = line.find('=');
+        if (equal_sign == line.npos) {
+            if (!line.empty()) {
+                // no difference between <key> and <key>=
+                result.emplace_back(std::move(line), "");
+            }
+        } else {
+            result.emplace_back(android::base::Trim(line.substr(0, equal_sign)),
+                                android::base::Trim(line.substr(equal_sign + 1)));
+        }
+    }
+
+    return result;
+}
+
+bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig,
+                                            const std::string& android_key, std::string* out_val) {
+    FS_MGR_CHECK(out_val != nullptr);
+
+    const std::string bootconfig_key("androidboot." + android_key);
+    for (const auto& [key, value] : fs_mgr_parse_proc_bootconfig(bootconfig)) {
+        if (key == bootconfig_key) {
+            *out_val = value;
+            return true;
+        }
+    }
+
+    *out_val = "";
+    return false;
+}
+
 bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::string& android_key,
                                         std::string* out_val) {
     FS_MGR_CHECK(out_val != nullptr);
 
     const std::string cmdline_key("androidboot." + android_key);
-    for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+    for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
         if (key == cmdline_key) {
             *out_val = value;
             return true;
@@ -74,6 +112,17 @@ bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::s
 
     *out_val = "";
     return false;
+}
+
+// Tries to get the given boot config value from bootconfig.
+// Returns true if successfully found, false otherwise.
+bool fs_mgr_get_boot_config_from_bootconfig_source(const std::string& key, std::string* out_val) {
+    std::string bootconfig;
+    if (!android::base::ReadFileToString("/proc/bootconfig", &bootconfig)) return false;
+    if (!bootconfig.empty() && bootconfig.back() == '\n') {
+        bootconfig.pop_back();
+    }
+    return fs_mgr_get_boot_config_from_bootconfig(bootconfig, key, out_val);
 }
 
 // Tries to get the given boot config value from kernel cmdline.
@@ -107,6 +156,11 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
     // next, check if we have "ro.boot" property already
     *out_val = android::base::GetProperty("ro.boot." + key, "");
     if (!out_val->empty()) {
+        return true;
+    }
+
+    // next, check if we have the property in bootconfig
+    if (fs_mgr_get_boot_config_from_bootconfig_source(key, out_val)) {
         return true;
     }
 

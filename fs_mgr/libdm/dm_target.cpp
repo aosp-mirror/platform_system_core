@@ -95,7 +95,9 @@ void DmTargetVerity::UseFec(const std::string& device, uint32_t num_roots, uint3
 }
 
 void DmTargetVerity::SetVerityMode(const std::string& mode) {
-    if (mode != "restart_on_corruption" && mode != "ignore_corruption") {
+    if (mode != "panic_on_corruption" &&
+        mode != "restart_on_corruption" &&
+        mode != "ignore_corruption") {
         LOG(ERROR) << "Unknown verity mode: " << mode;
         valid_ = false;
         return;
@@ -277,6 +279,14 @@ std::string DmTargetDefaultKey::GetParameterString() const {
         argv.emplace_back(std::to_string(extra_argv.size()));
         argv.insert(argv.end(), extra_argv.begin(), extra_argv.end());
     }
+    return android::base::Join(argv, " ");
+}
+
+std::string DmTargetUser::GetParameterString() const {
+    std::vector<std::string> argv;
+    argv.push_back(std::to_string(start()));
+    argv.push_back(std::to_string(size()));
+    argv.push_back(control_device());
     return android::base::Join(argv, " ");
 }
 

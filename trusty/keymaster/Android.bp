@@ -14,68 +14,8 @@
 // limitations under the License.
 //
 
-// WARNING: Everything listed here will be built on ALL platforms,
-// including x86, the emulator, and the SDK.  Modules must be uniquely
-// named (liblights.panda), and must build everywhere, or limit themselves
-// to only building on ARM if they include assembly. Individual makefiles
-// are responsible for having their own logic, for fine-grained control.
-
-// trusty_keymaster is a binary used only for on-device testing.  It
-// runs Trusty Keymaster through a basic set of operations with RSA
-// and ECDSA keys.
-cc_binary {
-    name: "trusty_keymaster_tipc",
-    vendor: true,
-    srcs: [
-        "ipc/trusty_keymaster_ipc.cpp",
-        "legacy/trusty_keymaster_device.cpp",
-        "legacy/trusty_keymaster_main.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-
-    local_include_dirs: ["include"],
-
-    shared_libs: [
-        "libcrypto",
-        "libcutils",
-        "libkeymaster_portable",
-        "libtrusty",
-        "libkeymaster_messages",
-        "libsoftkeymasterdevice",
-        "liblog",
-    ],
-}
-
-// keystore.trusty is the HAL used by keystore on Trusty devices.
-cc_library_shared {
-    name: "keystore.trusty",
-    vendor: true,
-    relative_install_path: "hw",
-    srcs: [
-        "ipc/trusty_keymaster_ipc.cpp",
-        "legacy/module.cpp",
-        "legacy/trusty_keymaster_device.cpp",
-    ],
-
-    cflags: [
-        "-fvisibility=hidden",
-        "-Wall",
-        "-Werror",
-    ],
-
-    local_include_dirs: ["include"],
-
-    shared_libs: [
-        "libcrypto",
-        "libkeymaster_messages",
-        "libtrusty",
-        "liblog",
-        "libcutils",
-    ],
-    header_libs: ["libhardware_headers"],
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
 cc_binary {
@@ -138,4 +78,101 @@ cc_binary {
     ],
 
     vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
+}
+
+cc_binary {
+    name: "android.hardware.security.keymint-service.trusty",
+    relative_install_path: "hw",
+    init_rc: ["keymint/android.hardware.security.keymint-service.trusty.rc"],
+    vintf_fragments: [
+        "keymint/android.hardware.security.keymint-service.trusty.xml",
+    ],
+    vendor: true,
+    cflags: [
+        "-Wall",
+        "-Wextra",
+    ],
+    local_include_dirs: [
+        "include",
+    ],
+    srcs: [
+        "TrustyKeymaster.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+        "keymint/TrustyKeyMintDevice.cpp",
+        "keymint/TrustyKeyMintOperation.cpp",
+        "keymint/TrustyRemotelyProvisionedComponentDevice.cpp",
+        "keymint/TrustySecureClock.cpp",
+        "keymint/TrustySharedSecret.cpp",
+        "keymint/service.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.security.keymint-V1-ndk_platform",
+        "android.hardware.security.secureclock-V1-ndk_platform",
+        "android.hardware.security.sharedsecret-V1-ndk_platform",
+        "lib_android_keymaster_keymint_utils",
+        "libbase",
+        "libbinder_ndk",
+        "libhardware",
+        "libkeymaster_messages",
+        "libkeymint",
+        "liblog",
+        "libtrusty",
+    ],
+    required: [
+        "android.hardware.hardware_keystore.xml",
+        "RemoteProvisioner",
+    ],
+}
+
+prebuilt_etc {
+    name: "keymaster_soft_attestation_keys.xml",
+    vendor: true,
+    src: "set_attestation_key/keymaster_soft_attestation_keys.xml",
+}
+
+cc_library {
+    name: "libtrusty_ipc",
+    vendor: true,
+    srcs: ["ipc/trusty_keymaster_ipc.cpp"],
+    local_include_dirs: ["include"],
+    shared_libs: [
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libxml2",
+    ],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+cc_binary {
+    name: "trusty_keymaster_set_attestation_key",
+    vendor: true,
+
+    srcs: [
+        "set_attestation_key/set_attestation_key.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libxml2",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
 }

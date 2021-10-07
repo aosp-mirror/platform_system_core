@@ -43,6 +43,8 @@
 #include <linux/version.h>
 #include <linux/usb/ch9.h>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -262,6 +264,13 @@ static int filter_usb_device(char* sysfs_name,
 
         info.has_bulk_in = (in != -1);
         info.has_bulk_out = (out != -1);
+
+        std::string interface;
+        auto path = android::base::StringPrintf("/sys/bus/usb/devices/%s/%s:1.%d/interface",
+                                                sysfs_name, sysfs_name, ifc->bInterfaceNumber);
+        if (android::base::ReadFileToString(path, &interface)) {
+            snprintf(info.interface, sizeof(info.interface), "%s", interface.c_str());
+        }
 
         if(callback(&info) == 0) {
             *ept_in_id = in;

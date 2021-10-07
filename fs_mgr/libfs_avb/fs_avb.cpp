@@ -226,7 +226,7 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
             return nullptr;
     }
 
-    // Sanity check here because we have to use vbmeta_images_[0] below.
+    // Validity check here because we have to use vbmeta_images_[0] below.
     if (avb_handle->vbmeta_images_.size() < 1) {
         LERROR << "LoadAndVerifyVbmetaByPartition failed, no vbmeta loaded";
         return nullptr;
@@ -405,11 +405,11 @@ AvbUniquePtr AvbHandle::Open() {
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_VERIFICATION (UNLOCKED only).
     //     Might occur in either the top-level vbmeta or a chained vbmeta.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_PUBLIC_KEY_REJECTED (UNLOCKED only).
-    //     Could only occur in a chained vbmeta. Because we have *dummy* operations in
+    //     Could only occur in a chained vbmeta. Because we have *no-op* operations in
     //     FsManagerAvbOps such that avb_ops->validate_vbmeta_public_key() used to validate
     //     the public key of the top-level vbmeta always pass in userspace here.
     //
-    // The following verify result won't happen, because the *dummy* operation
+    // The following verify result won't happen, because the *no-op* operation
     // avb_ops->read_rollback_index() always returns the minimum value zero. So rollbacked
     // vbmeta images, which should be caught in the bootloader stage, won't be detected here.
     //   - AVB_SLOT_VERIFY_RESULT_ERROR_ROLLBACK_INDEX
@@ -433,6 +433,16 @@ AvbUniquePtr AvbHandle::Open() {
     // Sets the MAJOR.MINOR for init to set it into "ro.boot.avb_version".
     avb_handle->avb_version_ = StringPrintf("%d.%d", AVB_VERSION_MAJOR, AVB_VERSION_MINOR);
 
+    // Verifies vbmeta structs against the digest passed from bootloader in kernel cmdline.
+    std::unique_ptr<AvbVerifier> avb_verifier = AvbVerifier::Create();
+    if (!avb_verifier || !avb_verifier->VerifyVbmetaImages(avb_handle->vbmeta_images_)) {
+        LERROR << "Failed to verify vbmeta digest";
+        if (!allow_verification_error) {
+            LERROR << "vbmeta digest error isn't allowed ";
+            return nullptr;
+        }
+    }
+
     // Checks whether FLAGS_VERIFICATION_DISABLED is set:
     //   - Only the top-level vbmeta struct is read.
     //   - vbmeta struct in other partitions are NOT processed, including AVB HASH descriptor(s)
@@ -443,26 +453,16 @@ AvbUniquePtr AvbHandle::Open() {
     bool verification_disabled = ((AvbVBMetaImageFlags)vbmeta_header.flags &
                                   AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED);
 
+    // Checks whether FLAGS_HASHTREE_DISABLED is set.
+    //   - vbmeta struct in all partitions are still processed, just disable
+    //     dm-verity in the user space.
+    bool hashtree_disabled =
+            ((AvbVBMetaImageFlags)vbmeta_header.flags & AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
+
     if (verification_disabled) {
         avb_handle->status_ = AvbHandleStatus::kVerificationDisabled;
-    } else {
-        // Verifies vbmeta structs against the digest passed from bootloader in kernel cmdline.
-        std::unique_ptr<AvbVerifier> avb_verifier = AvbVerifier::Create();
-        if (!avb_verifier) {
-            LERROR << "Failed to create AvbVerifier";
-            return nullptr;
-        }
-        if (!avb_verifier->VerifyVbmetaImages(avb_handle->vbmeta_images_)) {
-            LERROR << "VerifyVbmetaImages failed";
-            return nullptr;
-        }
-
-        // Checks whether FLAGS_HASHTREE_DISABLED is set.
-        bool hashtree_disabled = ((AvbVBMetaImageFlags)vbmeta_header.flags &
-                                  AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED);
-        if (hashtree_disabled) {
-            avb_handle->status_ = AvbHandleStatus::kHashtreeDisabled;
-        }
+    } else if (hashtree_disabled) {
+        avb_handle->status_ = AvbHandleStatus::kHashtreeDisabled;
     }
 
     LINFO << "Returning avb_handle with status: " << avb_handle->status_;

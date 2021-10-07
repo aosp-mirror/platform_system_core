@@ -167,7 +167,7 @@ TEST_F(FuseAppLoopTest, LookUp) {
   EXPECT_EQ(0u, response_.entry_out.attr.gid);
   EXPECT_EQ(0u, response_.entry_out.attr.rdev);
   EXPECT_EQ(0u, response_.entry_out.attr.blksize);
-  EXPECT_EQ(0u, response_.entry_out.attr.padding);
+  EXPECT_EQ(0u, response_.entry_out.attr.flags);
 }
 
 TEST_F(FuseAppLoopTest, LookUp_InvalidName) {
@@ -226,7 +226,7 @@ TEST_F(FuseAppLoopTest, GetAttr) {
   EXPECT_EQ(0u, response_.attr_out.attr.gid);
   EXPECT_EQ(0u, response_.attr_out.attr.rdev);
   EXPECT_EQ(0u, response_.attr_out.attr.blksize);
-  EXPECT_EQ(0u, response_.attr_out.attr.padding);
+  EXPECT_EQ(0u, response_.attr_out.attr.flags);
 }
 
 TEST_F(FuseAppLoopTest, GetAttr_Root) {
@@ -259,7 +259,7 @@ TEST_F(FuseAppLoopTest, GetAttr_Root) {
   EXPECT_EQ(0u, response_.attr_out.attr.gid);
   EXPECT_EQ(0u, response_.attr_out.attr.rdev);
   EXPECT_EQ(0u, response_.attr_out.attr.blksize);
-  EXPECT_EQ(0u, response_.attr_out.attr.padding);
+  EXPECT_EQ(0u, response_.attr_out.attr.flags);
 }
 
 TEST_F(FuseAppLoopTest, Open) {

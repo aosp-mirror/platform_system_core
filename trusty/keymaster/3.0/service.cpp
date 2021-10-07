@@ -24,7 +24,7 @@
 int main() {
     ::android::hardware::configureRpcThreadpool(1, true);
     auto trustyKeymaster = new keymaster::TrustyKeymaster();
-    int err = trustyKeymaster->Initialize();
+    int err = trustyKeymaster->Initialize(keymaster::KmVersion::KEYMASTER_3);
     if (err != 0) {
         LOG(FATAL) << "Could not initialize TrustyKeymaster (" << err << ")";
         return -1;

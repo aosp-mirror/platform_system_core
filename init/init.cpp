@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -46,11 +47,13 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <backtrace/Backtrace.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
+#include <libsnapshot/snapshot.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
@@ -69,12 +72,14 @@
 #include "proto_utils.h"
 #include "reboot.h"
 #include "reboot_utils.h"
+#include "second_stage_resources.h"
 #include "security.h"
 #include "selabel.h"
 #include "selinux.h"
 #include "service.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
+#include "snapuserd_transition.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
@@ -91,6 +96,7 @@ using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
 using android::fs_mgr::AvbHandle;
+using android::snapshot::SnapshotManager;
 
 namespace android {
 namespace init {
@@ -231,17 +237,42 @@ static class ShutdownState {
     std::optional<std::string> CheckShutdown() {
         auto lock = std::lock_guard{shutdown_command_lock_};
         if (do_shutdown_ && !IsShuttingDown()) {
-            do_shutdown_ = false;
             return shutdown_command_;
         }
         return {};
     }
+
+    bool do_shutdown() const { return do_shutdown_; }
+    void set_do_shutdown(bool value) { do_shutdown_ = value; }
 
   private:
     std::mutex shutdown_command_lock_;
     std::string shutdown_command_;
     bool do_shutdown_ = false;
 } shutdown_state;
+
+static void UnwindMainThreadStack() {
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
+    if (!backtrace->Unwind(0)) {
+        LOG(ERROR) << __FUNCTION__ << "sys.powerctl: Failed to unwind callstack.";
+    }
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+        LOG(ERROR) << "sys.powerctl: " << backtrace->FormatFrameData(i);
+    }
+}
+
+void DebugRebootLogging() {
+    LOG(INFO) << "sys.powerctl: do_shutdown: " << shutdown_state.do_shutdown()
+              << " IsShuttingDown: " << IsShuttingDown();
+    if (shutdown_state.do_shutdown()) {
+        LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
+        UnwindMainThreadStack();
+    }
+    if (IsShuttingDown()) {
+        LOG(ERROR) << "sys.powerctl set while init is already shutting down";
+        UnwindMainThreadStack();
+    }
+}
 
 void DumpState() {
     ServiceList::GetInstance().DumpState();
@@ -281,14 +312,14 @@ static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_
         // late_import is available only in Q and earlier release. As we don't
         // have system_ext in those versions, skip late_import for system_ext.
         parser.ParseConfig("/system_ext/etc/init");
-        if (!parser.ParseConfig("/product/etc/init")) {
-            late_import_paths.emplace_back("/product/etc/init");
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
         }
         if (!parser.ParseConfig("/odm/etc/init")) {
             late_import_paths.emplace_back("/odm/etc/init");
         }
-        if (!parser.ParseConfig("/vendor/etc/init")) {
-            late_import_paths.emplace_back("/vendor/etc/init");
+        if (!parser.ParseConfig("/product/etc/init")) {
+            late_import_paths.emplace_back("/product/etc/init");
         }
     } else {
         parser.ParseConfig(bootscript);
@@ -487,11 +518,9 @@ static void export_oem_lock_status() {
     if (!android::base::GetBoolProperty("ro.oem_unlock_supported", false)) {
         return;
     }
-    ImportKernelCmdline([](const std::string& key, const std::string& value) {
-        if (key == "androidboot.verifiedbootstate") {
-            SetProperty("ro.boot.flash.locked", value == "orange" ? "0" : "1");
-        }
-    });
+    SetProperty(
+            "ro.boot.flash.locked",
+            android::base::GetProperty("ro.boot.verifiedbootstate", "") == "orange" ? "0" : "1");
 }
 
 static Result<void> property_enable_triggers_action(const BuiltinArguments& args) {
@@ -639,6 +668,12 @@ static void UmountDebugRamdisk() {
     }
 }
 
+static void UmountSecondStageRes() {
+    if (umount(kSecondStageRes) != 0) {
+        PLOG(ERROR) << "Failed to umount " << kSecondStageRes;
+    }
+}
+
 static void MountExtraFilesystems() {
 #define CHECKCALL(x) \
     if ((x) != 0) PLOG(FATAL) << #x " failed.";
@@ -676,6 +711,10 @@ static void RecordStageBoottimes(const boot_clock::time_point& second_stage_star
     SetProperty("ro.boottime.init.selinux",
                 std::to_string(second_stage_start_time.time_since_epoch().count() -
                                selinux_start_time_ns));
+    if (auto init_module_time_str = getenv(kEnvInitModuleDurationMs); init_module_time_str) {
+        SetProperty("ro.boottime.init.modules", init_module_time_str);
+        unsetenv(kEnvInitModuleDurationMs);
+    }
 }
 
 void SendLoadPersistentPropertiesMessage() {
@@ -698,6 +737,12 @@ int SecondStageMain(int argc, char** argv) {
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
+
+    // Update $PATH in the case the second stage init is newer than first stage init, where it is
+    // first set.
+    if (setenv("PATH", _PATH_DEFPATH, 1) != 0) {
+        PLOG(FATAL) << "Could not set $PATH to '" << _PATH_DEFPATH << "' in second stage";
+    }
 
     // Init should not crash because of a dependence on any other process, therefore we ignore
     // SIGPIPE and handle EPIPE at the call site directly.  Note that setting a signal to SIG_IGN
@@ -740,6 +785,9 @@ int SecondStageMain(int argc, char** argv) {
     }
 
     PropertyInit();
+
+    // Umount second stage resources after property service has read the .prop files.
+    UmountSecondStageRes();
 
     // Umount the debug ramdisk after property service has read the .prop files when it means to.
     if (load_debug_prop) {
@@ -809,7 +857,6 @@ int SecondStageMain(int argc, char** argv) {
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");
     // ... so that we can start queuing up actions that require stuff from /dev.
-    am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
     am.QueueBuiltinAction(SetMmapRndBitsAction, "SetMmapRndBits");
     Keychords keychords;
     am.QueueBuiltinAction(
@@ -825,10 +872,6 @@ int SecondStageMain(int argc, char** argv) {
     // Trigger all the boot actions to get us started.
     am.QueueEventTrigger("init");
 
-    // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
-    // wasn't ready immediately after wait_for_coldboot_done
-    am.QueueBuiltinAction(MixHwrngIntoLinuxRngAction, "MixHwrngIntoLinuxRng");
-
     // Don't mount filesystems or start core system services in charger mode.
     std::string bootmode = GetProperty("ro.bootmode", "");
     if (bootmode == "charger") {
@@ -840,13 +883,18 @@ int SecondStageMain(int argc, char** argv) {
     // Run all property triggers based on current state of the properties.
     am.QueueBuiltinAction(queue_property_triggers_action, "queue_property_triggers");
 
+    // Restore prio before main loop
+    setpriority(PRIO_PROCESS, 0, 0);
     while (true) {
         // By default, sleep until something happens.
         auto epoll_timeout = std::optional<std::chrono::milliseconds>{};
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
+            LOG(INFO) << "Got shutdown_command '" << *shutdown_command
+                      << "' Calling HandlePowerctlMessage()";
             HandlePowerctlMessage(*shutdown_command);
+            shutdown_state.set_do_shutdown(false);
         }
 
         if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {

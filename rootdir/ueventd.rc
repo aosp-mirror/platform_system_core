@@ -1,3 +1,6 @@
+import /vendor/etc/ueventd.rc
+import /odm/etc/ueventd.rc
+
 firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
 uevent_socket_rcvbuf_size 16M
 
@@ -17,6 +20,9 @@ subsystem sound
     devname uevent_devpath
     dirname /dev/snd
 
+subsystem dma_heap
+   devname uevent_devpath
+   dirname /dev/dma_heap
 # ueventd can only set permissions on device nodes and their associated
 # sysfs attributes, not on arbitrary paths.
 #
@@ -31,14 +37,15 @@ subsystem sound
 /dev/tty                  0666   root       root
 /dev/random               0666   root       root
 /dev/urandom              0666   root       root
-# Make HW RNG readable by group system to let EntropyMixer read it.
-/dev/hw_random            0440   root       system
 /dev/ashmem*              0666   root       root
 /dev/binder               0666   root       root
 /dev/hwbinder             0666   root       root
 /dev/vndbinder            0666   root       root
 
 /dev/pmsg0                0222   root       log
+/dev/dma_heap/system      0444   system     system
+/dev/dma_heap/system-uncached      0444   system     system
+/dev/dma_heap/system-secure        0444   system     system
 
 # kms driver for drm based gpu
 /dev/dri/*                0666   root       graphics
@@ -60,6 +67,10 @@ subsystem sound
 # CDMA radio interface MUX
 /dev/ppp                  0660   radio      vpn
 
+# Virtualisation is managed by Virt Manager
+/dev/kvm                  0600   virtmanager root
+/dev/vhost-vsock          0600   virtmanager root
+
 # sysfs properties
 /sys/devices/platform/trusty.*      trusty_version        0440  root   log
 /sys/devices/virtual/input/input*   enable      0660  root   input
@@ -67,3 +78,5 @@ subsystem sound
 /sys/devices/virtual/usb_composite/*   enable      0664  root   system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_max_freq   0664  system system
 /sys/devices/system/cpu/cpu*   cpufreq/scaling_min_freq   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* brightness   0664  system system
+/sys/devices/virtual/misc/uhid/*/leds/* multi_intensity   0664  system system

@@ -50,21 +50,21 @@ void sparse_file_destroy(struct sparse_file* s) {
   free(s);
 }
 
-int sparse_file_add_data(struct sparse_file* s, void* data, unsigned int len, unsigned int block) {
+int sparse_file_add_data(struct sparse_file* s, void* data, uint64_t len, unsigned int block) {
   return backed_block_add_data(s->backed_block_list, data, len, block);
 }
 
-int sparse_file_add_fill(struct sparse_file* s, uint32_t fill_val, unsigned int len,
+int sparse_file_add_fill(struct sparse_file* s, uint32_t fill_val, uint64_t len,
                          unsigned int block) {
   return backed_block_add_fill(s->backed_block_list, fill_val, len, block);
 }
 
 int sparse_file_add_file(struct sparse_file* s, const char* filename, int64_t file_offset,
-                         unsigned int len, unsigned int block) {
+                         uint64_t len, unsigned int block) {
   return backed_block_add_file(s->backed_block_list, filename, file_offset, len, block);
 }
 
-int sparse_file_add_fd(struct sparse_file* s, int fd, int64_t file_offset, unsigned int len,
+int sparse_file_add_fd(struct sparse_file* s, int fd, int64_t file_offset, uint64_t len,
                        unsigned int block) {
   return backed_block_add_fd(s->backed_block_list, fd, file_offset, len, block);
 }

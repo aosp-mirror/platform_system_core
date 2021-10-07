@@ -1,0 +1,41 @@
+device_info_data {
+  allow_set_slot_as_unbootable: true
+  is_recovery: true
+}
+is_super_metadata_valid: true
+super_data {
+  partitions {
+    partition_name: "sys_a"
+    new_partition_info {
+      size: 3145728
+    }
+  }
+  partitions {
+    partition_name: "vnnd_"
+    new_partition_info {
+      size: 3145728
+    }
+  }
+  partitions {
+    partition_name: "prd_a"
+    new_partition_info {
+    }
+  }
+  dynamic_partition_metadata {
+    groups {
+      name: "group_google_dp_a"
+      size: 34375467008
+      partition_names: "sys_a"
+      partition_names: "vnd_a"
+      partition_names: "prd_a"
+    }
+  }
+}
+has_metadata_snapshots_dir: true
+actions {
+  handle_imminent_data_wipe: true
+}
+actions {
+  begin_update {
+  }
+}

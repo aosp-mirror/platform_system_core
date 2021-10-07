@@ -1,21 +1,24 @@
-// Copyright (C) 2008 The Android Open Source Project
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+package {
+    default_applicable_licenses: ["system_core_libutils_license"],
+}
+
+license {
+    name: "system_core_libutils_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+    ],
+    license_text: [
+        "NOTICE",
+    ],
+}
 
 cc_library_headers {
     name: "libutils_headers",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
+    vendor_ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
     apex_available: [
@@ -43,7 +46,13 @@ cc_library_headers {
             header_libs: ["libbacktrace_headers"],
             export_header_lib_headers: ["libbacktrace_headers"],
         },
+        linux_glibc: {
+            header_libs: ["libbacktrace_headers"],
+            export_header_lib_headers: ["libbacktrace_headers"],
+        },
         linux_bionic: {
+            header_libs: ["libbacktrace_headers"],
+            export_header_lib_headers: ["libbacktrace_headers"],
             enabled: true,
         },
         windows: {
@@ -55,6 +64,7 @@ cc_library_headers {
 cc_defaults {
     name: "libutils_defaults",
     vendor_available: true,
+    product_available: true,
     recovery_available: true,
     vndk: {
         enabled: true,
@@ -65,6 +75,7 @@ cc_defaults {
     cflags: [
         "-Wall",
         "-Werror",
+        "-Wno-exit-time-destructors",
     ],
     header_libs: [
         "libbase_headers",
@@ -78,11 +89,8 @@ cc_defaults {
         "libcutils",
         "liblog",
     ],
-
-    arch: {
-        mips: {
-            cflags: ["-DALIGN_DOUBLE"],
-        },
+    sanitize: {
+        misc_undefined: ["integer"],
     },
 
     target: {
@@ -133,9 +141,9 @@ cc_library {
         "Errors.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
+        "LightRefBase.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
-        "PropertyMap.cpp",
         "RefBase.cpp",
         "SharedBuffer.cpp",
         "StopWatch.cpp",
@@ -182,15 +190,9 @@ cc_library {
         "CallStack.cpp",
     ],
 
-    arch: {
-        mips: {
-            cflags: ["-DALIGN_DOUBLE"],
-        },
-    },
-
     shared_libs: [
-         "libutils",
-         "libbacktrace",
+        "libutils",
+        "libbacktrace",
     ],
 
     target: {
@@ -208,6 +210,88 @@ cc_library {
     },
 }
 
+cc_defaults {
+    name: "libutils_fuzz_defaults",
+    host_supported: true,
+    shared_libs: [
+        "libutils",
+        "libbase",
+        "liblog",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_bitset",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["BitSet_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_filemap",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["FileMap_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string8",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String8_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_string16",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["String16_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_vector",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Vector_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_printer",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Printer_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_callstack",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["CallStack_fuzz.cpp"],
+    shared_libs: [
+        "libutilscallstack",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_process_callstack",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["ProcessCallStack_fuzz.cpp"],
+    shared_libs: [
+        "libutilscallstack",
+    ],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_refbase",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["RefBase_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_lrucache",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["LruCache_fuzz.cpp"],
+}
+
+cc_fuzz {
+    name: "libutils_fuzz_looper",
+    defaults: ["libutils_fuzz_defaults"],
+    srcs: ["Looper_fuzz.cpp"],
+}
+
 cc_test {
     name: "libutils_test",
     host_supported: true,
@@ -218,9 +302,11 @@ cc_test {
         "LruCache_test.cpp",
         "Mutex_test.cpp",
         "SharedBuffer_test.cpp",
+        "Singleton_test.cpp",
         "String8_test.cpp",
         "String16_test.cpp",
         "StrongPointer_test.cpp",
+        "Timers_test.cpp",
         "Unicode_test.cpp",
         "Vector_test.cpp",
     ],
@@ -253,6 +339,11 @@ cc_test {
         },
     },
 
+    data_libs: [
+        "libutils_test_singleton1",
+        "libutils_test_singleton2",
+    ],
+
     cflags: [
         "-Wall",
         "-Wextra",
@@ -263,29 +354,10 @@ cc_test {
     test_suites: ["device-tests"],
 }
 
-// TODO: the test infrastructure isn't yet capable of running this,
-// so it's broken out into its own test so that the main libutils_tests
-// can be in presubmit even if this can't.
-
-cc_test {
-    name: "libutils_singleton_test",
-    srcs: ["Singleton_test.cpp"],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    shared_libs: ["libbase"],
-
-    required: [
-        ":libutils_test_singleton1",
-        ":libutils_test_singleton2",
-    ],
-}
-
 cc_test_library {
     name: "libutils_test_singleton1",
     host_supported: true,
-    relative_install_path: "libutils_test",
+    installable: false,
     srcs: ["Singleton_test1.cpp"],
     cflags: [
         "-Wall",
@@ -296,7 +368,7 @@ cc_test_library {
 cc_test_library {
     name: "libutils_test_singleton2",
     host_supported: true,
-    relative_install_path: "libutils_test",
+    installable: false,
     srcs: ["Singleton_test2.cpp"],
     cflags: [
         "-Wall",

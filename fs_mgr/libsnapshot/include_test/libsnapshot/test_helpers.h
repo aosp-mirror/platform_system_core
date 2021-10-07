@@ -51,8 +51,8 @@ using namespace std::string_literals;
 extern std::unique_ptr<SnapshotManager> sm;
 extern class TestDeviceInfo* test_device;
 extern std::string fake_super;
-static constexpr uint64_t kSuperSize = 16_MiB + 4_KiB;
-static constexpr uint64_t kGroupSize = 16_MiB;
+static constexpr uint64_t kSuperSize = 32_MiB + 4_KiB;
+static constexpr uint64_t kGroupSize = 32_MiB;
 
 // Redirect requests for "super" to our fake super partition.
 class TestPartitionOpener final : public android::fs_mgr::PartitionOpener {
@@ -77,7 +77,6 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         : TestDeviceInfo(fake_super) {
         set_slot_suffix(slot_suffix);
     }
-    std::string GetGsidDir() const override { return "ota/test"s; }
     std::string GetMetadataDir() const override { return "/metadata/ota/test"s; }
     std::string GetSlotSuffix() const override { return slot_suffix_; }
     std::string GetOtherSlotSuffix() const override { return slot_suffix_ == "_a" ? "_b" : "_a"; }
@@ -95,6 +94,11 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         unbootable_slots_.insert(slot);
         return true;
     }
+    bool IsTestDevice() const override { return true; }
+    bool IsFirstStageInit() const override { return first_stage_init_; }
+    std::unique_ptr<IImageManager> OpenImageManager() const override {
+        return IDeviceInfo::OpenImageManager("ota/test");
+    }
 
     bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
 
@@ -103,6 +107,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         opener_ = std::make_unique<TestPartitionOpener>(path);
     }
     void set_recovery(bool value) { recovery_ = value; }
+    void set_first_stage_init(bool value) { first_stage_init_ = value; }
     MergeStatus merge_status() const { return merge_status_; }
 
   private:
@@ -110,6 +115,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     std::unique_ptr<TestPartitionOpener> opener_;
     MergeStatus merge_status_;
     bool recovery_ = false;
+    bool first_stage_init_ = false;
     std::unordered_set<uint32_t> unbootable_slots_;
 };
 
@@ -144,6 +150,8 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 // Expect space of |path| is multiple of 4K.
 bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
                      std::string* hash = nullptr);
+bool WriteRandomData(ICowWriter* writer, std::string* hash = nullptr);
+std::string HashSnapshot(ISnapshotWriter* writer);
 
 std::optional<std::string> GetHash(const std::string& path);
 

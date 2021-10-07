@@ -1,0 +1,19 @@
+// Copyright 2005 The Android Open Source Project
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary_host {
+    name: "mkbootfs",
+    srcs: ["mkbootfs.c"],
+    cflags: ["-Werror"],
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+    ],
+    dist: {
+        targets: ["dist_files"],
+    },
+}

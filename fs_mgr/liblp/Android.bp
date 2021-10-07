@@ -14,6 +14,10 @@
 // limitations under the License.
 //
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 liblp_lib_deps = [
     "libbase",
     "liblog",
@@ -106,8 +110,4 @@ cc_test {
 cc_test {
     name: "vts_kernel_liblp_test",
     defaults: ["liblp_test_defaults"],
-}
-
-vts_config {
-    name: "VtsKernelLiblpTest",
 }

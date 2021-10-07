@@ -21,7 +21,11 @@
 extern "C" {
 #endif
 
+#include <sys/uio.h>
+#include <trusty/ipc.h>
+
 int tipc_connect(const char *dev_name, const char *srv_name);
+ssize_t tipc_send(int fd, const struct iovec* iov, int iovcnt, struct trusty_shm* shm, int shmcnt);
 int tipc_close(int fd);
 
 #ifdef __cplusplus

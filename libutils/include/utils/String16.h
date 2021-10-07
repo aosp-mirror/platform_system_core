@@ -39,17 +39,7 @@ class StaticString16;
 class String16
 {
 public:
-    /*
-     * Use String16(StaticLinkage) if you're statically linking against
-     * libutils and declaring an empty static String16, e.g.:
-     *
-     *   static String16 sAStaticEmptyString(String16::kEmptyString);
-     *   static String16 sAnotherStaticEmptyString(sAStaticEmptyString);
-     */
-    enum StaticLinkage { kEmptyString };
-
                                 String16();
-    explicit                    String16(StaticLinkage);
                                 String16(const String16& o);
                                 String16(const String16& o,
                                          size_t len,
@@ -95,12 +85,8 @@ public:
 
             bool                contains(const char16_t* chrs) const;
 
-            status_t            makeLower();
-
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
-
-            status_t            remove(size_t len, size_t begin=0);
 
     inline  int                 compare(const String16& other) const;
 
@@ -197,7 +183,7 @@ public:
 ANDROID_TRIVIAL_MOVE_TRAIT(String16)
 
 static inline std::ostream& operator<<(std::ostream& os, const String16& str) {
-    os << String8(str).c_str();
+    os << String8(str);
     return os;
 }
 

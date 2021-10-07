@@ -21,6 +21,7 @@
 
 #include <android-base/parseint.h>
 
+#include "import_parser.h"
 #include "keyword_map.h"
 #include "parser.h"
 
@@ -33,12 +34,12 @@ Result<void> ParsePermissionsLine(std::vector<std::string>&& args,
                                   std::vector<SysfsPermissions>* out_sysfs_permissions,
                                   std::vector<Permissions>* out_dev_permissions) {
     bool is_sysfs = out_sysfs_permissions != nullptr;
-    if (is_sysfs && args.size() != 5) {
-        return Error() << "/sys/ lines must have 5 entries";
+    if (is_sysfs && !(args.size() == 5 || args.size() == 6)) {
+        return Error() << "/sys/ lines must have 5 or 6 entries";
     }
 
-    if (!is_sysfs && args.size() != 4) {
-        return Error() << "/dev/ lines must have 4 entries";
+    if (!is_sysfs && !(args.size() == 4 || args.size() == 5)) {
+        return Error() << "/dev/ lines must have 4 or 5 entries";
     }
 
     auto it = args.begin();
@@ -69,10 +70,19 @@ Result<void> ParsePermissionsLine(std::vector<std::string>&& args,
     }
     gid_t gid = grp->gr_gid;
 
+    bool no_fnm_pathname = false;
+    if (it != args.end()) {
+        std::string& flags = *it++;
+        if (flags != "no_fnm_pathname") {
+            return Error() << "invalid option '" << flags << "', only no_fnm_pathname is supported";
+        }
+        no_fnm_pathname = true;
+    }
+
     if (is_sysfs) {
-        out_sysfs_permissions->emplace_back(name, sysfs_attribute, perm, uid, gid);
+        out_sysfs_permissions->emplace_back(name, sysfs_attribute, perm, uid, gid, no_fnm_pathname);
     } else {
-        out_dev_permissions->emplace_back(name, perm, uid, gid);
+        out_dev_permissions->emplace_back(name, perm, uid, gid, no_fnm_pathname);
     }
     return {};
 }
@@ -96,10 +106,10 @@ Result<void> ParseExternalFirmwareHandlerLine(
     }
 
     if (std::find_if(external_firmware_handlers->begin(), external_firmware_handlers->end(),
-                     [&args](const auto& other) { return other.devpath == args[2]; }) !=
+                     [&args](const auto& other) { return other.devpath == args[1]; }) !=
         external_firmware_handlers->end()) {
         return Error() << "found a previous external_firmware_handler with the same devpath, '"
-                       << args[2] << "'";
+                       << args[1] << "'";
     }
 
     passwd* pwd = getpwnam(args[2].c_str());
@@ -224,6 +234,7 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     Parser parser;
     UeventdConfiguration ueventd_configuration;
 
+    parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
     parser.AddSectionParser("subsystem",
                             std::make_unique<SubsystemParser>(&ueventd_configuration.subsystems));
 

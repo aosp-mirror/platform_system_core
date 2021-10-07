@@ -13,6 +13,16 @@ For example
     uevent_socket_rcvbuf_size 16M
 Sets the uevent socket rcvbuf_size to 16 megabytes.
 
+## Importing configuration files
+--------------------------------
+Ueventd reads /system/etc/ueventd.rc, all other files are imported via the `import` command, which
+takes the format of
+
+    import <path>
+This command parses an ueventd config file, extending the current configuration.  If _path_ is a
+directory, each file in the directory is parsed as a config file. It is not recursive, nested
+directories will not be parsed.  Imported files are parsed after the current file has been parsed.
+
 ## /dev
 ----
 Ueventd listens to the kernel uevent sockets and creates/deletes nodes in `/dev` based on the
@@ -32,7 +42,7 @@ for the node path:
 The permissions can be modified using a ueventd.rc script and a line that beings with `/dev`. These
 lines take the format of
 
-    devname mode uid gid
+    devname mode uid gid [options]
 For example
 
     /dev/null 0666 root root
@@ -70,7 +80,7 @@ Ueventd by default takes no action for `/sys`, however it can be instructed to s
 certain files in `/sys` when matching uevents are generated. This is done using a ueventd.rc script
 and a line that begins with `/sys`. These lines take the format of
 
-    nodename attr mode uid gid
+    nodename attr mode uid gid [options]
 For example
 
     /sys/devices/system/cpu/cpu* cpufreq/scaling_max_freq 0664 system system
@@ -78,13 +88,23 @@ When a uevent that matches the pattern `/sys/devices/system/cpu/cpu*` is sent, t
 attribute, `cpufreq/scaling_max_freq`, will have its mode set to `0664`, its user to to `system` and
 its group set to `system`.
 
-Note that `*` matches as a wildcard and can be used anywhere in a path.
+## Path matching
+----------------
+The path for a `/dev` or `/sys` entry can contain a `*` anywhere in the path.
+1. If the only `*` appears at the end of the string or if the _options_ parameter is set to
+`no_fnm_pathname`, ueventd matches the entry by `fnmatch(entry_path, incoming_path, 0)`
+2. Otherwise, ueventd matches the entry by `fnmatch(entry_path, incoming_path, FNM_PATHNAME)`
+
+See the [man page for fnmatch](https://www.man7.org/linux/man-pages/man3/fnmatch.3.html) for more
+details.
 
 ## Firmware loading
 ----------------
 Ueventd by default serves firmware requests by searching through a list of firmware directories
 for a file matching the uevent `FIRMWARE`. It then forks a process to serve this firmware to the
 kernel.
+
+`/apex/*/etc/firmware` is also searched after a list of firmware directories.
 
 The list of firmware directories is customized by a `firmware_directories` line in a ueventd.rc
 file. This line takes the format of
@@ -110,6 +130,10 @@ For example
 Will launch `/vendor/bin/led_coeffs.bin` as the system user instead of serving the default firmware
 for `/devices/leds/red/firmware/coeffs.bin`.
 
+The `devpath` argument may include asterisks (`*`) to match multiple paths. For example, the string
+`/dev/*/red` will match `/dev/leds/red` as well as `/dev/lights/red`. The pattern matching follows
+the rules of the fnmatch() function.
+
 Ueventd will provide the uevent `DEVPATH` and `FIRMWARE` to this external program on the environment
 via environment variables with the same names. Ueventd will use the string written to stdout as the
 new name of the firmware to load. It will still look for the new firmware in the list of firmware
@@ -131,8 +155,8 @@ ueventd to create the nodes.
 For boot time purposes, this is done in parallel across a set of child processes. `ueventd.cpp` in
 this directory contains documentation on how the parallelization is done.
 
-There is an option to parallelize the restorecon function during cold boot as well. This should only
-be done for devices that do not use genfscon, which is the recommended method for labeling sysfs
-nodes. To enable this option, use the below line in a ueventd.rc script:
+There is an option to parallelize the restorecon function during cold boot as well. It is
+recommended that devices use genfscon for labeling sysfs nodes. However, some devices may benefit
+from enabling the parallelization option:
 
     parallel_restorecon enabled

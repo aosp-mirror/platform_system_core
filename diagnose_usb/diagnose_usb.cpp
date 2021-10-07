@@ -49,7 +49,7 @@ static std::string GetUdevProblem() {
     // additionally just to be sure.
     if (group_member(plugdev_group->gr_gid) || getegid() == plugdev_group->gr_gid) {
         // The user is in plugdev so the problem is likely with the udev rules.
-        return "user in plugdev group; are your udev rules wrong?";
+        return "missing udev rules? user is in the plugdev group";
     }
     passwd* pwd = getpwuid(getuid());
     return android::base::StringPrintf("user %s is not in the plugdev group",

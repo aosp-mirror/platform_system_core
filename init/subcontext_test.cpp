@@ -202,6 +202,8 @@ BuiltinFunctionMap BuildTestFunctionMap() {
 
     // For RecoverAfterAbort
     auto do_cause_log_fatal = [](const BuiltinArguments& args) -> Result<void> {
+        // Since this is an expected failure, disable debuggerd to not generate a tombstone.
+        signal(SIGABRT, SIG_DFL);
         return Error() << std::string(4097, 'f');
     };
     auto do_generate_sane_error = [](const BuiltinArguments& args) -> Result<void> {

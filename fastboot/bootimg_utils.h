@@ -35,7 +35,8 @@
 #include <string>
 #include <vector>
 
-boot_img_hdr_v2* mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
-                           const std::vector<char>& second, const std::vector<char>& dtb,
-                           size_t base, const boot_img_hdr_v2& src, std::vector<char>* out);
+void mkbootimg(const std::vector<char>& kernel, const std::vector<char>& ramdisk,
+               const std::vector<char>& second, const std::vector<char>& dtb, size_t base,
+               const boot_img_hdr_v2& src, std::vector<char>* out);
+
 void bootimg_set_cmdline(boot_img_hdr_v2* h, const std::string& cmdline);

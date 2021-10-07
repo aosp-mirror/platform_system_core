@@ -28,6 +28,8 @@ namespace android {
 
 class ReferenceRenamer;
 
+void LightRefBase_reportIncStrongRequireStrongFailed(const void* thiz);
+
 template <class T>
 class LightRefBase
 {
@@ -35,6 +37,11 @@ public:
     inline LightRefBase() : mCount(0) { }
     inline void incStrong(__attribute__((unused)) const void* id) const {
         mCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    inline void incStrongRequireStrong(__attribute__((unused)) const void* id) const {
+        if (0 == mCount.fetch_add(1, std::memory_order_relaxed)) {
+            LightRefBase_reportIncStrongRequireStrongFailed(this);
+        }
     }
     inline void decStrong(__attribute__((unused)) const void* id) const {
         if (mCount.fetch_sub(1, std::memory_order_release) == 1) {
@@ -58,7 +65,6 @@ private:
 private:
     mutable std::atomic<int32_t> mCount;
 };
-
 
 // This is a wrapper around LightRefBase that simply enforces a virtual
 // destructor to eliminate the template requirement of LightRefBase

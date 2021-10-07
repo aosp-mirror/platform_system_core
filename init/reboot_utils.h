@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #define PROC_SYSRQ "/proc/sysrq-trigger"
@@ -23,7 +24,7 @@
 namespace android {
 namespace init {
 
-void SetFatalRebootTarget();
+void SetFatalRebootTarget(const std::optional<std::string>& reboot_target = std::nullopt);
 // Determines whether the system is capable of rebooting. This is conservative,
 // so if any of the attempts to determine this fail, it will still return true.
 bool IsRebootCapable();

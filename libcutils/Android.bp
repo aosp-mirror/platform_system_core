@@ -1,44 +1,58 @@
-//
-// Copyright (C) 2008 The Android Open Source Project
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+package {
+    default_applicable_licenses: ["system_core_libcutils_license"],
+}
 
-// some files must not be compiled when building against Mingw
-// they correspond to features not used by our host development tools
-// which are also hard or even impossible to port to native Win32
-libcutils_nonwindows_sources = [
-    "fs.cpp",
-    "hashmap.cpp",
-    "multiuser.cpp",
-    "str_parms.cpp",
-]
+license {
+    name: "system_core_libcutils_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+        "SPDX-license-identifier-BSD",
+        "SPDX-license-identifier-MIT", // strlcpy.c
+    ],
+    license_text: [
+        "NOTICE",
+    ],
+}
 
-cc_library_headers {
-    name: "libcutils_headers",
-    vendor_available: true,
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}
+
+cc_defaults {
+    name: "libcutils_defaults",
+    cflags: [
+        "-Wno-exit-time-destructors",
+    ],
+
+    product_available: true,
+    ramdisk_available: true,
     recovery_available: true,
+    vendor_available: true,
+    vendor_ramdisk_available: true,
+
     host_supported: true,
+    native_bridge_supported: true,
+
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
-    native_bridge_supported: true,
+}
+
+cc_library_headers {
+    name: "libcutils_headers",
+    defaults: ["libcutils_defaults"],
+
     export_include_dirs: ["include"],
     target: {
         vendor: {
-            override_export_include_dirs: ["include_vndk"],
+            override_export_include_dirs: ["include_outside_system"],
+        },
+        product: {
+            override_export_include_dirs: ["include_outside_system"],
         },
         linux_bionic: {
             enabled: true,
@@ -52,15 +66,7 @@ cc_library_headers {
 // Socket specific parts of libcutils that are safe to statically link into an APEX.
 cc_library {
     name: "libcutils_sockets",
-    vendor_available: true,
-    recovery_available: true,
-    host_supported: true,
-    native_bridge_supported: true,
-    apex_available: [
-        "//apex_available:platform",
-        "//apex_available:anyapex",
-    ],
-    min_sdk_version: "29",
+    defaults: ["libcutils_defaults"],
 
     export_include_dirs: ["include"],
 
@@ -131,27 +137,30 @@ cc_test {
     },
 }
 
+// some files must not be compiled when building against Mingw
+// they correspond to features not used by our host development tools
+// which are also hard or even impossible to port to native Win32
+libcutils_nonwindows_sources = [
+    "fs.cpp",
+    "hashmap.cpp",
+    "multiuser.cpp",
+    "str_parms.cpp",
+]
+
 cc_library {
     name: "libcutils",
-    vendor_available: true,
+    defaults: ["libcutils_defaults"],
     vndk: {
         enabled: true,
         support_system_process: true,
     },
-    recovery_available: true,
-    host_supported: true,
-    apex_available: [
-        "//apex_available:platform",
-        "//apex_available:anyapex",
-    ],
-    min_sdk_version: "29",
-    native_bridge_supported: true,
     srcs: [
         "config_utils.cpp",
         "canned_fs_config.cpp",
         "iosched_policy.cpp",
         "load_file.cpp",
         "native_handle.cpp",
+        "properties.cpp",
         "record_stream.cpp",
         "strlcpy.c",
         "threads.cpp",
@@ -187,7 +196,6 @@ cc_library {
                 "fs_config.cpp",
                 "klog.cpp",
                 "partition_utils.cpp",
-                "properties.cpp",
                 "qtaguid.cpp",
                 "trace-dev.cpp",
                 "uevent.cpp",
@@ -220,14 +228,19 @@ cc_library {
             },
         },
 
+        // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
+        // the interface of libnetd_client.so may vary between AOSP
+        // releases, exclude qtaguid.cpp from the VNDK-SP variant.
         vendor: {
             exclude_srcs: [
-                // qtaguid.cpp loads libnetd_client.so with dlopen().  Since
-                // the interface of libnetd_client.so may vary between AOSP
-                // releases, exclude qtaguid.cpp from the VNDK-SP variant.
                 "qtaguid.cpp",
             ],
-        }
+        },
+        product: {
+            exclude_srcs: [
+                "qtaguid.cpp",
+            ],
+        },
     },
 
     whole_static_libs: ["libcutils_sockets"],
@@ -238,7 +251,6 @@ cc_library {
     header_libs: [
         "libbase_headers",
         "libcutils_headers",
-        "libutils_headers",
         "libprocessgroup_headers",
     ],
     export_header_lib_headers: [
@@ -258,6 +270,7 @@ cc_defaults {
     name: "libcutils_test_default",
     srcs: [
         "native_handle_test.cpp",
+        "properties_test.cpp",
         "sockets_test.cpp",
     ],
 
@@ -269,7 +282,6 @@ cc_defaults {
                 "ashmem_test.cpp",
                 "fs_config_test.cpp",
                 "multiuser_test.cpp",
-                "properties_test.cpp",
                 "sched_policy_test.cpp",
                 "str_parms_test.cpp",
                 "trace-dev_test.cpp",
@@ -341,4 +353,19 @@ cc_test {
     test_suites: ["general-tests", "vts"],
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
+}
+
+rust_bindgen {
+    name: "libcutils_bindgen",
+    wrapper_src: "rust/cutils.h",
+    crate_name: "cutils_bindgen",
+    source_stem: "bindings",
+    local_include_dirs: ["include"],
+    bindgen_flags: [
+        "--allowlist-function", "multiuser_get_app_id",
+        "--allowlist-function", "multiuser_get_uid",
+        "--allowlist-function", "multiuser_get_user_id",
+        "--allowlist-var", "AID_KEYSTORE",
+        "--allowlist-var", "AID_USER_OFFSET",
+    ],
 }

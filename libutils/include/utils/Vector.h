@@ -23,15 +23,13 @@
 #include <log/log.h>
 #include <utils/TypeHelpers.h>
 #include <utils/VectorImpl.h>
-
-/*
- * Used to blacklist some functions from CFI.
- *
- */
 #ifndef __has_attribute
 #define __has_attribute(x) 0
 #endif
 
+/*
+ * Used to exclude some functions from CFI.
+ */
 #if __has_attribute(no_sanitize)
 #define UTILS_VECTOR_NO_CFI __attribute__((no_sanitize("cfi")))
 #else

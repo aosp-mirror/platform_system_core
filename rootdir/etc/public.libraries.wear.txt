@@ -16,6 +16,7 @@ libjnigraphics.so
 liblog.so
 libmediandk.so
 libm.so
+libnativehelper.so
 libnativewindow.so
 libneuralnetworks.so
 libOpenMAXAL.so

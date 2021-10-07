@@ -27,58 +27,34 @@
 #include <android-base/properties.h>
 #include <android-base/result.h>
 #include <android-base/unique_fd.h>
-#include <apex_manifest.pb.h>
 
 #include "util.h"
+
+#ifndef RECOVERY
+#define ACTIVATE_FLATTENED_APEX 1
+#endif
+
+#ifdef ACTIVATE_FLATTENED_APEX
+#include <apex_manifest.pb.h>
+#include <com_android_apex.h>
+#include <selinux/android.h>
+#endif  // ACTIVATE_FLATTENED_APEX
 
 namespace android {
 namespace init {
 namespace {
 
-static bool BindMount(const std::string& source, const std::string& mount_point,
-                      bool recursive = false) {
-    unsigned long mountflags = MS_BIND;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(source.c_str(), mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
+static bool BindMount(const std::string& source, const std::string& mount_point) {
+    if (mount(source.c_str(), mount_point.c_str(), nullptr, MS_BIND | MS_REC, nullptr) == -1) {
         PLOG(ERROR) << "Failed to bind mount " << source;
         return false;
     }
     return true;
 }
 
-static bool MakeShared(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_SHARED;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
+static bool ChangeMount(const std::string& mount_point, unsigned long mountflags) {
     if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to shared";
-        return false;
-    }
-    return true;
-}
-
-static bool MakeSlave(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_SLAVE;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to slave";
-        return false;
-    }
-    return true;
-}
-
-static bool MakePrivate(const std::string& mount_point, bool recursive = false) {
-    unsigned long mountflags = MS_PRIVATE;
-    if (recursive) {
-        mountflags |= MS_REC;
-    }
-    if (mount(nullptr, mount_point.c_str(), nullptr, mountflags, nullptr) == -1) {
-        PLOG(ERROR) << "Failed to change propagation type to private";
+        PLOG(ERROR) << "Failed to remount " << mount_point << " as " << std::hex << mountflags;
         return false;
     }
     return true;
@@ -106,6 +82,8 @@ static bool IsApexUpdatable() {
     return updatable;
 }
 
+#ifdef ACTIVATE_FLATTENED_APEX
+
 static Result<void> MountDir(const std::string& path, const std::string& mount_path) {
     if (int ret = mkdir(mount_path.c_str(), 0755); ret != 0 && errno != EEXIST) {
         return ErrnoError() << "Could not create mount point " << mount_path;
@@ -116,7 +94,7 @@ static Result<void> MountDir(const std::string& path, const std::string& mount_p
     return {};
 }
 
-static Result<std::string> GetApexName(const std::string& apex_dir) {
+static Result<apex::proto::ApexManifest> GetApexManifest(const std::string& apex_dir) {
     const std::string manifest_path = apex_dir + "/apex_manifest.pb";
     std::string content;
     if (!android::base::ReadFileToString(manifest_path, &content)) {
@@ -126,30 +104,39 @@ static Result<std::string> GetApexName(const std::string& apex_dir) {
     if (!manifest.ParseFromString(content)) {
         return Error() << "Can't parse manifest file: " << manifest_path;
     }
-    return manifest.name();
+    return manifest;
 }
 
+template <typename Fn>
 static Result<void> ActivateFlattenedApexesFrom(const std::string& from_dir,
-                                                const std::string& to_dir) {
+                                                const std::string& to_dir, Fn on_activate) {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(from_dir.c_str()), closedir);
     if (!dir) {
         return {};
     }
     dirent* entry;
+    std::vector<std::string> entries;
+
     while ((entry = readdir(dir.get())) != nullptr) {
         if (entry->d_name[0] == '.') continue;
         if (entry->d_type == DT_DIR) {
-            const std::string apex_path = from_dir + "/" + entry->d_name;
-            const auto apex_name = GetApexName(apex_path);
-            if (!apex_name.ok()) {
-                LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_name.error();
-                continue;
-            }
-            const std::string mount_path = to_dir + "/" + (*apex_name);
-            if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
-                return result;
-            }
+            entries.push_back(entry->d_name);
         }
+    }
+
+    std::sort(entries.begin(), entries.end());
+    for (const auto& name : entries) {
+        const std::string apex_path = from_dir + "/" + name;
+        const auto apex_manifest = GetApexManifest(apex_path);
+        if (!apex_manifest.ok()) {
+            LOG(ERROR) << apex_path << " is not an APEX directory: " << apex_manifest.error();
+            continue;
+        }
+        const std::string mount_path = to_dir + "/" + apex_manifest->name();
+        if (auto result = MountDir(apex_path, mount_path); !result.ok()) {
+            return result;
+        }
+        on_activate(apex_path, *apex_manifest);
     }
     return {};
 }
@@ -167,28 +154,37 @@ static bool ActivateFlattenedApexesIfPossible() {
             "/vendor/apex",
     };
 
+    std::vector<com::android::apex::ApexInfo> apex_infos;
+    auto on_activate = [&](const std::string& apex_path,
+                           const apex::proto::ApexManifest& apex_manifest) {
+        apex_infos.emplace_back(apex_manifest.name(), apex_path, apex_path, apex_manifest.version(),
+                                apex_manifest.versionname(), /*isFactory=*/true, /*isActive=*/true,
+                                /* lastUpdateMillis= */ 0);
+    };
+
     for (const auto& dir : kBuiltinDirsForApexes) {
-        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop); !result.ok()) {
+        if (auto result = ActivateFlattenedApexesFrom(dir, kApexTop, on_activate); !result.ok()) {
             LOG(ERROR) << result.error();
             return false;
         }
     }
+
+    std::ostringstream oss;
+    com::android::apex::ApexInfoList apex_info_list(apex_infos);
+    com::android::apex::write(oss, apex_info_list);
+    const std::string kApexInfoList = kApexTop + "/apex-info-list.xml";
+    if (!android::base::WriteStringToFile(oss.str(), kApexInfoList)) {
+        PLOG(ERROR) << "Failed to write " << kApexInfoList;
+        return false;
+    }
+    if (selinux_android_restorecon(kApexInfoList.c_str(), 0) != 0) {
+        PLOG(ERROR) << "selinux_android_restorecon(" << kApexInfoList << ") failed";
+    }
+
     return true;
 }
 
-static Result<void> MountLinkerConfigForDefaultNamespace() {
-    // No need to mount linkerconfig for default mount namespace if the path does not exist (which
-    // would mean it is already mounted)
-    if (access("/linkerconfig/default", 0) != 0) {
-        return {};
-    }
-
-    if (mount("/linkerconfig/default", "/linkerconfig", nullptr, MS_BIND | MS_REC, nullptr) != 0) {
-        return ErrnoError() << "Failed to mount linker configuration for default mount namespace.";
-    }
-
-    return {};
-}
+#endif  // ACTIVATE_FLATTENED_APEX
 
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
@@ -204,17 +200,17 @@ bool SetupMountNamespaces() {
     // needed for /foo/bar, then we will make /foo/bar as a mount point (by
     // bind-mounting by to itself) and set the propagation type of the mount
     // point to private.
-    if (!MakeShared("/", true /*recursive*/)) return false;
+    if (!ChangeMount("/", MS_SHARED | MS_REC)) return false;
 
     // /apex is a private mountpoint to give different sets of APEXes for
     // the bootstrap and default mount namespaces. The processes running with
     // the bootstrap namespace get APEXes from the read-only partition.
-    if (!(MakePrivate("/apex"))) return false;
+    if (!(ChangeMount("/apex", MS_PRIVATE))) return false;
 
     // /linkerconfig is a private mountpoint to give a different linker configuration
     // based on the mount namespace. Subdirectory will be bind-mounted based on current mount
     // namespace
-    if (!(MakePrivate("/linkerconfig"))) return false;
+    if (!(ChangeMount("/linkerconfig", MS_PRIVATE))) return false;
 
     // The two mount namespaces present challenges for scoped storage, because
     // vold, which is responsible for most of the mounting, lives in the
@@ -245,15 +241,15 @@ bool SetupMountNamespaces() {
     if (!mkdir_recursive("/mnt/user", 0755)) return false;
     if (!mkdir_recursive("/mnt/installer", 0755)) return false;
     if (!mkdir_recursive("/mnt/androidwritable", 0755)) return false;
-    if (!(BindMount("/mnt/user", "/mnt/installer", true))) return false;
-    if (!(BindMount("/mnt/user", "/mnt/androidwritable", true))) return false;
+    if (!(BindMount("/mnt/user", "/mnt/installer"))) return false;
+    if (!(BindMount("/mnt/user", "/mnt/androidwritable"))) return false;
     // First, make /mnt/installer and /mnt/androidwritable a slave bind mount
-    if (!(MakeSlave("/mnt/installer"))) return false;
-    if (!(MakeSlave("/mnt/androidwritable"))) return false;
+    if (!(ChangeMount("/mnt/installer", MS_SLAVE))) return false;
+    if (!(ChangeMount("/mnt/androidwritable", MS_SLAVE))) return false;
     // Then, make it shared again - effectively creating a new peer group, that
     // will be inherited by new mount namespaces.
-    if (!(MakeShared("/mnt/installer"))) return false;
-    if (!(MakeShared("/mnt/androidwritable"))) return false;
+    if (!(ChangeMount("/mnt/installer", MS_SHARED))) return false;
+    if (!(ChangeMount("/mnt/androidwritable", MS_SHARED))) return false;
 
     bootstrap_ns_fd.reset(OpenMountNamespace());
     bootstrap_ns_id = GetMountNamespaceId();
@@ -283,47 +279,42 @@ bool SetupMountNamespaces() {
         default_ns_fd.reset(OpenMountNamespace());
         default_ns_id = GetMountNamespaceId();
     }
-
+#ifdef ACTIVATE_FLATTENED_APEX
     success &= ActivateFlattenedApexesIfPossible();
-
+#endif
     LOG(INFO) << "SetupMountNamespaces done";
     return success;
 }
 
-bool SwitchToDefaultMountNamespace() {
-    if (IsRecoveryMode()) {
-        // we don't have multiple namespaces in recovery mode
-        return true;
+Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace) {
+    if (IsRecoveryMode() || !IsApexUpdatable()) {
+        // we don't have multiple namespaces in recovery mode or if apex is not updatable
+        return {};
     }
-    if (default_ns_id != GetMountNamespaceId()) {
-        if (setns(default_ns_fd.get(), CLONE_NEWNS) == -1) {
-            PLOG(ERROR) << "Failed to switch back to the default mount namespace.";
-            return false;
-        }
-
-        if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
-            LOG(ERROR) << result.error();
-            return false;
+    const auto& ns_id = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_id : default_ns_id;
+    const auto& ns_fd = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_fd : default_ns_fd;
+    const auto& ns_name = target_mount_namespace == NS_BOOTSTRAP ? "bootstrap" : "default";
+    if (ns_id != GetMountNamespaceId() && ns_fd.get() != -1) {
+        if (setns(ns_fd.get(), CLONE_NEWNS) == -1) {
+            return ErrnoError() << "Failed to switch to " << ns_name << " mount namespace.";
         }
     }
-
-    LOG(INFO) << "Switched to default mount namespace";
-    return true;
+    return {};
 }
 
-bool SwitchToBootstrapMountNamespaceIfNeeded() {
-    if (IsRecoveryMode()) {
-        // we don't have multiple namespaces in recovery mode
-        return true;
+base::Result<MountNamespace> GetCurrentMountNamespace() {
+    std::string current_namespace_id = GetMountNamespaceId();
+    if (current_namespace_id == "") {
+        return Error() << "Failed to get current mount namespace ID";
     }
-    if (bootstrap_ns_id != GetMountNamespaceId() && bootstrap_ns_fd.get() != -1 &&
-        IsApexUpdatable()) {
-        if (setns(bootstrap_ns_fd.get(), CLONE_NEWNS) == -1) {
-            PLOG(ERROR) << "Failed to switch to bootstrap mount namespace.";
-            return false;
-        }
+
+    if (current_namespace_id == bootstrap_ns_id) {
+        return NS_BOOTSTRAP;
+    } else if (current_namespace_id == default_ns_id) {
+        return NS_DEFAULT;
     }
-    return true;
+
+    return Error() << "Failed to find current mount namespace";
 }
 
 }  // namespace init

@@ -1,4 +1,8 @@
 
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 prebuilt_etc {
     name: "code_coverage.policy",
     sub_dir: "seccomp_policy",

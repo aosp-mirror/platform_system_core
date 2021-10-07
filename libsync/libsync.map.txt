@@ -19,7 +19,7 @@ LIBSYNC {
     sync_merge; # introduced=26
     sync_file_info; # introduced=26
     sync_file_info_free; # introduced=26
-    sync_wait; # llndk
+    sync_wait; # llndk apex
     sync_fence_info; # llndk
     sync_pt_info; # llndk
     sync_fence_info_free; # llndk

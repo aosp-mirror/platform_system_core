@@ -54,7 +54,7 @@ void GeneratePartitionImage(int fd, const std::string& file_name,
     cmd << "avbtool add_hashtree_footer"
         << " --image " << file_name << " --partition_name " << partition_name
         << " --partition_size " << FAKE_PARTITION_SIZE << " --algorithm SHA256_RSA2048"
-        << " --key external/avb/test/data/testkey_rsa2048.pem";
+        << " --key data/testkey_rsa2048.pem";
 
     int rc = system(cmd.str().c_str());
     EXPECT_TRUE(WIFEXITED(rc));

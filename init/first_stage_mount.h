@@ -19,7 +19,8 @@
 namespace android {
 namespace init {
 
-bool DoFirstStageMount();
+bool DoCreateDevices();
+bool DoFirstStageMount(bool create_devices);
 void SetInitAvbVersionInRecovery();
 
 }  // namespace init

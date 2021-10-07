@@ -81,6 +81,15 @@ class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGa
         return Send(GK_VERIFY, request, response);
     }
 
+    gatekeeper_error_t Send(const DeleteUserRequest& request, DeleteUserResponse* response) {
+        return Send(GK_DELETE_USER, request, response);
+    }
+
+    gatekeeper_error_t Send(const DeleteAllUsersRequest& request,
+                            DeleteAllUsersResponse* response) {
+        return Send(GK_DELETE_ALL_USERS, request, response);
+    }
+
     int error_;
 };
 

@@ -38,7 +38,7 @@ class Permissions {
   public:
     friend void TestPermissions(const Permissions& expected, const Permissions& test);
 
-    Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid);
+    Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid, bool no_fnm_pathname);
 
     bool Match(const std::string& path) const;
 
@@ -56,6 +56,7 @@ class Permissions {
     gid_t gid_;
     bool prefix_;
     bool wildcard_;
+    bool no_fnm_pathname_;
 };
 
 class SysfsPermissions : public Permissions {
@@ -63,8 +64,8 @@ class SysfsPermissions : public Permissions {
     friend void TestSysfsPermissions(const SysfsPermissions& expected, const SysfsPermissions& test);
 
     SysfsPermissions(const std::string& name, const std::string& attribute, mode_t perm, uid_t uid,
-                     gid_t gid)
-        : Permissions(name, perm, uid, gid), attribute_(attribute) {}
+                     gid_t gid, bool no_fnm_pathname)
+        : Permissions(name, perm, uid, gid, no_fnm_pathname), attribute_(attribute) {}
 
     bool MatchWithSubsystem(const std::string& path, const std::string& subsystem) const;
     void SetPermissions(const std::string& path) const;
