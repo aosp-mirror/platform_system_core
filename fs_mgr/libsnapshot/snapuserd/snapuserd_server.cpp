@@ -31,7 +31,6 @@
 #include <android-base/scopeguard.h>
 #include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
-#include "snapuserd.h"
 #include "snapuserd_server.h"
 
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
