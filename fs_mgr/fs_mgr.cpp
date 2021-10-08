@@ -2119,6 +2119,9 @@ static bool PrepareZramBackingDevice(off64_t size) {
         PERROR << "Cannot open " << loop_device;
         return false;
     }
+    if (!LoopControl::SetAutoClearStatus(loop_fd.get())) {
+        PERROR << "Failed set LO_FLAGS_AUTOCLEAR for " << loop_device;
+    }
     if (!LoopControl::EnableDirectIo(loop_fd.get())) {
         return false;
     }
