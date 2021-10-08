@@ -100,6 +100,9 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
         return IDeviceInfo::OpenImageManager("ota/test");
     }
     android::dm::IDeviceMapper& GetDeviceMapper() override {
+        if (dm_) {
+            return *dm_;
+        }
         return android::dm::DeviceMapper::Instance();
     }
 
@@ -111,6 +114,8 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     }
     void set_recovery(bool value) { recovery_ = value; }
     void set_first_stage_init(bool value) { first_stage_init_ = value; }
+    void set_dm(android::dm::IDeviceMapper* dm) { dm_ = dm; }
+
     MergeStatus merge_status() const { return merge_status_; }
 
   private:
@@ -120,6 +125,45 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     bool recovery_ = false;
     bool first_stage_init_ = false;
     std::unordered_set<uint32_t> unbootable_slots_;
+    android::dm::IDeviceMapper* dm_ = nullptr;
+};
+
+class DeviceMapperWrapper : public android::dm::IDeviceMapper {
+    using DmDeviceState = android::dm::DmDeviceState;
+    using DmTable = android::dm::DmTable;
+
+  public:
+    DeviceMapperWrapper() : impl_(android::dm::DeviceMapper::Instance()) {}
+    explicit DeviceMapperWrapper(android::dm::IDeviceMapper& impl) : impl_(impl) {}
+
+    virtual bool CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                              const std::chrono::milliseconds& timeout_ms) override {
+        return impl_.CreateDevice(name, table, path, timeout_ms);
+    }
+    virtual DmDeviceState GetState(const std::string& name) const override {
+        return impl_.GetState(name);
+    }
+    virtual bool LoadTableAndActivate(const std::string& name, const DmTable& table) {
+        return impl_.LoadTableAndActivate(name, table);
+    }
+    virtual bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {
+        return impl_.GetTableInfo(name, table);
+    }
+    virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
+        return impl_.GetTableStatus(name, table);
+    }
+    virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) {
+        return impl_.GetDmDevicePathByName(name, path);
+    }
+    virtual bool GetDeviceString(const std::string& name, std::string* dev) {
+        return impl_.GetDeviceString(name, dev);
+    }
+    virtual bool DeleteDeviceIfExists(const std::string& name) {
+        return impl_.DeleteDeviceIfExists(name);
+    }
+
+  private:
+    android::dm::IDeviceMapper& impl_;
 };
 
 class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {
