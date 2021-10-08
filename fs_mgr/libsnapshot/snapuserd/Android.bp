@@ -57,10 +57,16 @@ cc_defaults {
     ],
     srcs: [
         "snapuserd_server.cpp",
-        "snapuserd.cpp",
+        "dm-snapshot-merge/snapuserd.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+        "dm-snapshot-merge/snapuserd_readahead.cpp",
         "snapuserd_daemon.cpp",
-        "snapuserd_worker.cpp",
-        "snapuserd_readahead.cpp",
+	"snapuserd_buffer.cpp",
+	"user-space-merge/snapuserd_core.cpp",
+	"user-space-merge/snapuserd_dm_user.cpp",
+	"user-space-merge/snapuserd_merge.cpp",
+	"user-space-merge/snapuserd_readahead.cpp",
+	"user-space-merge/snapuserd_transitions.cpp",
     ],
 
     cflags: [
@@ -101,9 +107,10 @@ cc_test {
         "fs_mgr_defaults",
     ],
     srcs: [
-        "cow_snapuserd_test.cpp",
-        "snapuserd.cpp",
-        "snapuserd_worker.cpp",
+        "dm-snapshot-merge/cow_snapuserd_test.cpp",
+        "dm-snapshot-merge/snapuserd.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+	"snapuserd_buffer.cpp",
     ],
     cflags: [
         "-Wall",
