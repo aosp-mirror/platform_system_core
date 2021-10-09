@@ -28,7 +28,7 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
-#include "snapuserd.h"
+#include "dm-snapshot-merge/snapuserd.h"
 
 namespace android {
 namespace snapshot {
