@@ -112,36 +112,6 @@ void TrustyKeymaster::GetVersion(const GetVersionRequest& request, GetVersionRes
     ForwardCommand(KM_GET_VERSION, request, response);
 }
 
-void TrustyKeymaster::SupportedAlgorithms(const SupportedAlgorithmsRequest& request,
-                                          SupportedAlgorithmsResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_ALGORITHMS, request, response);
-}
-
-void TrustyKeymaster::SupportedBlockModes(const SupportedBlockModesRequest& request,
-                                          SupportedBlockModesResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_BLOCK_MODES, request, response);
-}
-
-void TrustyKeymaster::SupportedPaddingModes(const SupportedPaddingModesRequest& request,
-                                            SupportedPaddingModesResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_PADDING_MODES, request, response);
-}
-
-void TrustyKeymaster::SupportedDigests(const SupportedDigestsRequest& request,
-                                       SupportedDigestsResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_DIGESTS, request, response);
-}
-
-void TrustyKeymaster::SupportedImportFormats(const SupportedImportFormatsRequest& request,
-                                             SupportedImportFormatsResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_IMPORT_FORMATS, request, response);
-}
-
-void TrustyKeymaster::SupportedExportFormats(const SupportedExportFormatsRequest& request,
-                                             SupportedExportFormatsResponse* response) {
-    ForwardCommand(KM_GET_SUPPORTED_EXPORT_FORMATS, request, response);
-}
-
 void TrustyKeymaster::AddRngEntropy(const AddEntropyRequest& request,
                                     AddEntropyResponse* response) {
     ForwardCommand(KM_ADD_RNG_ENTROPY, request, response);
