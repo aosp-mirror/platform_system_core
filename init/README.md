@@ -77,6 +77,43 @@ monolithic init .rc files.  This additionally will aid in merge
 conflict resolution when multiple services are added to the system, as
 each one will go into a separate file.
 
+Versioned RC files within APEXs
+-------------------------------
+
+With the arrival of mainline on Android Q, the individual mainline
+modules carry their own init.rc files within their boundaries. Init
+processes these files according to the naming pattern `/apex/*/etc/*rc`.
+
+Because APEX modules must run on more than one release of Android,
+they may require different parameters as part of the services they
+define. This is achieved, starting in Android T, by incorporating
+the SDK version information in the name of the init file.  The suffix
+is changed from `.rc` to `.#rc` where # is the first SDK where that
+RC file is accepted. An init file specific to SDK=31 might be named
+`init.31rc`. With this scheme, an APEX may include multiple init files. An
+example is appropriate.
+
+For an APEX module with the following files in /apex/sample-module/apex/etc/:
+
+   1. init.rc
+   2. init.32rc
+   4. init.35rc
+
+The selection rule chooses the highest `.#rc` value that does not
+exceed the SDK of the currently running system. The unadorned `.rc`
+is interpreted as sdk=0.
+
+When this APEX is installed on a device with SDK <=31, the system will
+process init.rc.  When installed on a device running SDK 32, 33, or 34,
+it will use init.32rc.  When installed on a device running SDKs >= 35,
+it will choose init.35rc
+
+This versioning scheme is used only for the init files within APEX
+modules; it does not apply to the init files stored in /system/etc/init,
+/vendor/etc/init, or other directories.
+
+This naming scheme is available after Android S.
+
 Actions
 -------
 Actions are named sequences of commands.  Actions have a trigger which
