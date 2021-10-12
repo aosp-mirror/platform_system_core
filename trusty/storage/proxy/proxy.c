@@ -26,6 +26,7 @@
 
 #include <cutils/android_filesystem_config.h>
 
+#include "checkpoint_handling.h"
 #include "ipc.h"
 #include "log.h"
 #include "rpmb.h"
@@ -125,6 +126,21 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
     if (msg->flags & STORAGE_MSG_FLAG_PRE_COMMIT) {
         rc = storage_sync_checkpoint();
         if (rc < 0) {
+            msg->result = STORAGE_ERR_GENERIC;
+            return ipc_respond(msg, NULL, 0);
+        }
+    }
+
+    if (msg->flags & STORAGE_MSG_FLAG_PRE_COMMIT_CHECKPOINT) {
+        bool is_checkpoint_active = false;
+
+        rc = is_data_checkpoint_active(&is_checkpoint_active);
+        if (rc != 0) {
+            ALOGE("is_data_checkpoint_active failed in an unexpected way. Aborting.\n");
+            msg->result = STORAGE_ERR_GENERIC;
+            return ipc_respond(msg, NULL, 0);
+        } else if (is_checkpoint_active) {
+            ALOGE("Checkpoint in progress, dropping write ...\n");
             msg->result = STORAGE_ERR_GENERIC;
             return ipc_respond(msg, NULL, 0);
         }
