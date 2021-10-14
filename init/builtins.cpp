@@ -28,6 +28,7 @@
 #include <net/if.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <map>
 #include <memory>
 
 #include <ApexProperties.sysprop.h>
@@ -1313,7 +1315,7 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
 
 static Result<void> parse_apex_configs() {
     glob_t glob_result;
-    static constexpr char glob_pattern[] = "/apex/*/etc/*.rc";
+    static constexpr char glob_pattern[] = "/apex/*/etc/*rc";
     const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
     if (ret != 0 && ret != GLOB_NOMATCH) {
         globfree(&glob_result);
@@ -1330,17 +1332,66 @@ static Result<void> parse_apex_configs() {
         if (paths.size() >= 3 && paths[2].find('@') != std::string::npos) {
             continue;
         }
+        // Filter directories
+        if (path.back() == '/') {
+            continue;
+        }
         configs.push_back(path);
     }
     globfree(&glob_result);
 
-    bool success = true;
+    // Compare all files /apex/path.#rc and /apex/path.rc with the same "/apex/path" prefix,
+    // choosing the one with the highest # that doesn't exceed the system's SDK.
+    // (.rc == .0rc for ranking purposes)
+    //
+    int active_sdk = android::base::GetIntProperty("ro.build.version.sdk", INT_MAX);
+
+    std::map<std::string, std::pair<std::string, int>> script_map;
+
     for (const auto& c : configs) {
-        if (c.back() == '/') {
-            // skip if directory
+        int sdk = 0;
+        const std::vector<std::string> parts = android::base::Split(c, ".");
+        std::string base;
+        if (parts.size() < 2) {
             continue;
         }
-        success &= parser.ParseConfigFile(c);
+
+        // parts[size()-1], aka the suffix, should be "rc" or "#rc"
+        // any other pattern gets discarded
+
+        const auto& suffix = parts[parts.size() - 1];
+        if (suffix == "rc") {
+            sdk = 0;
+        } else {
+            char trailer[9] = {0};
+            int r = sscanf(suffix.c_str(), "%d%8s", &sdk, trailer);
+            if (r != 2) {
+                continue;
+            }
+            if (strlen(trailer) > 2 || strcmp(trailer, "rc") != 0) {
+                continue;
+            }
+        }
+
+        if (sdk < 0 || sdk > active_sdk) {
+            continue;
+        }
+
+        base = parts[0];
+        for (unsigned int i = 1; i < parts.size() - 1; i++) {
+            base = base + "." + parts[i];
+        }
+
+        // is this preferred over what we already have
+        auto it = script_map.find(base);
+        if (it == script_map.end() || it->second.second < sdk) {
+            script_map[base] = std::make_pair(c, sdk);
+        }
+    }
+
+    bool success = true;
+    for (const auto& m : script_map) {
+        success &= parser.ParseConfigFile(m.second.first);
     }
     ServiceList::GetInstance().MarkServicesUpdate();
     if (success) {
