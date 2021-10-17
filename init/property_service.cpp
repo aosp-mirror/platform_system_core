@@ -100,6 +100,7 @@ constexpr auto ID_PROP = "ro.build.id";
 constexpr auto LEGACY_ID_PROP = "ro.build.legacy.id";
 constexpr auto VBMETA_DIGEST_PROP = "ro.boot.vbmeta.digest";
 constexpr auto DIGEST_SIZE_USED = 8;
+constexpr auto API_LEVEL_CURRENT = 10000;
 
 static bool persistent_properties_loaded = false;
 
@@ -1017,29 +1018,37 @@ static void property_initialize_ro_cpu_abilist() {
     }
 }
 
+static int read_api_level_props(const std::vector<std::string>& api_level_props) {
+    int api_level = API_LEVEL_CURRENT;
+    for (const auto& api_level_prop : api_level_props) {
+        api_level = android::base::GetIntProperty(api_level_prop, API_LEVEL_CURRENT);
+        if (api_level != API_LEVEL_CURRENT) {
+            break;
+        }
+    }
+    return api_level;
+}
+
 static void property_initialize_ro_vendor_api_level() {
     // ro.vendor.api_level shows the api_level that the vendor images (vendor, odm, ...) are
     // required to support.
     constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
-    // Candidate api levels. The order of the properties must be kept.
-    const char* VENDOR_API_LEVEL_PROPS[] = {
-            "ro.board.api_level", "ro.board.first_api_level",    "ro.product.first_api_level",
-            "ro.vndk.version",    "ro.vendor.build.version.sdk", "ro.build.version.sdk"};
 
-    for (const auto& api_level_prop : VENDOR_API_LEVEL_PROPS) {
-        int api_level = android::base::GetIntProperty(api_level_prop, 0);
-        if (api_level != 0) {
-            std::string error;
-            uint32_t res = PropertySet(VENDOR_API_LEVEL_PROP, std::to_string(api_level), &error);
-            if (res != PROP_SUCCESS) {
-                LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << api_level
-                           << ": " << error;
-            }
-            return;
-        }
+    // Api level properties of the board. The order of the properties must be kept.
+    std::vector<std::string> BOARD_API_LEVEL_PROPS = {
+            "ro.board.api_level", "ro.board.first_api_level", "ro.vendor.build.version.sdk"};
+    // Api level properties of the device. The order of the properties must be kept.
+    std::vector<std::string> DEVICE_API_LEVEL_PROPS = {"ro.product.first_api_level",
+                                                       "ro.build.version.sdk"};
+
+    int api_level = std::min(read_api_level_props(BOARD_API_LEVEL_PROPS),
+                             read_api_level_props(DEVICE_API_LEVEL_PROPS));
+    std::string error;
+    uint32_t res = PropertySet(VENDOR_API_LEVEL_PROP, std::to_string(api_level), &error);
+    if (res != PROP_SUCCESS) {
+        LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << api_level << ": "
+                   << error << "(" << res << ")";
     }
-    // If no api integers are found from the vendor api level properties, ro.vendor.api_level
-    // will not be set.
 }
 
 void PropertyLoadBootDefaults() {
