@@ -155,6 +155,7 @@ on init
     mkdir /dev/cpuctl/rt
     mkdir /dev/cpuctl/system
     mkdir /dev/cpuctl/system-background
+    mkdir /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/foreground
     chown system system /dev/cpuctl/background
@@ -162,6 +163,7 @@ on init
     chown system system /dev/cpuctl/rt
     chown system system /dev/cpuctl/system
     chown system system /dev/cpuctl/system-background
+    chown system system /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl/tasks
     chown system system /dev/cpuctl/foreground/tasks
     chown system system /dev/cpuctl/background/tasks
@@ -169,6 +171,7 @@ on init
     chown system system /dev/cpuctl/rt/tasks
     chown system system /dev/cpuctl/system/tasks
     chown system system /dev/cpuctl/system-background/tasks
+    chown system system /dev/cpuctl/dex2oat/tasks
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
     chmod 0664 /dev/cpuctl/background/tasks
@@ -176,6 +179,7 @@ on init
     chmod 0664 /dev/cpuctl/rt/tasks
     chmod 0664 /dev/cpuctl/system/tasks
     chmod 0664 /dev/cpuctl/system-background/tasks
+    chmod 0664 /dev/cpuctl/dex2oat/tasks
 
     # Create a cpu group for NNAPI HAL processes
     mkdir /dev/cpuctl/nnapi-hal
