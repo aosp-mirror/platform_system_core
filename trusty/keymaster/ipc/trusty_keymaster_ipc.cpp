@@ -100,8 +100,8 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
 
         int p = poll(&pfd, 1, poll_timeout_ms);
         if (p == 0) {
-            ALOGW("write for cmd %d is taking more than %ld nsecs", cmd,
-                  systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns);
+            ALOGW("write for cmd %d is taking more than %lld nsecs", cmd,
+                  (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
             timed_out = true;
             poll_timeout_ms *= 2;
             if (poll_timeout_ms > max_timeout_ms) {
@@ -118,8 +118,8 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
 
     ssize_t rc = write(handle_, msg, msg_size);
     if (timed_out) {
-        ALOGW("write for cmd %d finished after %ld nsecs", cmd,
-              systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns);
+        ALOGW("write for cmd %d finished after %lld nsecs", cmd,
+              (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
     }
     free(msg);
 
@@ -169,8 +169,8 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
 
             int p = poll(&pfd, 1, poll_timeout_ms);
             if (p == 0) {
-                ALOGW("readv for cmd %d is taking more than %ld nsecs", cmd,
-                      systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns);
+                ALOGW("readv for cmd %d is taking more than %lld nsecs", cmd,
+                      (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
                 timed_out = true;
                 poll_timeout_ms *= 2;
                 if (poll_timeout_ms > max_timeout_ms) {
@@ -186,8 +186,8 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
         }
         rc = readv(handle_, iov, 2);
         if (timed_out) {
-            ALOGW("readv for cmd %d finished after %ld nsecs", cmd,
-                  systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns);
+            ALOGW("readv for cmd %d finished after %lld nsecs", cmd,
+                  (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
         }
         if (rc < 0) {
             ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT,
