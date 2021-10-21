@@ -106,6 +106,7 @@ sysprop_library {
 
 cc_library_static {
     name: "libhealthd_draw",
+    vendor_available: true,
     export_include_dirs: ["."],
     static_libs: [
         "libcharger_sysprop",
@@ -117,10 +118,19 @@ cc_library_static {
     header_libs: ["libbatteryservice_headers"],
 
     srcs: ["healthd_draw.cpp"],
+
+    target: {
+        vendor: {
+            exclude_static_libs: [
+                "libcharger_sysprop",
+            ],
+        },
+    },
 }
 
 cc_library_static {
     name: "libhealthd_charger_ui",
+    vendor_available: true,
     export_include_dirs: [
         "include",
         "include_charger",
@@ -156,6 +166,14 @@ cc_library_static {
         "healthd_mode_charger.cpp",
         "AnimationParser.cpp",
     ],
+
+    target: {
+        vendor: {
+            exclude_static_libs: [
+                "libcharger_sysprop",
+            ],
+        },
+    },
 }
 
 cc_library_static {

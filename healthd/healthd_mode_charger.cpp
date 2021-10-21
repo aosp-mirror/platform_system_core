@@ -50,12 +50,15 @@
 #include <suspend/autosuspend.h>
 
 #include "AnimationParser.h"
-#include "charger.sysprop.h"
 #include "healthd_draw.h"
 
 #include <aidl/android/hardware/health/BatteryStatus.h>
 #include <health/HealthLoop.h>
 #include <healthd/healthd.h>
+
+#if !defined(__ANDROID_VNDK__)
+#include "charger.sysprop.h"
+#endif
 
 using std::string_literals::operator""s;
 using namespace android;
@@ -314,10 +317,12 @@ void Charger::UpdateScreenState(int64_t now) {
         healthd_draw_ = HealthdDraw::Create(&batt_anim_);
         if (healthd_draw_ == nullptr) return;
 
+#if !defined(__ANDROID_VNDK__)
         if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
             healthd_draw_->blank_screen(true);
             screen_blanked_ = true;
         }
+#endif
     }
 
     /* animation is over, blank screen and leave */
