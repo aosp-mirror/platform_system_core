@@ -194,10 +194,12 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops
                                        std::vector<uint64_t>& blocks) {
     int num_ops = *pending_ops;
     int nr_consecutive = 0;
+    CHECK_NE(source_offset, nullptr);
 
     if (!RAIterDone() && num_ops) {
         // Get the first block with offset
         const CowOperation* cow_op = GetRAOpIter();
+        CHECK_NE(cow_op, nullptr);
         *source_offset = cow_op->source;
         if (cow_op->type == kCowCopyOp) {
             *source_offset *= BLOCK_SZ;
@@ -216,11 +218,12 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops
          */
         while (!RAIterDone() && num_ops) {
             const CowOperation* op = GetRAOpIter();
+            CHECK_NE(op, nullptr);
             uint64_t next_offset = op->source;
-            if (cow_op->type == kCowCopyOp) {
+            if (op->type == kCowCopyOp) {
                 next_offset *= BLOCK_SZ;
             }
-            if (next_offset != (*source_offset - nr_consecutive * BLOCK_SZ)) {
+            if (next_offset + nr_consecutive * BLOCK_SZ != *source_offset) {
                 break;
             }
             nr_consecutive += 1;

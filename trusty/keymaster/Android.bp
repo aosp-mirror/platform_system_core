@@ -117,9 +117,11 @@ cc_binary {
         "libkeymint",
         "liblog",
         "libtrusty",
+        "libutils",
     ],
     required: [
         "android.hardware.hardware_keystore.xml",
+        "RemoteProvisioner",
     ],
 }
 
@@ -141,6 +143,7 @@ cc_library {
         "libtrusty",
         "libhardware",
         "libkeymaster_messages",
+        "libutils",
         "libxml2",
     ],
     export_include_dirs: ["include"],
@@ -168,6 +171,7 @@ cc_binary {
         "libtrusty",
         "libhardware",
         "libkeymaster_messages",
+        "libutils",
         "libxml2",
     ],
     cflags: [

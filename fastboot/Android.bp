@@ -408,3 +408,9 @@ cc_test_host {
         ":fastboot_test_vendor_boot_v4_with_frag"
     ],
 }
+
+cc_library_headers {
+    name: "fastboot_headers",
+    host_supported: true,
+    export_include_dirs: ["."],
+}

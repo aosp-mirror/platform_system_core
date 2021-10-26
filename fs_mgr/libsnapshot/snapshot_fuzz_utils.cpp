@@ -139,7 +139,7 @@ std::vector<DeviceMapper::TargetInfo> GetTableInfoIfExists(const std::string& de
     auto& dm = DeviceMapper::Instance();
     std::vector<DeviceMapper::TargetInfo> table;
     if (!dm.GetTableInfo(dev_name, &table)) {
-        PCHECK(errno == ENODEV);
+        PCHECK(errno == ENODEV || errno == ENXIO);
         return {};
     }
     return table;
