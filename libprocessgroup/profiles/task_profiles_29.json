@@ -117,7 +117,19 @@
         }
       ]
     },
-
+    {
+      "Name": "Dex2oatPerformance",
+      "Actions": [
+        {
+          "Name": "JoinCgroup",
+          "Params":
+          {
+            "Controller": "schedtune",
+            "Path": "background"
+          }
+        }
+      ]
+    },
     {
       "Name": "CpuPolicySpread",
       "Actions": [
