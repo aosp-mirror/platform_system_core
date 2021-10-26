@@ -245,6 +245,8 @@ static ssize_t send_app_package(const char* package_file_name) {
     tipc_fd = tipc_connect(dev_name, APPLOADER_PORT);
     if (tipc_fd < 0) {
         LOG(ERROR) << "Failed to connect to Trusty app loader: " << strerror(-tipc_fd);
+        // print this to stderr too to avoid silently exiting when run as non-root
+        fprintf(stderr, "Failed to connect to Trusty app loader: %s\n", strerror(-tipc_fd));
         rc = tipc_fd;
         goto err_tipc_connect;
     }

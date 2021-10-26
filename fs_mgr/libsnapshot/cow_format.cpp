@@ -56,7 +56,10 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
         os << (int)op.compression << "?, ";
     os << "data_length:" << op.data_length << ",\t";
     os << "new_block:" << op.new_block << ",\t";
-    os << "source:" << op.source << ")";
+    os << "source:" << op.source;
+    if (op.type == kCowXorOp)
+        os << " (block:" << op.source / BLOCK_SZ << " offset:" << op.source % BLOCK_SZ << ")";
+    os << ")";
     return os;
 }
 

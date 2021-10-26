@@ -46,14 +46,6 @@ static int get_split_offset() {
 
 HealthdDraw::HealthdDraw(animation* anim)
     : kSplitScreen(get_split_screen()), kSplitOffset(get_split_offset()) {
-    int ret = gr_init();
-
-    if (ret < 0) {
-        LOGE("gr_init failed\n");
-        graphics_available = false;
-        return;
-    }
-
     graphics_available = true;
     sys_font = gr_sys_font();
     if (sys_font == nullptr) {
@@ -234,4 +226,12 @@ void HealthdDraw::draw_unknown(GRSurface* surf_unknown) {
   } else {
       LOGW("Charging, level unknown\n");
   }
+}
+
+std::unique_ptr<HealthdDraw> HealthdDraw::Create(animation *anim) {
+    if (gr_init() < 0) {
+        LOGE("gr_init failed\n");
+        return nullptr;
+    }
+    return std::unique_ptr<HealthdDraw>(new HealthdDraw(anim));
 }

@@ -105,7 +105,9 @@ cc_test {
     defaults: ["liblp_test_defaults"],
     test_suites: ["vts"],
     auto_gen_config: true,
-    test_min_api_level: 29,
+    test_options: {
+        min_shipping_api_level: 29,
+    },
     require_root: true,
 }
 

@@ -47,6 +47,7 @@ class ISnapshotWriter : public ICowWriter {
     virtual bool InitializeAppend(uint64_t label) = 0;
 
     virtual std::unique_ptr<FileDescriptor> OpenReader() = 0;
+    virtual bool VerifyMergeOps() const noexcept = 0;
 
   protected:
     android::base::borrowed_fd GetSourceFd();
@@ -58,7 +59,7 @@ class ISnapshotWriter : public ICowWriter {
 };
 
 // Send writes to a COW or a raw device directly, based on a threshold.
-class CompressedSnapshotWriter : public ISnapshotWriter {
+class CompressedSnapshotWriter final : public ISnapshotWriter {
   public:
     CompressedSnapshotWriter(const CowOptions& options);
 
@@ -70,6 +71,7 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
     bool Finalize() override;
     uint64_t GetCowSize() override;
     std::unique_ptr<FileDescriptor> OpenReader() override;
+    bool VerifyMergeOps() const noexcept;
 
   protected:
     bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
@@ -81,13 +83,14 @@ class CompressedSnapshotWriter : public ISnapshotWriter {
     bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
 
   private:
+    std::unique_ptr<CowReader> OpenCowReader() const;
     android::base::unique_fd cow_device_;
 
     std::unique_ptr<CowWriter> cow_;
 };
 
 // Write directly to a dm-snapshot device.
-class OnlineKernelSnapshotWriter : public ISnapshotWriter {
+class OnlineKernelSnapshotWriter final : public ISnapshotWriter {
   public:
     OnlineKernelSnapshotWriter(const CowOptions& options);
 
@@ -100,6 +103,10 @@ class OnlineKernelSnapshotWriter : public ISnapshotWriter {
     bool Finalize() override;
     uint64_t GetCowSize() override { return cow_size_; }
     std::unique_ptr<FileDescriptor> OpenReader() override;
+
+    // Online kernel snapshot writer doesn't care about merge sequences.
+    // So ignore.
+    bool VerifyMergeOps() const noexcept override { return true; }
 
   protected:
     bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;

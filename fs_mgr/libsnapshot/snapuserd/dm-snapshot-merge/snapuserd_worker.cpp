@@ -32,78 +32,6 @@ using android::base::unique_fd;
 #define SNAP_LOG(level) LOG(level) << misc_name_ << ": "
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
 
-void BufferSink::Initialize(size_t size) {
-    buffer_size_ = size;
-    buffer_offset_ = 0;
-    buffer_ = std::make_unique<uint8_t[]>(size);
-}
-
-void* BufferSink::GetPayloadBuffer(size_t size) {
-    if ((buffer_size_ - buffer_offset_) < size) return nullptr;
-
-    char* buffer = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
-    return (char*)msg->payload.buf + buffer_offset_;
-}
-
-void* BufferSink::GetBuffer(size_t requested, size_t* actual) {
-    void* buf = GetPayloadBuffer(requested);
-    if (!buf) {
-        *actual = 0;
-        return nullptr;
-    }
-    *actual = requested;
-    return buf;
-}
-
-struct dm_user_header* BufferSink::GetHeaderPtr() {
-    if (!(sizeof(struct dm_user_header) <= buffer_size_)) {
-        return nullptr;
-    }
-    char* buf = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_header* header = (struct dm_user_header*)(&(buf[0]));
-    return header;
-}
-
-void* BufferSink::GetPayloadBufPtr() {
-    char* buffer = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_message* msg = reinterpret_cast<struct dm_user_message*>(&(buffer[0]));
-    return msg->payload.buf;
-}
-
-void XorSink::Initialize(BufferSink* sink, size_t size) {
-    bufsink_ = sink;
-    buffer_size_ = size;
-    returned_ = 0;
-    buffer_ = std::make_unique<uint8_t[]>(size);
-}
-
-void XorSink::Reset() {
-    returned_ = 0;
-}
-
-void* XorSink::GetBuffer(size_t requested, size_t* actual) {
-    if (requested > buffer_size_) {
-        *actual = buffer_size_;
-    } else {
-        *actual = requested;
-    }
-    return buffer_.get();
-}
-
-bool XorSink::ReturnData(void* buffer, size_t len) {
-    uint8_t* xor_data = reinterpret_cast<uint8_t*>(buffer);
-    uint8_t* buff = reinterpret_cast<uint8_t*>(bufsink_->GetPayloadBuffer(len + returned_));
-    if (buff == nullptr) {
-        return false;
-    }
-    for (size_t i = 0; i < len; i++) {
-        buff[returned_ + i] ^= xor_data[i];
-    }
-    returned_ += len;
-    return true;
-}
-
 WorkerThread::WorkerThread(const std::string& cow_device, const std::string& backing_device,
                            const std::string& control_device, const std::string& misc_name,
                            std::shared_ptr<Snapuserd> snapuserd) {
@@ -350,16 +278,36 @@ int WorkerThread::ReadData(sector_t sector, size_t size) {
     it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
                           Snapuserd::compare);
 
-    if (!(it != chunk_vec.end())) {
-        SNAP_LOG(ERROR) << "ReadData: Sector " << sector << " not found in chunk_vec";
-        return -1;
+    bool read_end_of_device = false;
+    if (it == chunk_vec.end()) {
+        // |-------|-------|-------|
+        // 0       1       2       3
+        //
+        // Block 0 - op 1
+        // Block 1 - op 2
+        // Block 2 - op 3
+        //
+        // chunk_vec will have block 0, 1, 2 which maps to relavant COW ops.
+        //
+        // Each block is 4k bytes. Thus, the last block will span 8 sectors
+        // ranging till block 3 (However, block 3 won't be in chunk_vec as
+        // it doesn't have any mapping to COW ops. Now, if we get an I/O request for a sector
+        // spanning between block 2 and block 3, we need to step back
+        // and get hold of the last element.
+        //
+        // Additionally, dm-snapshot makes sure that I/O request beyond block 3
+        // will not be routed to the daemon. Hence, it is safe to assume that
+        // if a sector is not available in the chunk_vec, the I/O falls in the
+        // end of region.
+        it = std::prev(chunk_vec.end());
+        read_end_of_device = true;
     }
 
     // We didn't find the required sector; hence find the previous sector
     // as lower_bound will gives us the value greater than
     // the requested sector
     if (it->first != sector) {
-        if (it != chunk_vec.begin()) {
+        if (it != chunk_vec.begin() && !read_end_of_device) {
             --it;
         }
 

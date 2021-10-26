@@ -67,7 +67,7 @@ uint64_t CompressedSnapshotWriter::GetCowSize() {
     return cow_->GetCowSize();
 }
 
-std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
+std::unique_ptr<CowReader> CompressedSnapshotWriter::OpenCowReader() const {
     unique_fd cow_fd(dup(cow_device_.get()));
     if (cow_fd < 0) {
         PLOG(ERROR) << "dup COW device";
@@ -79,6 +79,20 @@ std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
         LOG(ERROR) << "Unable to read COW";
         return nullptr;
     }
+    return cow;
+}
+
+bool CompressedSnapshotWriter::VerifyMergeOps() const noexcept {
+    auto cow_reader = OpenCowReader();
+    if (cow_reader == nullptr) {
+        LOG(ERROR) << "Couldn't open CowReader";
+        return false;
+    }
+    return cow_reader->VerifyMergeOps();
+}
+
+std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
+    auto cow = OpenCowReader();
 
     auto reader = std::make_unique<CompressedSnapshotReader>();
     if (!reader->SetCow(std::move(cow))) {

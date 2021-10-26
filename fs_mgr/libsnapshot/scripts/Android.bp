@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+package {
+    // See: http://go/android-license-faq
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 python_binary_host {
     name: "dump_snapshot_proto",
     main: "dump_snapshot_proto.py",
