@@ -130,10 +130,12 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
             if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
                 const auto arg = flag.substr(equal_sign + 1);
                 if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
-                    if (!ParseInt(arg, &entry->reserved_size)) {
+                    off64_t size_in_4k_blocks;
+                    if (!ParseInt(arg, &size_in_4k_blocks, static_cast<off64_t>(0),
+                                  std::numeric_limits<off64_t>::max() >> 12)) {
                         LWARNING << "Warning: reserve_root= flag malformed: " << arg;
                     } else {
-                        entry->reserved_size <<= 12;
+                        entry->reserved_size = size_in_4k_blocks << 12;
                     }
                 } else if (StartsWith(flag, "lowerdir=")) {
                     entry->lowerdir = std::move(arg);
