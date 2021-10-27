@@ -1101,6 +1101,9 @@ on boot
     # Define default initial receive window size in segments.
     setprop net.tcp_def_init_rwnd 60
 
+    # Update dm-verity state and set partition.*.verified properties.
+    verity_update_state
+
     # Start standard binderized HAL daemons
     class_start hal
 
