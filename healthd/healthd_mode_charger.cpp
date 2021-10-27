@@ -99,6 +99,13 @@ char* locale;
 
 namespace android {
 
+#if defined(__ANDROID_VNDK__)
+static constexpr const char* vendor_animation_desc_path =
+        "/vendor/etc/res/values/charger/animation.txt";
+static constexpr const char* vendor_animation_root = "/vendor/etc/res/images/";
+static constexpr const char* vendor_default_animation_root = "/vendor/etc/res/images/default/";
+#else
+
 // Legacy animation resources are loaded from this directory.
 static constexpr const char* legacy_animation_root = "/res/images/";
 
@@ -112,6 +119,7 @@ static constexpr const char* product_animation_desc_path =
         "/product/etc/res/values/charger/animation.txt";
 static constexpr const char* product_animation_root = "/product/etc/res/images/";
 static constexpr const char* animation_desc_path = "/res/values/charger/animation.txt";
+#endif
 
 static const animation BASE_ANIMATION = {
     .text_clock =
@@ -619,6 +627,16 @@ void Charger::InitAnimation() {
     bool parse_success;
 
     std::string content;
+
+#if defined(__ANDROID_VNDK__)
+    if (base::ReadFileToString(vendor_animation_desc_path, &content)) {
+        parse_success = parse_animation_desc(content, &batt_anim_);
+        batt_anim_.set_resource_root(vendor_animation_root);
+    } else {
+        LOGW("Could not open animation description at %s\n", vendor_animation_desc_path);
+        parse_success = false;
+    }
+#else
     if (base::ReadFileToString(product_animation_desc_path, &content)) {
         parse_success = parse_animation_desc(content, &batt_anim_);
         batt_anim_.set_resource_root(product_animation_root);
@@ -634,17 +652,26 @@ void Charger::InitAnimation() {
         LOGW("Could not open animation description at %s\n", animation_desc_path);
         parse_success = false;
     }
+#endif
+
+#if defined(__ANDROID_VNDK__)
+    auto default_animation_root = vendor_default_animation_root;
+#else
+    auto default_animation_root = system_animation_root;
+#endif
 
     if (!parse_success) {
-        LOGW("Could not parse animation description. Using default animation.\n");
+        LOGW("Could not parse animation description. "
+             "Using default animation with resources at %s\n",
+             default_animation_root);
         batt_anim_ = BASE_ANIMATION;
-        batt_anim_.animation_file.assign(system_animation_root + "charger/battery_scale.png"s);
+        batt_anim_.animation_file.assign(default_animation_root + "charger/battery_scale.png"s);
         InitDefaultAnimationFrames();
         batt_anim_.frames = owned_frames_.data();
         batt_anim_.num_frames = owned_frames_.size();
     }
     if (batt_anim_.fail_file.empty()) {
-        batt_anim_.fail_file.assign(system_animation_root + "charger/battery_fail.png"s);
+        batt_anim_.fail_file.assign(default_animation_root + "charger/battery_fail.png"s);
     }
 
     LOGV("Animation Description:\n");
@@ -685,9 +712,11 @@ void Charger::OnInit(struct healthd_config* config) {
 
     ret = CreateDisplaySurface(batt_anim_.fail_file, &surf_unknown_);
     if (ret < 0) {
+#if !defined(__ANDROID_VNDK__)
         LOGE("Cannot load custom battery_fail image. Reverting to built in: %d\n", ret);
         ret = CreateDisplaySurface((system_animation_root + "charger/battery_fail.png"s).c_str(),
                                    &surf_unknown_);
+#endif
         if (ret < 0) {
             LOGE("Cannot load built in battery_fail image\n");
             surf_unknown_ = NULL;
