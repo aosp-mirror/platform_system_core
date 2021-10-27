@@ -17,6 +17,7 @@
 #include "healthd_mode_charger_hidl.h"
 
 #include <android/hardware/health/2.0/types.h>
+#include <charger.sysprop.h>
 #include <cutils/klog.h>
 
 #include "charger_utils.h"
@@ -49,6 +50,10 @@ std::optional<bool> ChargerHidl::ChargerShouldKeepScreenOn() {
         }
     });
     return out_screen_on;
+}
+
+bool ChargerHidl::ChargerEnableSuspend() {
+    return android::sysprop::ChargerProperties::enable_suspend().value_or(false);
 }
 
 }  // namespace android

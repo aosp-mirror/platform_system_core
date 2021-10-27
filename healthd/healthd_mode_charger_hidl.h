@@ -37,6 +37,7 @@ class ChargerHidl : public ::android::ChargerConfigurationInterface,
     int ChargerRegisterEvent(int fd, BoundFunction func, EventWakeup wakeup) override {
         return HalHealthLoop::RegisterEvent(fd, func, wakeup);
     }
+    bool ChargerEnableSuspend() override;
     // HealthLoop overrides
     void Heartbeat() override { charger_->OnHeartbeat(); }
     int PrepareToWait() override { return charger_->OnPrepareToWait(); }

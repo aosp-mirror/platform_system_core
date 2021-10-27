@@ -254,15 +254,18 @@ out:
     LOGW("************* END LAST KMSG *************\n");
 }
 
-static int request_suspend(bool enable) {
-    if (!android::sysprop::ChargerProperties::enable_suspend().value_or(false)) {
+int Charger::RequestEnableSuspend() {
+    if (!configuration_->ChargerEnableSuspend()) {
         return 0;
     }
+    return autosuspend_enable();
+}
 
-    if (enable)
-        return autosuspend_enable();
-    else
-        return autosuspend_disable();
+int Charger::RequestDisableSuspend() {
+    if (!configuration_->ChargerEnableSuspend()) {
+        return 0;
+    }
+    return autosuspend_disable();
 }
 
 static void kick_animation(animation* anim) {
@@ -302,7 +305,7 @@ void Charger::UpdateScreenState(int64_t now) {
                 batt_anim_.run = false;
                 next_screen_transition_ = -1;
                 if (configuration_->ChargerIsOnline()) {
-                    request_suspend(true);
+                    RequestEnableSuspend();
                 }
                 return;
             }
@@ -325,7 +328,7 @@ void Charger::UpdateScreenState(int64_t now) {
         screen_blanked_ = true;
         LOGV("[%" PRId64 "] animation done\n", now);
         if (configuration_->ChargerIsOnline()) {
-            request_suspend(true);
+            RequestEnableSuspend();
         }
         return;
     }
@@ -481,13 +484,13 @@ void Charger::ProcessKey(int code, int64_t now) {
                  * rather than on key release
                  */
                 kick_animation(&batt_anim_);
-                request_suspend(false);
+                RequestDisableSuspend();
             }
         } else {
             /* if the power key got released, force screen state cycle */
             if (key->pending) {
                 kick_animation(&batt_anim_);
-                request_suspend(false);
+                RequestDisableSuspend();
             }
         }
     }
@@ -506,7 +509,7 @@ void Charger::HandlePowerSupplyState(int64_t now) {
     if (!have_battery_state_) return;
 
     if (!configuration_->ChargerIsOnline()) {
-        request_suspend(false);
+        RequestDisableSuspend();
         if (next_pwr_check_ == -1) {
             /* Last cycle would have stopped at the extreme top of battery-icon
              * Need to show the correct level corresponding to capacity.
@@ -536,7 +539,7 @@ void Charger::HandlePowerSupplyState(int64_t now) {
              * Reset & kick animation to show complete animation cycles
              * when charger connected again.
              */
-            request_suspend(false);
+            RequestDisableSuspend();
             next_screen_transition_ = now - 1;
             reset_animation(&batt_anim_);
             kick_animation(&batt_anim_);
@@ -563,7 +566,7 @@ void Charger::OnHealthInfoChanged(const ChargerHealthInfo& health_info) {
     if (!have_battery_state_) {
         have_battery_state_ = true;
         next_screen_transition_ = curr_time_ms() - 1;
-        request_suspend(false);
+        RequestDisableSuspend();
         reset_animation(&batt_anim_);
         kick_animation(&batt_anim_);
     }

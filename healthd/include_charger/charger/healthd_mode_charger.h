@@ -59,6 +59,7 @@ class ChargerConfigurationInterface {
     virtual int ChargerRegisterEvent(int fd, BoundFunction func, EventWakeup wakeup) = 0;
 
     // Other configuration values
+    virtual bool ChargerEnableSuspend() = 0;
 };
 
 // charger UI
@@ -91,6 +92,8 @@ class Charger {
     void HandlePowerSupplyState(int64_t now);
     int InputCallback(int fd, unsigned int epevents);
     void InitAnimation();
+    int RequestEnableSuspend();
+    int RequestDisableSuspend();
 
     bool have_battery_state_ = false;
     bool screen_blanked_ = false;

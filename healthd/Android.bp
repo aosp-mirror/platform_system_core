@@ -167,6 +167,7 @@ cc_library_static {
 
     static_libs: [
         "android.hardware.health@1.0-convert",
+        "libcharger_sysprop",
         "libhealth2impl",
         "libhealthd_charger_ui",
     ],
