@@ -442,7 +442,81 @@ std::string GetFstabPath() {
     return "";
 }
 
-bool ReadFstabFile(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
+/* Extracts <device>s from the by-name symlinks specified in a fstab:
+ *   /dev/block/<type>/<device>/by-name/<partition>
+ *
+ * <type> can be: platform, pci or vbd.
+ *
+ * For example, given the following entries in the input fstab:
+ *   /dev/block/platform/soc/1da4000.ufshc/by-name/system
+ *   /dev/block/pci/soc.0/f9824900.sdhci/by-name/vendor
+ * it returns a set { "soc/1da4000.ufshc", "soc.0/f9824900.sdhci" }.
+ */
+std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
+    std::set<std::string> boot_devices;
+
+    for (const auto& entry : fstab) {
+        std::string blk_device = entry.blk_device;
+        // Skips blk_device that doesn't conform to the format.
+        if (!android::base::StartsWith(blk_device, "/dev/block") ||
+            android::base::StartsWith(blk_device, "/dev/block/by-name") ||
+            android::base::StartsWith(blk_device, "/dev/block/bootdevice/by-name")) {
+            continue;
+        }
+        // Skips non-by_name blk_device.
+        // /dev/block/<type>/<device>/by-name/<partition>
+        //                           ^ slash_by_name
+        auto slash_by_name = blk_device.find("/by-name");
+        if (slash_by_name == std::string::npos) continue;
+        blk_device.erase(slash_by_name);  // erases /by-name/<partition>
+
+        // Erases /dev/block/, now we have <type>/<device>
+        blk_device.erase(0, std::string("/dev/block/").size());
+
+        // <type>/<device>
+        //       ^ first_slash
+        auto first_slash = blk_device.find('/');
+        if (first_slash == std::string::npos) continue;
+
+        auto boot_device = blk_device.substr(first_slash + 1);
+        if (!boot_device.empty()) boot_devices.insert(std::move(boot_device));
+    }
+
+    return boot_devices;
+}
+
+FstabEntry BuildDsuUserdataFstabEntry() {
+    constexpr uint32_t kFlags = MS_NOATIME | MS_NOSUID | MS_NODEV;
+
+    FstabEntry userdata = {
+            .blk_device = "userdata_gsi",
+            .mount_point = "/data",
+            .fs_type = "ext4",
+            .flags = kFlags,
+            .reserved_size = 128 * 1024 * 1024,
+    };
+    userdata.fs_mgr_flags.wait = true;
+    userdata.fs_mgr_flags.check = true;
+    userdata.fs_mgr_flags.logical = true;
+    userdata.fs_mgr_flags.quota = true;
+    userdata.fs_mgr_flags.late_mount = true;
+    userdata.fs_mgr_flags.formattable = true;
+    return userdata;
+}
+
+bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
+    auto iter = std::remove_if(fstab->begin(), fstab->end(),
+                               [&](const auto& entry) { return entry.mount_point == mount_point; });
+    if (iter != fstab->end()) {
+        fstab->erase(iter, fstab->end());
+        return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
     ssize_t len;
     size_t alloc_len = 0;
     char *line = NULL;
@@ -527,80 +601,6 @@ err:
     free(line);
     return false;
 }
-
-/* Extracts <device>s from the by-name symlinks specified in a fstab:
- *   /dev/block/<type>/<device>/by-name/<partition>
- *
- * <type> can be: platform, pci or vbd.
- *
- * For example, given the following entries in the input fstab:
- *   /dev/block/platform/soc/1da4000.ufshc/by-name/system
- *   /dev/block/pci/soc.0/f9824900.sdhci/by-name/vendor
- * it returns a set { "soc/1da4000.ufshc", "soc.0/f9824900.sdhci" }.
- */
-std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
-    std::set<std::string> boot_devices;
-
-    for (const auto& entry : fstab) {
-        std::string blk_device = entry.blk_device;
-        // Skips blk_device that doesn't conform to the format.
-        if (!android::base::StartsWith(blk_device, "/dev/block") ||
-            android::base::StartsWith(blk_device, "/dev/block/by-name") ||
-            android::base::StartsWith(blk_device, "/dev/block/bootdevice/by-name")) {
-            continue;
-        }
-        // Skips non-by_name blk_device.
-        // /dev/block/<type>/<device>/by-name/<partition>
-        //                           ^ slash_by_name
-        auto slash_by_name = blk_device.find("/by-name");
-        if (slash_by_name == std::string::npos) continue;
-        blk_device.erase(slash_by_name);  // erases /by-name/<partition>
-
-        // Erases /dev/block/, now we have <type>/<device>
-        blk_device.erase(0, std::string("/dev/block/").size());
-
-        // <type>/<device>
-        //       ^ first_slash
-        auto first_slash = blk_device.find('/');
-        if (first_slash == std::string::npos) continue;
-
-        auto boot_device = blk_device.substr(first_slash + 1);
-        if (!boot_device.empty()) boot_devices.insert(std::move(boot_device));
-    }
-
-    return boot_devices;
-}
-
-FstabEntry BuildDsuUserdataFstabEntry() {
-    constexpr uint32_t kFlags = MS_NOATIME | MS_NOSUID | MS_NODEV;
-
-    FstabEntry userdata = {
-            .blk_device = "userdata_gsi",
-            .mount_point = "/data",
-            .fs_type = "ext4",
-            .flags = kFlags,
-            .reserved_size = 128 * 1024 * 1024,
-    };
-    userdata.fs_mgr_flags.wait = true;
-    userdata.fs_mgr_flags.check = true;
-    userdata.fs_mgr_flags.logical = true;
-    userdata.fs_mgr_flags.quota = true;
-    userdata.fs_mgr_flags.late_mount = true;
-    userdata.fs_mgr_flags.formattable = true;
-    return userdata;
-}
-
-bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
-    auto iter = std::remove_if(fstab->begin(), fstab->end(),
-                               [&](const auto& entry) { return entry.mount_point == mount_point; });
-    if (iter != fstab->end()) {
-        fstab->erase(iter, fstab->end());
-        return true;
-    }
-    return false;
-}
-
-}  // namespace
 
 void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                           const std::vector<std::string>& dsu_partitions) {
@@ -707,7 +707,7 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
     bool is_proc_mounts = path == "/proc/mounts";
 
     Fstab fstab;
-    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, &fstab)) {
+    if (!ReadFstabFromFp(fstab_file.get(), is_proc_mounts, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
@@ -762,7 +762,7 @@ bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
         return false;
     }
 
-    if (!ReadFstabFile(fstab_file.get(), false, fstab)) {
+    if (!ReadFstabFromFp(fstab_file.get(), false, fstab)) {
         if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;
