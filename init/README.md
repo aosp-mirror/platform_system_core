@@ -733,7 +733,10 @@ provides the `aidl_lazy_test_1` interface.
 `verity_update_state`
 > Internal implementation detail used to update dm-verity state and
   set the partition._mount-point_.verified properties used by adb remount
-  because fs\_mgr can't set them directly itself.
+  because fs\_mgr can't set them directly itself. This is required since
+  Android 12, because CtsNativeVerifiedBootTestCases will read property
+  "partition.${partition}.verified.hash_alg" to check that sha1 is not used.
+  See https://r.android.com/1546980 for more details.
 
 `wait <path> [ <timeout> ]`
 > Poll for the existence of the given file and return when found,
