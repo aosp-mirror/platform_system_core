@@ -25,4 +25,11 @@ cc_fuzz {
   shared_libs: [
     "libbase",
   ],
+
+  dictionary: "fstab.dict",
+  fuzz_config: {
+    cc: [
+      "yochiang@google.com",
+    ],
+  },
 }
