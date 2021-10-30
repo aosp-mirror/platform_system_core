@@ -107,7 +107,7 @@ static std::string get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
     // In this case, the sp will be in either an invalid map if triggered
     // on the main thread, or in a guard map if in another thread, which
     // will be the first case or second case from below.
-    unwindstack::MapInfo* map_info = maps->Find(sp);
+    auto map_info = maps->Find(sp);
     if (map_info == nullptr) {
       return "stack pointer is in a non-existent map; likely due to stack overflow.";
     } else if ((map_info->flags() & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
@@ -158,7 +158,7 @@ static void dump_probable_cause(log_t* log, unwindstack::Unwinder* unwinder,
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
     uint64_t fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
-    unwindstack::MapInfo* map_info = maps->Find(fault_addr);
+    auto map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
@@ -396,7 +396,7 @@ void dump_memory_and_code(log_t* log, unwindstack::Maps* maps, unwindstack::Memo
   regs->IterateRegisters([log, maps, memory](const char* reg_name, uint64_t reg_value) {
     std::string label{"memory near "s + reg_name};
     if (maps) {
-      unwindstack::MapInfo* map_info = maps->Find(untag_address(reg_value));
+      auto map_info = maps->Find(untag_address(reg_value));
       if (map_info != nullptr && !map_info->name().empty()) {
         label += " (" + map_info->name() + ")";
       }
