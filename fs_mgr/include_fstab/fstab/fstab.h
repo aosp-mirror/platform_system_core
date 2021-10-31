@@ -99,6 +99,9 @@ struct FstabEntry {
 // Unless explicitly requested, a lookup on mount point should always return the 1st one.
 using Fstab = std::vector<FstabEntry>;
 
+// Exported for testability. Regular users should use ReadFstabFromfile().
+bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out);
+
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);
 bool ReadDefaultFstab(Fstab* fstab);
