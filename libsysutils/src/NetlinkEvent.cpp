@@ -31,14 +31,41 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/personality.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
+
+#include <android-base/parseint.h>
+#include <log/log.h>
+#include <sysutils/NetlinkEvent.h>
+
+using android::base::ParseInt;
 
 /* From kernel's net/netfilter/xt_quota2.c */
 const int LOCAL_QLOG_NL_EVENT = 112;
 const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 
-/* From deprecated ipt_ULOG.h to parse QLOG_NL_EVENT. */
+/******************************************************************************
+ * WARNING: HERE BE DRAGONS!                                                  *
+ *                                                                            *
+ * This is here to provide for compatibility with both 32 and 64-bit kernels  *
+ * from 32-bit userspace.                                                     *
+ *                                                                            *
+ * The kernel definition of this struct uses types (like long) that are not   *
+ * the same across 32-bit and 64-bit builds, and there is no compatibility    *
+ * layer to fix it up before it reaches userspace.                            *
+ * As such we need to detect the bit-ness of the kernel and deal with it.     *
+ *                                                                            *
+ ******************************************************************************/
+
+/*
+ * This is the verbatim kernel declaration from net/netfilter/xt_quota2.c,
+ * it is *NOT* of a well defined layout and is included here for compile
+ * time assertions only.
+ *
+ * It got there from deprecated ipt_ULOG.h to parse QLOG_NL_EVENT.
+ */
 #define ULOG_MAC_LEN 80
 #define ULOG_PREFIX_LEN 32
 typedef struct ulog_packet_msg {
@@ -55,11 +82,117 @@ typedef struct ulog_packet_msg {
     unsigned char payload[0];
 } ulog_packet_msg_t;
 
-#include <android-base/parseint.h>
-#include <log/log.h>
-#include <sysutils/NetlinkEvent.h>
+// On Linux int is always 32 bits, while sizeof(long) == sizeof(void*),
+// thus long on a 32-bit Linux kernel is 32-bits, like int always is
+typedef int long32;
+typedef unsigned int ulong32;
+static_assert(sizeof(long32) == 4);
+static_assert(sizeof(ulong32) == 4);
 
-using android::base::ParseInt;
+// Here's the same structure definition with the assumption the kernel
+// is compiled for 32-bits.
+typedef struct {
+    ulong32 mark;
+    long32 timestamp_sec;
+    long32 timestamp_usec;
+    unsigned int hook;
+    char indev_name[IFNAMSIZ];
+    char outdev_name[IFNAMSIZ];
+    ulong32 data_len;
+    char prefix[ULOG_PREFIX_LEN];
+    unsigned char mac_len;
+    unsigned char mac[ULOG_MAC_LEN];
+    unsigned char payload[0];
+} ulog_packet_msg32_t;
+
+// long on a 64-bit kernel is 64-bits with 64-bit alignment,
+// while long long is 64-bit but may have 32-bit aligment.
+typedef long long __attribute__((__aligned__(8))) long64;
+typedef unsigned long long __attribute__((__aligned__(8))) ulong64;
+static_assert(sizeof(long64) == 8);
+static_assert(sizeof(ulong64) == 8);
+
+// Here's the same structure definition with the assumption the kernel
+// is compiled for 64-bits.
+typedef struct {
+    ulong64 mark;
+    long64 timestamp_sec;
+    long64 timestamp_usec;
+    unsigned int hook;
+    char indev_name[IFNAMSIZ];
+    char outdev_name[IFNAMSIZ];
+    ulong64 data_len;
+    char prefix[ULOG_PREFIX_LEN];
+    unsigned char mac_len;
+    unsigned char mac[ULOG_MAC_LEN];
+    unsigned char payload[0];
+} ulog_packet_msg64_t;
+
+// One expects the 32-bit version to be smaller than the 64-bit version.
+static_assert(sizeof(ulog_packet_msg32_t) < sizeof(ulog_packet_msg64_t));
+// And either way the 'native' version should match either the 32 or 64 bit one.
+static_assert(sizeof(ulog_packet_msg_t) == sizeof(ulog_packet_msg32_t) ||
+              sizeof(ulog_packet_msg_t) == sizeof(ulog_packet_msg64_t));
+
+// In practice these sizes are always simply (for both x86 and arm):
+static_assert(sizeof(ulog_packet_msg32_t) == 168);
+static_assert(sizeof(ulog_packet_msg64_t) == 192);
+
+// Figure out the bitness of userspace.
+// Trivial and known at compile time.
+static bool isUserspace64bit(void) {
+    return sizeof(long) == 8;
+}
+
+// Figure out the bitness of the kernel.
+static bool isKernel64Bit(void) {
+    // a 64-bit userspace requires a 64-bit kernel
+    if (isUserspace64bit()) return true;
+
+    static bool init = false;
+    static bool cache = false;
+    if (init) return cache;
+
+    // Retrieve current personality - on Linux this system call *cannot* fail.
+    int p = personality(0xffffffff);
+    // But if it does just assume kernel and userspace (which is 32-bit) match...
+    if (p == -1) return false;
+
+    // This will effectively mask out the bottom 8 bits, and switch to 'native'
+    // personality, and then return the previous personality of this thread
+    // (likely PER_LINUX or PER_LINUX32) with any extra options unmodified.
+    int q = personality((p & ~PER_MASK) | PER_LINUX);
+    // Per man page this theoretically could error out with EINVAL,
+    // but kernel code analysis suggests setting PER_LINUX cannot fail.
+    // Either way, assume kernel and userspace (which is 32-bit) match...
+    if (q != p) return false;
+
+    struct utsname u;
+    (void)uname(&u);  // only possible failure is EFAULT, but u is on stack.
+
+    // Switch back to previous personality.
+    // Theoretically could fail with EINVAL on arm64 with no 32-bit support,
+    // but then we wouldn't have fetched 'p' from the kernel in the first place.
+    // Either way there's nothing meaningul we can do in case of error.
+    // Since PER_LINUX32 vs PER_LINUX only affects uname.machine it doesn't
+    // really hurt us either.  We're really just switching back to be 'clean'.
+    (void)personality(p);
+
+    // Possible values of utsname.machine observed on x86_64 desktop (arm via qemu):
+    //   x86_64 i686 aarch64 armv7l
+    // additionally observed on arm device:
+    //   armv8l
+    // presumably also might just be possible:
+    //   i386 i486 i586
+    // and there might be other weird arm32 cases.
+    // We note that the 64 is present in both 64-bit archs,
+    // and in general is likely to be present in only 64-bit archs.
+    cache = !!strstr(u.machine, "64");
+    init = true;
+    return cache;
+}
+
+/******************************************************************************/
 
 NetlinkEvent::NetlinkEvent() {
     mAction = Action::kUnknown;
@@ -280,13 +413,22 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
  * Parse a QLOG_NL_EVENT message.
  */
 bool NetlinkEvent::parseUlogPacketMessage(const struct nlmsghdr *nh) {
-    const char *devname;
-    ulog_packet_msg_t *pm = (ulog_packet_msg_t *) NLMSG_DATA(nh);
-    if (!checkRtNetlinkLength(nh, sizeof(*pm)))
-        return false;
+    const char* alert;
+    const char* devname;
 
-    devname = pm->indev_name[0] ? pm->indev_name : pm->outdev_name;
-    asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
+    if (isKernel64Bit()) {
+        ulog_packet_msg64_t* pm64 = (ulog_packet_msg64_t*)NLMSG_DATA(nh);
+        if (!checkRtNetlinkLength(nh, sizeof(*pm64))) return false;
+        alert = pm64->prefix;
+        devname = pm64->indev_name[0] ? pm64->indev_name : pm64->outdev_name;
+    } else {
+        ulog_packet_msg32_t* pm32 = (ulog_packet_msg32_t*)NLMSG_DATA(nh);
+        if (!checkRtNetlinkLength(nh, sizeof(*pm32))) return false;
+        alert = pm32->prefix;
+        devname = pm32->indev_name[0] ? pm32->indev_name : pm32->outdev_name;
+    }
+
+    asprintf(&mParams[0], "ALERT_NAME=%s", alert);
     asprintf(&mParams[1], "INTERFACE=%s", devname);
     mSubsystem = strdup("qlog");
     mAction = Action::kChange;
