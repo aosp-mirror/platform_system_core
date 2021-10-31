@@ -103,7 +103,7 @@ static std::optional<std::string> get_stack_overflow_cause(uint64_t fault_addr, 
     // In this case, the sp will be in either an invalid map if triggered
     // on the main thread, or in a guard map if in another thread, which
     // will be the first case or second case from below.
-    unwindstack::MapInfo* map_info = maps->Find(sp);
+    std::shared_ptr<unwindstack::MapInfo> map_info = maps->Find(sp);
     if (map_info == nullptr) {
       return "stack pointer is in a non-existent map; likely due to stack overflow.";
     } else if ((map_info->flags() & (PROT_READ | PROT_WRITE)) != (PROT_READ | PROT_WRITE)) {
@@ -226,7 +226,7 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::Unwinder* unw
       cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
-    unwindstack::MapInfo* map_info = maps->Find(fault_addr);
+    auto map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
@@ -342,8 +342,8 @@ void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& fr
 
   f->set_file_map_offset(frame.map_elf_start_offset);
 
-  unwindstack::MapInfo* map_info = maps->Find(frame.map_start);
-  if (map_info) {
+  auto map_info = maps->Find(frame.map_start);
+  if (map_info.get() != nullptr) {
     f->set_build_id(map_info->GetPrintableBuildID());
   }
 }
@@ -370,7 +370,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
           MemoryDump dump;
 
           dump.set_register_name(name);
-          unwindstack::MapInfo* map_info = maps->Find(untag_address(value));
+          std::shared_ptr<unwindstack::MapInfo> map_info = maps->Find(untag_address(value));
           if (map_info) {
             dump.set_mapping_name(map_info->name());
           }
