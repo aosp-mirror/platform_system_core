@@ -481,6 +481,7 @@ int main(int argc, char* argv[]) {
     int result = do_remount(argc, argv);
     if (result == MUST_REBOOT) {
         LOG(INFO) << "Now reboot your device for settings to take effect";
+        result = 0;
     } else if (result == REMOUNT_SUCCESS) {
         printf("remount succeeded\n");
     } else {
