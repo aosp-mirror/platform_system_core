@@ -120,21 +120,22 @@ cc_library_static {
 }
 
 cc_library_static {
-    name: "libhealthd_charger",
-    local_include_dirs: ["include"],
-    export_include_dirs: [".", "include"],
+    name: "libhealthd_charger_ui",
+    export_include_dirs: [
+        "include",
+        "include_charger",
+    ],
 
     static_libs: [
-        "android.hardware.health@1.0-convert",
+        "android.hardware.health-V1-ndk",
+        "android.hardware.health-translate-ndk",
         "libcharger_sysprop",
         "libhealthd_draw",
         "libhealthloop",
-        "libhealth2impl",
         "libminui",
     ],
 
     shared_libs: [
-        "android.hardware.health@2.1",
         "libbase",
         "libcutils",
         "liblog",
@@ -143,14 +144,52 @@ cc_library_static {
         "libutils",
     ],
 
+    header_libs: [
+        "libhealthd_headers",
+    ],
+
+    export_static_lib_headers: [
+        "android.hardware.health-V1-ndk",
+    ],
+
     srcs: [
         "healthd_mode_charger.cpp",
         "AnimationParser.cpp",
     ],
 }
 
+cc_library_static {
+    name: "libhealthd_charger",
+    export_include_dirs: [
+        "include",
+        "include_charger",
+    ],
+
+    static_libs: [
+        "android.hardware.health@1.0-convert",
+        "libcharger_sysprop",
+        "libhealth2impl",
+        "libhealthd_charger_ui",
+    ],
+
+    shared_libs: [
+        "android.hardware.health@2.1",
+        "libbase",
+        "libcutils",
+        "liblog",
+        "libutils",
+    ],
+
+    srcs: [
+        "healthd_mode_charger_hidl.cpp",
+    ],
+}
+
 cc_defaults {
     name: "charger_defaults",
+    local_include_dirs: [
+        "include_charger",
+    ],
 
     cflags: [
         "-Wall",
@@ -174,6 +213,7 @@ cc_defaults {
     static_libs: [
         // common
         "android.hardware.health@1.0-convert",
+        "android.hardware.health-V1-ndk",
         "libbatterymonitor",
         "libcharger_sysprop",
         "libhealthd_charger_nops",
@@ -183,6 +223,7 @@ cc_defaults {
         // system charger only
         "libhealthd_draw",
         "libhealthd_charger",
+        "libhealthd_charger_ui",
         "libminui",
         "libsuspend",
     ],
@@ -209,6 +250,7 @@ cc_binary {
             exclude_static_libs: [
                 "libhealthd_draw",
                 "libhealthd_charger",
+                "libhealthd_charger_ui",
                 "libminui",
                 "libsuspend",
             ],
