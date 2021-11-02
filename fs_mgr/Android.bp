@@ -246,28 +246,12 @@ cc_binary {
                 "-UALLOW_ADBD_DISABLE_VERITY",
                 "-DALLOW_ADBD_DISABLE_VERITY=1",
             ],
-        },
-    },
-    required: [
-        "clean_scratch_files",
-    ],
-}
-
-cc_binary {
-    name: "clean_scratch_files",
-    defaults: ["fs_mgr_defaults"],
-    shared_libs: [
-        "libbase",
-        "libfs_mgr_binder",
-    ],
-    srcs: [
-        "clean_scratch_files.cpp",
-    ],
-    product_variables: {
-        debuggable: {
             init_rc: [
                 "clean_scratch_files.rc",
             ],
         },
     },
+    symlinks: [
+        "clean_scratch_files",
+    ],
 }
