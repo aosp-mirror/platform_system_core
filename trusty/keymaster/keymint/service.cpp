@@ -31,7 +31,7 @@ using aidl::android::hardware::security::sharedsecret::trusty::TrustySharedSecre
 
 template <typename T, class... Args>
 std::shared_ptr<T> addService(Args&&... args) {
-    std::shared_ptr<T> service = std::make_shared<T>(std::forward<Args>(args)...);
+    std::shared_ptr<T> service = ndk::SharedRefBase::make<T>(std::forward<Args>(args)...);
     auto instanceName = std::string(T::descriptor) + "/default";
     LOG(ERROR) << "Adding service instance: " << instanceName;
     auto status = AServiceManager_addService(service->asBinder().get(), instanceName.c_str());
