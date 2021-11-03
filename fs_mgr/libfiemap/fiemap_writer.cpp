@@ -514,6 +514,10 @@ static bool IsLastExtent(const fiemap_extent* extent) {
 static bool FiemapToExtents(struct fiemap* fiemap, std::vector<struct fiemap_extent>* extents,
                             std::string_view file_path) {
     uint32_t num_extents = fiemap->fm_mapped_extents;
+    if (num_extents == 0) {
+        LOG(ERROR) << "File " << file_path << " has zero extent";
+        return false;
+    }
     const struct fiemap_extent* last_extent = &fiemap->fm_extents[num_extents - 1];
     if (!IsLastExtent(last_extent)) {
         LOG(ERROR) << "FIEMAP did not return a final extent for file: " << file_path
