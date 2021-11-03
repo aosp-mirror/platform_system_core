@@ -359,5 +359,289 @@ void SnapshotHandler::WaitForMergeComplete() {
     }
 }
 
+std::string SnapshotHandler::GetMergeStatus() {
+    bool merge_not_initiated = false;
+    bool merge_failed = false;
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        if (!MergeInitiated()) {
+            merge_not_initiated = true;
+        }
+
+        if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED) {
+            merge_failed = true;
+        }
+    }
+
+    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
+    bool merge_complete = (ch->num_merge_ops == reader_->get_num_total_data_ops());
+
+    if (merge_not_initiated) {
+        // Merge was not initiated yet; however, we have merge completion
+        // recorded in the COW Header. This can happen if the device was
+        // rebooted during merge. During next reboot, libsnapshot will
+        // query the status and if the merge is completed, then snapshot-status
+        // file will be deleted
+        if (merge_complete) {
+            return "snapshot-merge-complete";
+        }
+
+        // Return the state as "snapshot". If the device was rebooted during
+        // merge, we will return the status as "snapshot". This is ok, as
+        // libsnapshot will explicitly resume the merge. This is slightly
+        // different from kernel snapshot wherein once the snapshot was switched
+        // to merge target, during next boot, we immediately switch to merge
+        // target. We don't do that here because, during first stage init, we
+        // don't want to initiate the merge. The problem is that we have daemon
+        // transition between first and second stage init. If the merge was
+        // started, then we will have to quiesce the merge before switching
+        // the dm tables. Instead, we just wait until second stage daemon is up
+        // before resuming the merge.
+        return "snapshot";
+    }
+
+    if (merge_failed) {
+        return "snapshot-merge-failed";
+    }
+
+    // Merge complete
+    if (merge_complete) {
+        return "snapshot-merge-complete";
+    }
+
+    // Merge is in-progress
+    return "snapshot-merge";
+}
+
+//========== End of Read-ahead state transition functions ====================
+
+/*
+ * Root partitions are mounted off dm-user and the I/O's are served
+ * by snapuserd worker threads.
+ *
+ * When there is an I/O request to be served by worker threads, we check
+ * if the corresponding sector is "changed" due to OTA by doing a lookup.
+ * If the lookup succeeds then the sector has been changed and that can
+ * either fall into 4 COW operations viz: COPY, XOR, REPLACE and ZERO.
+ *
+ * For the case of REPLACE and ZERO ops, there is not much of a concern
+ * as there is no dependency between blocks. Hence all the I/O request
+ * mapped to these two COW operations will be served by reading the COW device.
+ *
+ * However, COPY and XOR ops are tricky. Since the merge operations are
+ * in-progress, we cannot just go and read from the source device. We need
+ * to be in sync with the state of the merge thread before serving the I/O.
+ *
+ * Given that we know merge thread processes a set of COW ops called as RA
+ * Blocks - These set of COW ops are fixed size wherein each Block comprises
+ * of 510 COW ops.
+ *
+ *  +--------------------------+
+ *  |op-1|op-2|op-3|....|op-510|
+ *  +--------------------------+
+ *
+ *  <------ Merge Group Block N ------>
+ *
+ * Thus, a Merge Group Block N, will fall into one of these states and will
+ * transition the states in the following order:
+ *
+ * 1: GROUP_MERGE_PENDING
+ * 2: GROUP_MERGE_RA_READY
+ * 2: GROUP_MERGE_IN_PROGRESS
+ * 3: GROUP_MERGE_COMPLETED
+ * 4: GROUP_MERGE_FAILED
+ *
+ * Let's say that we have the I/O request from dm-user whose sector gets mapped
+ * to a COPY operation with op-10 in the above "Merge Group Block N".
+ *
+ * 1: If the Group is in "GROUP_MERGE_PENDING" state:
+ *
+ *    Just read the data from source block based on COW op->source field. Note,
+ *    that we will take a ref count on "Block N". This ref count will prevent
+ *    merge thread to begin merging if there are any pending I/Os. Once the I/O
+ *    is completed, ref count on "Group N" is decremented. Merge thread will
+ *    resume merging "Group N" if there are no pending I/Os.
+ *
+ * 2: If the Group is in "GROUP_MERGE_IN_PROGRESS" or "GROUP_MERGE_RA_READY" state:
+ *
+ *    When the merge thread is ready to process a "Group", it will first move
+ *    the state to GROUP_MERGE_PENDING -> GROUP_MERGE_RA_READY. From this point
+ *    onwards, I/O will be served from Read-ahead buffer. However, merge thread
+ *    cannot start merging this "Group" immediately. If there were any in-flight
+ *    I/O requests, merge thread should wait and allow those I/O's to drain.
+ *    Once all the in-flight I/O's are completed, merge thread will move the
+ *    state from "GROUP_MERGE_RA_READY" -> "GROUP_MERGE_IN_PROGRESS". I/O will
+ *    be continued to serve from Read-ahead buffer during the entire duration
+ *    of the merge.
+ *
+ *    See SetMergeInProgress().
+ *
+ * 3: If the Group is in "GROUP_MERGE_COMPLETED" state:
+ *
+ *    This is straightforward. We just read the data directly from "Base"
+ *    device. We should not be reading the COW op->source field.
+ *
+ * 4: If the Block is in "GROUP_MERGE_FAILED" state:
+ *
+ *    Terminate the I/O with an I/O error as we don't know which "op" in the
+ *    "Group" failed.
+ *
+ *    Transition ensures that the I/O from root partitions are never made to
+ *    wait and are processed immediately. Thus the state transition for any
+ *    "Group" is:
+ *
+ *    GROUP_MERGE_PENDING
+ *          |
+ *          |
+ *          v
+ *    GROUP_MERGE_RA_READY
+ *          |
+ *          |
+ *          v
+ *    GROUP_MERGE_IN_PROGRESS
+ *          |
+ *          |----------------------------(on failure)
+ *          |                           |
+ *          v                           v
+ *    GROUP_MERGE_COMPLETED           GROUP_MERGE_FAILED
+ *
+ */
+
+// Invoked by Merge thread
+void SnapshotHandler::SetMergeCompleted(size_t ra_index) {
+    MergeGroupState* blk_state = merge_blk_state_[ra_index].get();
+    {
+        std::lock_guard<std::mutex> lock(blk_state->m_lock);
+
+        CHECK(blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS);
+        CHECK(blk_state->num_ios_in_progress == 0);
+
+        // Merge is complete - All I/O henceforth should be read directly
+        // from base device
+        blk_state->merge_state_ = MERGE_GROUP_STATE::GROUP_MERGE_COMPLETED;
+    }
+}
+
+// Invoked by Merge thread. This is called just before the beginning
+// of merging a given Block of 510 ops. If there are any in-flight I/O's
+// from dm-user then wait for them to complete.
+void SnapshotHandler::SetMergeInProgress(size_t ra_index) {
+    MergeGroupState* blk_state = merge_blk_state_[ra_index].get();
+    {
+        std::unique_lock<std::mutex> lock(blk_state->m_lock);
+
+        CHECK(blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_PENDING);
+
+        // First set the state to RA_READY so that in-flight I/O will drain
+        // and any new I/O will start reading from RA buffer
+        blk_state->merge_state_ = MERGE_GROUP_STATE::GROUP_MERGE_RA_READY;
+
+        // Wait if there are any in-flight I/O's - we cannot merge at this point
+        while (!(blk_state->num_ios_in_progress == 0)) {
+            blk_state->m_cv.wait(lock);
+        }
+
+        blk_state->merge_state_ = MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS;
+    }
+}
+
+// Invoked by Merge thread on failure
+void SnapshotHandler::SetMergeFailed(size_t ra_index) {
+    MergeGroupState* blk_state = merge_blk_state_[ra_index].get();
+    {
+        std::unique_lock<std::mutex> lock(blk_state->m_lock);
+
+        blk_state->merge_state_ = MERGE_GROUP_STATE::GROUP_MERGE_FAILED;
+    }
+}
+
+// Invoked by worker threads when I/O is complete on a "MERGE_PENDING"
+// Block. If there are no more in-flight I/Os, wake up merge thread
+// to resume merging.
+void SnapshotHandler::NotifyIOCompletion(uint64_t new_block) {
+    auto it = block_to_ra_index_.find(new_block);
+    CHECK(it != block_to_ra_index_.end()) << " invalid block: " << new_block;
+
+    bool pending_ios = true;
+
+    int ra_index = it->second;
+    MergeGroupState* blk_state = merge_blk_state_[ra_index].get();
+    {
+        std::unique_lock<std::mutex> lock(blk_state->m_lock);
+
+        CHECK(blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_PENDING);
+        blk_state->num_ios_in_progress -= 1;
+        if (blk_state->num_ios_in_progress == 0) {
+            pending_ios = false;
+        }
+    }
+
+    // Give a chance to merge-thread to resume merge
+    // as there are no pending I/O.
+    if (!pending_ios) {
+        blk_state->m_cv.notify_all();
+    }
+}
+
+bool SnapshotHandler::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t block,
+                                  void* buffer) {
+    if (!lock->owns_lock()) {
+        SNAP_LOG(ERROR) << "GetRABuffer - Lock not held";
+        return false;
+    }
+    std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
+
+    if (it == read_ahead_buffer_map_.end()) {
+        SNAP_LOG(ERROR) << "Block: " << block << " not found in RA buffer";
+        return false;
+    }
+
+    memcpy(buffer, it->second, BLOCK_SZ);
+    return true;
+}
+
+// Invoked by worker threads in the I/O path. This is called when a sector
+// is mapped to a COPY/XOR COW op.
+MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void* buffer) {
+    auto it = block_to_ra_index_.find(new_block);
+    if (it == block_to_ra_index_.end()) {
+        return MERGE_GROUP_STATE::GROUP_INVALID;
+    }
+
+    int ra_index = it->second;
+    MergeGroupState* blk_state = merge_blk_state_[ra_index].get();
+    {
+        std::unique_lock<std::mutex> lock(blk_state->m_lock);
+
+        MERGE_GROUP_STATE state = blk_state->merge_state_;
+        switch (state) {
+            case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
+                blk_state->num_ios_in_progress += 1;  // ref count
+                [[fallthrough]];
+            }
+            case MERGE_GROUP_STATE::GROUP_MERGE_COMPLETED: {
+                [[fallthrough]];
+            }
+            case MERGE_GROUP_STATE::GROUP_MERGE_FAILED: {
+                return state;
+            }
+            // Fetch the data from RA buffer.
+            case MERGE_GROUP_STATE::GROUP_MERGE_RA_READY: {
+                [[fallthrough]];
+            }
+            case MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS: {
+                if (!GetRABuffer(&lock, new_block, buffer)) {
+                    return MERGE_GROUP_STATE::GROUP_INVALID;
+                }
+                return state;
+            }
+            default: {
+                return MERGE_GROUP_STATE::GROUP_INVALID;
+            }
+        }
+    }
+}
+
 }  // namespace snapshot
 }  // namespace android
