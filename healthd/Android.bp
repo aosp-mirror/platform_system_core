@@ -106,6 +106,7 @@ sysprop_library {
 
 cc_library_static {
     name: "libhealthd_draw",
+    vendor_available: true,
     export_include_dirs: ["."],
     static_libs: [
         "libcharger_sysprop",
@@ -117,10 +118,19 @@ cc_library_static {
     header_libs: ["libbatteryservice_headers"],
 
     srcs: ["healthd_draw.cpp"],
+
+    target: {
+        vendor: {
+            exclude_static_libs: [
+                "libcharger_sysprop",
+            ],
+        },
+    },
 }
 
 cc_library_static {
     name: "libhealthd_charger_ui",
+    vendor_available: true,
     export_include_dirs: [
         "include",
         "include_charger",
@@ -156,6 +166,14 @@ cc_library_static {
         "healthd_mode_charger.cpp",
         "AnimationParser.cpp",
     ],
+
+    target: {
+        vendor: {
+            exclude_static_libs: [
+                "libcharger_sysprop",
+            ],
+        },
+    },
 }
 
 cc_library_static {
@@ -305,5 +323,31 @@ phony {
     required: [
         "system_core_charger_res_images_battery_fail.png",
         "system_core_charger_res_images_battery_scale.png",
+    ],
+}
+
+// /vendor/etc/res/images/charger/battery_fail.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_fail.png_default_vendor",
+    src: "images/battery_fail.png",
+    relative_install_path: "res/images/charger/default",
+    vendor: true,
+    filename: "battery_fail.png",
+}
+
+// /vendor/etc/res/images/charger/battery_scale.png
+prebuilt_etc {
+    name: "system_core_charger_res_images_battery_scale.png_default_vendor",
+    src: "images/battery_scale.png",
+    relative_install_path: "res/images/charger/default",
+    vendor: true,
+    filename: "battery_scale.png",
+}
+
+phony {
+    name: "charger_res_images_vendor",
+    required: [
+        "system_core_charger_res_images_battery_fail.png_default_vendor",
+        "system_core_charger_res_images_battery_scale.png_default_vendor",
     ],
 }
