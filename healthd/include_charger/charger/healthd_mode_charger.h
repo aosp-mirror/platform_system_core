@@ -19,11 +19,12 @@
 #include <linux/input.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
-#include <android/hardware/health/2.0/IHealthInfoCallback.h>
-#include <android/hardware/health/2.1/IHealth.h>
-#include <health2impl/HalHealthLoop.h>
+#include <aidl/android/hardware/health/BatteryStatus.h>
+#include <health/HealthLoop.h>
+#include <healthd/healthd.h>
 
 #include "animation.h"
 
@@ -37,22 +38,44 @@ struct key_state {
     int64_t timestamp;
 };
 
-class Charger : public ::android::hardware::health::V2_1::implementation::HalHealthLoop {
-  public:
-    using HealthInfo_1_0 = android::hardware::health::V1_0::HealthInfo;
-    using HealthInfo_2_1 = android::hardware::health::V2_1::HealthInfo;
+// Health info that interests charger
+struct ChargerHealthInfo {
+    int32_t battery_level;
+    aidl::android::hardware::health::BatteryStatus battery_status;
+};
 
-    Charger(const sp<android::hardware::health::V2_1::IHealth>& service);
-    ~Charger();
+// Configuration interface for charger. This includes:
+// - HalHealthLoop APIs that interests charger.
+// - configuration values that used to be provided by sysprops
+class ChargerConfigurationInterface {
+  public:
+    virtual ~ChargerConfigurationInterface() = default;
+    // HalHealthLoop related APIs
+    virtual std::optional<bool> ChargerShouldKeepScreenOn() = 0;
+    virtual bool ChargerIsOnline() = 0;
+    virtual void ChargerInitConfig(healthd_config* config) = 0;
+    using BoundFunction =
+            std::function<void(android::hardware::health::HealthLoop*, uint32_t /* epevents */)>;
+    virtual int ChargerRegisterEvent(int fd, BoundFunction func, EventWakeup wakeup) = 0;
+
+    // Other configuration values
+    virtual bool ChargerEnableSuspend() = 0;
+};
+
+// charger UI
+class Charger {
+  public:
+    explicit Charger(ChargerConfigurationInterface* configuration);
+    virtual ~Charger();
+
+    // Hooks for ChargerConfigurationInterface
+    void OnHeartbeat();
+    int OnPrepareToWait();
+    // |cookie| is passed to ChargerConfigurationInterface::ChargerInitConfig
+    void OnInit(struct healthd_config* config);
+    void OnHealthInfoChanged(const ChargerHealthInfo& health_info);
 
   protected:
-    // HealthLoop overrides.
-    void Heartbeat() override;
-    int PrepareToWait() override;
-    void Init(struct healthd_config* config) override;
-    // HalHealthLoop overrides
-    void OnHealthInfoChanged(const HealthInfo_2_1& health_info) override;
-
     // Allowed to be mocked for testing.
     virtual int CreateDisplaySurface(const std::string& name, GRSurface** surface);
     virtual int CreateMultiDisplaySurface(const std::string& name, int* frames, int* fps,
@@ -69,6 +92,8 @@ class Charger : public ::android::hardware::health::V2_1::implementation::HalHea
     void HandlePowerSupplyState(int64_t now);
     int InputCallback(int fd, unsigned int epevents);
     void InitAnimation();
+    int RequestEnableSuspend();
+    int RequestDisableSuspend();
 
     bool have_battery_state_ = false;
     bool screen_blanked_ = false;
@@ -83,10 +108,10 @@ class Charger : public ::android::hardware::health::V2_1::implementation::HalHea
     GRSurface* surf_unknown_ = nullptr;
     int boot_min_cap_ = 0;
 
-    HealthInfo_1_0 health_info_ = {};
+    ChargerHealthInfo health_info_ = {};
     std::unique_ptr<HealthdDraw> healthd_draw_;
     std::vector<animation::frame> owned_frames_;
+
+    ChargerConfigurationInterface* configuration_;
 };
 }  // namespace android
-
-int healthd_charger_main(int argc, char** argv);
