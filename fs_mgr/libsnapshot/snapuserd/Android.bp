@@ -142,3 +142,39 @@ cc_test {
     auto_gen_config: true,
     require_root: false,
 }
+
+cc_test {
+    name: "snapuserd_test",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "user-space-merge/snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libgtest",
+        "libsnapshot_cow",
+        "libsnapshot_snapuserd",
+        "libcutils_sockets",
+        "libz",
+        "libfs_mgr",
+        "libdm",
+        "libext4_utils",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+        "libfiemap_headers",
+    ],
+    test_min_api_level: 30,
+    auto_gen_config: true,
+    require_root: false,
+}
