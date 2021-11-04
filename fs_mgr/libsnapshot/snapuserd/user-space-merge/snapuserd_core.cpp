@@ -59,6 +59,15 @@ std::unique_ptr<CowReader> SnapshotHandler::CloneReaderForWorker() {
     return reader_->CloneCowReader();
 }
 
+void SnapshotHandler::UpdateMergeCompletionPercentage() {
+    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
+    merge_completion_percentage_ = (ch->num_merge_ops * 100.0) / reader_->get_num_total_data_ops();
+
+    SNAP_LOG(DEBUG) << "Merge-complete %: " << merge_completion_percentage_
+                    << " num_merge_ops: " << ch->num_merge_ops
+                    << " total-ops: " << reader_->get_num_total_data_ops();
+}
+
 bool SnapshotHandler::CommitMerge(int num_merge_ops) {
     struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
     ch->num_merge_ops += num_merge_ops;
@@ -95,6 +104,12 @@ bool SnapshotHandler::CommitMerge(int num_merge_ops) {
         }
     }
 
+    // Update the merge completion - this is used by update engine
+    // to track the completion. No need to take a lock. It is ok
+    // even if there is a miss on reading a latest updated value.
+    // Subsequent polling will eventually converge to completion.
+    UpdateMergeCompletionPercentage();
+
     return true;
 }
 
@@ -124,7 +139,7 @@ void SnapshotHandler::CheckMergeCompletionStatus() {
 }
 
 bool SnapshotHandler::ReadMetadata() {
-    reader_ = std::make_unique<CowReader>();
+    reader_ = std::make_unique<CowReader>(CowReader::ReaderFlags::USERSPACE_MERGE);
     CowHeader header;
     CowOptions options;
 
@@ -152,16 +167,48 @@ bool SnapshotHandler::ReadMetadata() {
         return false;
     }
 
+    UpdateMergeCompletionPercentage();
+
     // Initialize the iterator for reading metadata
     std::unique_ptr<ICowOpIter> cowop_iter = reader_->GetMergeOpIter();
+
+    int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
+    int ra_index = 0;
+
+    size_t copy_ops = 0, replace_ops = 0, zero_ops = 0, xor_ops = 0;
 
     while (!cowop_iter->Done()) {
         const CowOperation* cow_op = &cowop_iter->Get();
 
+        if (cow_op->type == kCowCopyOp) {
+            copy_ops += 1;
+        } else if (cow_op->type == kCowReplaceOp) {
+            replace_ops += 1;
+        } else if (cow_op->type == kCowZeroOp) {
+            zero_ops += 1;
+        } else if (cow_op->type == kCowXorOp) {
+            xor_ops += 1;
+        }
+
         chunk_vec_.push_back(std::make_pair(ChunkToSector(cow_op->new_block), cow_op));
 
-        if (!ra_thread_ && IsOrderedOp(*cow_op)) {
+        if (IsOrderedOp(*cow_op)) {
             ra_thread_ = true;
+            block_to_ra_index_[cow_op->new_block] = ra_index;
+            num_ra_ops_per_iter -= 1;
+
+            if ((ra_index + 1) - merge_blk_state_.size() == 1) {
+                std::unique_ptr<MergeGroupState> blk_state = std::make_unique<MergeGroupState>(
+                        MERGE_GROUP_STATE::GROUP_MERGE_PENDING, 0);
+
+                merge_blk_state_.push_back(std::move(blk_state));
+            }
+
+            // Move to next RA block
+            if (num_ra_ops_per_iter == 0) {
+                num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
+                ra_index += 1;
+            }
         }
         cowop_iter->Next();
     }
@@ -172,6 +219,12 @@ bool SnapshotHandler::ReadMetadata() {
     std::sort(chunk_vec_.begin(), chunk_vec_.end(), compare);
 
     PrepareReadAhead();
+
+    SNAP_LOG(INFO) << "Merged-ops: " << header.num_merge_ops
+                   << " Total-data-ops: " << reader_->get_num_total_data_ops()
+                   << " Unmerged-ops: " << chunk_vec_.size() << " Copy-ops: " << copy_ops
+                   << " Zero-ops: " << zero_ops << " Replace-ops: " << replace_ops
+                   << " Xor-ops: " << xor_ops;
 
     return true;
 }

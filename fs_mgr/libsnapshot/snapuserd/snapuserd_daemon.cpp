@@ -21,8 +21,6 @@
 #include <gflags/gflags.h>
 #include <snapuserd/snapuserd_client.h>
 
-#include "snapuserd_server.h"
-
 DEFINE_string(socket, android::snapshot::kSnapuserdSocket, "Named socket or socket path.");
 DEFINE_bool(no_socket, false,
             "If true, no socket is used. Each additional argument is an INIT message.");
