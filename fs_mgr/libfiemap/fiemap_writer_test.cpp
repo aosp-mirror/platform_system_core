@@ -258,6 +258,13 @@ TEST_F(FiemapWriterTest, FibmapBlockAddressing) {
     EXPECT_EQ(memcmp(actual.data(), data.data(), data.size()), 0);
 }
 
+TEST_F(FiemapWriterTest, CheckEmptyFile) {
+    // Can't get any fiemap_extent out of a zero-sized file.
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 0);
+    EXPECT_EQ(fptr, nullptr);
+    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
+}
+
 TEST_F(SplitFiemapTest, Create) {
     auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
     ASSERT_NE(ptr, nullptr);

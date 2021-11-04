@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <unwindstack/MapInfo.h>
 #include <unwindstack/Maps.h>
 #include <unwindstack/Unwinder.h>
@@ -31,7 +33,7 @@ class UnwinderMock : public unwindstack::Unwinder {
   }
 
   void MockSetBuildID(uint64_t offset, const std::string& build_id) {
-    unwindstack::MapInfo* map_info = GetMaps()->Find(offset);
+    std::shared_ptr<unwindstack::MapInfo> map_info = GetMaps()->Find(offset);
     if (map_info != nullptr) {
       map_info->SetBuildID(std::string(build_id));
     }

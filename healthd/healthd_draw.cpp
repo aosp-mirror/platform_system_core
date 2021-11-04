@@ -18,19 +18,30 @@
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 
-#include "charger.sysprop.h"
 #include "healthd_draw.h"
+
+#if !defined(__ANDROID_VNDK__)
+#include "charger.sysprop.h"
+#endif
 
 #define LOGE(x...) KLOG_ERROR("charger", x);
 #define LOGW(x...) KLOG_WARNING("charger", x);
 #define LOGV(x...) KLOG_DEBUG("charger", x);
 
 static bool get_split_screen() {
+#if !defined(__ANDROID_VNDK__)
     return android::sysprop::ChargerProperties::draw_split_screen().value_or(false);
+#else
+    return false;
+#endif
 }
 
 static int get_split_offset() {
+#if !defined(__ANDROID_VNDK__)
     int64_t value = android::sysprop::ChargerProperties::draw_split_offset().value_or(0);
+#else
+    int64_t value = 0;
+#endif
     if (value < static_cast<int64_t>(std::numeric_limits<int>::min())) {
         LOGW("draw_split_offset = %" PRId64 " overflow for an int; resetting to %d.\n", value,
              std::numeric_limits<int>::min());
