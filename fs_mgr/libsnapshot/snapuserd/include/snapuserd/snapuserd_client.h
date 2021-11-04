@@ -79,6 +79,15 @@ class SnapuserdClient {
 
     // Returns true if the snapuserd instance supports bridging a socket to second-stage init.
     bool SupportsSecondStageSocketHandoff();
+
+    // Returns true if the merge is started(or resumed from crash).
+    bool InitiateMerge(const std::string& misc_name);
+
+    // Returns Merge completion percentage
+    double GetMergePercent();
+
+    // Return the status of the snapshot
+    std::string QuerySnapshotStatus(const std::string& misc_name);
 };
 
 }  // namespace snapshot
