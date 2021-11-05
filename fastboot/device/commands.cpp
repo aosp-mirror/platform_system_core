@@ -725,7 +725,7 @@ class PartitionFetcher {
             return false;
         }
 
-        if (!OpenPartition(device_, partition_name_, &handle_, true /* read */)) {
+        if (!OpenPartition(device_, partition_name_, &handle_, O_RDONLY)) {
             ret_ = device_->WriteFail(
                     android::base::StringPrintf("Cannot open %s", partition_name_.c_str()));
             return false;
