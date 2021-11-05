@@ -69,13 +69,9 @@ void execute(const char* command) {
 seconds llkdSleepPeriod(char state) {
     auto default_eng = android::base::GetProperty(LLK_ENABLE_PROPERTY, "eng") == "eng";
     auto default_enable = LLK_ENABLE_DEFAULT;
-    if (!LLK_ENABLE_DEFAULT && default_eng &&
-        android::base::GetBoolProperty("ro.debuggable", false)) {
-        default_enable = true;
-    }
     default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, default_enable);
     if (default_eng) {
-        GTEST_LOG_INFO << LLK_ENABLE_PROPERTY " defaults to \"eng\" thus "
+        GTEST_LOG_INFO << LLK_ENABLE_PROPERTY " defaults to "
                        << (default_enable ? "true" : "false") << "\n";
     }
     // Hail Mary hope is unconfigured.
@@ -108,10 +104,6 @@ seconds llkdSleepPeriod(char state) {
         rest();
     }
     default_enable = LLK_ENABLE_DEFAULT;
-    if (!LLK_ENABLE_DEFAULT && (android::base::GetProperty(LLK_ENABLE_PROPERTY, "eng") == "eng") &&
-        android::base::GetBoolProperty("ro.debuggable", false)) {
-        default_enable = true;
-    }
     default_enable = android::base::GetBoolProperty(LLK_ENABLE_PROPERTY, default_enable);
     if (default_enable) {
         execute("start llkd-1");
