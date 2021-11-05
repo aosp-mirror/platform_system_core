@@ -31,7 +31,7 @@
 #include <health/utils.h>
 #include <health2impl/Health.h>
 
-#include "healthd_mode_charger.h"
+#include "healthd_mode_charger_hidl.h"
 
 using android::hardware::health::InitHealthdConfig;
 using android::hardware::health::V2_1::HealthInfo;
@@ -153,7 +153,7 @@ int main(int /*argc*/, char** /*argv*/) {
     sp<IHealth> passthrough = new TestHealth(std::move(config));
 
     std::thread bgThread([=] {
-        android::Charger charger(passthrough);
+        android::ChargerHidl charger(passthrough);
         charger.StartLoop();
     });
 

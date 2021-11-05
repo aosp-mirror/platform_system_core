@@ -115,7 +115,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
 }
 
 bool ReadAhead::ReconstructDataFromCow() {
-    std::unordered_map<uint64_t, void*> read_ahead_buffer_map;
+    std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
     loff_t metadata_offset = 0;
     loff_t start_data_offset = snapuserd_->GetBufferDataOffset();
     int num_ops = 0;
@@ -318,6 +318,18 @@ bool ReadAhead::ReadAheadIOStart() {
     // Copy the data to scratch space
     memcpy(metadata_buffer_, ra_temp_meta_buffer.get(), snapuserd_->GetBufferMetadataSize());
     memcpy(read_ahead_buffer_, ra_temp_buffer.get(), total_blocks_merged * BLOCK_SZ);
+
+    offset = 0;
+    std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
+    read_ahead_buffer_map.clear();
+
+    for (size_t block_index = 0; block_index < blocks.size(); block_index++) {
+        void* bufptr = static_cast<void*>((char*)read_ahead_buffer_ + offset);
+        uint64_t new_block = blocks[block_index];
+
+        read_ahead_buffer_map[new_block] = bufptr;
+        offset += BLOCK_SZ;
+    }
 
     snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged);
 

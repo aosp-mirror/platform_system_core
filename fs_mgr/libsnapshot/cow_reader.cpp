@@ -34,11 +34,12 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader()
+CowReader::CowReader(ReaderFlags reader_flag)
     : fd_(-1),
       header_(),
       fd_size_(0),
-      merge_op_blocks_(std::make_shared<std::vector<uint32_t>>()) {}
+      merge_op_blocks_(std::make_shared<std::vector<uint32_t>>()),
+      reader_flag_(reader_flag) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -415,7 +416,7 @@ bool CowReader::ParseOps(std::optional<uint64_t> label) {
 //==============================================================
 bool CowReader::PrepMergeOps() {
     auto merge_op_blocks = std::make_shared<std::vector<uint32_t>>();
-    std::set<int, std::greater<int>> other_ops;
+    std::vector<int> other_ops;
     auto seq_ops_set = std::unordered_set<uint32_t>();
     auto block_map = std::make_shared<std::unordered_map<uint32_t, int>>();
     size_t num_seqs = 0;
@@ -446,7 +447,7 @@ bool CowReader::PrepMergeOps() {
         if (!has_seq_ops_ && IsOrderedOp(current_op)) {
             merge_op_blocks->emplace_back(current_op.new_block);
         } else if (seq_ops_set.count(current_op.new_block) == 0) {
-            other_ops.insert(current_op.new_block);
+            other_ops.push_back(current_op.new_block);
         }
         block_map->insert({current_op.new_block, i});
     }
@@ -462,6 +463,18 @@ bool CowReader::PrepMergeOps() {
     } else {
         num_ordered_ops_to_merge_ = 0;
     }
+
+    // Sort the vector in increasing order if merging in user-space as
+    // we can batch merge them when iterating from forward.
+    //
+    // dm-snapshot-merge requires decreasing order as we iterate the blocks
+    // in reverse order.
+    if (reader_flag_ == ReaderFlags::USERSPACE_MERGE) {
+        std::sort(other_ops.begin(), other_ops.end());
+    } else {
+        std::sort(other_ops.begin(), other_ops.end(), std::greater<int>());
+    }
+
     merge_op_blocks->reserve(merge_op_blocks->size() + other_ops.size());
     for (auto block : other_ops) {
         merge_op_blocks->emplace_back(block);

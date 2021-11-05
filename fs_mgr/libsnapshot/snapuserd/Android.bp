@@ -56,7 +56,7 @@ cc_defaults {
         "fs_mgr_defaults",
     ],
     srcs: [
-        "snapuserd_server.cpp",
+        "dm-snapshot-merge/snapuserd_server.cpp",
         "dm-snapshot-merge/snapuserd.cpp",
         "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
@@ -67,6 +67,7 @@ cc_defaults {
 	"user-space-merge/snapuserd_merge.cpp",
 	"user-space-merge/snapuserd_readahead.cpp",
 	"user-space-merge/snapuserd_transitions.cpp",
+        "user-space-merge/snapuserd_server.cpp",
     ],
 
     cflags: [
