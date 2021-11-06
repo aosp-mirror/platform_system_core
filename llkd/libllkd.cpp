@@ -1283,8 +1283,7 @@ bool llkInit(const char* threadname) {
     llkEnableSysrqT &= !llkLowRam;
     if (debuggable) {
         llkEnableSysrqT |= llkCheckEng(LLK_ENABLE_SYSRQ_T_PROPERTY);
-        if (!LLK_ENABLE_DEFAULT) {  // NB: default is currently true ...
-            llkEnable |= llkCheckEng(LLK_ENABLE_PROPERTY);
+        if (!LLK_ENABLE_DEFAULT) {
             khtEnable |= llkCheckEng(KHT_ENABLE_PROPERTY);
         }
     }
