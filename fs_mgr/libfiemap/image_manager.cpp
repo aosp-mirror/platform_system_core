@@ -696,7 +696,12 @@ bool ImageManager::RemoveDisabledImages() {
     bool ok = true;
     for (const auto& partition : metadata->partitions) {
         if (partition.attributes & LP_PARTITION_ATTR_DISABLED) {
-            ok &= DeleteBackingImage(GetPartitionName(partition));
+            const auto name = GetPartitionName(partition);
+            if (!DeleteBackingImage(name)) {
+                ok = false;
+            } else {
+                LOG(INFO) << "Removed disabled partition image: " << name;
+            }
         }
     }
     return ok;
