@@ -586,32 +586,7 @@ static void import_late(const std::vector<std::string>& rc_paths) {
  * return code is processed based on input code
  */
 static Result<void> queue_fs_event(int code, bool userdata_remount) {
-    if (code == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
-        if (userdata_remount) {
-            // FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION should only happen on FDE devices. Since we don't
-            // support userdata remount on FDE devices, this should never been triggered. Time to
-            // panic!
-            LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
-            trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
-        }
-        ActionManager::GetInstance().QueueEventTrigger("encrypt");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
-        if (userdata_remount) {
-            // FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED should only happen on FDE devices. Since we
-            // don't support userdata remount on FDE devices, this should never been triggered.
-            // Time to panic!
-            LOG(ERROR) << "Userdata remount is not supported on FDE devices. How did you get here?";
-            trigger_shutdown("reboot,requested-userdata-remount-on-fde-device");
-        }
-        SetProperty("ro.crypto.state", "encrypted");
-        ActionManager::GetInstance().QueueEventTrigger("defaultcrypto");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
-        SetProperty("ro.crypto.state", "unencrypted");
-        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
+    if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         SetProperty("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
         return {};
