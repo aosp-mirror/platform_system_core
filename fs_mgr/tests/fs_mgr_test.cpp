@@ -488,18 +488,16 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_AllBad) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      encryptable,forceencrypt,fileencryption,forcefdeorfbe,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_backingdev_size
+source none0       swap   defaults      fileencryption,keydirectory,length,swapprio,zramsize,max_comp_streams,reservedsize,eraseblk,logicalblk,sysfs_path,zram_backingdev_size
 
-source none1       swap   defaults      encryptable=,forceencrypt=,fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_backingdev_size=
-
-source none2       swap   defaults      forcefdeorfbe=
+source none1       swap   defaults      fileencryption=,keydirectory=,length=,swapprio=,zramsize=,max_comp_streams=,avb=,reservedsize=,eraseblk=,logicalblk=,sysfs_path=,zram_backingdev_size=
 
 )fs";
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(3U, fstab.size());
+    ASSERT_LE(2U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -526,8 +524,6 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ("none1", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
-        flags.crypt = true;
-        flags.force_crypt = true;
         flags.file_encryption = true;
         flags.avb = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
@@ -546,24 +542,26 @@ source none2       swap   defaults      forcefdeorfbe=
     EXPECT_EQ(0, entry->logical_blk_size);
     EXPECT_EQ("", entry->sysfs_path);
     EXPECT_EQ(0U, entry->zram_backingdev_size);
-    entry++;
-
-    // forcefdeorfbe has its own encryption_options defaults, so test it separately.
-    EXPECT_EQ("none2", entry->mount_point);
-    {
-        FstabEntry::FsMgrFlags flags = {};
-        flags.force_fde_or_fbe = true;
-        EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    }
-    EXPECT_EQ("aes-256-xts:aes-256-cts", entry->encryption_options);
-    EXPECT_EQ("", entry->key_loc);
 }
 
-TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Encryptable) {
+// FDE is no longer supported, so an fstab with FDE enabled should be rejected.
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_FDE) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      encryptable=/dir/key
+source /data        ext4    noatime    forceencrypt=footer
+)fs";
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_FALSE(ReadFstabFromFile(tf.path, &fstab));
+}
+
+TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_AdoptableStorage) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+source none0       swap   defaults      encryptable=userdata,voldmanaged=sdcard:auto
 )fs";
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
@@ -573,11 +571,11 @@ source none0       swap   defaults      encryptable=/dir/key
 
     FstabEntry::FsMgrFlags flags = {};
     flags.crypt = true;
+    flags.vold_managed = true;
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ("/dir/key", entry->key_loc);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_VoldManaged) {
@@ -723,53 +721,6 @@ source none5       swap   defaults      zramsize=%
     EXPECT_EQ("none5", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
-}
-
-TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_ForceEncrypt) {
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    std::string fstab_contents = R"fs(
-source none0       swap   defaults      forceencrypt=/dir/key
-)fs";
-
-    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
-
-    Fstab fstab;
-    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
-
-    auto entry = fstab.begin();
-    EXPECT_EQ("none0", entry->mount_point);
-
-    FstabEntry::FsMgrFlags flags = {};
-    flags.force_crypt = true;
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-
-    EXPECT_EQ("/dir/key", entry->key_loc);
-}
-
-TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_ForceFdeOrFbe) {
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    std::string fstab_contents = R"fs(
-source none0       swap   defaults      forcefdeorfbe=/dir/key
-)fs";
-
-    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
-
-    Fstab fstab;
-    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
-
-    auto entry = fstab.begin();
-    EXPECT_EQ("none0", entry->mount_point);
-
-    FstabEntry::FsMgrFlags flags = {};
-    flags.force_fde_or_fbe = true;
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-
-    EXPECT_EQ("/dir/key", entry->key_loc);
-    EXPECT_EQ("aes-256-xts:aes-256-cts", entry->encryption_options);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_FileEncryption) {
