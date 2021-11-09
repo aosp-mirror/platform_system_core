@@ -125,7 +125,7 @@ bool TryPathMount(FstabEntry* rec, const std::string& mount_pt) {
     int result = fs_mgr_do_mount_one(*rec, mount_point);
     if (result == -1 && rec->fs_mgr_flags.formattable) {
         PERROR << "Failed to mount " << mount_point << "; formatting";
-        if (fs_mgr_do_format(*rec, false) != 0) {
+        if (fs_mgr_do_format(*rec) != 0) {
             PERROR << "Failed to format " << mount_point;
             return false;
         }

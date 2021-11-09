@@ -1529,7 +1529,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 }
             }
 
-            if (fs_mgr_do_format(current_entry, false) == 0) {
+            if (fs_mgr_do_format(current_entry) == 0) {
                 // Let's replay the mount actions.
                 i = top_idx - 1;
                 continue;
