@@ -187,11 +187,17 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
                                  ", build may be missing broken or missing boot_devices");
     }
 
+    std::string slot_suffix = device->GetCurrentSlot();
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+
+    std::string other_slot_suffix;
+    if (!slot_suffix.empty()) {
+        other_slot_suffix = (slot_suffix == "_a") ? "_b" : "_a";
+    }
+
     // If we are unable to read the existing metadata, then the super partition
     // is corrupt. In this case we reflash the whole thing using the provided
     // image.
-    std::string slot_suffix = device->GetCurrentSlot();
-    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
     std::unique_ptr<LpMetadata> old_metadata = ReadMetadata(super_name, slot_number);
     if (wipe || !old_metadata) {
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
@@ -203,11 +209,15 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     }
 
     std::set<std::string> partitions_to_keep;
+    bool virtual_ab = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
     for (const auto& partition : old_metadata->partitions) {
         // Preserve partitions in the other slot, but not the current slot.
         std::string partition_name = GetPartitionName(partition);
-        if (!slot_suffix.empty() && GetPartitionSlotSuffix(partition_name) == slot_suffix) {
-            continue;
+        if (!slot_suffix.empty()) {
+            auto part_suffix = GetPartitionSlotSuffix(partition_name);
+            if (part_suffix == slot_suffix || (part_suffix == other_slot_suffix && virtual_ab)) {
+                continue;
+            }
         }
         std::string group_name = GetPartitionGroupName(old_metadata->groups[partition.group_index]);
         // Skip partitions in the COW group
