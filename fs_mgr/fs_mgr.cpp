@@ -2065,22 +2065,22 @@ static bool PrepareZramBackingDevice(off64_t size) {
 
     // Allocate loop device and attach it to file_path.
     LoopControl loop_control;
-    std::string device;
-    if (!loop_control.Attach(target_fd.get(), 5s, &device)) {
+    std::string loop_device;
+    if (!loop_control.Attach(target_fd.get(), 5s, &loop_device)) {
         return false;
     }
 
     // set block size & direct IO
-    unique_fd device_fd(TEMP_FAILURE_RETRY(open(device.c_str(), O_RDWR | O_CLOEXEC)));
-    if (device_fd.get() == -1) {
-        PERROR << "Cannot open " << device;
+    unique_fd loop_fd(TEMP_FAILURE_RETRY(open(loop_device.c_str(), O_RDWR | O_CLOEXEC)));
+    if (loop_fd.get() == -1) {
+        PERROR << "Cannot open " << loop_device;
         return false;
     }
-    if (!LoopControl::EnableDirectIo(device_fd.get())) {
+    if (!LoopControl::EnableDirectIo(loop_fd.get())) {
         return false;
     }
 
-    return InstallZramDevice(device);
+    return InstallZramDevice(loop_device);
 }
 
 bool fs_mgr_swapon_all(const Fstab& fstab) {
