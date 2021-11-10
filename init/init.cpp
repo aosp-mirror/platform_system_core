@@ -27,6 +27,7 @@
 #include <sys/mount.h>
 #include <sys/signalfd.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
@@ -554,6 +555,19 @@ static void SetUsbController() {
     }
 }
 
+/// Set ro.kernel.version property to contain the major.minor pair as returned
+/// by uname(2).
+static void SetKernelVersion() {
+    struct utsname uts;
+    unsigned int major, minor;
+
+    if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
+        LOG(ERROR) << "Could not parse the kernel version from uname";
+        return;
+    }
+    SetProperty("ro.kernel.version", android::base::StringPrintf("%u.%u", major, minor));
+}
+
 static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     if (siginfo.ssi_pid != 0) {
         // Drop any userspace SIGTERM requests.
@@ -824,6 +838,7 @@ int SecondStageMain(int argc, char** argv) {
     export_oem_lock_status();
     MountHandler mount_handler(&epoll);
     SetUsbController();
+    SetKernelVersion();
 
     const BuiltinFunctionMap& function_map = GetBuiltinFunctionMap();
     Action::set_function_map(&function_map);

@@ -120,6 +120,7 @@ cc_binary {
     ],
     required: [
         "android.hardware.hardware_keystore.xml",
+        "RemoteProvisioner",
     ],
 }
 
