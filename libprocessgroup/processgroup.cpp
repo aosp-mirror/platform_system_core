@@ -69,6 +69,20 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     return true;
 }
 
+bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name) {
+    auto controller = CgroupMap::GetInstance().FindControllerByPath(path);
+
+    if (!controller.HasValue()) {
+        return false;
+    }
+
+    if (cgroup_name) {
+        *cgroup_name = controller.name();
+    }
+
+    return true;
+}
+
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
     const ProfileAttribute* attr = tp.GetAttribute(attr_name);
