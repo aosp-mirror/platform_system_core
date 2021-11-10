@@ -518,6 +518,13 @@ bool SnapshotManager::MapSnapshot(LockedFile* lock, const std::string& name,
             break;
     }
 
+    if (mode == SnapshotStorageMode::Persistent && status.state() == SnapshotState::MERGING) {
+        LOG(ERROR) << "Snapshot: " << name
+                   << " has snapshot status Merging but mode set to Persistent."
+                   << " Changing mode to Snapshot-Merge.";
+        mode = SnapshotStorageMode::Merge;
+    }
+
     DmTable table;
     table.Emplace<DmTargetSnapshot>(0, snapshot_sectors, base_device, cow_device, mode,
                                     kSnapshotChunkSize);
@@ -885,6 +892,10 @@ bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::strin
     }
     if (target_type) {
         *target_type = DeviceMapper::GetTargetType(target.spec);
+    }
+    if (!status->error.empty()) {
+        LOG(ERROR) << "Snapshot: " << dm_name << " returned error code: " << status->error;
+        return false;
     }
     return true;
 }
