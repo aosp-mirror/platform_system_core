@@ -2071,12 +2071,22 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     // After reboot, init does first stage mount.
     auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
+
+    ASSERT_TRUE(init->EnsureSnapuserdConnected());
+    init->set_use_first_stage_snapuserd(true);
+
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Check that the target partitions have the same content.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b", "dlkm_b"}) {
+    std::vector<std::string> partitions = {"sys_b", "vnd_b", "prd_b", "dlkm_b"};
+    for (const auto& name : partitions) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
+    for (const auto& name : partitions) {
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
     }
 
     // Initiate the merge and wait for it to be completed.
