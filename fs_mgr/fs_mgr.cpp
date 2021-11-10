@@ -75,9 +75,6 @@
 #include "blockdev.h"
 #include "fs_mgr_priv.h"
 
-#define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
-#define KEY_IN_FOOTER  "footer"
-
 #define E2FSCK_BIN      "/system/bin/e2fsck"
 #define F2FS_FSCK_BIN   "/system/bin/fsck.f2fs"
 #define MKSWAP_BIN      "/system/bin/mkswap"
@@ -907,7 +904,7 @@ static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_
                    << "(): skipping mount due to invalid magic, mountpoint=" << fstab[i].mount_point
                    << " blk_dev=" << realpath(fstab[i].blk_device) << " rec[" << i
                    << "].fs_type=" << fstab[i].fs_type;
-            mount_errno = EINVAL;  // continue bootup for FDE
+            mount_errno = EINVAL;  // continue bootup for metadata encryption
             continue;
         }
 
@@ -1005,50 +1002,22 @@ static bool TranslateExtLabels(FstabEntry* entry) {
     return false;
 }
 
-static bool needs_block_encryption(const FstabEntry& entry) {
-    if (android::base::GetBoolProperty("ro.vold.forceencryption", false) && entry.is_encryptable())
-        return true;
-    if (entry.fs_mgr_flags.force_crypt) return true;
-    if (entry.fs_mgr_flags.crypt) {
-        // Check for existence of convert_fde breadcrumb file.
-        auto convert_fde_name = entry.mount_point + "/misc/vold/convert_fde";
-        if (access(convert_fde_name.c_str(), F_OK) == 0) return true;
-    }
-    if (entry.fs_mgr_flags.force_fde_or_fbe) {
-        // Check for absence of convert_fbe breadcrumb file.
-        auto convert_fbe_name = entry.mount_point + "/convert_fbe";
-        if (access(convert_fbe_name.c_str(), F_OK) != 0) return true;
-    }
-    return false;
-}
-
 static bool should_use_metadata_encryption(const FstabEntry& entry) {
-    return !entry.metadata_key_dir.empty() &&
-           (entry.fs_mgr_flags.file_encryption || entry.fs_mgr_flags.force_fde_or_fbe);
+    return !entry.metadata_key_dir.empty() && entry.fs_mgr_flags.file_encryption;
 }
 
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(const FstabEntry& entry) {
-    // If this is block encryptable, need to trigger encryption.
-    if (needs_block_encryption(entry)) {
-        if (umount(entry.mount_point.c_str()) == 0) {
-            return FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
-        } else {
-            PWARNING << "Could not umount " << entry.mount_point << " - allow continue unencrypted";
-            return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
-        }
-    } else if (should_use_metadata_encryption(entry)) {
+    if (should_use_metadata_encryption(entry)) {
         if (umount(entry.mount_point.c_str()) == 0) {
             return FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION;
         } else {
             PERROR << "Could not umount " << entry.mount_point << " - fail since can't encrypt";
             return FS_MGR_MNTALL_FAIL;
         }
-    } else if (entry.fs_mgr_flags.file_encryption || entry.fs_mgr_flags.force_fde_or_fbe) {
+    } else if (entry.fs_mgr_flags.file_encryption) {
         LINFO << entry.mount_point << " is file encrypted";
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
-    } else if (entry.is_encryptable()) {
-        return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
     } else {
         return FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE;
     }
@@ -1056,9 +1025,6 @@ static int handle_encryptable(const FstabEntry& entry) {
 
 static void set_type_property(int status) {
     switch (status) {
-        case FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED:
-            SetProperty("ro.crypto.type", "block");
-            break;
         case FS_MGR_MNTALL_DEV_FILE_ENCRYPTED:
         case FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED:
         case FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION:
@@ -1532,7 +1498,6 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
 
         // Mounting failed, understand why and retry.
         wiped = partition_wiped(current_entry.blk_device.c_str());
-        bool crypt_footer = false;
         if (mount_errno != EBUSY && mount_errno != EACCES &&
             current_entry.fs_mgr_flags.formattable && wiped) {
             // current_entry and attempted_entry point at the same partition, but sometimes
@@ -1543,19 +1508,6 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                    << " is formattable. Format it.";
 
             checkpoint_manager.Revert(&current_entry);
-
-            if (current_entry.is_encryptable() && current_entry.key_loc != KEY_IN_FOOTER) {
-                unique_fd fd(TEMP_FAILURE_RETRY(
-                        open(current_entry.key_loc.c_str(), O_WRONLY | O_CLOEXEC)));
-                if (fd >= 0) {
-                    LINFO << __FUNCTION__ << "(): also wipe " << current_entry.key_loc;
-                    wipe_block_device(fd, get_file_size(fd));
-                } else {
-                    PERROR << __FUNCTION__ << "(): " << current_entry.key_loc << " wouldn't open";
-                }
-            } else if (current_entry.is_encryptable() && current_entry.key_loc == KEY_IN_FOOTER) {
-                crypt_footer = true;
-            }
 
             // EncryptInplace will be used when vdc gives an error or needs to format partitions
             // other than /data
@@ -1577,7 +1529,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 }
             }
 
-            if (fs_mgr_do_format(current_entry, crypt_footer) == 0) {
+            if (fs_mgr_do_format(current_entry) == 0) {
                 // Let's replay the mount actions.
                 i = top_idx - 1;
                 continue;
@@ -1590,27 +1542,8 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         }
 
         // mount(2) returned an error, handle the encryptable/formattable case.
-        if (mount_errno != EBUSY && mount_errno != EACCES && attempted_entry.is_encryptable()) {
-            if (wiped) {
-                LERROR << __FUNCTION__ << "(): " << attempted_entry.blk_device << " is wiped and "
-                       << attempted_entry.mount_point << " " << attempted_entry.fs_type
-                       << " is encryptable. Suggest recovery...";
-                encryptable = FS_MGR_MNTALL_DEV_NEEDS_RECOVERY;
-                continue;
-            } else {
-                // Need to mount a tmpfs at this mountpoint for now, and set
-                // properties that vold will query later for decrypting
-                LERROR << __FUNCTION__ << "(): possibly an encryptable blkdev "
-                       << attempted_entry.blk_device << " for mount " << attempted_entry.mount_point
-                       << " type " << attempted_entry.fs_type;
-                if (fs_mgr_do_tmpfs_mount(attempted_entry.mount_point.c_str()) < 0) {
-                    ++error_count;
-                    continue;
-                }
-            }
-            encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
-        } else if (mount_errno != EBUSY && mount_errno != EACCES &&
-                   should_use_metadata_encryption(attempted_entry)) {
+        if (mount_errno != EBUSY && mount_errno != EACCES &&
+            should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
                            attempted_entry.mount_point},
                           nullptr)) {
