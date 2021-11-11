@@ -531,11 +531,11 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 }  // namespace
 
 bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
+    const int expected_fields = proc_mounts ? 4 : 5;
     ssize_t len;
     size_t alloc_len = 0;
     char *line = NULL;
-    const char *delim = " \t";
-    char *save_ptr, *p;
+    char* p;
     Fstab fstab;
 
     while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
@@ -553,42 +553,23 @@ bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
         if (*p == '#' || *p == '\0')
             continue;
 
+        auto fields = android::base::Tokenize(line, " \t");
+        if (fields.size() < expected_fields) {
+            LERROR << "Error parsing fstab: expected " << expected_fields << " fields, got "
+                   << fields.size();
+            goto err;
+        }
+
         FstabEntry entry;
+        auto it = fields.begin();
 
-        if (!(p = strtok_r(line, delim, &save_ptr))) {
-            LERROR << "Error parsing mount source";
-            goto err;
-        }
-        entry.blk_device = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing mount_point";
-            goto err;
-        }
-        entry.mount_point = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing fs_type";
-            goto err;
-        }
-        entry.fs_type = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing mount_flags";
-            goto err;
-        }
-
-        ParseMountFlags(p, &entry);
+        entry.blk_device = std::move(*it++);
+        entry.mount_point = std::move(*it++);
+        entry.fs_type = std::move(*it++);
+        ParseMountFlags(std::move(*it++), &entry);
 
         // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
-        if (proc_mounts) {
-            p += strlen(p);
-        } else if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing fs_mgr_options";
-            goto err;
-        }
-
-        if (!ParseFsMgrFlags(p, &entry)) {
+        if (!proc_mounts && !ParseFsMgrFlags(std::move(*it++), &entry)) {
             LERROR << "Error parsing fs_mgr_flags";
             goto err;
         }
