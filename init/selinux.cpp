@@ -27,7 +27,7 @@
 // file located at /sepolicy and is directly loaded into the kernel SELinux subsystem.
 
 // The split policy is for supporting treble devices.  It splits the SEPolicy across files on
-// /system/etc/selinux (the 'plat' portion of the policy) and /vendor/etc/selinux (the 'nonplat'
+// /system/etc/selinux (the 'plat' portion of the policy) and /vendor/etc/selinux (the 'vendor'
 // portion of the policy).  This is necessary to allow the system image to be updated independently
 // of the vendor image, while maintaining contributions from both partitions in the SEPolicy.  This
 // is especially important for VTS testing, where the SEPolicy on the Google System Image may not be
@@ -320,12 +320,12 @@ struct PolicyFile {
 };
 
 bool OpenSplitPolicy(PolicyFile* policy_file) {
-    // IMPLEMENTATION NOTE: Split policy consists of three CIL files:
+    // IMPLEMENTATION NOTE: Split policy consists of three or more CIL files:
     // * platform -- policy needed due to logic contained in the system image,
-    // * non-platform -- policy needed due to logic contained in the vendor image,
+    // * vendor -- policy needed due to logic contained in the vendor image,
     // * mapping -- mapping policy which helps preserve forward-compatibility of non-platform policy
     //   with newer versions of platform policy.
-    //
+    // * (optional) policy needed due to logic on product, system_ext, or odm images.
     // secilc is invoked to compile the above three policy files into a single monolithic policy
     // file. This file is then loaded into the kernel.
 
@@ -404,17 +404,14 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
         product_mapping_file.clear();
     }
 
-    // vendor_sepolicy.cil and plat_pub_versioned.cil are the new design to replace
-    // nonplat_sepolicy.cil.
-    std::string plat_pub_versioned_cil_file("/vendor/etc/selinux/plat_pub_versioned.cil");
     std::string vendor_policy_cil_file("/vendor/etc/selinux/vendor_sepolicy.cil");
-
     if (access(vendor_policy_cil_file.c_str(), F_OK) == -1) {
-        // For backward compatibility.
-        // TODO: remove this after no device is using nonplat_sepolicy.cil.
-        vendor_policy_cil_file = "/vendor/etc/selinux/nonplat_sepolicy.cil";
-        plat_pub_versioned_cil_file.clear();
-    } else if (access(plat_pub_versioned_cil_file.c_str(), F_OK) == -1) {
+        LOG(ERROR) << "Missing " << vendor_policy_cil_file;
+        return false;
+    }
+
+    std::string plat_pub_versioned_cil_file("/vendor/etc/selinux/plat_pub_versioned.cil");
+    if (access(plat_pub_versioned_cil_file.c_str(), F_OK) == -1) {
         LOG(ERROR) << "Missing " << plat_pub_versioned_cil_file;
         return false;
     }
