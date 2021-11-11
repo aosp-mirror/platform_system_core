@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2013 The Android Open Source Project
+ * Copyright (C) 2008 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef _CUTILS_LIST_H_
-#define _CUTILS_LIST_H_
+#pragma once
 
 #include <stddef.h>
 
@@ -38,9 +37,6 @@ struct listnode
         .prev = &(name), \
     }
 
-#define list_for_each(node, list) \
-    for ((node) = (list)->next; (node) != (list); (node) = (node)->next)
-
 #define list_for_each_reverse(node, list) \
     for ((node) = (list)->prev; (node) != (list); (node) = (node)->prev)
 
@@ -48,6 +44,10 @@ struct listnode
     for ((node) = (list)->next, (n) = (node)->next; \
          (node) != (list); \
          (node) = (n), (n) = (node)->next)
+
+#define list_for_each(node, list)                                                \
+    for (struct listnode* __n = ((node) = (list)->next)->next; (node) != (list); \
+         (node) = __n, __n = (node)->next)
 
 static inline void list_init(struct listnode *node)
 {
@@ -84,5 +84,3 @@ static inline void list_remove(struct listnode *item)
 #ifdef __cplusplus
 };
 #endif /* __cplusplus */
-
-#endif
