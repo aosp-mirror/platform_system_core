@@ -34,6 +34,7 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cgroup_map.h>
 #include <json/reader.h>
@@ -41,6 +42,7 @@
 #include <processgroup/processgroup.h>
 
 using android::base::GetBoolProperty;
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
 using android::base::WriteStringToFile;
@@ -197,6 +199,24 @@ CgroupController CgroupMap::FindController(const std::string& name) const {
     for (uint32_t i = 0; i < controller_count; ++i) {
         const ACgroupController* controller = ACgroupFile_getController(i);
         if (name == ACgroupController_getName(controller)) {
+            return CgroupController(controller);
+        }
+    }
+
+    return CgroupController(nullptr);
+}
+
+CgroupController CgroupMap::FindControllerByPath(const std::string& path) const {
+    if (!loaded_) {
+        LOG(ERROR) << "CgroupMap::FindControllerByPath called for [" << getpid()
+                   << "] failed, RC file was not initialized properly";
+        return CgroupController(nullptr);
+    }
+
+    auto controller_count = ACgroupFile_getControllerCount();
+    for (uint32_t i = 0; i < controller_count; ++i) {
+        const ACgroupController* controller = ACgroupFile_getController(i);
+        if (StartsWith(path, ACgroupController_getPath(controller))) {
             return CgroupController(controller);
         }
     }

@@ -146,7 +146,7 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
     entry->fs_options = std::move(fs_options);
 }
 
-void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
+bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     for (const auto& flag : Split(flags, ",")) {
         if (flag.empty() || flag == "defaults") continue;
         std::string arg;
@@ -188,10 +188,20 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
 #undef CheckFlag
 
         // Then handle flags that take an argument.
-        if (StartsWith(flag, "encryptable=")) {
-            // The encryptable flag is followed by an = and the  location of the keys.
+        if (flag == "encryptable=userdata") {
+            // The "encryptable" flag identifies adoptable storage volumes.  The
+            // argument to this flag must be "userdata".
+            //
+            // Historical note: this flag was originally meant just for /data,
+            // to indicate that FDE (full disk encryption) can be enabled.
+            // Unfortunately, it was also overloaded to identify adoptable
+            // storage volumes.  Today, FDE is no longer supported, leaving only
+            // the adoptable storage volume meaning for this flag.
             entry->fs_mgr_flags.crypt = true;
-            entry->key_loc = arg;
+        } else if (StartsWith(flag, "encryptable=") || StartsWith(flag, "forceencrypt=") ||
+                   StartsWith(flag, "forcefdeorfbe=")) {
+            LERROR << "flag no longer supported: " << flag;
+            return false;
         } else if (StartsWith(flag, "voldmanaged=")) {
             // The voldmanaged flag is followed by an = and the label, a colon and the partition
             // number or the word "auto", e.g. voldmanaged=sdcard:3
@@ -235,18 +245,8 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
                 }
             }
-        } else if (StartsWith(flag, "forceencrypt=")) {
-            // The forceencrypt flag is followed by an = and the location of the keys.
-            entry->fs_mgr_flags.force_crypt = true;
-            entry->key_loc = arg;
         } else if (StartsWith(flag, "fileencryption=")) {
             ParseFileEncryption(arg, entry);
-        } else if (StartsWith(flag, "forcefdeorfbe=")) {
-            // The forcefdeorfbe flag is followed by an = and the location of the keys.  Get it and
-            // return it.
-            entry->fs_mgr_flags.force_fde_or_fbe = true;
-            entry->key_loc = arg;
-            entry->encryption_options = "aes-256-xts:aes-256-cts";
         } else if (StartsWith(flag, "max_comp_streams=")) {
             if (!ParseInt(arg, &entry->max_comp_streams)) {
                 LWARNING << "Warning: max_comp_streams= flag malformed: " << arg;
@@ -306,6 +306,13 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             LWARNING << "Warning: unknown flag: " << flag;
         }
     }
+
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed) {
+        LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
+                  "storage";
+        return false;
+    }
+    return true;
 }
 
 std::string InitAndroidDtDir() {
@@ -576,7 +583,10 @@ bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
             goto err;
         }
 
-        ParseFsMgrFlags(p, &entry);
+        if (!ParseFsMgrFlags(p, &entry)) {
+            LERROR << "Error parsing fs_mgr_flags";
+            goto err;
+        }
 
         if (entry.fs_mgr_flags.logical) {
             entry.logical_partition_name = entry.blk_device;
