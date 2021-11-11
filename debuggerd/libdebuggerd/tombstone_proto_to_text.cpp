@@ -292,6 +292,7 @@ static void print_tag_dump(CallbackType callback, const Tombstone& tombstone) {
 
 static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
                               const Thread& thread) {
+  int word_size = pointer_width(tombstone);
   print_thread_header(callback, tombstone, thread, true);
 
   const Signal& signal_info = tombstone.signal_info();
@@ -307,7 +308,7 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   } else {
     std::string fault_addr_desc;
     if (signal_info.has_fault_address()) {
-      fault_addr_desc = StringPrintf("0x%" PRIx64, signal_info.fault_address());
+      fault_addr_desc = StringPrintf("0x%0*" PRIx64, 2 * word_size, signal_info.fault_address());
     } else {
       fault_addr_desc = "--------";
     }
@@ -331,7 +332,7 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   if (tombstone.causes_size() > 1) {
     CBS("");
     CBL("Note: multiple potential causes for this crash were detected, listing them in decreasing "
-        "order of probability.");
+        "order of likelihood.");
   }
 
   for (const Cause& cause : tombstone.causes()) {
@@ -369,7 +370,6 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
     return;
   }
 
-  int word_size = pointer_width(tombstone);
   const auto format_pointer = [word_size](uint64_t ptr) -> std::string {
     if (word_size == 8) {
       uint64_t top = ptr >> 32;
