@@ -340,7 +340,12 @@ TEST_F(CrasherTest, smoke) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0xdead)");
+#ifdef __LP64__
+  ASSERT_MATCH(result,
+               R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x000000000000dead)");
+#else
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0000dead)");
+#endif
 
   if (mte_supported()) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
@@ -371,8 +376,7 @@ TEST_F(CrasherTest, tagged_fault_addr) {
 
   // The address can either be tagged (new kernels) or untagged (old kernels).
   ASSERT_MATCH(
-      result,
-      R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr (0x100000000000dead|0xdead))");
+      result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x[01]00000000000dead)");
 }
 
 // Marked as weak to prevent the compiler from removing the malloc in the caller. In theory, the
@@ -420,6 +424,12 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 #if defined(__aarch64__)
 static void SetTagCheckingLevelSync() {
   if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_SYNC) == 0) {
+    abort();
+  }
+}
+
+static void SetTagCheckingLevelAsync() {
+  if (mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_ASYNC) == 0) {
     abort();
   }
 }
@@ -654,6 +664,36 @@ TEST_P(SizeParamCrasherTest, mte_underflow) {
 #endif
 }
 
+TEST_F(CrasherTest, mte_async) {
+#if defined(__aarch64__)
+  if (!mte_supported()) {
+    GTEST_SKIP() << "Requires MTE";
+  }
+
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([&]() {
+    SetTagCheckingLevelAsync();
+    volatile int* p = (volatile int*)malloc(16);
+    p[-1] = 42;
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 8 \(SEGV_MTEAERR\), fault addr --------)");
+#else
+  GTEST_SKIP() << "Requires aarch64";
+#endif
+}
+
 TEST_F(CrasherTest, mte_multiple_causes) {
 #if defined(__aarch64__)
   if (!mte_supported()) {
@@ -704,7 +744,7 @@ TEST_F(CrasherTest, mte_multiple_causes) {
   for (const auto& result : log_sources) {
     ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\))");
     ASSERT_THAT(result, HasSubstr("Note: multiple potential causes for this crash were detected, "
-                                  "listing them in decreasing order of probability."));
+                                  "listing them in decreasing order of likelihood."));
     // Adjacent untracked allocations may cause us to see the wrong underflow here (or only
     // overflows), so we can't match explicitly for an underflow message.
     ASSERT_MATCH(result,
@@ -891,7 +931,7 @@ TEST_F(CrasherTest, LD_PRELOAD) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0xdead)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0+dead)");
 }
 
 TEST_F(CrasherTest, abort) {
@@ -1941,7 +1981,7 @@ TEST_F(CrasherTest, fault_address_before_first_map) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x1024)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0+1024)");
 
   ASSERT_MATCH(result, R"(\nmemory map \(.*\):\n)");
 
@@ -1971,8 +2011,8 @@ TEST_F(CrasherTest, fault_address_after_last_map) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
-  match_str += android::base::StringPrintf("0x%" PRIxPTR, crash_uptr);
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x)";
+  match_str += format_full_pointer(crash_uptr);
   ASSERT_MATCH(result, match_str);
 
   ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
@@ -2019,8 +2059,8 @@ TEST_F(CrasherTest, fault_address_between_maps) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr )";
-  match_str += android::base::StringPrintf("%p", middle_ptr);
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x)";
+  match_str += format_full_pointer(reinterpret_cast<uintptr_t>(middle_ptr));
   ASSERT_MATCH(result, match_str);
 
   ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
@@ -2057,8 +2097,8 @@ TEST_F(CrasherTest, fault_address_in_map) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  std::string match_str = R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\), fault addr )";
-  match_str += android::base::StringPrintf("%p", ptr);
+  std::string match_str = R"(signal 11 \(SIGSEGV\), code 2 \(SEGV_ACCERR\), fault addr 0x)";
+  match_str += format_full_pointer(reinterpret_cast<uintptr_t>(ptr));
   ASSERT_MATCH(result, match_str);
 
   ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
@@ -2182,7 +2222,7 @@ TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
   ConsumeFd(std::move(output_fd), &result);
 
   // Verify the process crashed properly.
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0*)");
 
   // Now verify that the dex_pc frame includes a proper function name.
   ASSERT_MATCH(result, R"( \[anon:dex\] \(Main\.\<init\>\+2)");
