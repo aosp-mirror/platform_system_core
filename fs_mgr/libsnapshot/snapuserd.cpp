@@ -442,8 +442,9 @@ bool Snapuserd::ReadMetadata() {
 
     int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     std::optional<chunk_t> prev_id = {};
-    std::map<uint64_t, const CowOperation*> map;
+    std::vector<const CowOperation*> vec;
     std::set<uint64_t> dest_blocks;
+    std::set<uint64_t> source_blocks;
     size_t pending_copy_ops = exceptions_per_area_ - num_ops;
     uint64_t total_copy_ops = reader_->total_copy_ops();
 
@@ -500,99 +501,45 @@ bool Snapuserd::ReadMetadata() {
             // scratch space and re-construct it thereby there
             // is no loss of data.
             //
+            // Note that we will follow the same order of COW operations
+            // as present in the COW file. This will make sure that\
+            // the merge of operations are done based on the ops present
+            // in the file.
             //===========================================================
-            //
-            // Case 2:
-            //
-            // Let's say we have three copy operations written to COW file
-            // in the following order:
-            //
-            // op-1: 15 -> 18
-            // op-2: 16 -> 19
-            // op-3: 17 -> 20
-            //
-            // As aforementioned, kernel will initiate merge in reverse order.
-            // Hence, we will read these ops in reverse order so that all these
-            // ops are exectued in the same order as requested. Thus, we will
-            // read the metadata in reverse order and for the kernel it will
-            // look like:
-            //
-            // op-3: 17 -> 20
-            // op-2: 16 -> 19
-            // op-1: 15 -> 18   <-- Merge starts here in the kernel
-            //
-            // Now, this is problematic as kernel cannot batch merge them.
-            //
-            // Merge sequence will look like:
-            //
-            // Merge-1: op-1: 15 -> 18
-            // Merge-2: op-2: 16 -> 19
-            // Merge-3: op-3: 17 -> 20
-            //
-            // We have three merge operations.
-            //
-            // Even though the blocks are contiguous, kernel can batch merge
-            // them if the blocks are in descending order. Update engine
-            // addresses this issue partially for overlapping operations as
-            // we see that op-1 to op-3 and op-4 to op-6 operatiosn are in
-            // descending order. However, if the copy operations are not
-            // overlapping, update engine cannot write these blocks
-            // in descending order. Hence, we will try to address it.
-            // Thus, we will send these blocks to the kernel and it will
-            // look like:
-            //
-            // op-3: 15 -> 18
-            // op-2: 16 -> 19
-            // op-1: 17 -> 20  <-- Merge starts here in the kernel
-            //
-            // Now with this change, we can batch merge all these three
-            // operations. Merge sequence will look like:
-            //
-            // Merge-1: {op-1: 17 -> 20, op-2: 16 -> 19, op-3: 15 -> 18}
-            //
-            // Note that we have changed the ordering of merge; However, this
-            // is ok as each of these copy operations are independent and there
-            // is no overlap.
-            //
-            //===================================================================
             if (prev_id.has_value()) {
-                chunk_t diff = (cow_op->new_block > prev_id.value())
-                                       ? (cow_op->new_block - prev_id.value())
-                                       : (prev_id.value() - cow_op->new_block);
-                if (diff != 1) {
-                    break;
-                }
-
-                if (dest_blocks.count(cow_op->new_block) || map.count(cow_op->source) > 0) {
+                if (dest_blocks.count(cow_op->new_block) || source_blocks.count(cow_op->source)) {
                     break;
                 }
             }
             metadata_found = true;
             pending_copy_ops -= 1;
-            map[cow_op->new_block] = cow_op;
+            vec.push_back(cow_op);
             dest_blocks.insert(cow_op->source);
+            source_blocks.insert(cow_op->new_block);
             prev_id = cow_op->new_block;
             cowop_riter_->Next();
         } while (!cowop_riter_->Done() && pending_copy_ops);
 
         data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
-        SNAP_LOG(DEBUG) << "Batch Merge copy-ops of size: " << map.size()
+        SNAP_LOG(DEBUG) << "Batch Merge copy-ops of size: " << vec.size()
                         << " Area: " << vec_.size() << " Area offset: " << offset
                         << " Pending-copy-ops in this area: " << pending_copy_ops;
 
-        for (auto it = map.begin(); it != map.end(); it++) {
+        for (size_t i = 0; i < vec.size(); i++) {
             struct disk_exception* de =
                     reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
-            de->old_chunk = it->first;
+            const CowOperation* cow_op = vec[i];
+
+            de->old_chunk = cow_op->new_block;
             de->new_chunk = data_chunk_id;
 
             // Store operation pointer.
-            chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), it->second));
+            chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), cow_op));
             offset += sizeof(struct disk_exception);
             num_ops += 1;
             copy_ops++;
             if (read_ahead_feature_) {
-                read_ahead_ops_.push_back(it->second);
+                read_ahead_ops_.push_back(cow_op);
             }
 
             SNAP_LOG(DEBUG) << num_ops << ":"
@@ -635,8 +582,9 @@ bool Snapuserd::ReadMetadata() {
                 data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
             }
         }
-        map.clear();
+        vec.clear();
         dest_blocks.clear();
+        source_blocks.clear();
         prev_id.reset();
     }
 

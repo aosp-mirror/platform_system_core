@@ -146,12 +146,6 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
         std::this_thread::sleep_for(5ms);
     }
 
-    // With the exception of boot or shutdown, system uid_ folders are always populated. Spinning
-    // here would needlessly delay most pid removals. Additionally, once empty a uid_ cgroup won't
-    // have processes hanging on it (we've already spun for all its pid_), so there's no need to
-    // spin anyway.
-    rmdir(uid_path.c_str());
-
     return ret;
 }
 
@@ -230,7 +224,11 @@ void removeAllProcessGroups() {
  * transferred for the user/group passed as uid/gid before system_server can properly access them.
  */
 static bool MkdirAndChown(const std::string& path, mode_t mode, uid_t uid, gid_t gid) {
-    if (mkdir(path.c_str(), mode) == -1 && errno != EEXIST) {
+    if (mkdir(path.c_str(), mode) == -1) {
+        if (errno == EEXIST) {
+            // Directory already exists and permissions have been set at the time it was created
+            return true;
+        }
         return false;
     }
 
