@@ -46,7 +46,6 @@
 #include <map>
 #include <memory>
 
-#include <ApexProperties.sysprop.h>
 #include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
@@ -177,28 +176,6 @@ static Result<void> do_class_start(const BuiltinArguments& args) {
     return {};
 }
 
-static Result<void> do_class_start_post_data(const BuiltinArguments& args) {
-    if (args.context != kInitContext) {
-        return Error() << "command 'class_start_post_data' only available in init context";
-    }
-    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
-
-    if (!is_apex_updatable) {
-        // No need to start these on devices that don't support APEX, since they're not
-        // stopped either.
-        return {};
-    }
-    for (const auto& service : ServiceList::GetInstance()) {
-        if (service->classnames().count(args[1])) {
-            if (auto result = service->StartIfPostData(); !result.ok()) {
-                LOG(ERROR) << "Could not start service '" << service->name()
-                           << "' as part of class '" << args[1] << "': " << result.error();
-            }
-        }
-    }
-    return {};
-}
-
 static Result<void> do_class_stop(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Stop);
     return {};
@@ -206,19 +183,6 @@ static Result<void> do_class_stop(const BuiltinArguments& args) {
 
 static Result<void> do_class_reset(const BuiltinArguments& args) {
     ForEachServiceInClass(args[1], &Service::Reset);
-    return {};
-}
-
-static Result<void> do_class_reset_post_data(const BuiltinArguments& args) {
-    if (args.context != kInitContext) {
-        return Error() << "command 'class_reset_post_data' only available in init context";
-    }
-    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
-    if (!is_apex_updatable) {
-        // No need to stop these on devices that don't support APEX.
-        return {};
-    }
-    ForEachServiceInClass(args[1], &Service::ResetIfPostData);
     return {};
 }
 
@@ -1428,10 +1392,8 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"chmod",                   {2,     2,    {true,   do_chmod}}},
         {"chown",                   {2,     3,    {true,   do_chown}}},
         {"class_reset",             {1,     1,    {false,  do_class_reset}}},
-        {"class_reset_post_data",   {1,     1,    {false,  do_class_reset_post_data}}},
         {"class_restart",           {1,     1,    {false,  do_class_restart}}},
         {"class_start",             {1,     1,    {false,  do_class_start}}},
-        {"class_start_post_data",   {1,     1,    {false,  do_class_start_post_data}}},
         {"class_stop",              {1,     1,    {false,  do_class_stop}}},
         {"copy",                    {2,     2,    {true,   do_copy}}},
         {"copy_per_line",           {2,     2,    {true,   do_copy_per_line}}},
