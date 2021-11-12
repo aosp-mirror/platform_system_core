@@ -530,34 +530,23 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 
 }  // namespace
 
-bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
+bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out) {
     const int expected_fields = proc_mounts ? 4 : 5;
-    ssize_t len;
-    size_t alloc_len = 0;
-    char *line = NULL;
-    char* p;
+
     Fstab fstab;
 
-    while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
-        /* if the last character is a newline, shorten the string by 1 byte */
-        if (line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
-
-        /* Skip any leading whitespace */
-        p = line;
-        while (isspace(*p)) {
-            p++;
-        }
-        /* ignore comments or empty lines */
-        if (*p == '#' || *p == '\0')
-            continue;
-
+    for (const auto& line : android::base::Split(fstab_str, "\n")) {
         auto fields = android::base::Tokenize(line, " \t");
+
+        // Ignore empty lines and comments.
+        if (fields.empty() || android::base::StartsWith(fields.front(), '#')) {
+            continue;
+        }
+
         if (fields.size() < expected_fields) {
             LERROR << "Error parsing fstab: expected " << expected_fields << " fields, got "
                    << fields.size();
-            goto err;
+            return false;
         }
 
         FstabEntry entry;
@@ -571,7 +560,7 @@ bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
         // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
         if (!proc_mounts && !ParseFsMgrFlags(std::move(*it++), &entry)) {
             LERROR << "Error parsing fs_mgr_flags";
-            goto err;
+            return false;
         }
 
         if (entry.fs_mgr_flags.logical) {
@@ -583,21 +572,17 @@ bool ReadFstabFromFp(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
 
     if (fstab.empty()) {
         LERROR << "No entries found in fstab";
-        goto err;
+        return false;
     }
 
     /* If an A/B partition, modify block device to be the real block device */
     if (!fs_mgr_update_for_slotselect(&fstab)) {
         LERROR << "Error updating for slotselect";
-        goto err;
+        return false;
     }
-    free(line);
+
     *fstab_out = std::move(fstab);
     return true;
-
-err:
-    free(line);
-    return false;
 }
 
 void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
@@ -696,16 +681,16 @@ void EnableMandatoryFlags(Fstab* fstab) {
 }
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
-    auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
-    if (!fstab_file) {
-        PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
+    const bool is_proc_mounts = (path == "/proc/mounts");
+
+    std::string fstab_str;
+    if (!android::base::ReadFileToString(path, &fstab_str, /* follow_symlinks = */ true)) {
+        PERROR << __FUNCTION__ << "(): failed to read file: '" << path << "'";
         return false;
     }
 
-    bool is_proc_mounts = path == "/proc/mounts";
-
     Fstab fstab;
-    if (!ReadFstabFromFp(fstab_file.get(), is_proc_mounts, &fstab)) {
+    if (!ParseFstabFromString(fstab_str, is_proc_mounts, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
@@ -752,15 +737,7 @@ bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
         return false;
     }
 
-    std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
-        fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
-                 fstab_buf.length(), "r"), fclose);
-    if (!fstab_file) {
-        if (verbose) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
-        return false;
-    }
-
-    if (!ReadFstabFromFp(fstab_file.get(), false, fstab)) {
+    if (!ParseFstabFromString(fstab_buf, /* proc_mounts = */ false, fstab)) {
         if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;
