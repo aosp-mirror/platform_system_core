@@ -80,10 +80,8 @@ class Service {
     Result<void> ExecStart();
     Result<void> Start();
     Result<void> StartIfNotDisabled();
-    Result<void> StartIfPostData();
     Result<void> Enable();
     void Reset();
-    void ResetIfPostData();
     void Stop();
     void Terminate();
     void Timeout();
@@ -213,8 +211,6 @@ class Service {
     bool use_bootstrap_ns_ = false;
 
     bool post_data_ = false;
-
-    bool running_at_post_data_reset_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
 
