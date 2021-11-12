@@ -276,9 +276,10 @@ bool signal_has_si_addr(const siginfo_t* si) {
     case SIGBUS:
     case SIGFPE:
     case SIGILL:
-    case SIGSEGV:
     case SIGTRAP:
       return true;
+    case SIGSEGV:
+      return si->si_code != SEGV_MTEAERR;
     default:
       return false;
   }
