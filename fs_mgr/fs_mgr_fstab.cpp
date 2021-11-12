@@ -138,7 +138,7 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
                         entry->reserved_size = size_in_4k_blocks << 12;
                     }
                 } else if (StartsWith(flag, "lowerdir=")) {
-                    entry->lowerdir = std::move(arg);
+                    entry->lowerdir = arg;
                 }
             }
         }
