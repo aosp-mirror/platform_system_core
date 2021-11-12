@@ -1,5 +1,5 @@
 on property:ro.debuggable=1
-    setprop llk.enable ${ro.llk.enable:-1}
+    setprop llk.enable ${ro.llk.enable:-0}
     setprop khungtask.enable ${ro.khungtask.enable:-1}
 
 on property:ro.llk.enable=eng
