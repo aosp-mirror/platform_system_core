@@ -306,7 +306,13 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         }
     }
 
-    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed) {
+    // FDE is no longer supported, so reject "encryptable" when used without
+    // "vold_managed".  For now skip this check when in recovery mode, since
+    // some recovery fstabs still contain the FDE options since they didn't do
+    // anything in recovery mode anyway (except possibly to cause the
+    // reservation of a crypto footer) and thus never got removed.
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed &&
+        access("/system/bin/recovery", F_OK) != 0) {
         LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
                   "storage";
         return false;
