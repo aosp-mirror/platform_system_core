@@ -188,9 +188,9 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
 #undef CheckFlag
 
         // Then handle flags that take an argument.
-        if (flag == "encryptable=userdata") {
+        if (StartsWith(flag, "encryptable=")) {
             // The "encryptable" flag identifies adoptable storage volumes.  The
-            // argument to this flag must be "userdata".
+            // argument to this flag is ignored, but it should be "userdata".
             //
             // Historical note: this flag was originally meant just for /data,
             // to indicate that FDE (full disk encryption) can be enabled.
@@ -198,8 +198,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             // storage volumes.  Today, FDE is no longer supported, leaving only
             // the adoptable storage volume meaning for this flag.
             entry->fs_mgr_flags.crypt = true;
-        } else if (StartsWith(flag, "encryptable=") || StartsWith(flag, "forceencrypt=") ||
-                   StartsWith(flag, "forcefdeorfbe=")) {
+        } else if (StartsWith(flag, "forceencrypt=") || StartsWith(flag, "forcefdeorfbe=")) {
             LERROR << "flag no longer supported: " << flag;
             return false;
         } else if (StartsWith(flag, "voldmanaged=")) {
@@ -307,7 +306,13 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         }
     }
 
-    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed) {
+    // FDE is no longer supported, so reject "encryptable" when used without
+    // "vold_managed".  For now skip this check when in recovery mode, since
+    // some recovery fstabs still contain the FDE options since they didn't do
+    // anything in recovery mode anyway (except possibly to cause the
+    // reservation of a crypto footer) and thus never got removed.
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed &&
+        access("/system/bin/recovery", F_OK) != 0) {
         LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
                   "storage";
         return false;
