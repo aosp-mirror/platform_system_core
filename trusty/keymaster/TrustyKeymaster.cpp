@@ -79,6 +79,16 @@ int TrustyKeymaster::Initialize(KmVersion version) {
         return -1;
     }
 
+    // Set the vendor patchlevel to value retrieved from system property (which
+    // requires SELinux permission).
+    ConfigureVendorPatchlevelRequest vendor_req(message_version());
+    vendor_req.vendor_patchlevel = GetVendorPatchlevel();
+    ConfigureVendorPatchlevelResponse vendor_rsp = ConfigureVendorPatchlevel(vendor_req);
+    if (vendor_rsp.error != KM_ERROR_OK) {
+        LOG(ERROR) << "Failed to configure keymaster vendor patchlevel: " << vendor_rsp.error;
+        // Don't fail if this message isn't understood.
+    }
+
     return 0;
 }
 
@@ -259,6 +269,13 @@ EarlyBootEndedResponse TrustyKeymaster::EarlyBootEnded() {
 DeviceLockedResponse TrustyKeymaster::DeviceLocked(const DeviceLockedRequest& request) {
     DeviceLockedResponse response(message_version());
     ForwardCommand(KM_DEVICE_LOCKED, request, &response);
+    return response;
+}
+
+ConfigureVendorPatchlevelResponse TrustyKeymaster::ConfigureVendorPatchlevel(
+        const ConfigureVendorPatchlevelRequest& request) {
+    ConfigureVendorPatchlevelResponse response(message_version());
+    ForwardCommand(KM_CONFIGURE_VENDOR_PATCHLEVEL, request, &response);
     return response;
 }
 
