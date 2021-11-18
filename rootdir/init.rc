@@ -460,11 +460,6 @@ on property:sys.boot_from_charger_mode=1
     class_stop charger
     trigger late-init
 
-on load_persist_props_action
-    load_persist_props
-    start logd
-    start logd-reinit
-
 # Indicate to fw loaders that the relevant mounts are up.
 on firmware_mounts_complete
     rm /dev/.booting
@@ -490,9 +485,6 @@ on late-init
     # Now we can mount /data. File encryption requires keymaster to decrypt
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
-
-    # Load persist properties and override properties (if enabled) from /data.
-    trigger load_persist_props_action
 
     # Should be before netd, but after apex, properties and logging is available.
     trigger load_bpf_programs
@@ -583,6 +575,7 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
+    mkdir /metadata/sepolicy 0700 root root
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -675,6 +668,18 @@ on post-fs-data
     # and access its database for the first time to support creation and
     # use of MAX_BOOT_LEVEL keys.
     exec - system system -- /system/bin/vdc keymaster earlyBootEnded
+
+    # Multi-installed APEXes are selected using persist props.
+    # Load persist properties and override properties (if enabled) from /data,
+    # before starting apexd.
+    load_persist_props
+    start logd
+    start logd-reinit
+    # Some existing vendor rc files use 'on load_persist_props_action' to know
+    # when persist props are ready. These are difficult to change due to GRF,
+    # so continue triggering this action here even though props are already loaded
+    # by the 'load_persist_props' call above.
+    trigger load_persist_props_action
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     #

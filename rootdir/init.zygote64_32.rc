@@ -10,6 +10,7 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
     onrestart restart audioserver
     onrestart restart cameraserver
     onrestart restart media
+    onrestart restart media.tuner
     onrestart restart netd
     onrestart restart wificond
     task_profiles ProcessCapacityHigh MaxPerformance
