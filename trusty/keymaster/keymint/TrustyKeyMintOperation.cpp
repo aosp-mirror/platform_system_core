@@ -34,6 +34,7 @@ using ::keymaster::FinishOperationRequest;
 using ::keymaster::FinishOperationResponse;
 using ::keymaster::TAG_ASSOCIATED_DATA;
 using ::keymaster::TAG_AUTH_TOKEN;
+using ::keymaster::TAG_CONFIRMATION_TOKEN;
 using ::keymaster::UpdateOperationRequest;
 using ::keymaster::UpdateOperationResponse;
 using km_utils::authToken2AidlVec;
@@ -106,12 +107,12 @@ ScopedAStatus TrustyKeyMintOperation::update(const vector<uint8_t>& input,
     return ScopedAStatus::ok();
 }
 
-ScopedAStatus TrustyKeyMintOperation::finish(
-        const optional<vector<uint8_t>>& input,      //
-        const optional<vector<uint8_t>>& signature,  //
-        const optional<HardwareAuthToken>& authToken,
-        const optional<TimeStampToken>& /* timestampToken */,
-        const optional<vector<uint8_t>>& /* confirmationToken */, vector<uint8_t>* output) {
+ScopedAStatus TrustyKeyMintOperation::finish(const optional<vector<uint8_t>>& input,      //
+                                             const optional<vector<uint8_t>>& signature,  //
+                                             const optional<HardwareAuthToken>& authToken,
+                                             const optional<TimeStampToken>& /* timestampToken */,
+                                             const optional<vector<uint8_t>>& confirmationToken,
+                                             vector<uint8_t>* output) {
     if (!output) {
         return ScopedAStatus(AStatus_fromServiceSpecificError(
                 static_cast<int32_t>(ErrorCode::OUTPUT_PARAMETER_NULL)));
@@ -119,6 +120,16 @@ ScopedAStatus TrustyKeyMintOperation::finish(
     output->clear();
 
     FinishOperationRequest request(impl_->message_version());
+
+    if (authToken) {
+        auto tokenAsVec(authToken2AidlVec(*authToken));
+        request.additional_params.push_back(TAG_AUTH_TOKEN, tokenAsVec.data(), tokenAsVec.size());
+    }
+    if (confirmationToken) {
+        request.additional_params.push_back(TAG_CONFIRMATION_TOKEN, confirmationToken->data(),
+                                            confirmationToken->size());
+    }
+
     request.op_handle = opHandle_;
     if (signature) request.signature.Reinitialize(signature->data(), signature->size());
     size_t serialized_size = request.SerializedSize();

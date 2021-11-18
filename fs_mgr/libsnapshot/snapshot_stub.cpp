@@ -136,7 +136,10 @@ class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     void set_boot_complete_to_merge_start_time_ms(uint32_t) override {}
     uint32_t boot_complete_to_merge_start_time_ms() override { return 0; }
     void set_merge_failure_code(MergeFailureCode) override {}
-    MergeFailureCode merge_failure_code() { return MergeFailureCode::Ok; }
+    MergeFailureCode merge_failure_code() override { return MergeFailureCode::Ok; }
+    void set_source_build_fingerprint(const std::string&) override {}
+    std::string source_build_fingerprint() override { return {}; }
+    bool WriteState() override { return false; }
 };
 
 ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
@@ -168,6 +171,11 @@ void SnapshotManagerStub::UpdateCowStats(ISnapshotMergeStats*) {
 auto SnapshotManagerStub::ReadMergeFailureCode() -> MergeFailureCode {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return MergeFailureCode::Ok;
+}
+
+std::string SnapshotManagerStub::ReadSourceBuildFingerprint() {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return {};
 }
 
 }  // namespace android::snapshot

@@ -127,7 +127,7 @@ const std::string bootconfig =
         "androidboot.serialno = \"BLAHBLAHBLAH\"\n"
         "androidboot.slot_suffix = \"_a\"\n"
         "androidboot.hardware.platform = \"sdw813\"\n"
-        "hardware = \"foo\"\n"
+        "androidboot.hardware = \"foo\"\n"
         "androidboot.revision = \"EVT1.0\"\n"
         "androidboot.bootloader = \"burp-0.1-7521\"\n"
         "androidboot.hardware.sku = \"mary\"\n"
@@ -159,7 +159,7 @@ const std::vector<std::pair<std::string, std::string>> bootconfig_result_space =
         {"androidboot.serialno", "BLAHBLAHBLAH"},
         {"androidboot.slot_suffix", "_a"},
         {"androidboot.hardware.platform", "sdw813"},
-        {"hardware", "foo"},
+        {"androidboot.hardware", "foo"},
         {"androidboot.revision", "EVT1.0"},
         {"androidboot.bootloader", "burp-0.1-7521"},
         {"androidboot.hardware.sku", "mary"},

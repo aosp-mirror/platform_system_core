@@ -1238,21 +1238,11 @@ static void ProcessKernelCmdline() {
     });
 }
 
-// bootconfig does not allow to populate `key=value` simultaneously with
-// `key.subkey=value` which does not work with the existing code for
-// `hardware` (e.g. we want both `ro.boot.hardware=value` and
-// `ro.boot.hardware.sku=value`) and for `qemu` (Android Stidio Emulator
-// specific).
-static bool IsAllowedBootconfigKey(const std::string_view key) {
-    return (key == "hardware"sv) || (key == "qemu"sv);
-}
 
 static void ProcessBootconfig() {
     ImportBootconfig([&](const std::string& key, const std::string& value) {
         if (StartsWith(key, ANDROIDBOOT_PREFIX)) {
             InitPropertySet("ro.boot." + key.substr(ANDROIDBOOT_PREFIX.size()), value);
-        } else if (IsAllowedBootconfigKey(key)) {
-            InitPropertySet("ro.boot." + key, value);
         }
     });
 }

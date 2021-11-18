@@ -49,6 +49,10 @@ enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
 
 static constexpr uint64_t kSectorSize = 512;
 
+// Returns `path` without /dev/block prefix if and only if `path` starts with
+// that prefix.
+std::optional<std::string> ExtractBlockDeviceName(const std::string& path);
+
 class DeviceMapper final {
   public:
     class DmBlockDevice final {
