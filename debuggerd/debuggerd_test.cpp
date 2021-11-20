@@ -18,6 +18,7 @@
 #include <dlfcn.h>
 #include <err.h>
 #include <fcntl.h>
+#include <linux/prctl.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <sys/capability.h>
@@ -31,6 +32,7 @@
 
 #include <chrono>
 #include <regex>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -53,6 +55,9 @@
 #include <cutils/sockets.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <unwindstack/Elf.h>
+#include <unwindstack/Memory.h>
 
 #include <libminijail.h>
 #include <scoped_minijail.h>
@@ -2226,4 +2231,210 @@ TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
 
   // Now verify that the dex_pc frame includes a proper function name.
   ASSERT_MATCH(result, R"( \[anon:dex\] \(Main\.\<init\>\+2)");
+}
+
+static std::string format_map_pointer(uintptr_t ptr) {
+#if defined(__LP64__)
+  return android::base::StringPrintf("%08x'%08x", static_cast<uint32_t>(ptr >> 32),
+                                     static_cast<uint32_t>(ptr & 0xffffffff));
+#else
+  return android::base::StringPrintf("%08x", ptr);
+#endif
+}
+
+// Verify that map data is properly formatted.
+TEST_F(CrasherTest, verify_map_format) {
+  // Create multiple maps to make sure that the map data is formatted properly.
+  void* none_map = mmap(nullptr, getpagesize(), 0, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, none_map);
+  void* r_map = mmap(nullptr, getpagesize(), PROT_READ, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, r_map);
+  void* w_map = mmap(nullptr, getpagesize(), PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, w_map);
+  void* x_map = mmap(nullptr, getpagesize(), PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_NE(MAP_FAILED, x_map);
+
+  TemporaryFile tf;
+  ASSERT_EQ(0x2000, lseek(tf.fd, 0x2000, SEEK_SET));
+  char c = 'f';
+  ASSERT_EQ(1, write(tf.fd, &c, 1));
+  ASSERT_EQ(0x5000, lseek(tf.fd, 0x5000, SEEK_SET));
+  ASSERT_EQ(1, write(tf.fd, &c, 1));
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET));
+  void* file_map = mmap(nullptr, 0x3001, PROT_READ, MAP_PRIVATE, tf.fd, 0x2000);
+  ASSERT_NE(MAP_FAILED, file_map);
+
+  StartProcess([]() { abort(); });
+
+  ASSERT_EQ(0, munmap(none_map, getpagesize()));
+  ASSERT_EQ(0, munmap(r_map, getpagesize()));
+  ASSERT_EQ(0, munmap(w_map, getpagesize()));
+  ASSERT_EQ(0, munmap(x_map, getpagesize()));
+  ASSERT_EQ(0, munmap(file_map, 0x3001));
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str;
+  // Verify none.
+  match_str = android::base::StringPrintf(
+      "    %s-%s ---         0      1000\\n",
+      format_map_pointer(reinterpret_cast<uintptr_t>(none_map)).c_str(),
+      format_map_pointer(reinterpret_cast<uintptr_t>(none_map) + getpagesize() - 1).c_str());
+  ASSERT_MATCH(result, match_str);
+
+  // Verify read-only.
+  match_str = android::base::StringPrintf(
+      "    %s-%s r--         0      1000\\n",
+      format_map_pointer(reinterpret_cast<uintptr_t>(r_map)).c_str(),
+      format_map_pointer(reinterpret_cast<uintptr_t>(r_map) + getpagesize() - 1).c_str());
+  ASSERT_MATCH(result, match_str);
+
+  // Verify write-only.
+  match_str = android::base::StringPrintf(
+      "    %s-%s -w-         0      1000\\n",
+      format_map_pointer(reinterpret_cast<uintptr_t>(w_map)).c_str(),
+      format_map_pointer(reinterpret_cast<uintptr_t>(w_map) + getpagesize() - 1).c_str());
+  ASSERT_MATCH(result, match_str);
+
+  // Verify exec-only.
+  match_str = android::base::StringPrintf(
+      "    %s-%s --x         0      1000\\n",
+      format_map_pointer(reinterpret_cast<uintptr_t>(x_map)).c_str(),
+      format_map_pointer(reinterpret_cast<uintptr_t>(x_map) + getpagesize() - 1).c_str());
+  ASSERT_MATCH(result, match_str);
+
+  // Verify file map with non-zero offset and a name.
+  match_str = android::base::StringPrintf(
+      "    %s-%s r--      2000      4000  %s\\n",
+      format_map_pointer(reinterpret_cast<uintptr_t>(file_map)).c_str(),
+      format_map_pointer(reinterpret_cast<uintptr_t>(file_map) + 0x3fff).c_str(), tf.path);
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that the tombstone map data is correct.
+TEST_F(CrasherTest, verify_header) {
+  StartProcess([]() { abort(); });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  std::string match_str = android::base::StringPrintf(
+      "Build fingerprint: '%s'\\nRevision: '%s'\\n",
+      android::base::GetProperty("ro.build.fingerprint", "unknown").c_str(),
+      android::base::GetProperty("ro.revision", "unknown").c_str());
+  match_str += android::base::StringPrintf("ABI: '%s'\n", ABI_STRING);
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that the thread header is formatted properly.
+TEST_F(CrasherTest, verify_thread_header) {
+  void* shared_map =
+      mmap(nullptr, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  ASSERT_NE(MAP_FAILED, shared_map);
+  memset(shared_map, 0, sizeof(pid_t));
+
+  StartProcess([&shared_map]() {
+    std::atomic_bool tid_written;
+    std::thread thread([&tid_written, &shared_map]() {
+      pid_t tid = gettid();
+      memcpy(shared_map, &tid, sizeof(pid_t));
+      tid_written = true;
+      volatile bool done = false;
+      while (!done)
+        ;
+    });
+    thread.detach();
+    while (!tid_written.load(std::memory_order_acquire))
+      ;
+    abort();
+  });
+
+  pid_t primary_pid = crasher_pid;
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  // Read the tid data out.
+  pid_t tid;
+  memcpy(&tid, shared_map, sizeof(pid_t));
+  ASSERT_NE(0, tid);
+
+  ASSERT_EQ(0, munmap(shared_map, sizeof(pid_t)));
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // Verify that there are two headers, one where the tid is "primary_pid"
+  // and the other where the tid is "tid".
+  std::string match_str = android::base::StringPrintf("pid: %d, tid: %d, name: .*  >>> .* <<<\\n",
+                                                      primary_pid, primary_pid);
+  ASSERT_MATCH(result, match_str);
+
+  match_str =
+      android::base::StringPrintf("pid: %d, tid: %d, name: .*  >>> .* <<<\\n", primary_pid, tid);
+  ASSERT_MATCH(result, match_str);
+}
+
+// Verify that there is a BuildID present in the map section and set properly.
+TEST_F(CrasherTest, verify_build_id) {
+  StartProcess([]() { abort(); });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // Find every /system or /apex lib and verify the BuildID is displayed
+  // properly.
+  bool found_valid_elf = false;
+  std::smatch match;
+  std::regex build_id_regex(R"(  ((/system/|/apex/)\S+) \(BuildId: ([^\)]+)\))");
+  for (std::string prev_file; std::regex_search(result, match, build_id_regex);
+       result = match.suffix()) {
+    if (prev_file == match[1]) {
+      // Already checked this file.
+      continue;
+    }
+
+    prev_file = match[1];
+    unwindstack::Elf elf(unwindstack::Memory::CreateFileMemory(prev_file, 0).release());
+    if (!elf.Init() || !elf.valid()) {
+      // Skipping invalid elf files.
+      continue;
+    }
+    ASSERT_EQ(match[3], elf.GetPrintableBuildID());
+
+    found_valid_elf = true;
+  }
+  ASSERT_TRUE(found_valid_elf) << "Did not find any elf files with valid BuildIDs to check.";
 }
