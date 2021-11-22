@@ -283,6 +283,7 @@ cc_test {
         "libdebuggerd/test/log_fake.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
         "libdebuggerd/test/tombstone_test.cpp",
+        "libdebuggerd/test/utility_test.cpp",
     ],
 
     target: {

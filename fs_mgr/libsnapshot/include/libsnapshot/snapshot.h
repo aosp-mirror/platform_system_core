@@ -193,6 +193,9 @@ class ISnapshotManager {
     // UpdateState is None, or no snapshots have been created.
     virtual bool UpdateUsesCompression() = 0;
 
+    // Returns true if userspace snapshots is enabled for the current update.
+    virtual bool UpdateUsesUserSnapshots() = 0;
+
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
@@ -352,6 +355,7 @@ class SnapshotManager final : public ISnapshotManager {
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
     bool UpdateUsesCompression() override;
+    bool UpdateUsesUserSnapshots() override;
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
@@ -386,6 +390,11 @@ class SnapshotManager final : public ISnapshotManager {
     // If true, compression is enabled for this update. This is used by
     // first-stage to decide whether to launch snapuserd.
     bool IsSnapuserdRequired();
+
+    enum class SnapshotDriver {
+        DM_SNAPSHOT,
+        DM_USER,
+    };
 
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
@@ -456,6 +465,8 @@ class SnapshotManager final : public ISnapshotManager {
     };
     static std::unique_ptr<LockedFile> OpenFile(const std::string& file, int lock_flags);
 
+    SnapshotDriver GetSnapshotDriver(LockedFile* lock);
+
     // Create a new snapshot record. This creates the backing COW store and
     // persists information needed to map the device. The device can be mapped
     // with MapSnapshot().
@@ -491,8 +502,8 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Create a dm-user device for a given snapshot.
     bool MapDmUserCow(LockedFile* lock, const std::string& name, const std::string& cow_file,
-                      const std::string& base_device, const std::chrono::milliseconds& timeout_ms,
-                      std::string* path);
+                      const std::string& base_device, const std::string& base_path_merge,
+                      const std::chrono::milliseconds& timeout_ms, std::string* path);
 
     // Map the source device used for dm-user.
     bool MapSourceDevice(LockedFile* lock, const std::string& name,
@@ -591,7 +602,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Internal callback for when merging is complete.
     bool OnSnapshotMergeComplete(LockedFile* lock, const std::string& name,
                                  const SnapshotStatus& status);
-    bool CollapseSnapshotDevice(const std::string& name, const SnapshotStatus& status);
+    bool CollapseSnapshotDevice(LockedFile* lock, const std::string& name,
+                                const SnapshotStatus& status);
 
     struct MergeResult {
         explicit MergeResult(UpdateState state,
@@ -689,7 +701,10 @@ class SnapshotManager final : public ISnapshotManager {
     bool UnmapPartitionWithSnapshot(LockedFile* lock, const std::string& target_partition_name);
 
     // Unmap a dm-user device through snapuserd.
-    bool UnmapDmUserDevice(const std::string& snapshot_name);
+    bool UnmapDmUserDevice(const std::string& dm_user_name);
+
+    // Unmap a dm-user device for user space snapshots
+    bool UnmapUserspaceSnapshotDevice(LockedFile* lock, const std::string& snapshot_name);
 
     // If there isn't a previous update, return true. |needs_merge| is set to false.
     // If there is a previous update but the device has not boot into it, tries to cancel the
@@ -778,6 +793,8 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper of UpdateUsesCompression
     bool UpdateUsesCompression(LockedFile* lock);
+    // Helper of UpdateUsesUsersnapshots
+    bool UpdateUsesUserSnapshots(LockedFile* lock);
 
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
@@ -792,6 +809,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::function<bool(const std::string&)> uevent_regen_callback_;
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
     std::unique_ptr<LpMetadata> old_partition_metadata_;
+    std::optional<bool> is_snapshot_userspace_;
 };
 
 }  // namespace snapshot

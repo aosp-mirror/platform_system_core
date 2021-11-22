@@ -33,7 +33,7 @@
 namespace android {
 namespace snapshot {
 
-static constexpr uint32_t MAX_PACKET_SIZE = 512;
+static constexpr uint32_t kMaxPacketSize = 512;
 
 enum class DaemonOps {
     INIT,
@@ -49,9 +49,9 @@ enum class DaemonOps {
     INVALID,
 };
 
-class DmUserHandler {
+class UserSnapshotDmUserHandler {
   public:
-    explicit DmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd);
+    explicit UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd);
 
     void FreeResources() {
         // Each worker thread holds a reference to snapuserd.
@@ -76,7 +76,7 @@ class DmUserHandler {
     bool thread_terminated_ = false;
 };
 
-class SnapuserServer {
+class UserSnapshotServer {
   private:
     android::base::unique_fd sockfd_;
     bool terminating_;
@@ -87,7 +87,7 @@ class SnapuserServer {
 
     std::mutex lock_;
 
-    using HandlerList = std::vector<std::shared_ptr<DmUserHandler>>;
+    using HandlerList = std::vector<std::shared_ptr<UserSnapshotDmUserHandler>>;
     HandlerList dm_users_;
 
     void AddWatchedFd(android::base::borrowed_fd fd, int events);
@@ -105,11 +105,11 @@ class SnapuserServer {
 
     bool IsTerminating() { return terminating_; }
 
-    void RunThread(std::shared_ptr<DmUserHandler> handler);
+    void RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler);
     void JoinAllThreads();
     bool StartWithSocket(bool start_listening);
 
-    // Find a DmUserHandler within a lock.
+    // Find a UserSnapshotDmUserHandler within a lock.
     HandlerList::iterator FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
                                       const std::string& misc_name);
 
@@ -117,8 +117,8 @@ class SnapuserServer {
     void TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of_lock);
 
   public:
-    SnapuserServer() { terminating_ = false; }
-    ~SnapuserServer();
+    UserSnapshotServer() { terminating_ = false; }
+    ~UserSnapshotServer();
 
     bool Start(const std::string& socketname);
     bool Run();
@@ -126,13 +126,13 @@ class SnapuserServer {
     bool RunForSocketHandoff();
     bool WaitForSocket();
 
-    std::shared_ptr<DmUserHandler> AddHandler(const std::string& misc_name,
-                                              const std::string& cow_device_path,
-                                              const std::string& backing_device,
-                                              const std::string& base_path_merge);
-    bool StartHandler(const std::shared_ptr<DmUserHandler>& handler);
-    bool StartMerge(const std::shared_ptr<DmUserHandler>& handler);
-    std::string GetMergeStatus(const std::shared_ptr<DmUserHandler>& handler);
+    std::shared_ptr<UserSnapshotDmUserHandler> AddHandler(const std::string& misc_name,
+                                                          const std::string& cow_device_path,
+                                                          const std::string& backing_device,
+                                                          const std::string& base_path_merge);
+    bool StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
+    bool StartMerge(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
+    std::string GetMergeStatus(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
 
     void SetTerminating() { terminating_ = true; }
     void ReceivedSocketSignal() { received_socket_signal_ = true; }
