@@ -92,6 +92,7 @@ bool signal_has_si_addr(const siginfo_t*);
 void get_signal_sender(char* buf, size_t n, const siginfo_t*);
 const char* get_signame(const siginfo_t*);
 const char* get_sigcode(const siginfo_t*);
+std::string describe_tagged_addr_ctrl(long ctrl);
 
 // Number of bytes per MTE granule.
 constexpr size_t kTagGranuleSize = 16;
