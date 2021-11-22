@@ -35,7 +35,7 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 }
 
 bool SnapshotHandler::InitializeWorkers() {
-    for (int i = 0; i < NUM_THREADS_PER_PARTITION; i++) {
+    for (int i = 0; i < kNumWorkerThreads; i++) {
         std::unique_ptr<Worker> wt =
                 std::make_unique<Worker>(cow_device_, backing_store_device_, control_device_,
                                          misc_name_, base_path_merge_, GetSharedPtr());
