@@ -666,9 +666,11 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
 }
 
 void EnableMandatoryFlags(Fstab* fstab) {
-    // Devices launched in R and after should enable fs_verity on userdata. The flag causes tune2fs
-    // to enable the feature. A better alternative would be to enable on mkfs at the beginning.
+    // Devices launched in R and after must support fs_verity. Set flag to cause tune2fs
+    // to enable the feature on userdata and metadata partitions.
     if (android::base::GetIntProperty("ro.product.first_api_level", 0) >= 30) {
+        // Devices launched in R and after should enable fs_verity on userdata.
+        // A better alternative would be to enable on mkfs at the beginning.
         std::vector<FstabEntry*> data_entries = GetEntriesForMountPoint(fstab, "/data");
         for (auto&& entry : data_entries) {
             // Besides ext4, f2fs is also supported. But the image is already created with verity
@@ -676,6 +678,12 @@ void EnableMandatoryFlags(Fstab* fstab) {
             if (entry->fs_type == "ext4") {
                 entry->fs_mgr_flags.fs_verity = true;
             }
+        }
+        // Devices shipping with S and earlier likely do not already have fs_verity enabled via
+        // mkfs, so enable it here.
+        std::vector<FstabEntry*> metadata_entries = GetEntriesForMountPoint(fstab, "/metadata");
+        for (auto&& entry : metadata_entries) {
+            entry->fs_mgr_flags.fs_verity = true;
         }
     }
 }
