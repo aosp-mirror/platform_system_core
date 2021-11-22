@@ -31,3 +31,6 @@ PRODUCT_PROPERTY_OVERRIDES += \
 	ro.hardware.keystore_desede=true \
 	ro.hardware.keystore=trusty \
 	ro.hardware.gatekeeper=trusty
+
+PRODUCT_COPY_FILES += \
+	frameworks/native/data/etc/android.hardware.keystore.app_attest_key.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.keystore.app_attest_key.xml
