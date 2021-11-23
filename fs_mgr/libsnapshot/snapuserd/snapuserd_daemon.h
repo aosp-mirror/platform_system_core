@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "dm-snapshot-merge/snapuserd_server.h"
+#include "user-space-merge/snapuserd_server.h"
 
 namespace android {
 namespace snapshot {
@@ -35,9 +36,13 @@ class Daemon {
         return instance;
     }
 
-    bool StartServer(int argc, char** argv);
+    bool StartServerForDmSnapshot(int arg_start, int argc, char** argv);
+    bool StartServerForUserspaceSnapshots(int arg_start, int argc, char** argv);
     void Interrupt();
     void ReceivedSocketSignal();
+    bool IsUserspaceSnapshotsEnabled();
+    bool IsDmSnapshotTestingEnabled();
+    bool StartDaemon(int argc, char** argv);
 
   private:
     // Signal mask used with ppoll()
@@ -47,6 +52,7 @@ class Daemon {
     void operator=(Daemon const&) = delete;
 
     SnapuserdServer server_;
+    UserSnapshotServer user_server_;
     void MaskAllSignalsExceptIntAndTerm();
     void MaskAllSignals();
     static void SignalHandler(int signal);
