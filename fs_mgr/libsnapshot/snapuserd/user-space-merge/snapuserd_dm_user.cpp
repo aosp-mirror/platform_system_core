@@ -231,8 +231,8 @@ void Worker::InitializeBufsink() {
     // Allocate the buffer which is used to communicate between
     // daemon and dm-user. The buffer comprises of header and a fixed payload.
     // If the dm-user requests a big IO, the IO will be broken into chunks
-    // of PAYLOAD_SIZE.
-    size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_SIZE;
+    // of PAYLOAD_BUFFER_SZ.
+    size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_BUFFER_SZ;
     bufsink_.Initialize(buf_size);
 }
 
@@ -326,7 +326,7 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz, bool header_response)
 
     do {
         // Process 1MB payload at a time
-        size_t read_size = std::min(PAYLOAD_SIZE, remaining_size);
+        size_t read_size = std::min(PAYLOAD_BUFFER_SZ, remaining_size);
 
         header->type = DM_USER_RESP_SUCCESS;
         size_t total_bytes_read = 0;

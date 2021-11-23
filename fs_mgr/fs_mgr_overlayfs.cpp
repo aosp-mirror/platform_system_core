@@ -322,6 +322,17 @@ std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
 const auto kLowerdirOption = "lowerdir="s;
 const auto kUpperdirOption = "upperdir="s;
 
+static inline bool KernelSupportsUserXattrs() {
+    struct utsname uts;
+    uname(&uts);
+
+    int major, minor;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
+        return false;
+    }
+    return major > 5 || (major == 5 && minor >= 15);
+}
+
 // default options for mount_point, returns empty string for none available.
 std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
@@ -330,6 +341,9 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
                ",workdir=" + candidate + kWorkName;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
         ret += ",override_creds=off";
+    }
+    if (KernelSupportsUserXattrs()) {
+        ret += ",userxattr";
     }
     return ret;
 }

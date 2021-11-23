@@ -48,10 +48,10 @@ namespace snapshot {
 using android::base::unique_fd;
 using namespace std::chrono_literals;
 
-static constexpr size_t PAYLOAD_SIZE = (1UL << 20);
-static_assert(PAYLOAD_SIZE >= BLOCK_SZ);
+static constexpr size_t PAYLOAD_BUFFER_SZ = (1UL << 20);
+static_assert(PAYLOAD_BUFFER_SZ >= BLOCK_SZ);
 
-static constexpr int NUM_THREADS_PER_PARTITION = 1;
+static constexpr int kNumWorkerThreads = 4;
 
 #define SNAP_LOG(level) LOG(level) << misc_name_ << ": "
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
