@@ -429,7 +429,7 @@ void ReadAhead::InitializeBuffer() {
             static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferMetadataOffset());
     read_ahead_buffer_ = static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferDataOffset());
     // For xor ops
-    bufsink_.Initialize(PAYLOAD_SIZE);
+    bufsink_.Initialize(PAYLOAD_BUFFER_SZ);
 }
 
 }  // namespace snapshot

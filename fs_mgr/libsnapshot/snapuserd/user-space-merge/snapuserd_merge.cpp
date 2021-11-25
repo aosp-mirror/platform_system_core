@@ -81,11 +81,11 @@ bool Worker::MergeReplaceZeroOps(const std::unique_ptr<ICowOpIter>& cowop_iter) 
     // Why 2048 ops ? We can probably increase this to bigger value but just
     // need to ensure that merge makes forward progress if there are
     // crashes repeatedly which is highly unlikely.
-    int total_ops_merged_per_commit = (PAYLOAD_SIZE / BLOCK_SZ) * 8;
+    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ) * 8;
     int num_ops_merged = 0;
 
     while (!cowop_iter->Done()) {
-        int num_ops = PAYLOAD_SIZE / BLOCK_SZ;
+        int num_ops = PAYLOAD_BUFFER_SZ / BLOCK_SZ;
         std::vector<const CowOperation*> replace_zero_vec;
         uint64_t source_offset;
 
@@ -292,6 +292,7 @@ bool Worker::RunMergeThread() {
 
     if (!Init()) {
         SNAP_LOG(ERROR) << "Merge thread initialization failed...";
+        snapuserd_->MergeFailed();
         return false;
     }
 

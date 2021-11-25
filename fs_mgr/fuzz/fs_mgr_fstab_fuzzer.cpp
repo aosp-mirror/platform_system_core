@@ -19,12 +19,8 @@
 #include <fstab/fstab.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
-            fmemopen(static_cast<void*>(const_cast<uint8_t*>(data)), size, "r"), fclose);
-    if (fstab_file == nullptr) {
-        return 0;
-    }
+    std::string make_fstab_str(reinterpret_cast<const char*>(data), size);
     android::fs_mgr::Fstab fstab;
-    android::fs_mgr::ReadFstabFromFp(fstab_file.get(), /* proc_mounts= */ false, &fstab);
+    android::fs_mgr::ParseFstabFromString(make_fstab_str, /* proc_mounts = */ false, &fstab);
     return 0;
 }
