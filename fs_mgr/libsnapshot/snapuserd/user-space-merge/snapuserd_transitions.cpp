@@ -570,7 +570,6 @@ void SnapshotHandler::NotifyIOCompletion(uint64_t new_block) {
     {
         std::unique_lock<std::mutex> lock(blk_state->m_lock);
 
-        CHECK(blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_PENDING);
         blk_state->num_ios_in_progress -= 1;
         if (blk_state->num_ios_in_progress == 0) {
             pending_ios = false;

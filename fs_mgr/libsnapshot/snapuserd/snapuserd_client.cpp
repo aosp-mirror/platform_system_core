@@ -195,8 +195,16 @@ bool SnapuserdClient::AttachDmUser(const std::string& misc_name) {
 }
 
 uint64_t SnapuserdClient::InitDmUserCow(const std::string& misc_name, const std::string& cow_device,
-                                        const std::string& backing_device) {
-    std::vector<std::string> parts = {"init", misc_name, cow_device, backing_device};
+                                        const std::string& backing_device,
+                                        const std::string& base_path_merge) {
+    std::vector<std::string> parts;
+
+    if (base_path_merge.empty()) {
+        parts = {"init", misc_name, cow_device, backing_device};
+    } else {
+        // For userspace snapshots
+        parts = {"init", misc_name, cow_device, backing_device, base_path_merge};
+    }
     std::string msg = android::base::Join(parts, ",");
     if (!Sendmsg(msg)) {
         LOG(ERROR) << "Failed to send message " << msg << " to snapuserd daemon";

@@ -44,7 +44,7 @@ using namespace std::string_literals;
 using android::base::borrowed_fd;
 using android::base::unique_fd;
 
-DaemonOps SnapuserServer::Resolveop(std::string& input) {
+DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
     if (input == "init") return DaemonOps::INIT;
     if (input == "start") return DaemonOps::START;
     if (input == "stop") return DaemonOps::STOP;
@@ -59,14 +59,14 @@ DaemonOps SnapuserServer::Resolveop(std::string& input) {
     return DaemonOps::INVALID;
 }
 
-SnapuserServer::~SnapuserServer() {
+UserSnapshotServer::~UserSnapshotServer() {
     // Close any client sockets that were added via AcceptClient().
     for (size_t i = 1; i < watched_fds_.size(); i++) {
         close(watched_fds_[i].fd);
     }
 }
 
-std::string SnapuserServer::GetDaemonStatus() {
+std::string UserSnapshotServer::GetDaemonStatus() {
     std::string msg = "";
 
     if (IsTerminating())
@@ -77,8 +77,8 @@ std::string SnapuserServer::GetDaemonStatus() {
     return msg;
 }
 
-void SnapuserServer::Parsemsg(std::string const& msg, const char delim,
-                              std::vector<std::string>& out) {
+void UserSnapshotServer::Parsemsg(std::string const& msg, const char delim,
+                                  std::vector<std::string>& out) {
     std::stringstream ss(msg);
     std::string s;
 
@@ -87,15 +87,15 @@ void SnapuserServer::Parsemsg(std::string const& msg, const char delim,
     }
 }
 
-void SnapuserServer::ShutdownThreads() {
+void UserSnapshotServer::ShutdownThreads() {
     terminating_ = true;
     JoinAllThreads();
 }
 
-DmUserHandler::DmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd)
+UserSnapshotDmUserHandler::UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd)
     : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
-bool SnapuserServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
+bool UserSnapshotServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
     ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), MSG_NOSIGNAL));
     if (ret < 0) {
         PLOG(ERROR) << "Snapuserd:server: send() failed";
@@ -109,8 +109,8 @@ bool SnapuserServer::Sendmsg(android::base::borrowed_fd fd, const std::string& m
     return true;
 }
 
-bool SnapuserServer::Recv(android::base::borrowed_fd fd, std::string* data) {
-    char msg[MAX_PACKET_SIZE];
+bool UserSnapshotServer::Recv(android::base::borrowed_fd fd, std::string* data) {
+    char msg[kMaxPacketSize];
     ssize_t rv = TEMP_FAILURE_RETRY(recv(fd.get(), msg, sizeof(msg), 0));
     if (rv < 0) {
         PLOG(ERROR) << "recv failed";
@@ -120,7 +120,7 @@ bool SnapuserServer::Recv(android::base::borrowed_fd fd, std::string* data) {
     return true;
 }
 
-bool SnapuserServer::Receivemsg(android::base::borrowed_fd fd, const std::string& str) {
+bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::string& str) {
     const char delim = ',';
 
     std::vector<std::string> out;
@@ -290,7 +290,7 @@ bool SnapuserServer::Receivemsg(android::base::borrowed_fd fd, const std::string
     }
 }
 
-void SnapuserServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
+void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
     handler->snapuserd()->SetSocketPresent(is_socket_present_);
@@ -337,7 +337,7 @@ void SnapuserServer::RunThread(std::shared_ptr<DmUserHandler> handler) {
     }
 }
 
-bool SnapuserServer::Start(const std::string& socketname) {
+bool UserSnapshotServer::Start(const std::string& socketname) {
     bool start_listening = true;
 
     sockfd_.reset(android_get_control_socket(socketname.c_str()));
@@ -353,7 +353,7 @@ bool SnapuserServer::Start(const std::string& socketname) {
     return StartWithSocket(start_listening);
 }
 
-bool SnapuserServer::StartWithSocket(bool start_listening) {
+bool UserSnapshotServer::StartWithSocket(bool start_listening) {
     if (start_listening && listen(sockfd_.get(), 4) < 0) {
         PLOG(ERROR) << "listen socket failed";
         return false;
@@ -374,7 +374,7 @@ bool SnapuserServer::StartWithSocket(bool start_listening) {
     return true;
 }
 
-bool SnapuserServer::Run() {
+bool UserSnapshotServer::Run() {
     LOG(INFO) << "Now listening on snapuserd socket";
 
     while (!IsTerminating()) {
@@ -406,9 +406,9 @@ bool SnapuserServer::Run() {
     return true;
 }
 
-void SnapuserServer::JoinAllThreads() {
+void UserSnapshotServer::JoinAllThreads() {
     // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<DmUserHandler>> dm_users;
+    std::vector<std::shared_ptr<UserSnapshotDmUserHandler>> dm_users;
     {
         std::lock_guard<std::mutex> guard(lock_);
         dm_users = std::move(dm_users_);
@@ -421,14 +421,14 @@ void SnapuserServer::JoinAllThreads() {
     }
 }
 
-void SnapuserServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
+void UserSnapshotServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
     struct pollfd p = {};
     p.fd = fd.get();
     p.events = events;
     watched_fds_.emplace_back(std::move(p));
 }
 
-void SnapuserServer::AcceptClient() {
+void UserSnapshotServer::AcceptClient() {
     int fd = TEMP_FAILURE_RETRY(accept4(sockfd_.get(), nullptr, nullptr, SOCK_CLOEXEC));
     if (fd < 0) {
         PLOG(ERROR) << "accept4 failed";
@@ -438,7 +438,7 @@ void SnapuserServer::AcceptClient() {
     AddWatchedFd(fd, POLLIN);
 }
 
-bool SnapuserServer::HandleClient(android::base::borrowed_fd fd, int revents) {
+bool UserSnapshotServer::HandleClient(android::base::borrowed_fd fd, int revents) {
     if (revents & POLLHUP) {
         LOG(DEBUG) << "Snapuserd client disconnected";
         return false;
@@ -455,16 +455,15 @@ bool SnapuserServer::HandleClient(android::base::borrowed_fd fd, int revents) {
     return true;
 }
 
-void SnapuserServer::Interrupt() {
+void UserSnapshotServer::Interrupt() {
     // Force close the socket so poll() fails.
     sockfd_ = {};
     SetTerminating();
 }
 
-std::shared_ptr<DmUserHandler> SnapuserServer::AddHandler(const std::string& misc_name,
-                                                          const std::string& cow_device_path,
-                                                          const std::string& backing_device,
-                                                          const std::string& base_path_merge) {
+std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
+        const std::string& misc_name, const std::string& cow_device_path,
+        const std::string& backing_device, const std::string& base_path_merge) {
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
                                                        base_path_merge);
     if (!snapuserd->InitCowDevice()) {
@@ -477,7 +476,7 @@ std::shared_ptr<DmUserHandler> SnapuserServer::AddHandler(const std::string& mis
         return nullptr;
     }
 
-    auto handler = std::make_shared<DmUserHandler>(snapuserd);
+    auto handler = std::make_shared<UserSnapshotDmUserHandler>(snapuserd);
     {
         std::lock_guard<std::mutex> lock(lock_);
         if (FindHandler(&lock, misc_name) != dm_users_.end()) {
@@ -489,7 +488,7 @@ std::shared_ptr<DmUserHandler> SnapuserServer::AddHandler(const std::string& mis
     return handler;
 }
 
-bool SnapuserServer::StartHandler(const std::shared_ptr<DmUserHandler>& handler) {
+bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
     if (handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler already attached";
         return false;
@@ -497,11 +496,11 @@ bool SnapuserServer::StartHandler(const std::shared_ptr<DmUserHandler>& handler)
 
     handler->snapuserd()->AttachControlDevice();
 
-    handler->thread() = std::thread(std::bind(&SnapuserServer::RunThread, this, handler));
+    handler->thread() = std::thread(std::bind(&UserSnapshotServer::RunThread, this, handler));
     return true;
 }
 
-bool SnapuserServer::StartMerge(const std::shared_ptr<DmUserHandler>& handler) {
+bool UserSnapshotServer::StartMerge(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
     if (!handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler not attached to dm-user - Merge thread cannot be started";
         return false;
@@ -511,8 +510,8 @@ bool SnapuserServer::StartMerge(const std::shared_ptr<DmUserHandler>& handler) {
     return true;
 }
 
-auto SnapuserServer::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
-                                 const std::string& misc_name) -> HandlerList::iterator {
+auto UserSnapshotServer::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
+                                     const std::string& misc_name) -> HandlerList::iterator {
     CHECK(proof_of_lock);
 
     for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
@@ -523,7 +522,7 @@ auto SnapuserServer::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
     return dm_users_.end();
 }
 
-void SnapuserServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of_lock) {
+void UserSnapshotServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of_lock) {
     CHECK(proof_of_lock);
 
     for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
@@ -533,11 +532,12 @@ void SnapuserServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of
     }
 }
 
-std::string SnapuserServer::GetMergeStatus(const std::shared_ptr<DmUserHandler>& handler) {
+std::string UserSnapshotServer::GetMergeStatus(
+        const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
     return handler->snapuserd()->GetMergeStatus();
 }
 
-double SnapuserServer::GetMergePercentage(std::lock_guard<std::mutex>* proof_of_lock) {
+double UserSnapshotServer::GetMergePercentage(std::lock_guard<std::mutex>* proof_of_lock) {
     CHECK(proof_of_lock);
     double percentage = 0.0;
     int n = 0;
@@ -567,8 +567,8 @@ double SnapuserServer::GetMergePercentage(std::lock_guard<std::mutex>* proof_of_
     return percentage;
 }
 
-bool SnapuserServer::RemoveAndJoinHandler(const std::string& misc_name) {
-    std::shared_ptr<DmUserHandler> handler;
+bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
+    std::shared_ptr<UserSnapshotDmUserHandler> handler;
     {
         std::lock_guard<std::mutex> lock(lock_);
 
@@ -588,7 +588,7 @@ bool SnapuserServer::RemoveAndJoinHandler(const std::string& misc_name) {
     return true;
 }
 
-bool SnapuserServer::WaitForSocket() {
+bool UserSnapshotServer::WaitForSocket() {
     auto scope_guard = android::base::make_scope_guard([this]() -> void { JoinAllThreads(); });
 
     auto socket_path = ANDROID_SOCKET_DIR "/"s + kSnapuserdSocketProxy;
@@ -642,7 +642,7 @@ bool SnapuserServer::WaitForSocket() {
     return Run();
 }
 
-bool SnapuserServer::RunForSocketHandoff() {
+bool UserSnapshotServer::RunForSocketHandoff() {
     unique_fd proxy_fd(android_get_control_socket(kSnapuserdSocketProxy));
     if (proxy_fd < 0) {
         PLOG(FATAL) << "Proxy could not get android control socket " << kSnapuserdSocketProxy;
