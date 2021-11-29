@@ -99,7 +99,6 @@ cc_defaults {
 
             shared_libs: [
                 "libprocessgroup",
-                "libdl",
                 "libvndksupport",
             ],
 
