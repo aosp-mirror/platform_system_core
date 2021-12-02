@@ -44,6 +44,7 @@ cc_library {
             enabled: true,
         },
     },
+    min_sdk_version: "apex_inherit",
     apex_available: [
         "//apex_available:platform",
         "com.android.adbd",
