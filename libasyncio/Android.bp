@@ -32,6 +32,7 @@ cc_library {
     defaults: ["libasyncio_defaults"],
     vendor_available: true,
     recovery_available: true,
+    min_sdk_version: "apex_inherit",
     apex_available: [
         "//apex_available:platform",
         "com.android.adbd",
