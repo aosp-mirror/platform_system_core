@@ -226,9 +226,15 @@ bool ReadAheadThread::ReconstructDataFromCow() {
     int num_ops = 0;
     int total_blocks_merged = 0;
 
+    // This memcpy is important as metadata_buffer_ will be an unaligned address and will fault
+    // on 32-bit systems
+    std::unique_ptr<uint8_t[]> metadata_buffer =
+            std::make_unique<uint8_t[]>(snapuserd_->GetBufferMetadataSize());
+    memcpy(metadata_buffer.get(), metadata_buffer_, snapuserd_->GetBufferMetadataSize());
+
     while (true) {
         struct ScratchMetadata* bm = reinterpret_cast<struct ScratchMetadata*>(
-                (char*)metadata_buffer_ + metadata_offset);
+                (char*)metadata_buffer.get() + metadata_offset);
 
         // Done reading metadata
         if (bm->new_block == 0 && bm->file_offset == 0) {
