@@ -144,11 +144,7 @@ class SnapshotTest : public ::testing::Test {
         std::vector<std::string> snapshots = {"test-snapshot", "test_partition_a",
                                               "test_partition_b"};
         for (const auto& snapshot : snapshots) {
-            ASSERT_TRUE(DeleteSnapshotDevice(snapshot));
-            DeleteBackingImage(image_manager_, snapshot + "-cow-img");
-
-            auto status_file = sm->GetSnapshotStatusFilePath(snapshot);
-            android::base::RemoveFileIfExists(status_file);
+            CleanupSnapshotArtifacts(snapshot);
         }
 
         // Remove stale partitions in fake super.
@@ -156,7 +152,7 @@ class SnapshotTest : public ::testing::Test {
                 "base-device",
                 "test_partition_b",
                 "test_partition_b-base",
-                "test_partition_b-base",
+                "test_partition_b-cow",
         };
         for (const auto& partition : partitions) {
             DeleteDevice(partition);
@@ -166,6 +162,32 @@ class SnapshotTest : public ::testing::Test {
             auto state_file = sm->GetStateFilePath();
             unlink(state_file.c_str());
         }
+    }
+
+    void CleanupSnapshotArtifacts(const std::string& snapshot) {
+        // The device-mapper stack may have been collapsed to dm-linear, so it's
+        // necessary to check what state it's in before attempting a cleanup.
+        // SnapshotManager has no path like this because we'd never remove a
+        // merged snapshot (a live partition).
+        bool is_dm_user = false;
+        DeviceMapper::TargetInfo target;
+        if (sm->IsSnapshotDevice(snapshot, &target)) {
+            is_dm_user = (DeviceMapper::GetTargetType(target.spec) == "user");
+        }
+
+        if (is_dm_user) {
+            ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+            ASSERT_TRUE(AcquireLock());
+
+            auto local_lock = std::move(lock_);
+            ASSERT_TRUE(sm->UnmapUserspaceSnapshotDevice(local_lock.get(), snapshot));
+        }
+
+        ASSERT_TRUE(DeleteSnapshotDevice(snapshot));
+        DeleteBackingImage(image_manager_, snapshot + "-cow-img");
+
+        auto status_file = sm->GetSnapshotStatusFilePath(snapshot);
+        android::base::RemoveFileIfExists(status_file);
     }
 
     bool AcquireLock() {
