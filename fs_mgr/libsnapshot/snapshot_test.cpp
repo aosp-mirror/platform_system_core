@@ -2215,6 +2215,8 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
 TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
     AddOperationForPartitions();
 
+    ASSERT_TRUE(UnmapAll());
+
     // Execute the update from B->A.
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->BeginUpdate());
