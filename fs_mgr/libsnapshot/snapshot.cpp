@@ -668,9 +668,15 @@ bool SnapshotManager::MapSourceDevice(LockedFile* lock, const std::string& name,
 bool SnapshotManager::UnmapSnapshot(LockedFile* lock, const std::string& name) {
     CHECK(lock);
 
-    if (!DeleteDeviceIfExists(name)) {
-        LOG(ERROR) << "Could not delete snapshot device: " << name;
-        return false;
+    if (UpdateUsesUserSnapshots(lock)) {
+        if (!UnmapUserspaceSnapshotDevice(lock, name)) {
+            return false;
+        }
+    } else {
+        if (!DeleteDeviceIfExists(name)) {
+            LOG(ERROR) << "Could not delete snapshot device: " << name;
+            return false;
+        }
     }
     return true;
 }
@@ -2429,10 +2435,8 @@ bool SnapshotManager::UnmapPartitionWithSnapshot(LockedFile* lock,
                                                  const std::string& target_partition_name) {
     CHECK(lock);
 
-    if (!UpdateUsesUserSnapshots(lock)) {
-        if (!UnmapSnapshot(lock, target_partition_name)) {
-            return false;
-        }
+    if (!UnmapSnapshot(lock, target_partition_name)) {
+        return false;
     }
 
     if (!UnmapCowDevices(lock, target_partition_name)) {
@@ -2530,16 +2534,10 @@ bool SnapshotManager::UnmapCowDevices(LockedFile* lock, const std::string& name)
     CHECK(lock);
     if (!EnsureImageManager()) return false;
 
-    if (UpdateUsesCompression(lock)) {
-        if (UpdateUsesUserSnapshots(lock)) {
-            if (!UnmapUserspaceSnapshotDevice(lock, name)) {
-                return false;
-            }
-        } else {
-            auto dm_user_name = GetDmUserCowName(name, GetSnapshotDriver(lock));
-            if (!UnmapDmUserDevice(dm_user_name)) {
-                return false;
-            }
+    if (UpdateUsesCompression(lock) && !UpdateUsesUserSnapshots(lock)) {
+        auto dm_user_name = GetDmUserCowName(name, GetSnapshotDriver(lock));
+        if (!UnmapDmUserDevice(dm_user_name)) {
+            return false;
         }
     }
 
