@@ -45,6 +45,8 @@
 #include "partition_cow_creator.h"
 #include "utility.h"
 
+#include <android-base/properties.h>
+
 // Mock classes are not used. Header included to ensure mocked class definition aligns with the
 // class itself.
 #include <libsnapshot/mock_device_info.h>
@@ -272,7 +274,7 @@ class SnapshotTest : public ::testing::Test {
     AssertionResult DeleteSnapshotDevice(const std::string& snapshot) {
         AssertionResult res = AssertionSuccess();
         if (!(res = DeleteDevice(snapshot))) return res;
-        if (!sm->UnmapDmUserDevice(snapshot)) {
+        if (!sm->UnmapDmUserDevice(snapshot + "-user-cow")) {
             return AssertionFailure() << "Cannot delete dm-user device for " << snapshot;
         }
         if (!(res = DeleteDevice(snapshot + "-inner"))) return res;
@@ -2213,6 +2215,8 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
 TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
     AddOperationForPartitions();
 
+    ASSERT_TRUE(UnmapAll());
+
     // Execute the update from B->A.
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2559,5 +2563,15 @@ void SnapshotTestEnvironment::TearDown() {
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
-    return RUN_ALL_TESTS();
+
+    android::base::SetProperty("ctl.stop", "snapuserd");
+
+    if (!android::base::SetProperty("snapuserd.test.dm.snapshots", "1")) {
+        return testing::AssertionFailure()
+               << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
+    }
+
+    int ret = RUN_ALL_TESTS();
+    android::base::SetProperty("snapuserd.test.dm.snapshots", "0");
+    return ret;
 }

@@ -135,7 +135,7 @@ void ScudoCrashData::DumpCause(log_t* log, unwindstack::Unwinder* unwinder) cons
   if (error_info_.reports[1].error_type != UNKNOWN) {
     _LOG(log, logtype::HEADER,
          "\nNote: multiple potential causes for this crash were detected, listing them in "
-         "decreasing order of probability.\n");
+         "decreasing order of likelihood.\n");
   }
 
   size_t report_num = 0;

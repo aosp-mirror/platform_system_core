@@ -63,7 +63,8 @@ class SnapuserdClient {
     // The misc_name must be the "misc_name" given to dm-user in step 2.
     //
     uint64_t InitDmUserCow(const std::string& misc_name, const std::string& cow_device,
-                           const std::string& backing_device);
+                           const std::string& backing_device,
+                           const std::string& base_path_merge = "");
     bool AttachDmUser(const std::string& misc_name);
 
     // Wait for snapuserd to disassociate with a dm-user control device. This
@@ -79,6 +80,15 @@ class SnapuserdClient {
 
     // Returns true if the snapuserd instance supports bridging a socket to second-stage init.
     bool SupportsSecondStageSocketHandoff();
+
+    // Returns true if the merge is started(or resumed from crash).
+    bool InitiateMerge(const std::string& misc_name);
+
+    // Returns Merge completion percentage
+    double GetMergePercent();
+
+    // Return the status of the snapshot
+    std::string QuerySnapshotStatus(const std::string& misc_name);
 };
 
 }  // namespace snapshot
