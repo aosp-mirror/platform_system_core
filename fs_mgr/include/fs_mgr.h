@@ -56,9 +56,6 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
 #define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 5
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 4
-#define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 3
-#define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 2
-#define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
 
@@ -107,7 +104,7 @@ bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
 // device is in "check_at_most_once" mode.
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry);
 
-int fs_mgr_do_format(const android::fs_mgr::FstabEntry& entry, bool reserve_footer);
+int fs_mgr_do_format(const android::fs_mgr::FstabEntry& entry);
 
 #define FS_MGR_SETUP_VERITY_SKIPPED  (-3)
 #define FS_MGR_SETUP_VERITY_DISABLED (-2)

@@ -115,15 +115,21 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
 }
 
 bool ReadAhead::ReconstructDataFromCow() {
-    std::unordered_map<uint64_t, void*> read_ahead_buffer_map;
+    std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
     loff_t metadata_offset = 0;
     loff_t start_data_offset = snapuserd_->GetBufferDataOffset();
     int num_ops = 0;
     int total_blocks_merged = 0;
 
+    // This memcpy is important as metadata_buffer_ will be an unaligned address and will fault
+    // on 32-bit systems
+    std::unique_ptr<uint8_t[]> metadata_buffer =
+            std::make_unique<uint8_t[]>(snapuserd_->GetBufferMetadataSize());
+    memcpy(metadata_buffer.get(), metadata_buffer_, snapuserd_->GetBufferMetadataSize());
+
     while (true) {
         struct ScratchMetadata* bm = reinterpret_cast<struct ScratchMetadata*>(
-                (char*)metadata_buffer_ + metadata_offset);
+                (char*)metadata_buffer.get() + metadata_offset);
 
         // Done reading metadata
         if (bm->new_block == 0 && bm->file_offset == 0) {
@@ -319,6 +325,18 @@ bool ReadAhead::ReadAheadIOStart() {
     memcpy(metadata_buffer_, ra_temp_meta_buffer.get(), snapuserd_->GetBufferMetadataSize());
     memcpy(read_ahead_buffer_, ra_temp_buffer.get(), total_blocks_merged * BLOCK_SZ);
 
+    offset = 0;
+    std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
+    read_ahead_buffer_map.clear();
+
+    for (size_t block_index = 0; block_index < blocks.size(); block_index++) {
+        void* bufptr = static_cast<void*>((char*)read_ahead_buffer_ + offset);
+        uint64_t new_block = blocks[block_index];
+
+        read_ahead_buffer_map[new_block] = bufptr;
+        offset += BLOCK_SZ;
+    }
+
     snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged);
 
     // Flush the data only if we have a overlapping blocks in the region
@@ -417,7 +435,7 @@ void ReadAhead::InitializeBuffer() {
             static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferMetadataOffset());
     read_ahead_buffer_ = static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferDataOffset());
     // For xor ops
-    bufsink_.Initialize(PAYLOAD_SIZE);
+    bufsink_.Initialize(PAYLOAD_BUFFER_SZ);
 }
 
 }  // namespace snapshot
