@@ -107,6 +107,12 @@ cc_binary {
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
+
+    // Snapuserd segfaults with ThinLTO
+    // http://b/208565717
+    lto: {
+         never: true,
+    }
 }
 
 cc_test {
