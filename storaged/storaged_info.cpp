@@ -36,9 +36,8 @@ using namespace chrono;
 using namespace android::base;
 using namespace storaged_proto;
 
-using android::hardware::health::V2_0::IHealth;
-using android::hardware::health::V2_0::Result;
-using android::hardware::health::V2_0::StorageInfo;
+using aidl::android::hardware::health::IHealth;
+using aidl::android::hardware::health::StorageInfo;
 
 const string emmc_info_t::emmc_sysfs = "/sys/bus/mmc/devices/mmc0:0001/";
 const char* emmc_info_t::emmc_ver_str[9] = {
@@ -57,7 +56,7 @@ bool FileExists(const std::string& filename)
 
 } // namespace
 
-storage_info_t* storage_info_t::get_storage_info(const sp<IHealth>& healthService) {
+storage_info_t* storage_info_t::get_storage_info(const shared_ptr<IHealth>& healthService) {
     if (healthService != nullptr) {
         return new health_storage_info_t(healthService);
     }
@@ -326,23 +325,22 @@ void ufs_info_t::report()
 }
 
 void health_storage_info_t::report() {
-    auto ret = mHealth->getStorageInfo([this](auto result, const auto& halInfos) {
-        if (result == Result::NOT_SUPPORTED) {
-            LOG(DEBUG) << "getStorageInfo is not supported on health HAL.";
+    vector<StorageInfo> halInfos;
+    auto ret = mHealth->getStorageInfo(&halInfos);
+    if (ret.isOk()) {
+        if (halInfos.size() == 0) {
+            set_values_from_hal_storage_info(halInfos[0]);
+            publish();
             return;
         }
-        if (result != Result::SUCCESS || halInfos.size() == 0) {
-            LOG(ERROR) << "getStorageInfo failed with result " << toString(result) << " and size "
-                       << halInfos.size();
-            return;
-        }
-        set_values_from_hal_storage_info(halInfos[0]);
-        publish();
-    });
-
-    if (!ret.isOk()) {
-        LOG(ERROR) << "getStorageInfo failed with " << ret.description();
+        LOG(ERROR) << "getStorageInfo succeeded but size is 0";
+        return;
     }
+    if (ret.getExceptionCode() == EX_UNSUPPORTED_OPERATION) {
+        LOG(DEBUG) << "getStorageInfo is not supported on health HAL.";
+        return;
+    }
+    LOG(ERROR) << "getStorageInfo failed with " << ret.getDescription();
 }
 
 void health_storage_info_t::set_values_from_hal_storage_info(const StorageInfo& halInfo) {
