@@ -28,6 +28,7 @@
 
 #include <utils/Mutex.h>
 
+#include <aidl/android/hardware/health/IHealth.h>
 #include <android/hardware/health/2.0/IHealth.h>
 
 #define FRIEND_TEST(test_case_name, test_name) \
@@ -67,6 +68,8 @@ using namespace android;
 // UID IO threshold in bytes
 #define DEFAULT_PERIODIC_CHORES_UID_IO_THRESHOLD ( 1024 * 1024 * 1024ULL )
 
+class storaged_t;
+
 struct storaged_config {
     int periodic_chores_interval_unit;
     int periodic_chores_interval_disk_stats_publish;
@@ -75,15 +78,33 @@ struct storaged_config {
     int event_time_check_usec;  // check how much cputime spent in event loop
 };
 
-class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
-                   public android::hardware::hidl_death_recipient {
+struct HealthServicePair {
+    std::shared_ptr<aidl::android::hardware::health::IHealth> aidl_health;
+    android::sp<android::hardware::health::V2_0::IHealth> hidl_health;
+    static HealthServicePair get();
+};
+
+class hidl_health_death_recipient : public android::hardware::hidl_death_recipient {
+  public:
+    hidl_health_death_recipient(const android::sp<android::hardware::health::V2_0::IHealth>& health)
+        : mHealth(health) {}
+    void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
+
+  private:
+    android::sp<android::hardware::health::V2_0::IHealth> mHealth;
+};
+
+class storaged_t : public RefBase {
   private:
     time_t mTimer;
     storaged_config mConfig;
     unique_ptr<disk_stats_monitor> mDsm;
     uid_monitor mUidm;
     time_t mStarttime;
-    sp<android::hardware::health::V2_0::IHealth> health;
+    std::shared_ptr<aidl::android::hardware::health::IHealth> health;
+    sp<android::hardware::hidl_death_recipient> hidl_death_recp;
+    ndk::ScopedAIBinder_DeathRecipient aidl_death_recp;
+    shared_ptr<aidl::android::hardware::health::IHealthInfoCallback> aidl_health_callback;
     unique_ptr<storage_info_t> storage_info;
     static const uint32_t current_version;
     Mutex proto_lock;
@@ -134,10 +155,6 @@ class storaged_t : public android::hardware::health::V2_0::IHealthInfoCallback,
 
     void add_user_ce(userid_t user_id);
     void remove_user_ce(userid_t user_id);
-
-    virtual ::android::hardware::Return<void> healthInfoChanged(
-        const ::android::hardware::health::V2_0::HealthInfo& info);
-    void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
 
     void report_storage_info();
 

@@ -240,9 +240,7 @@ void expect_increasing(struct disk_stats stats1, struct disk_stats stats2) {
 }
 
 TEST(storaged_test, disk_stats_monitor) {
-    using android::hardware::health::V2_0::get_health_service;
-
-    auto healthService = get_health_service();
+    auto [healthService, hidlHealth] = HealthServicePair::get();
 
     // asserting that there is one file for diskstats
     ASSERT_TRUE(healthService != nullptr || access(MMC_DISK_STATS_PATH, R_OK) >= 0 ||
