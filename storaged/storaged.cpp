@@ -28,12 +28,16 @@
 #include <sstream>
 #include <string>
 
+#include <aidl/android/hardware/health/BnHealthInfoCallback.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <android/binder_ibinder.h>
+#include <android/binder_manager.h>
 #include <android/hidl/manager/1.0/IServiceManager.h>
 #include <batteryservice/BatteryServiceConstants.h>
 #include <cutils/properties.h>
+#include <health-shim/shim.h>
 #include <healthhalutils/HealthHalUtils.h>
 #include <hidl/HidlTransportSupport.h>
 #include <hwbinder/IPCThreadState.h>
@@ -64,26 +68,59 @@ constexpr ssize_t min_benchmark_size = 128 * 1024;  // 128KB
 
 const uint32_t storaged_t::current_version = 4;
 
+using aidl::android::hardware::health::BatteryStatus;
+using aidl::android::hardware::health::BnHealthInfoCallback;
+using aidl::android::hardware::health::HealthInfo;
+using aidl::android::hardware::health::IHealth;
+using aidl::android::hardware::health::IHealthInfoCallback;
 using android::hardware::interfacesEqual;
-using android::hardware::Return;
-using android::hardware::health::V1_0::BatteryStatus;
-using android::hardware::health::V1_0::toString;
 using android::hardware::health::V2_0::get_health_service;
-using android::hardware::health::V2_0::HealthInfo;
-using android::hardware::health::V2_0::IHealth;
-using android::hardware::health::V2_0::Result;
 using android::hidl::manager::V1_0::IServiceManager;
+using HidlHealth = android::hardware::health::V2_0::IHealth;
+using aidl::android::hardware::health::HealthShim;
+using ndk::ScopedAIBinder_DeathRecipient;
+using ndk::ScopedAStatus;
 
+HealthServicePair HealthServicePair::get() {
+    HealthServicePair ret;
+    auto service_name = IHealth::descriptor + "/default"s;
+    if (AServiceManager_isDeclared(service_name.c_str())) {
+        ndk::SpAIBinder binder(AServiceManager_waitForService(service_name.c_str()));
+        ret.aidl_health = IHealth::fromBinder(binder);
+        if (ret.aidl_health == nullptr) {
+            LOG(WARNING) << "AIDL health service is declared, but it cannot be retrieved.";
+        }
+    }
+    if (ret.aidl_health == nullptr) {
+        LOG(INFO) << "Unable to get AIDL health service, trying HIDL...";
+        ret.hidl_health = get_health_service();
+        if (ret.hidl_health != nullptr) {
+            ret.aidl_health = ndk::SharedRefBase::make<HealthShim>(ret.hidl_health);
+        }
+    }
+    if (ret.aidl_health == nullptr) {
+        LOG(WARNING) << "health: failed to find IHealth service";
+        return {};
+    }
+    return ret;
+}
 
 inline charger_stat_t is_charger_on(BatteryStatus prop) {
     return (prop == BatteryStatus::CHARGING || prop == BatteryStatus::FULL) ?
         CHARGER_ON : CHARGER_OFF;
 }
 
-Return<void> storaged_t::healthInfoChanged(const HealthInfo& props) {
-    mUidm.set_charger_state(is_charger_on(props.legacy.batteryStatus));
-    return android::hardware::Void();
-}
+class HealthInfoCallback : public BnHealthInfoCallback {
+  public:
+    HealthInfoCallback(uid_monitor* uidm) : mUidm(uidm) {}
+    ScopedAStatus healthInfoChanged(const HealthInfo& info) override {
+        mUidm->set_charger_state(is_charger_on(info.batteryStatus));
+        return ScopedAStatus::ok();
+    }
+
+  private:
+    uid_monitor* mUidm;
+};
 
 void storaged_t::init() {
     init_health_service();
@@ -91,42 +128,59 @@ void storaged_t::init() {
     storage_info.reset(storage_info_t::get_storage_info(health));
 }
 
+static void onHealthBinderDied(void*) {
+    LOG(ERROR) << "health service died, exiting";
+    android::hardware::IPCThreadState::self()->stopProcess();
+    exit(1);
+}
+
 void storaged_t::init_health_service() {
     if (!mUidm.enabled())
         return;
 
-    health = get_health_service();
-    if (health == NULL) {
-        LOG(WARNING) << "health: failed to find IHealth service";
-        return;
-    }
+    auto [aidlHealth, hidlHealth] = HealthServicePair::get();
+    health = aidlHealth;
+    if (health == nullptr) return;
 
     BatteryStatus status = BatteryStatus::UNKNOWN;
-    auto ret = health->getChargeStatus([&](Result r, BatteryStatus v) {
-        if (r != Result::SUCCESS) {
-            LOG(WARNING) << "health: cannot get battery status " << toString(r);
-            return;
-        }
-        if (v == BatteryStatus::UNKNOWN) {
-            LOG(WARNING) << "health: invalid battery status";
-        }
-        status = v;
-    });
+    auto ret = health->getChargeStatus(&status);
     if (!ret.isOk()) {
-        LOG(WARNING) << "health: get charge status transaction error " << ret.description();
+        LOG(WARNING) << "health: cannot get battery status: " << ret.getDescription();
+    }
+    if (status == BatteryStatus::UNKNOWN) {
+        LOG(WARNING) << "health: invalid battery status";
     }
 
     mUidm.init(is_charger_on(status));
     // register listener after init uid_monitor
-    health->registerCallback(this);
-    health->linkToDeath(this, 0 /* cookie */);
+    aidl_health_callback = std::make_shared<HealthInfoCallback>(&mUidm);
+    ret = health->registerCallback(aidl_health_callback);
+    if (!ret.isOk()) {
+        LOG(WARNING) << "health: failed to register callback: " << ret.getDescription();
+    }
+
+    if (hidlHealth != nullptr) {
+        hidl_death_recp = new hidl_health_death_recipient(hidlHealth);
+        auto ret = hidlHealth->linkToDeath(hidl_death_recp, 0 /* cookie */);
+        if (!ret.isOk()) {
+            LOG(WARNING) << "Failed to link to death (HIDL): " << ret.description();
+        }
+    } else {
+        aidl_death_recp =
+                ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(onHealthBinderDied));
+        auto ret = AIBinder_linkToDeath(health->asBinder().get(), aidl_death_recp.get(),
+                                        nullptr /* cookie */);
+        if (ret != STATUS_OK) {
+            LOG(WARNING) << "Failed to link to death (AIDL): "
+                         << ScopedAStatus(AStatus_fromStatus(ret)).getDescription();
+        }
+    }
 }
 
-void storaged_t::serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who) {
-    if (health != NULL && interfacesEqual(health, who.promote())) {
-        LOG(ERROR) << "health service died, exiting";
-        android::hardware::IPCThreadState::self()->stopProcess();
-        exit(1);
+void hidl_health_death_recipient::serviceDied(uint64_t cookie,
+                                              const wp<::android::hidl::base::V1_0::IBase>& who) {
+    if (mHealth != nullptr && interfacesEqual(mHealth, who.promote())) {
+        onHealthBinderDied(reinterpret_cast<void*>(cookie));
     } else {
         LOG(ERROR) << "unknown service died";
     }
