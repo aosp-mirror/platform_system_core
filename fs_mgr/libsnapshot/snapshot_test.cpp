@@ -897,9 +897,9 @@ class SnapshotUpdateTest : public SnapshotTest {
         ASSERT_NE(nullptr, metadata);
         ASSERT_TRUE(UpdatePartitionTable(*opener_, "super", *metadata.get(), 0));
 
-        // Map source partitions. Additionally, map sys_b to simulate system_other after flashing.
+        // Map source partitions.
         std::string path;
-        for (const auto& name : {"sys_a", "vnd_a", "prd_a", "sys_b"}) {
+        for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
             ASSERT_TRUE(CreateLogicalPartition(
                     CreateLogicalPartitionParams{
                             .block_device = fake_super,
@@ -2214,6 +2214,8 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
 
 TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
     AddOperationForPartitions();
+
+    ASSERT_TRUE(UnmapAll());
 
     // Execute the update from B->A.
     test_device->set_slot_suffix("_b");
