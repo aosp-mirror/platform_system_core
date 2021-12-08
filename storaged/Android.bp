@@ -24,8 +24,10 @@ cc_defaults {
     shared_libs: [
         "android.hardware.health@1.0",
         "android.hardware.health@2.0",
+        "android.hardware.health-V1-ndk",
         "libbase",
         "libbinder",
+        "libbinder_ndk",
         "libcutils",
         "libhidlbase",
         "liblog",
@@ -33,6 +35,12 @@ cc_defaults {
         "libutils",
         "libz",
         "packagemanager_aidl-cpp",
+    ],
+
+    static_libs: [
+        "android.hardware.health-translate-ndk",
+        "libhealthhalutils",
+        "libhealthshim",
     ],
 
     cflags: [
@@ -67,7 +75,6 @@ cc_library_static {
         ":storaged_aidl_private",
     ],
 
-    static_libs: ["libhealthhalutils"],
     header_libs: ["libbatteryservice_headers"],
 
     logtags: ["EventLogTags.logtags"],
@@ -90,7 +97,6 @@ cc_binary {
     srcs: ["main.cpp"],
 
     static_libs: [
-        "libhealthhalutils",
         "libstoraged",
     ],
 }
@@ -107,7 +113,6 @@ cc_test {
     srcs: ["tests/storaged_test.cpp"],
 
     static_libs: [
-        "libhealthhalutils",
         "libstoraged",
     ],
 }

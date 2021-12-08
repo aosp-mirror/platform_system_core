@@ -21,7 +21,7 @@
 
 #include <chrono>
 
-#include <android/hardware/health/2.0/IHealth.h>
+#include <aidl/android/hardware/health/IHealth.h>
 #include <utils/Mutex.h>
 
 #include "storaged.h"
@@ -71,8 +71,8 @@ class storage_info_t {
 
   public:
     static storage_info_t* get_storage_info(
-        const sp<android::hardware::health::V2_0::IHealth>& healthService);
-    virtual ~storage_info_t() {};
+            const shared_ptr<aidl::android::hardware::health::IHealth>& healthService);
+    virtual ~storage_info_t(){};
     virtual void report() {};
     void load_perf_history_proto(const IOPerfHistory& perf_history);
     void refresh(IOPerfHistory* perf_history);
@@ -105,14 +105,14 @@ public:
 
 class health_storage_info_t : public storage_info_t {
   private:
-    using IHealth = hardware::health::V2_0::IHealth;
-    using StorageInfo = hardware::health::V2_0::StorageInfo;
+    using IHealth = aidl::android::hardware::health::IHealth;
+    using StorageInfo = aidl::android::hardware::health::StorageInfo;
 
-    sp<IHealth> mHealth;
+    shared_ptr<IHealth> mHealth;
     void set_values_from_hal_storage_info(const StorageInfo& halInfo);
 
   public:
-    health_storage_info_t(const sp<IHealth>& service) : mHealth(service){};
+    health_storage_info_t(const shared_ptr<IHealth>& service) : mHealth(service){};
     virtual ~health_storage_info_t() {}
     virtual void report();
 };
