@@ -155,8 +155,8 @@ class OfflineSnapshotTest : public ::testing::Test {
     }
 
     std::string MakeXorBlockString() {
-        std::string data(100, -1);
-        data.resize(kBlockSize, 0);
+        std::string data(kBlockSize, 0);
+        memset(data.data(), 0xff, 100);
         return data;
     }
 
