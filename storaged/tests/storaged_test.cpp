@@ -64,20 +64,23 @@ void write_and_pause(uint32_t sec) {
 } // namespace
 
 // the return values of the tested functions should be the expected ones
-const char* DISK_STATS_PATH;
+const char* get_disk_stats_path() {
+    if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
+        return MMC_DISK_STATS_PATH;
+    } else if (access(SDA_DISK_STATS_PATH, R_OK) >= 0) {
+        return SDA_DISK_STATS_PATH;
+    } else {
+        return nullptr;
+    }
+}
 TEST(storaged_test, retvals) {
     struct disk_stats stats;
     memset(&stats, 0, sizeof(struct disk_stats));
 
-    if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
-        DISK_STATS_PATH = MMC_DISK_STATS_PATH;
-    } else if (access(SDA_DISK_STATS_PATH, R_OK) >= 0) {
-        DISK_STATS_PATH = SDA_DISK_STATS_PATH;
-    } else {
-        return;
-    }
+    auto disk_stats_path = get_disk_stats_path();
+    if (disk_stats_path == nullptr) GTEST_SKIP();
 
-    EXPECT_TRUE(parse_disk_stats(DISK_STATS_PATH, &stats));
+    EXPECT_TRUE(parse_disk_stats(disk_stats_path, &stats));
 
     struct disk_stats old_stats;
     memset(&old_stats, 0, sizeof(struct disk_stats));
@@ -92,7 +95,9 @@ TEST(storaged_test, retvals) {
 
 TEST(storaged_test, disk_stats) {
     struct disk_stats stats = {};
-    ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &stats));
+    auto disk_stats_path = get_disk_stats_path();
+    if (disk_stats_path == nullptr) GTEST_SKIP();
+    ASSERT_TRUE(parse_disk_stats(disk_stats_path, &stats));
 
     // every entry of stats (except io_in_flight) should all be greater than 0
     for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
@@ -103,7 +108,7 @@ TEST(storaged_test, disk_stats) {
     // accumulation of the increments should be the same with the overall increment
     struct disk_stats base = {}, tmp = {}, curr, acc = {}, inc[5];
     for (uint i = 0; i < 5; ++i) {
-        ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &curr));
+        ASSERT_TRUE(parse_disk_stats(disk_stats_path, &curr));
         if (i == 0) {
             base = curr;
             tmp = curr;
