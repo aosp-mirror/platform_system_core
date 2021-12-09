@@ -115,6 +115,9 @@ cc_test {
     static_libs: [
         "libstoraged",
     ],
+    test_suites: [
+        "general-tests",
+    ],
 }
 
 // AIDL interface between storaged and framework.jar
