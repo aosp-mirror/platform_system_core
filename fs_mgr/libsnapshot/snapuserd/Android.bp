@@ -187,7 +187,9 @@ cc_test {
         "libstorage_literals_headers",
         "libfiemap_headers",
     ],
-    test_min_api_level: 30,
+    test_options: {
+        min_shipping_api_level: 30,
+    },
     auto_gen_config: true,
     require_root: false,
 }
