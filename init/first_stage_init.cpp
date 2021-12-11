@@ -330,14 +330,21 @@ int FirstStageMain(int argc, char** argv) {
     // If "/force_debuggable" is present, the second-stage init will use a userdebug
     // sepolicy and load adb_debug.prop to allow adb root, if the device is unlocked.
     if (access("/force_debuggable", F_OK) == 0) {
+        constexpr const char adb_debug_prop_src[] = "/adb_debug.prop";
+        constexpr const char userdebug_plat_sepolicy_cil_src[] = "/userdebug_plat_sepolicy.cil";
         std::error_code ec;  // to invoke the overloaded copy_file() that won't throw.
-        if (!fs::copy_file("/adb_debug.prop", kDebugRamdiskProp, ec) ||
-            !fs::copy_file("/userdebug_plat_sepolicy.cil", kDebugRamdiskSEPolicy, ec)) {
-            LOG(ERROR) << "Failed to setup debug ramdisk";
-        } else {
-            // setenv for second-stage init to read above kDebugRamdisk* files.
-            setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
+        if (access(adb_debug_prop_src, F_OK) == 0 &&
+            !fs::copy_file(adb_debug_prop_src, kDebugRamdiskProp, ec)) {
+            LOG(WARNING) << "Can't copy " << adb_debug_prop_src << " to " << kDebugRamdiskProp
+                         << ": " << ec.message();
         }
+        if (access(userdebug_plat_sepolicy_cil_src, F_OK) == 0 &&
+            !fs::copy_file(userdebug_plat_sepolicy_cil_src, kDebugRamdiskSEPolicy, ec)) {
+            LOG(WARNING) << "Can't copy " << userdebug_plat_sepolicy_cil_src << " to "
+                         << kDebugRamdiskSEPolicy << ": " << ec.message();
+        }
+        // setenv for second-stage init to read above kDebugRamdisk* files.
+        setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
     }
 
     if (ForceNormalBoot(cmdline, bootconfig)) {
