@@ -328,7 +328,7 @@ void health_storage_info_t::report() {
     vector<StorageInfo> halInfos;
     auto ret = mHealth->getStorageInfo(&halInfos);
     if (ret.isOk()) {
-        if (halInfos.size() == 0) {
+        if (halInfos.size() != 0) {
             set_values_from_hal_storage_info(halInfos[0]);
             publish();
             return;
