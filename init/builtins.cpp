@@ -774,8 +774,21 @@ static Result<void> do_stop(const BuiltinArguments& args) {
 }
 
 static Result<void> do_restart(const BuiltinArguments& args) {
-    Service* svc = ServiceList::GetInstance().FindService(args[1]);
-    if (!svc) return Error() << "service " << args[1] << " not found";
+    bool only_if_running = false;
+    if (args.size() == 3) {
+        if (args[1] == "--only-if-running") {
+            only_if_running = true;
+        } else {
+            return Error() << "Unknown argument to restart: " << args[1];
+        }
+    }
+
+    const auto& classname = args[args.size() - 1];
+    Service* svc = ServiceList::GetInstance().FindService(classname);
+    if (!svc) return Error() << "service " << classname << " not found";
+    if (only_if_running && !svc->IsRunning()) {
+        return {};
+    }
     svc->Restart();
     return {};
 }
@@ -1453,7 +1466,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"update_linker_config",    {0,     0,    {false,  do_update_linker_config}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
         {"remount_userdata",        {0,     0,    {false,  do_remount_userdata}}},
-        {"restart",                 {1,     1,    {false,  do_restart}}},
+        {"restart",                 {1,     2,    {false,  do_restart}}},
         {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
         {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
         {"rm",                      {1,     1,    {true,   do_rm}}},
