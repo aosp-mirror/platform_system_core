@@ -117,7 +117,7 @@ class ErrorIgnoreEnoent {
                         android::base::GetMinimumLogSeverity() > android::base::DEBUG) {}
 
     template <typename T>
-    operator android::base::expected<T, ResultError<int>>() {
+    operator android::base::expected<T, ResultError<android::base::Errno>>() {
         if (ignore_error_) {
             return {};
         }
