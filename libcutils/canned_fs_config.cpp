@@ -21,7 +21,6 @@
 #include <android-base/strings.h>
 
 #include <errno.h>
-#include <fnmatch.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
@@ -67,10 +66,10 @@ int load_canned_fs_config(const char* fn) {
         }
 
         // Historical: remove the leading '/' if exists.
-        std::string path = tokens[0].front() == '/' ? std::string(tokens[0], 1) : tokens[0];
+        std::string path(tokens[0].front() == '/' ? std::string(tokens[0], 1) : tokens[0]);
 
         Entry e{
-                .path = path,
+                .path = std::move(path),
                 .uid = static_cast<unsigned int>(atoi(tokens[1].c_str())),
                 .gid = static_cast<unsigned int>(atoi(tokens[2].c_str())),
                 // mode is in octal
@@ -93,8 +92,15 @@ int load_canned_fs_config(const char* fn) {
         canned_data.emplace_back(std::move(e));
     }
 
-    std::sort(canned_data.begin(), canned_data.end(),
-              [](const Entry& a, const Entry& b) -> bool { return a.path < b.path; });
+    // Note: we used to sort the entries by path names. This was to improve the lookup performance
+    // by doing binary search. However, this is no longer the case. The lookup performance is not
+    // critical because this tool runs on the host, not on the device. Now, there can be multiple
+    // entries for the same path. Then the one that comes the last wins. This is to allow overriding
+    // platform provided fs_config with a user provided fs_config by appending the latter to the
+    // former.
+    //
+    // To implement the strategy, reverse the entries order, and search from the top.
+    std::reverse(canned_data.begin(), canned_data.end());
 
     std::cout << "loaded " << canned_data.size() << " fs_config entries" << std::endl;
     return 0;
@@ -105,12 +111,15 @@ void canned_fs_config(const char* path, [[maybe_unused]] int dir,
                       unsigned* mode, uint64_t* capabilities) {
     if (path != nullptr && path[0] == '/') path++;  // canned paths lack the leading '/'
 
-    const Entry* found = static_cast<Entry*>(
-            bsearch(path, &canned_data[0], canned_data.size(), sizeof(Entry),
-                    [](const void* a, const void* b) -> int {
-                        return strcmp(static_cast<const char*>(a),
-                                      static_cast<const Entry*>(b)->path.c_str());
-                    }));
+    const Entry* found = nullptr;
+    // canned_data is already reversed. First match wins.
+    for (const auto& entry : canned_data) {
+        if (path == entry.path) {
+            found = &entry;
+            break;
+        }
+        continue;
+    }
 
     if (found == nullptr) {
         std::cerr << "failed to find " << path << " in canned fs_config" << std::endl;
