@@ -236,52 +236,7 @@ cc_defaults {
         "libbrotli",
         "libc++fs",
         "libfs_mgr_binder",
-        "libgsi",
-        "libgmock",
-        "liblp",
-        "libsnapshot",
-        "libsnapshot_cow",
-        "libsnapshot_test_helpers",
-        "libsparse",
-    ],
-    header_libs: [
-        "libstorage_literals_headers",
-    ],
-    test_suites: [
-        "vts",
-        "device-tests"
-    ],
-    test_options: {
-        min_shipping_api_level: 29,
-    },
-    auto_gen_config: true,
-    require_root: true,
-}
-
-cc_defaults {
-    name: "userspace_snapshot_test_defaults",
-    defaults: ["libsnapshot_defaults"],
-    srcs: [
-        "partition_cow_creator_test.cpp",
-        "snapshot_metadata_updater_test.cpp",
-        "snapshot_reader_test.cpp",
-        "userspace_snapshot_test.cpp",
-        "snapshot_writer_test.cpp",
-    ],
-    shared_libs: [
-        "libbinder",
-        "libcrypto",
-        "libhidlbase",
-        "libprotobuf-cpp-lite",
-        "libutils",
-        "libz",
-    ],
-    static_libs: [
-        "android.hardware.boot@1.0",
-        "android.hardware.boot@1.1",
-        "libbrotli",
-        "libc++fs",
-        "libfs_mgr_binder",
+        "libgflags",
         "libgsi",
         "libgmock",
         "liblp",
@@ -309,9 +264,15 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
-cc_test {
-    name: "vts_userspace_snapshot_test",
-    defaults: ["userspace_snapshot_test_defaults"],
+sh_test {
+    name: "run_snapshot_tests",
+    src: "run_snapshot_tests.sh",
+    test_suites: [
+        "device-tests",
+    ],
+    required: [
+        "vts_libsnapshot_test",
+    ],
 }
 
 cc_binary {
