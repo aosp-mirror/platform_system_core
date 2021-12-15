@@ -208,6 +208,39 @@ static inline void atrace_async_end(uint64_t tag, const char* name, int32_t cook
 }
 
 /**
+ * Trace an instantaneous context. name is used to identify the context.
+ *
+ * An "instant" is an event with no defined duration. Visually is displayed like a single marker
+ * in the timeline (rather than a span, in the case of begin/end events).
+ *
+ * By default, instant events are added into a dedicated track that has the same name of the event.
+ * Use atrace_instant_for_track to put different instant events into the same timeline track/row.
+ */
+#define ATRACE_INSTANT(name) atrace_instant(ATRACE_TAG, name)
+static inline void atrace_instant(uint64_t tag, const char* name) {
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        void atrace_instant_body(const char*);
+        atrace_instant_body(name);
+    }
+}
+
+/**
+ * Trace an instantaneous context. name is used to identify the context.
+ * trackName is the name of the row where the event should be recorded.
+ *
+ * An "instant" is an event with no defined duration. Visually is displayed like a single marker
+ * in the timeline (rather than a span, in the case of begin/end events).
+ */
+#define ATRACE_INSTANT_FOR_TRACK(trackName, name) \
+    atrace_instant_for_track(ATRACE_TAG, trackName, name)
+static inline void atrace_instant_for_track(uint64_t tag, const char* trackName, const char* name) {
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        void atrace_instant_for_track_body(const char*, const char*);
+        atrace_instant_for_track_body(trackName, name);
+    }
+}
+
+/**
  * Traces an integer counter value.  name is used to identify the counter.
  * This can be used to track how a value changes over time.
  */
