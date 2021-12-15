@@ -166,8 +166,10 @@ cc_binary {
         "android.hardware.boot@1.1",
         "android.hardware.fastboot@1.1",
         "android.hardware.health@2.0",
+        "android.hardware.health-V1-ndk",
         "libasyncio",
         "libbase",
+        "libbinder_ndk",
         "libbootloader_message",
         "libcutils",
         "libext2_uuid",
@@ -183,8 +185,10 @@ cc_binary {
     ],
 
     static_libs: [
+        "android.hardware.health-translate-ndk",
         "libc++fs",
         "libhealthhalutils",
+        "libhealthshim",
         "libsnapshot_cow",
         "libsnapshot_nobinder",
         "update_metadata-protos",

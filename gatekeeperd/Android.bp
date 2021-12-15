@@ -29,7 +29,9 @@ cc_binary {
     srcs: [
         "gatekeeperd.cpp",
     ],
-
+    defaults: [
+        "keymint_use_latest_hal_aidl_ndk_shared",
+    ],
     shared_libs: [
         "libbinder",
         "libbinder_ndk",
@@ -43,7 +45,6 @@ cc_binary {
         "libhidlbase",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
-        "android.hardware.security.keymint-V1-ndk",
         "android.security.authorization-ndk",
     ],
 
