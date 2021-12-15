@@ -216,8 +216,6 @@ cc_defaults {
 
     shared_libs: [
         // common
-        "android.hardware.health@2.0",
-        "android.hardware.health@2.1",
         "libbase",
         "libcutils",
         "libhidlbase",
@@ -255,6 +253,10 @@ cc_binary {
         "charger.cpp",
         "charger_utils.cpp",
     ],
+    shared_libs: [
+        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
+    ],
 
     target: {
         recovery: {
@@ -280,6 +282,11 @@ cc_test {
     name: "charger_test",
     defaults: ["charger_defaults"],
     srcs: ["charger_test.cpp"],
+    static_libs: [
+        "android.hardware.health@1.0",
+        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
+    ],
 }
 
 cc_test {
@@ -290,6 +297,9 @@ cc_test {
         "healthd_mode_charger_test.cpp"
     ],
     static_libs: [
+        "android.hardware.health@1.0",
+        "android.hardware.health@2.0",
+        "android.hardware.health@2.1",
         "libgmock",
     ],
     test_suites: [

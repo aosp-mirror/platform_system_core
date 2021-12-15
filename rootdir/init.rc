@@ -78,8 +78,8 @@ on early-init
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
 
-    # Mount tracefs
-    mount tracefs tracefs /sys/kernel/tracing
+    # Mount tracefs (with GID=AID_READTRACEFS)
+    mount tracefs tracefs /sys/kernel/tracing gid=3012
 
     # create sys dirctory
     mkdir /dev/sys 0755 system system
