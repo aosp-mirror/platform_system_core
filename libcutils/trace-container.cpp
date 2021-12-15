@@ -217,6 +217,28 @@ void atrace_async_end_body(const char* name, int32_t cookie)
     WRITE_MSG("F|%d|", "|%" PRId32, name, cookie);
 }
 
+void atrace_instant_body(const char* name) {
+    if (CC_LIKELY(atrace_use_container_sock)) {
+        WRITE_MSG_IN_CONTAINER("I", "|", "%s", name, "");
+        return;
+    }
+
+    if (atrace_marker_fd < 0) return;
+
+    WRITE_MSG("I|%d|", "%s", name, "");
+}
+
+void atrace_instant_for_track_body(const char* trackName, const char* name) {
+    if (CC_LIKELY(atrace_use_container_sock)) {
+        WRITE_MSG_IN_CONTAINER("N", "|", "|%s", trackName, name);
+        return;
+    }
+
+    if (atrace_marker_fd < 0) return;
+
+    WRITE_MSG("N|%d|", "|%s", name, trackName);
+}
+
 void atrace_int_body(const char* name, int32_t value)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
