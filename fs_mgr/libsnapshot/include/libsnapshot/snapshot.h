@@ -111,6 +111,7 @@ class ISnapshotManager {
         virtual bool IsFirstStageInit() const = 0;
         virtual std::unique_ptr<IImageManager> OpenImageManager() const = 0;
         virtual android::dm::IDeviceMapper& GetDeviceMapper() = 0;
+        virtual bool UseUserspaceSnapshots() const = 0;
 
         // Helper method for implementing OpenImageManager.
         std::unique_ptr<IImageManager> OpenImageManager(const std::string& gsid_dir) const;

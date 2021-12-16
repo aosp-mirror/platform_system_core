@@ -19,6 +19,8 @@
 #include <fs_mgr_overlayfs.h>
 #include <libfiemap/image_manager.h>
 
+#include "utility.h"
+
 namespace android {
 namespace snapshot {
 
@@ -141,6 +143,10 @@ std::unique_ptr<android::fiemap::IImageManager> ISnapshotManager::IDeviceInfo::O
 
 android::dm::IDeviceMapper& DeviceInfo::GetDeviceMapper() {
     return android::dm::DeviceMapper::Instance();
+}
+
+bool DeviceInfo::UseUserspaceSnapshots() const {
+    return IsUserspaceSnapshotsEnabled();
 }
 
 }  // namespace snapshot
