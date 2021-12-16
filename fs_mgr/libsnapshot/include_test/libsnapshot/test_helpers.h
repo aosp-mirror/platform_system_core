@@ -107,6 +107,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     }
 
     bool IsSlotUnbootable(uint32_t slot) { return unbootable_slots_.count(slot) != 0; }
+    bool UseUserspaceSnapshots() const override;
 
     void set_slot_suffix(const std::string& suffix) { slot_suffix_ = suffix; }
     void set_fake_super(const std::string& path) {
