@@ -195,6 +195,106 @@ TEST_F(TraceDevTest, atrace_async_end_body_truncated) {
   ASSERT_STREQ(expected.c_str(), actual.c_str());
 }
 
+TEST_F(TraceDevTest, atrace_instant_body_normal) {
+    atrace_instant_body("fake_name");
+
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    std::string expected = android::base::StringPrintf("I|%d|fake_name", getpid());
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
+TEST_F(TraceDevTest, atrace_instant_body_exact) {
+    std::string expected = android::base::StringPrintf("I|%d|", getpid());
+    std::string name = MakeName(ATRACE_MESSAGE_LENGTH - expected.length() - 1);
+    atrace_instant_body(name.c_str());
+
+    ASSERT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    expected += name;
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+
+    // Add a single character and verify we get the exact same value as before.
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+    name += '*';
+    atrace_instant_body(name.c_str());
+    EXPECT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
+TEST_F(TraceDevTest, atrace_instant_body_truncated) {
+    std::string expected = android::base::StringPrintf("I|%d|", getpid());
+    std::string name = MakeName(2 * ATRACE_MESSAGE_LENGTH);
+    atrace_instant_body(name.c_str());
+
+    ASSERT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    int expected_len = ATRACE_MESSAGE_LENGTH - expected.length() - 1;
+    expected += android::base::StringPrintf("%.*s", expected_len, name.c_str());
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
+TEST_F(TraceDevTest, atrace_instant_for_track_body_normal) {
+    atrace_instant_for_track_body("fake_track", "fake_name");
+
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    std::string expected = android::base::StringPrintf("N|%d|fake_track|fake_name", getpid());
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
+TEST_F(TraceDevTest, atrace_instant_for_track_body_exact) {
+    const int nameSize = 5;
+    std::string expected = android::base::StringPrintf("N|%d|", getpid());
+    std::string trackName = MakeName(ATRACE_MESSAGE_LENGTH - expected.length() - 1 - nameSize);
+    atrace_instant_for_track_body(trackName.c_str(), "name");
+
+    ASSERT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    expected += trackName + "|name";
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+
+    // Add a single character and verify we get the exact same value as before.
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+    trackName += '*';
+    atrace_instant_for_track_body(trackName.c_str(), "name");
+    EXPECT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
+TEST_F(TraceDevTest, atrace_instant_for_track_body_truncated) {
+    const int nameSize = 5;
+    std::string expected = android::base::StringPrintf("N|%d|", getpid());
+    std::string trackName = MakeName(2 * ATRACE_MESSAGE_LENGTH);
+    atrace_instant_for_track_body(trackName.c_str(), "name");
+
+    ASSERT_EQ(ATRACE_MESSAGE_LENGTH - 1, lseek(atrace_marker_fd, 0, SEEK_CUR));
+    ASSERT_EQ(0, lseek(atrace_marker_fd, 0, SEEK_SET));
+
+    std::string actual;
+    ASSERT_TRUE(android::base::ReadFdToString(atrace_marker_fd, &actual));
+    int expected_len = ATRACE_MESSAGE_LENGTH - expected.length() - 1 - nameSize;
+    expected += android::base::StringPrintf("%.*s|name", expected_len, trackName.c_str());
+    ASSERT_STREQ(expected.c_str(), actual.c_str());
+}
+
 TEST_F(TraceDevTest, atrace_int_body_normal) {
   atrace_int_body("fake_name", 12345);
 
