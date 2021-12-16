@@ -58,7 +58,6 @@ struct PartitionCowCreator {
     std::vector<ChromeOSExtent> extra_extents = {};
     // True if compression is enabled.
     bool compression_enabled = false;
-    bool userspace_snapshots_enabled = false;
     std::string compression_algorithm;
 
     struct Return {
