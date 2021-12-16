@@ -357,7 +357,7 @@ class SnapshotTest : public ::testing::Test {
         DeltaArchiveManifest manifest;
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(ShouldUseCompression());
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         auto group = dynamic_partition_metadata->add_groups();
@@ -396,7 +396,7 @@ class SnapshotTest : public ::testing::Test {
             if (!res) {
                 return res;
             }
-        } else if (!IsCompressionEnabled()) {
+        } else if (!ShouldUseUserspaceSnapshots()) {
             std::string ignore;
             if (!MapUpdateSnapshot("test_partition_b", &ignore)) {
                 return AssertionFailure() << "Failed to map test_partition_b";
@@ -1030,7 +1030,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
-        if (ShouldUseCompression()) {
+        if (ShouldUseUserspaceSnapshots()) {
             std::unique_ptr<ISnapshotWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
@@ -1040,7 +1040,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult WriteSnapshotAndHash(const std::string& name) {
-        if (ShouldUseCompression()) {
+        if (ShouldUseUserspaceSnapshots()) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
@@ -2072,7 +2072,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
-    if (ShouldUseCompression()) {
+    if (ShouldUseUserspaceSnapshots()) {
         GTEST_SKIP() << "No overflow bit set for userspace COWs";
     }
 
