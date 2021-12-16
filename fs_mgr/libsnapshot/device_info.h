@@ -41,7 +41,6 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     std::unique_ptr<IImageManager> OpenImageManager() const override;
     bool IsFirstStageInit() const override;
     android::dm::IDeviceMapper& GetDeviceMapper() override;
-    bool UseUserspaceSnapshots() const override;
 
     void set_first_stage_init(bool value) { first_stage_init_ = value; }
 
