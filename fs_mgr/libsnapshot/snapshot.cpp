@@ -3134,14 +3134,15 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .compression_algorithm = compression_algorithm,
     };
 
-    if (!device()->IsTestDevice()) {
-        cow_creator.userspace_snapshots_enabled = IsUserspaceSnapshotsEnabled();
-        if (cow_creator.userspace_snapshots_enabled) {
-            LOG(INFO) << "User-space snapshots enabled";
-        } else {
-            LOG(INFO) << "User-space snapshots disabled";
-        }
+    cow_creator.userspace_snapshots_enabled = device_->UseUserspaceSnapshots();
+    if (cow_creator.userspace_snapshots_enabled) {
+        LOG(INFO) << "User-space snapshots enabled, compression = " << compression_algorithm;
+    } else {
+        LOG(INFO) << "User-space snapshots disabled, compression = " << compression_algorithm;
+    }
+    is_snapshot_userspace_ = cow_creator.userspace_snapshots_enabled;
 
+    if ((use_compression || is_snapshot_userspace_) && !device()->IsTestDevice()) {
         // Terminate stale daemon if any
         std::unique_ptr<SnapuserdClient> snapuserd_client =
                 SnapuserdClient::Connect(kSnapuserdSocket, 10s);
@@ -3156,16 +3157,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             snapuserd_client_->CloseConnection();
             snapuserd_client_ = nullptr;
         }
-    } else {
-        cow_creator.userspace_snapshots_enabled = !IsDmSnapshotTestingEnabled();
-        if (cow_creator.userspace_snapshots_enabled) {
-            LOG(INFO) << "User-space snapshots disabled for testing";
-        } else {
-            LOG(INFO) << "User-space snapshots enabled for testing";
-        }
     }
-
-    is_snapshot_userspace_ = cow_creator.userspace_snapshots_enabled;
 
     // If compression is enabled, we need to retain a copy of the old metadata
     // so we can access original blocks in case they are moved around. We do
