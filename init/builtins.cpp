@@ -88,6 +88,7 @@
 using namespace std::literals::string_literals;
 
 using android::base::Basename;
+using android::base::ResultError;
 using android::base::SetProperty;
 using android::base::Split;
 using android::base::StartsWith;
@@ -116,7 +117,7 @@ class ErrorIgnoreEnoent {
                         android::base::GetMinimumLogSeverity() > android::base::DEBUG) {}
 
     template <typename T>
-    operator android::base::expected<T, ResultError>() {
+    operator android::base::expected<T, ResultError<int>>() {
         if (ignore_error_) {
             return {};
         }
@@ -130,7 +131,7 @@ class ErrorIgnoreEnoent {
     }
 
   private:
-    Error error_;
+    Error<> error_;
     bool ignore_error_;
 };
 
