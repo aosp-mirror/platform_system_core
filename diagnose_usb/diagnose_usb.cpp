@@ -19,7 +19,9 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 #include <android-base/stringprintf.h>
 
@@ -45,9 +47,25 @@ static std::string GetUdevProblem() {
         return "";
     }
 
-    // getgroups(2) indicates that the GNU group_member(3) may not check the egid so we check it
-    // additionally just to be sure.
-    if (group_member(plugdev_group->gr_gid) || getegid() == plugdev_group->gr_gid) {
+    int ngroups = getgroups(0, nullptr);
+    if (ngroups < 0) {
+        perror("failed to get groups list size");
+        return "";
+    }
+
+    std::vector<gid_t> groups(ngroups);
+    ngroups = getgroups(groups.size(), groups.data());
+    if (ngroups < 0) {
+        perror("failed to get groups list");
+        return "";
+    }
+
+    groups.resize(ngroups);
+
+    // getgroups(2) indicates that the egid may not be included so we check it additionally just
+    // to be sure.
+    if (std::find(groups.begin(), groups.end(), plugdev_group->gr_gid) != groups.end() ||
+        getegid() == plugdev_group->gr_gid) {
         // The user is in plugdev so the problem is likely with the udev rules.
         return "missing udev rules? user is in the plugdev group";
     }
