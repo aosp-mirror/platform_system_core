@@ -24,6 +24,7 @@
 #include <linux/types.h>
 #include <stdint.h>
 #include <sys/sysmacros.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <chrono>
