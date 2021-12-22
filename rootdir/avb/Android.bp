@@ -18,3 +18,10 @@ filegroup {
         "s-gsi.avbpubkey",
     ],
 }
+
+filegroup {
+    name: "qcar-gsi_avbpubkey",
+    srcs: [
+        "qcar-gsi.avbpubkey",
+    ],
+}
