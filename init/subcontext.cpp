@@ -297,7 +297,7 @@ Result<void> Subcontext::Execute(const std::vector<std::string>& args) {
 
     if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
         auto& failure = subcontext_reply->failure();
-        return ResultError(failure.error_string(), failure.error_errno());
+        return ResultError<>(failure.error_string(), failure.error_errno());
     }
 
     if (subcontext_reply->reply_case() != SubcontextReply::kSuccess) {
@@ -321,7 +321,7 @@ Result<std::vector<std::string>> Subcontext::ExpandArgs(const std::vector<std::s
 
     if (subcontext_reply->reply_case() == SubcontextReply::kFailure) {
         auto& failure = subcontext_reply->failure();
-        return ResultError(failure.error_string(), failure.error_errno());
+        return ResultError<>(failure.error_string(), failure.error_errno());
     }
 
     if (subcontext_reply->reply_case() != SubcontextReply::kExpandArgsReply) {
