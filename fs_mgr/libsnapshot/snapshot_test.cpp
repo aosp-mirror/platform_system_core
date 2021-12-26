@@ -34,6 +34,7 @@
 #include <fs_mgr/file_wait.h>
 #include <fs_mgr/roots.h>
 #include <fs_mgr_dm_linear.h>
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
@@ -51,6 +52,8 @@
 // class itself.
 #include <libsnapshot/mock_device_info.h>
 #include <libsnapshot/mock_snapshot.h>
+
+DEFINE_string(force_config, "", "Force testing mode (dmsnap, vab, vabc) ignoring device config.");
 
 namespace android {
 namespace snapshot {
@@ -87,6 +90,8 @@ TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
 void MountMetadata();
+bool ShouldUseCompression();
+bool ShouldUseUserspaceSnapshots();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -139,11 +144,7 @@ class SnapshotTest : public ::testing::Test {
         std::vector<std::string> snapshots = {"test-snapshot", "test_partition_a",
                                               "test_partition_b"};
         for (const auto& snapshot : snapshots) {
-            ASSERT_TRUE(DeleteSnapshotDevice(snapshot));
-            DeleteBackingImage(image_manager_, snapshot + "-cow-img");
-
-            auto status_file = sm->GetSnapshotStatusFilePath(snapshot);
-            android::base::RemoveFileIfExists(status_file);
+            CleanupSnapshotArtifacts(snapshot);
         }
 
         // Remove stale partitions in fake super.
@@ -151,7 +152,7 @@ class SnapshotTest : public ::testing::Test {
                 "base-device",
                 "test_partition_b",
                 "test_partition_b-base",
-                "test_partition_b-base",
+                "test_partition_b-cow",
         };
         for (const auto& partition : partitions) {
             DeleteDevice(partition);
@@ -161,6 +162,32 @@ class SnapshotTest : public ::testing::Test {
             auto state_file = sm->GetStateFilePath();
             unlink(state_file.c_str());
         }
+    }
+
+    void CleanupSnapshotArtifacts(const std::string& snapshot) {
+        // The device-mapper stack may have been collapsed to dm-linear, so it's
+        // necessary to check what state it's in before attempting a cleanup.
+        // SnapshotManager has no path like this because we'd never remove a
+        // merged snapshot (a live partition).
+        bool is_dm_user = false;
+        DeviceMapper::TargetInfo target;
+        if (sm->IsSnapshotDevice(snapshot, &target)) {
+            is_dm_user = (DeviceMapper::GetTargetType(target.spec) == "user");
+        }
+
+        if (is_dm_user) {
+            ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+            ASSERT_TRUE(AcquireLock());
+
+            auto local_lock = std::move(lock_);
+            ASSERT_TRUE(sm->UnmapUserspaceSnapshotDevice(local_lock.get(), snapshot));
+        }
+
+        ASSERT_TRUE(DeleteSnapshotDevice(snapshot));
+        DeleteBackingImage(image_manager_, snapshot + "-cow-img");
+
+        auto status_file = sm->GetSnapshotStatusFilePath(snapshot);
+        android::base::RemoveFileIfExists(status_file);
     }
 
     bool AcquireLock() {
@@ -428,7 +455,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = IsCompressionEnabled();
+    cow_creator.compression_enabled = ShouldUseCompression();
     if (cow_creator.compression_enabled) {
         cow_creator.compression_algorithm = "gz";
     } else {
@@ -469,7 +496,7 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = IsCompressionEnabled();
+    cow_creator.compression_enabled = ShouldUseCompression();
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -527,6 +554,8 @@ TEST_F(SnapshotTest, Merge) {
     std::unique_ptr<ISnapshotWriter> writer;
     ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize, &writer));
 
+    bool userspace_snapshots = sm->UpdateUsesUserSnapshots(lock_.get());
+
     // Release the lock.
     lock_ = nullptr;
 
@@ -548,7 +577,11 @@ TEST_F(SnapshotTest, Merge) {
     // The device should have been switched to a snapshot-merge target.
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(sm->IsSnapshotDevice("test_partition_b", &target));
-    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot-merge");
+    if (userspace_snapshots) {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "user");
+    } else {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot-merge");
+    }
 
     // We should not be able to cancel an update now.
     ASSERT_FALSE(sm->CancelUpdate());
@@ -584,11 +617,13 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
 
     ASSERT_TRUE(AcquireLock());
 
+    bool userspace_snapshots = init->UpdateUsesUserSnapshots(lock_.get());
+
     // Validate that we have a snapshot device.
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
-    if (IsCompressionEnabled()) {
+    if (ShouldUseCompression()) {
         ASSERT_EQ(status.compression_algorithm(), "gz");
     } else {
         ASSERT_EQ(status.compression_algorithm(), "none");
@@ -596,7 +631,11 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
 
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(init->IsSnapshotDevice("test_partition_b", &target));
-    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+    if (userspace_snapshots) {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "user");
+    } else {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+    }
 }
 
 TEST_F(SnapshotTest, FlashSuperDuringUpdate) {
@@ -858,7 +897,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(ShouldUseCompression());
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         // Create a fake update package metadata.
@@ -991,7 +1030,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
-        if (IsCompressionEnabled()) {
+        if (ShouldUseCompression()) {
             std::unique_ptr<ISnapshotWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
@@ -1001,7 +1040,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult WriteSnapshotAndHash(const std::string& name) {
-        if (IsCompressionEnabled()) {
+        if (ShouldUseCompression()) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
@@ -1169,7 +1208,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsCompressionEnabled());
+    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1196,7 +1235,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 }
 
 TEST_F(SnapshotUpdateTest, DuplicateOps) {
-    if (!IsCompressionEnabled()) {
+    if (!ShouldUseCompression()) {
         GTEST_SKIP() << "Compression-only test";
     }
 
@@ -1240,7 +1279,7 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
-    if (!IsCompressionEnabled()) {
+    if (!ShouldUseCompression()) {
         // b/179111359
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
     }
@@ -1303,7 +1342,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsCompressionEnabled());
+    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1320,11 +1359,21 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
     // Check that we used the correct types after rebooting mid-merge.
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(init->IsSnapshotDevice("prd_b", &target));
-    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot-merge");
-    ASSERT_TRUE(init->IsSnapshotDevice("sys_b", &target));
-    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
-    ASSERT_TRUE(init->IsSnapshotDevice("vnd_b", &target));
-    ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+
+    bool userspace_snapshots = init->UpdateUsesUserSnapshots();
+    if (userspace_snapshots) {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "user");
+        ASSERT_TRUE(init->IsSnapshotDevice("sys_b", &target));
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "user");
+        ASSERT_TRUE(init->IsSnapshotDevice("vnd_b", &target));
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "user");
+    } else {
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot-merge");
+        ASSERT_TRUE(init->IsSnapshotDevice("sys_b", &target));
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+        ASSERT_TRUE(init->IsSnapshotDevice("vnd_b", &target));
+        ASSERT_EQ(DeviceMapper::GetTargetType(target.spec), "snapshot");
+    }
 
     // Complete the merge.
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
@@ -1802,6 +1851,8 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
 
     ASSERT_TRUE(new_sm->FinishMergeInRecovery());
 
+    ASSERT_TRUE(UnmapAll());
+
     auto mount = new_sm->EnsureMetadataMounted();
     ASSERT_TRUE(mount && mount->HasDevice());
     ASSERT_EQ(new_sm->ProcessUpdateState(), UpdateState::MergeCompleted);
@@ -1894,6 +1945,8 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     ASSERT_FALSE(test_device->IsSlotUnbootable(1));
     ASSERT_FALSE(test_device->IsSlotUnbootable(0));
 
+    ASSERT_TRUE(UnmapAll());
+
     // Now reboot into new slot.
     test_device = new TestDeviceInfo(fake_super, "_b");
     auto init = NewManagerForFirstStageMount(test_device);
@@ -1922,8 +1975,8 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
         ASSERT_TRUE(AcquireLock());
 
         PartitionCowCreator cow_creator = {
-                .compression_enabled = IsCompressionEnabled(),
-                .compression_algorithm = IsCompressionEnabled() ? "gz" : "none",
+                .compression_enabled = ShouldUseCompression(),
+                .compression_algorithm = ShouldUseCompression() ? "gz" : "none",
         };
         SnapshotStatus status;
         status.set_name("sys_a");
@@ -1954,6 +2007,8 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     ASSERT_FALSE(test_device->IsSlotUnbootable(1));
     ASSERT_FALSE(test_device->IsSlotUnbootable(0));
+
+    ASSERT_TRUE(UnmapAll());
 
     // Now reboot into new slot.
     test_device = new TestDeviceInfo(fake_super, "_b");
@@ -2017,7 +2072,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
-    if (IsCompressionEnabled()) {
+    if (ShouldUseCompression()) {
         GTEST_SKIP() << "No overflow bit set for userspace COWs";
     }
 
@@ -2152,7 +2207,7 @@ class AutoKill final {
 };
 
 TEST_F(SnapshotUpdateTest, DaemonTransition) {
-    if (!IsCompressionEnabled()) {
+    if (!ShouldUseCompression()) {
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
     }
 
@@ -2178,21 +2233,38 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
-    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow-init", F_OK), 0);
-    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), -1);
+    bool userspace_snapshots = init->UpdateUsesUserSnapshots();
+
+    if (userspace_snapshots) {
+        ASSERT_EQ(access("/dev/dm-user/sys_b-init", F_OK), 0);
+        ASSERT_EQ(access("/dev/dm-user/sys_b", F_OK), -1);
+    } else {
+        ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow-init", F_OK), 0);
+        ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), -1);
+    }
 
     ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
 
     // :TODO: this is a workaround to ensure the handler list stays empty. We
     // should make this test more like actual init, and spawn two copies of
     // snapuserd, given how many other tests we now have for normal snapuserd.
-    ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("sys_b-user-cow-init"));
-    ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("vnd_b-user-cow-init"));
-    ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("prd_b-user-cow-init"));
+    if (userspace_snapshots) {
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("sys_b-init"));
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("vnd_b-init"));
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("prd_b-init"));
 
-    // The control device should have been renamed.
-    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
-    ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
+        // The control device should have been renamed.
+        ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-init", 10s));
+        ASSERT_EQ(access("/dev/dm-user/sys_b", F_OK), 0);
+    } else {
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("sys_b-user-cow-init"));
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("vnd_b-user-cow-init"));
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete("prd_b-user-cow-init"));
+
+        // The control device should have been renamed.
+        ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
+        ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
+    }
 }
 
 TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
@@ -2233,8 +2305,13 @@ TEST_F(SnapshotUpdateTest, CancelOnTargetSlot) {
             },
             &path));
 
-    // Hold sys_a open so it can't be unmapped.
-    unique_fd fd(open(path.c_str(), O_RDONLY));
+    bool userspace_snapshots = sm->UpdateUsesUserSnapshots();
+
+    unique_fd fd;
+    if (!userspace_snapshots) {
+        // Hold sys_a open so it can't be unmapped.
+        fd.reset(open(path.c_str(), O_RDONLY));
+    }
 
     // Switch back to "A", make sure we can cancel. Instead of unmapping sys_a
     // we should simply delete the old snapshots.
@@ -2253,6 +2330,11 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    if (sm->UpdateUsesUserSnapshots()) {
+        GTEST_SKIP() << "Test does not apply to userspace snapshots";
+    }
+
     ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
     ASSERT_TRUE(UnmapAll());
@@ -2557,21 +2639,53 @@ void SnapshotTestEnvironment::TearDown() {
     }
 }
 
+bool ShouldUseUserspaceSnapshots() {
+    if (FLAGS_force_config == "dmsnap") {
+        return false;
+    }
+    if (!FLAGS_force_config.empty()) {
+        return true;
+    }
+    return IsUserspaceSnapshotsEnabled();
+}
+
+bool ShouldUseCompression() {
+    if (FLAGS_force_config == "vab" || FLAGS_force_config == "dmsnap") {
+        return false;
+    }
+    if (FLAGS_force_config == "vabc") {
+        return true;
+    }
+    return IsCompressionEnabled();
+}
+
 }  // namespace snapshot
 }  // namespace android
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
+    gflags::ParseCommandLineFlags(&argc, &argv, false);
 
     android::base::SetProperty("ctl.stop", "snapuserd");
 
-    if (!android::base::SetProperty("snapuserd.test.dm.snapshots", "1")) {
-        return testing::AssertionFailure()
-               << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
+    std::unordered_set<std::string> configs = {"", "dmsnap", "vab", "vabc"};
+    if (configs.count(FLAGS_force_config) == 0) {
+        std::cerr << "Unexpected force_config argument\n";
+        return 1;
+    }
+
+    if (FLAGS_force_config == "dmsnap") {
+        if (!android::base::SetProperty("snapuserd.test.dm.snapshots", "1")) {
+            return testing::AssertionFailure()
+                   << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
+        }
     }
 
     int ret = RUN_ALL_TESTS();
-    android::base::SetProperty("snapuserd.test.dm.snapshots", "0");
+
+    if (FLAGS_force_config == "dmsnap") {
+        android::base::SetProperty("snapuserd.test.dm.snapshots", "0");
+    }
     return ret;
 }

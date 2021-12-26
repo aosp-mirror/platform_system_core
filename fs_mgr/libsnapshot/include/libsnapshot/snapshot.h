@@ -793,7 +793,8 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Helper of UpdateUsesCompression
     bool UpdateUsesCompression(LockedFile* lock);
-    // Helper of UpdateUsesUsersnapshots
+    // Locked and unlocked functions to test whether the current update uses
+    // userspace snapshots.
     bool UpdateUsesUserSnapshots(LockedFile* lock);
 
     // Wrapper around libdm, with diagnostics.
