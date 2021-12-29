@@ -1809,9 +1809,13 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& alt_mount_po
     auto& mount_point = alt_mount_point.empty() ? entry.mount_point : alt_mount_point;
 
     // Run fsck if needed
-    prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    int ret = prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    // Wiped case doesn't require to try __mount below.
+    if (ret & FS_STAT_INVALID_MAGIC) {
+      return FS_MGR_DOMNT_FAILED;
+    }
 
-    int ret = __mount(entry.blk_device, mount_point, entry);
+    ret = __mount(entry.blk_device, mount_point, entry);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
     }
