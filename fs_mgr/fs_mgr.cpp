@@ -364,8 +364,8 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
                        const struct ext4_super_block* sb, int* fs_stat) {
     bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
     bool want_quota = entry.fs_mgr_flags.quota;
-    bool want_projid = android::base::GetBoolProperty("external_storage.projid.enabled", false);
-
+    // Enable projid support by default
+    bool want_projid = true;
     if (has_quota == want_quota) {
         return;
     }
