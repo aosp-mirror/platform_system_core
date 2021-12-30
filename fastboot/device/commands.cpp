@@ -268,9 +268,17 @@ bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& arg
     }
 
     // arg[0] is the command name, arg[1] contains size of data to be downloaded
+    // which should always be 8 bytes
+    if (args[1].length() != 8) {
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Invalid size (length of size != 8)");
+    }
     unsigned int size;
     if (!android::base::ParseUint("0x" + args[1], &size, kMaxDownloadSizeDefault)) {
         return device->WriteStatus(FastbootResult::FAIL, "Invalid size");
+    }
+    if (size == 0) {
+        return device->WriteStatus(FastbootResult::FAIL, "Invalid size (0)");
     }
     device->download_data().resize(size);
     if (!device->WriteStatus(FastbootResult::DATA, android::base::StringPrintf("%08x", size))) {
