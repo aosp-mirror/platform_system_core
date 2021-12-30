@@ -410,12 +410,10 @@ static int sparse_file_read_sparse(struct sparse_file* s, SparseFileSource* sour
   return 0;
 }
 
-static int sparse_file_read_normal(struct sparse_file* s, int fd) {
+static int do_sparse_file_read_normal(struct sparse_file* s, int fd, uint32_t* buf, int64_t offset,
+                                      int64_t remain) {
   int ret;
-  uint32_t* buf = (uint32_t*)malloc(s->block_size);
-  unsigned int block = 0;
-  int64_t remain = s->len;
-  int64_t offset = 0;
+  unsigned int block = offset / s->block_size;
   unsigned int to_read;
   unsigned int i;
   bool sparse_block;
@@ -429,7 +427,6 @@ static int sparse_file_read_normal(struct sparse_file* s, int fd) {
     ret = read_all(fd, buf, to_read);
     if (ret < 0) {
       error("failed to read sparse file");
-      free(buf);
       return ret;
     }
 
@@ -457,8 +454,19 @@ static int sparse_file_read_normal(struct sparse_file* s, int fd) {
     block++;
   }
 
-  free(buf);
   return 0;
+}
+
+static int sparse_file_read_normal(struct sparse_file* s, int fd) {
+  int ret;
+  uint32_t* buf = (uint32_t*)malloc(s->block_size);
+
+  if (!buf)
+    return -ENOMEM;
+
+  ret = do_sparse_file_read_normal(s, fd, buf, 0, s->len);
+  free(buf);
+  return ret;
 }
 
 int sparse_file_read(struct sparse_file* s, int fd, bool sparse, bool crc) {
