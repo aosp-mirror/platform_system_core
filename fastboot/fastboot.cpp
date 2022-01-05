@@ -141,6 +141,10 @@ struct Image {
 static Image images[] = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { "init_boot",
+                  "init_boot.img",    "init_boot.sig",
+                                                      "init_boot",
+                                                                  false, ImageType::BootCritical },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
     { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
