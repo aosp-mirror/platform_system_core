@@ -130,7 +130,6 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     std::unique_ptr<IImageManager> OpenImageManager() const {
         return env_->CheckCreateFakeImageManager();
     }
-    bool UseUserspaceSnapshots() const override { return false; }
 
     void SwitchSlot() { switched_slot_ = !switched_slot_; }
 
