@@ -167,12 +167,10 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("recoveryonly", recovery_only);
         CheckFlag("noemulatedsd", no_emulated_sd);
         CheckFlag("notrim", no_trim);
-        CheckFlag("verify", verify);
         CheckFlag("formattable", formattable);
         CheckFlag("slotselect", slot_select);
         CheckFlag("latemount", late_mount);
         CheckFlag("nofail", no_fail);
-        CheckFlag("verifyatboot", verify_at_boot);
         CheckFlag("quota", quota);
         CheckFlag("avb", avb);
         CheckFlag("logical", logical);
