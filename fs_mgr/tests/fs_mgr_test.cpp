@@ -192,7 +192,6 @@ bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
            lhs.nonremovable == rhs.nonremovable &&
            lhs.vold_managed == rhs.vold_managed &&
            lhs.recovery_only == rhs.recovery_only &&
-           lhs.verify == rhs.verify &&
            lhs.no_emulated_sd == rhs.no_emulated_sd &&
            lhs.no_trim == rhs.no_trim &&
            lhs.file_encryption == rhs.file_encryption &&
@@ -200,7 +199,6 @@ bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
            lhs.slot_select == rhs.slot_select &&
            lhs.late_mount == rhs.late_mount &&
            lhs.no_fail == rhs.no_fail &&
-           lhs.verify_at_boot == rhs.verify_at_boot &&
            lhs.quota == rhs.quota &&
            lhs.avb == rhs.avb &&
            lhs.logical == rhs.logical &&
@@ -409,7 +407,7 @@ TEST(fs_mgr, ReadFstabFromFile_FsMgrFlags) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source none0       swap   defaults      wait,check,nonremovable,recoveryonly,verifyatboot,verify
+source none0       swap   defaults      wait,check,nonremovable,recoveryonly
 source none1       swap   defaults      avb,noemulatedsd,notrim,formattable,nofail
 source none2       swap   defaults      first_stage_mount,latemount,quota,logical
 source none3       swap   defaults      checkpoint=block
@@ -430,8 +428,6 @@ source none5       swap   defaults      defaults
         flags.check = true;
         flags.nonremovable = true;
         flags.recovery_only = true;
-        flags.verify_at_boot = true;
-        flags.verify = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
 
