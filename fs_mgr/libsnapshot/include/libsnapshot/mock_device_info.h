@@ -34,6 +34,7 @@ class MockDeviceInfo : public SnapshotManager::IDeviceInfo {
     MOCK_METHOD(bool, IsFirstStageInit, (), (const, override));
     MOCK_METHOD(std::unique_ptr<android::fiemap::IImageManager>, OpenImageManager, (),
                 (const, override));
+    MOCK_METHOD(bool, UseUserspaceSnapshots, (), (const, override));
 };
 
 }  // namespace android::snapshot
