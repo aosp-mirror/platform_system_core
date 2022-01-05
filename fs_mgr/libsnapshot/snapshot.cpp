@@ -1329,7 +1329,7 @@ MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const 
                                                         const SnapshotStatus& status) {
     CHECK(lock);
 
-    if (!status.compression_enabled()) {
+    if (!status.compression_enabled() && !UpdateUsesUserSnapshots(lock)) {
         // Do not try to verify old-style COWs yet.
         return MergeFailureCode::Ok;
     }
@@ -2345,13 +2345,15 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
-    if (context == SnapshotContext::Update && live_snapshot_status->compression_enabled()) {
-        // Stop here, we can't run dm-user yet, the COW isn't built.
-        created_devices.Release();
-        return true;
+    if (context == SnapshotContext::Update) {
+        if (UpdateUsesUserSnapshots(lock) || live_snapshot_status->compression_enabled()) {
+            // Stop here, we can't run dm-user yet, the COW isn't built.
+            created_devices.Release();
+            return true;
+        }
     }
 
-    if (live_snapshot_status->compression_enabled()) {
+    if (UpdateUsesUserSnapshots(lock) || live_snapshot_status->compression_enabled()) {
         // Get the source device (eg the view of the partition from before it was resized).
         std::string source_device_path;
         if (live_snapshot_status->old_partition_size() > 0) {
@@ -3132,6 +3134,53 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .compression_algorithm = compression_algorithm,
     };
 
+    cow_creator.userspace_snapshots_enabled = device_->UseUserspaceSnapshots();
+    if (cow_creator.userspace_snapshots_enabled) {
+        LOG(INFO) << "User-space snapshots enabled, compression = " << compression_algorithm;
+    } else {
+        LOG(INFO) << "User-space snapshots disabled, compression = " << compression_algorithm;
+    }
+    is_snapshot_userspace_ = cow_creator.userspace_snapshots_enabled;
+
+    if ((use_compression || is_snapshot_userspace_) && !device()->IsTestDevice()) {
+        // Terminate stale daemon if any
+        std::unique_ptr<SnapuserdClient> snapuserd_client =
+                SnapuserdClient::Connect(kSnapuserdSocket, 10s);
+        if (snapuserd_client) {
+            snapuserd_client->DetachSnapuserd();
+            snapuserd_client->CloseConnection();
+            snapuserd_client = nullptr;
+        }
+
+        // Clear the cached client if any
+        if (snapuserd_client_) {
+            snapuserd_client_->CloseConnection();
+            snapuserd_client_ = nullptr;
+        }
+    }
+
+    // If compression is enabled, we need to retain a copy of the old metadata
+    // so we can access original blocks in case they are moved around. We do
+    // not want to rely on the old super metadata slot because we don't
+    // guarantee its validity after the slot switch is successful.
+    //
+    // Note that we do this for userspace merges even if compression is
+    // disabled, since the code path expects it even if the source device will
+    // be unused.
+    if (cow_creator.compression_enabled || cow_creator.userspace_snapshots_enabled) {
+        auto metadata = current_metadata->Export();
+        if (!metadata) {
+            LOG(ERROR) << "Could not export current metadata";
+            return Return::Error();
+        }
+
+        auto path = GetOldPartitionMetadataPath();
+        if (!android::fs_mgr::WriteToImageFile(path, *metadata.get())) {
+            LOG(ERROR) << "Cannot write old metadata to " << path;
+            return Return::Error();
+        }
+    }
+
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
     if (!ret.is_ok()) return ret;
@@ -3153,64 +3202,11 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         return Return::Error();
     }
 
-    // If compression is enabled, we need to retain a copy of the old metadata
-    // so we can access original blocks in case they are moved around. We do
-    // not want to rely on the old super metadata slot because we don't
-    // guarantee its validity after the slot switch is successful.
-    if (cow_creator.compression_enabled) {
-        auto metadata = current_metadata->Export();
-        if (!metadata) {
-            LOG(ERROR) << "Could not export current metadata";
-            return Return::Error();
-        }
-
-        auto path = GetOldPartitionMetadataPath();
-        if (!android::fs_mgr::WriteToImageFile(path, *metadata.get())) {
-            LOG(ERROR) << "Cannot write old metadata to " << path;
-            return Return::Error();
-        }
-    }
-
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
     status.set_state(update_state);
     status.set_compression_enabled(cow_creator.compression_enabled);
-    if (cow_creator.compression_enabled) {
-        if (!device()->IsTestDevice()) {
-            // Userspace snapshots is enabled only if compression is enabled
-            status.set_userspace_snapshots(IsUserspaceSnapshotsEnabled());
-            if (IsUserspaceSnapshotsEnabled()) {
-                is_snapshot_userspace_ = true;
-                LOG(INFO) << "User-space snapshots enabled";
-            } else {
-                is_snapshot_userspace_ = false;
-                LOG(INFO) << "User-space snapshots disabled";
-            }
+    status.set_userspace_snapshots(cow_creator.userspace_snapshots_enabled);
 
-            // Terminate stale daemon if any
-            std::unique_ptr<SnapuserdClient> snapuserd_client =
-                    SnapuserdClient::Connect(kSnapuserdSocket, 10s);
-            if (snapuserd_client) {
-                snapuserd_client->DetachSnapuserd();
-                snapuserd_client->CloseConnection();
-                snapuserd_client = nullptr;
-            }
-
-            // Clear the cached client if any
-            if (snapuserd_client_) {
-                snapuserd_client_->CloseConnection();
-                snapuserd_client_ = nullptr;
-            }
-        } else {
-            status.set_userspace_snapshots(!IsDmSnapshotTestingEnabled());
-            if (IsDmSnapshotTestingEnabled()) {
-                is_snapshot_userspace_ = false;
-                LOG(INFO) << "User-space snapshots disabled for testing";
-            } else {
-                is_snapshot_userspace_ = true;
-                LOG(INFO) << "User-space snapshots enabled for testing";
-            }
-        }
-    }
     if (!WriteSnapshotUpdateStatus(lock.get(), status)) {
         LOG(ERROR) << "Unable to write new update state";
         return Return::Error();
@@ -3374,6 +3370,8 @@ Return SnapshotManager::InitializeUpdateSnapshots(
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
     CHECK(lock);
 
+    bool userspace_merges = UpdateUsesUserSnapshots(lock);
+
     CreateLogicalPartitionParams cow_params{
             .block_device = LP_METADATA_DEFAULT_PARTITION_NAME,
             .metadata = exported_target_metadata,
@@ -3403,7 +3401,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
-        if (it->second.compression_enabled()) {
+        if (userspace_merges || it->second.compression_enabled()) {
             unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
             if (fd < 0) {
                 PLOG(ERROR) << "open " << cow_path << " failed for snapshot "
@@ -3449,8 +3447,8 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
     if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
         return false;
     }
-    if (status.compression_enabled()) {
-        LOG(ERROR) << "Cannot use MapUpdateSnapshot with compressed snapshots";
+    if (status.compression_enabled() || UpdateUsesUserSnapshots(lock.get())) {
+        LOG(ERROR) << "Cannot use MapUpdateSnapshot with user snapshots";
         return false;
     }
 
@@ -3507,7 +3505,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    if (status.compression_enabled()) {
+    if (status.compression_enabled() || UpdateUsesUserSnapshots(lock.get())) {
         return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
                                             status, paths);
     }
@@ -3647,6 +3645,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
        << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
        << std::endl;
     ss << "Source build fingerprint: " << update_status.source_build_fingerprint() << std::endl;
+    ss << "Using userspace snapshots: " << UpdateUsesUserSnapshots(file.get()) << std::endl;
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -3847,6 +3846,10 @@ UpdateState SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_mer
 bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
     CHECK(lock);
 
+    if (UpdateUsesUserSnapshots(lock)) {
+        return true;
+    }
+
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
         LOG(ERROR) << "Could not list snapshots.";
@@ -3859,6 +3862,7 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
             return false;
         }
         if (status.compression_enabled()) {
+            // Compressed snapshots are never written through dm-snapshot.
             continue;
         }
 
@@ -4022,7 +4026,10 @@ bool SnapshotManager::IsSnapuserdRequired() {
     if (!lock) return false;
 
     auto status = ReadSnapshotUpdateStatus(lock.get());
-    return status.state() != UpdateState::None && status.compression_enabled();
+    if (status.state() != UpdateState::None && status.compression_enabled()) {
+        return true;
+    }
+    return UpdateUsesUserSnapshots(lock.get());
 }
 
 bool SnapshotManager::DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv) {
@@ -4048,6 +4055,9 @@ const LpMetadata* SnapshotManager::ReadOldPartitionMetadata(LockedFile* lock) {
 }
 
 MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
+    // Note: disabling compression disables move operations, so we don't need
+    // separate phases when compression is disabled (irrespective of userspace
+    // merges).
     if (status.compression_enabled() && status.device_size() < status.old_partition_size()) {
         return MergePhase::FIRST_PHASE;
     }
