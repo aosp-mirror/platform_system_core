@@ -914,6 +914,9 @@ on post-fs-data
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
+    # Create directories for boot animation.
+    mkdir /data/bootanim 0755 system system encryption=None
+
     exec_start derive_sdk
 
     init_user0
