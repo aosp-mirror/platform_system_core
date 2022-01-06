@@ -99,7 +99,6 @@ cc_defaults {
 
             shared_libs: [
                 "libprocessgroup",
-                "libdl",
                 "libvndksupport",
             ],
 
@@ -178,6 +177,8 @@ cc_library {
         "//apex_available:platform",
     ],
     min_sdk_version: "apex_inherit",
+
+    afdo: true,
 }
 
 cc_library {

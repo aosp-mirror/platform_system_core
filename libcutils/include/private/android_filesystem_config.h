@@ -131,6 +131,7 @@
 #define AID_ARTD 1082             /* ART Service daemon */
 #define AID_UWB 1083              /* UWB subsystem */
 #define AID_THREAD_NETWORK 1084   /* Thread Network subsystem */
+#define AID_DICED 1085            /* Android's DICE daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
@@ -158,6 +159,7 @@
 #define AID_READPROC 3009     /* Allow /proc read access */
 #define AID_WAKELOCK 3010     /* Allow system wakelock read/write access */
 #define AID_UHID 3011         /* Allow read/write to /dev/uhid node */
+#define AID_READTRACEFS 3012  /* Allow tracefs read */
 
 /* The range 5000-5999 is also reserved for vendor partition. */
 #define AID_OEM_RESERVED_2_START 5000

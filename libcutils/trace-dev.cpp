@@ -89,6 +89,14 @@ void atrace_async_end_body(const char* name, int32_t cookie)
     WRITE_MSG("F|%d|", "|%" PRId32, name, cookie);
 }
 
+void atrace_instant_body(const char* name) {
+    WRITE_MSG("I|%d|", "%s", name, "");
+}
+
+void atrace_instant_for_track_body(const char* trackName, const char* name) {
+    WRITE_MSG("N|%d|", "|%s", trackName, name);
+}
+
 void atrace_int_body(const char* name, int32_t value)
 {
     WRITE_MSG("C|%d|", "|%" PRId32, name, value);

@@ -293,7 +293,7 @@ The following is the recommended workflow for using Fuzzy Fastboot on a new devi
 Begin with just the generic tests (i.e. no XML file). In particular, make sure all
 the conformance tests are passing before you move on. All other tests require that
 the basic generic conformance tests all pass for them to be valid. The conformance
-tests can be run with `./fuzzy_fastboot --gtests_filter=Conformance.*`.
+tests can be run with `./fuzzy_fastboot --gtest_filter=Conformance.*`.
 
 #### Understanding and Fixing Failed Tests
 Whenever a test fails, it will print out to the console the reason for failure
