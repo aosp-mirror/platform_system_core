@@ -87,6 +87,8 @@ static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
 static constexpr auto kUpdateStateCheckInterval = 2s;
 
+MergeFailureCode CheckMergeConsistency(const std::string& name, const SnapshotStatus& status);
+
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
 SnapshotManager::~SnapshotManager() {}
@@ -116,7 +118,9 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
 }
 
 SnapshotManager::SnapshotManager(IDeviceInfo* device)
-    : dm_(device->GetDeviceMapper()), device_(device), metadata_dir_(device_->GetMetadataDir()) {}
+    : dm_(device->GetDeviceMapper()), device_(device), metadata_dir_(device_->GetMetadataDir()) {
+    merge_consistency_checker_ = android::snapshot::CheckMergeConsistency;
+}
 
 static std::string GetCowName(const std::string& snapshot_name) {
     return snapshot_name + "-cow";
@@ -1329,14 +1333,20 @@ MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const 
                                                         const SnapshotStatus& status) {
     CHECK(lock);
 
+    return merge_consistency_checker_(name, status);
+}
+
+MergeFailureCode CheckMergeConsistency(const std::string& name, const SnapshotStatus& status) {
     if (!status.compression_enabled()) {
         // Do not try to verify old-style COWs yet.
         return MergeFailureCode::Ok;
     }
 
+    auto& dm = DeviceMapper::Instance();
+
     std::string cow_image_name = GetMappedCowDeviceName(name, status);
     std::string cow_image_path;
-    if (!dm_.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
+    if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
         LOG(ERROR) << "Failed to get path for cow device: " << cow_image_name;
         return MergeFailureCode::GetCowPathConsistencyCheck;
     }
@@ -1400,9 +1410,11 @@ MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
     }
 
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
-    CHECK(update_status.state() == UpdateState::Merging);
+    CHECK(update_status.state() == UpdateState::Merging ||
+          update_status.state() == UpdateState::MergeFailed);
     CHECK(update_status.merge_phase() == MergePhase::FIRST_PHASE);
 
+    update_status.set_state(UpdateState::Merging);
     update_status.set_merge_phase(MergePhase::SECOND_PHASE);
     if (!WriteSnapshotUpdateStatus(lock, update_status)) {
         return MergeFailureCode::WriteStatus;
