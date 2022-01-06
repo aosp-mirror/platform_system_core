@@ -244,25 +244,6 @@ int main(int argc, char* argv[]) {
       any_changed = true;
     }
     avb_ops_user_free(ops);
-  } else {
-    // Not using AVB - assume VB1.0.
-
-    // read all fstab entries at once from all sources
-    android::fs_mgr::Fstab fstab;
-    if (!android::fs_mgr::ReadDefaultFstab(&fstab)) {
-      printf("Failed to read fstab\n");
-      suggest_run_adb_root();
-      return 0;
-    }
-
-    // Loop through entries looking for ones that verity manages.
-    for (const auto& entry : fstab) {
-      if (entry.fs_mgr_flags.verify) {
-        if (set_verity_enabled_state(entry.blk_device.c_str(), entry.mount_point.c_str(), enable)) {
-          any_changed = true;
-        }
-      }
-    }
   }
   if (!any_changed) any_changed = overlayfs_setup(enable);
 
