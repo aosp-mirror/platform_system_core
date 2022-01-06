@@ -186,6 +186,11 @@ void FastbootDevice::ExecuteCommands() {
             PLOG(ERROR) << "Couldn't read command";
             return;
         }
+        if (std::count_if(command, command + bytes_read, iscntrl) != 0) {
+            WriteStatus(FastbootResult::FAIL,
+                        "Command contains control character");
+            continue;
+        }
         command[bytes_read] = '\0';
 
         LOG(INFO) << "Fastboot command: " << command;
