@@ -475,10 +475,7 @@ bool CowReader::PrepMergeOps() {
         std::sort(other_ops.begin(), other_ops.end(), std::greater<int>());
     }
 
-    merge_op_blocks->reserve(merge_op_blocks->size() + other_ops.size());
-    for (auto block : other_ops) {
-        merge_op_blocks->emplace_back(block);
-    }
+    merge_op_blocks->insert(merge_op_blocks->end(), other_ops.begin(), other_ops.end());
 
     num_total_data_ops_ = merge_op_blocks->size();
     if (header_.num_merge_ops > 0) {
