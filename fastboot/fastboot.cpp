@@ -141,6 +141,10 @@ struct Image {
 static Image images[] = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { "init_boot",
+                  "init_boot.img",    "init_boot.sig",
+                                                      "init_boot",
+                                                                  false, ImageType::BootCritical },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
     { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
@@ -1072,7 +1076,8 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 {
     sparse_file** s;
 
-    if (partition == "boot" || partition == "boot_a" || partition == "boot_b") {
+    if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
+        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b") {
         copy_boot_avb_footer(partition, buf);
     }
 
