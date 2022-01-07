@@ -684,13 +684,9 @@ TEST(libdm, DeleteDeviceDeferredWaitsForLastReference) {
 TEST(libdm, CreateEmptyDevice) {
     DeviceMapper& dm = DeviceMapper::Instance();
     ASSERT_TRUE(dm.CreateEmptyDevice("empty-device"));
-    auto guard = android::base::make_scope_guard([&]() { dm.DeleteDevice("empty-device", 5s); });
+    auto guard =
+            android::base::make_scope_guard([&]() { dm.DeleteDeviceIfExists("empty-device", 5s); });
 
     // Empty device should be in suspended state.
     ASSERT_EQ(DmDeviceState::SUSPENDED, dm.GetState("empty-device"));
-
-    std::string path;
-    ASSERT_TRUE(dm.WaitForDevice("empty-device", 5s, &path));
-    // Path should exist.
-    ASSERT_EQ(0, access(path.c_str(), F_OK));
 }
