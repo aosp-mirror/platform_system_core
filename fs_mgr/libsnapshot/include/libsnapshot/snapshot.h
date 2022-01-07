@@ -396,6 +396,17 @@ class SnapshotManager final : public ISnapshotManager {
         DM_USER,
     };
 
+    // Add new public entries above this line.
+
+    // Helpers for failure injection.
+    using MergeConsistencyChecker =
+            std::function<MergeFailureCode(const std::string& name, const SnapshotStatus& status)>;
+
+    void set_merge_consistency_checker(MergeConsistencyChecker checker) {
+        merge_consistency_checker_ = checker;
+    }
+    MergeConsistencyChecker merge_consistency_checker() const { return merge_consistency_checker_; }
+
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
@@ -410,6 +421,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
     FRIEND_TEST(SnapshotUpdateTest, AddPartition);
+    FRIEND_TEST(SnapshotUpdateTest, ConsistencyCheckResume);
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
@@ -811,6 +823,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
     std::unique_ptr<LpMetadata> old_partition_metadata_;
     std::optional<bool> is_snapshot_userspace_;
+    MergeConsistencyChecker merge_consistency_checker_;
 };
 
 }  // namespace snapshot
