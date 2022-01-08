@@ -141,6 +141,10 @@ struct Image {
 static Image images[] = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { "init_boot",
+                  "init_boot.img",    "init_boot.sig",
+                                                      "init_boot",
+                                                                  false, ImageType::BootCritical },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
     { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
@@ -1021,7 +1025,7 @@ static uint64_t get_partition_size(const std::string& partition) {
     return partition_size;
 }
 
-static void copy_boot_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
+static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
     if (buf->sz < AVB_FOOTER_SIZE) {
         return;
     }
@@ -1036,9 +1040,9 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     // In this case, partition_size will be zero.
     if (partition_size < buf->sz) {
         fprintf(stderr,
-                "Warning: skip copying boot image avb footer"
-                " (boot partition size: %" PRId64 ", boot image size: %" PRId64 ").\n",
-                partition_size, buf->sz);
+                "Warning: skip copying %s image avb footer"
+                " (%s partition size: %" PRId64 ", %s image size: %" PRId64 ").\n",
+                partition.c_str(), partition.c_str(), partition_size, partition.c_str(), buf->sz);
         return;
     }
 
@@ -1046,7 +1050,7 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
     // Because buf->fd will still be used afterwards.
     std::string data;
     if (!android::base::ReadFdToString(buf->fd, &data)) {
-        die("Failed reading from boot");
+        die("Failed reading from %s", partition.c_str());
     }
 
     uint64_t footer_offset = buf->sz - AVB_FOOTER_SIZE;
@@ -1055,13 +1059,14 @@ static void copy_boot_avb_footer(const std::string& partition, struct fastboot_b
         return;
     }
 
-    unique_fd fd(make_temporary_fd("boot rewriting"));
+    const std::string tmp_fd_template = partition + " rewriting";
+    unique_fd fd(make_temporary_fd(tmp_fd_template.c_str()));
     if (!android::base::WriteStringToFd(data, fd)) {
-        die("Failed writing to modified boot");
+        die("Failed writing to modified %s", partition.c_str());
     }
     lseek(fd.get(), partition_size - AVB_FOOTER_SIZE, SEEK_SET);
     if (!android::base::WriteStringToFd(data.substr(footer_offset), fd)) {
-        die("Failed copying AVB footer in boot");
+        die("Failed copying AVB footer in %s", partition.c_str());
     }
     buf->fd = std::move(fd);
     buf->sz = partition_size;
@@ -1072,8 +1077,9 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 {
     sparse_file** s;
 
-    if (partition == "boot" || partition == "boot_a" || partition == "boot_b") {
-        copy_boot_avb_footer(partition, buf);
+    if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
+        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b") {
+        copy_avb_footer(partition, buf);
     }
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
