@@ -63,6 +63,7 @@ cc_defaults {
         "-D_FILE_OFFSET_BITS=64",
     ],
     srcs: [
+        "blockdev.cpp",
         "file_wait.cpp",
         "fs_mgr.cpp",
         "fs_mgr_format.cpp",

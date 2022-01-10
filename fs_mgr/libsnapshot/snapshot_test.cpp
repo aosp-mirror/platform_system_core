@@ -963,7 +963,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult UnmapAll() {
-        for (const auto& name : {"sys", "vnd", "prd"}) {
+        for (const auto& name : {"sys", "vnd", "prd", "dlkm"}) {
             if (!dm_.DeleteDeviceIfExists(name + "_a"s)) {
                 return AssertionFailure() << "Cannot unmap " << name << "_a";
             }
@@ -2024,6 +2024,80 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
     ASSERT_GE(res.required_size(), 14_MiB);
     ASSERT_LT(res.required_size(), 40_MiB);
+}
+
+TEST_F(SnapshotUpdateTest, AddPartition) {
+    // OTA client blindly unmaps all partitions that are possibly mapped.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(sm->UnmapUpdateSnapshot(name));
+    }
+
+    group_->add_partition_names("dlkm");
+
+    auto dlkm = manifest_.add_partitions();
+    dlkm->set_partition_name("dlkm");
+    dlkm->set_estimate_cow_size(2_MiB);
+    SetSize(dlkm, 3_MiB);
+
+    // Grow all partitions. Set |prd| large enough that |sys| and |vnd|'s COWs
+    // fit in super, but not |prd|.
+    constexpr uint64_t partition_size = 3788_KiB;
+    SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, partition_size);
+    SetSize(dlkm, partition_size);
+
+    AddOperationForPartitions({sys_, vnd_, prd_, dlkm});
+
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b", "dlkm_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+
+    // Assert that source partitions aren't affected.
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = NewManagerForFirstStageMount("_b");
+    ASSERT_NE(init, nullptr);
+
+    ASSERT_TRUE(init->EnsureSnapuserdConnected());
+    init->set_use_first_stage_snapuserd(true);
+
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    // Check that the target partitions have the same content.
+    std::vector<std::string> partitions = {"sys_b", "vnd_b", "prd_b", "dlkm_b"};
+    for (const auto& name : partitions) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
+    for (const auto& name : partitions) {
+        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+    }
+
+    // Initiate the merge and wait for it to be completed.
+    ASSERT_TRUE(init->InitiateMerge());
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+
+    // Check that the target partitions have the same content after the merge.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b", "dlkm_b"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name))
+                << "Content of " << name << " changes after the merge";
+    }
 }
 
 class AutoKill final {
