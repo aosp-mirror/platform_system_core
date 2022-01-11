@@ -590,9 +590,10 @@ on late-fs
     # Load trusted keys from dm-verity protected partitions
     exec -- /system/bin/fsverity_init --load-verified-keys
 
+on late-fs && property:ro.product.cpu.abilist64=*
     # Set up a tracing instance for system_server to monitor error_report_end events.
     # These are sent by kernel tools like KASAN and KFENCE when a memory corruption
-    # is detected.
+    # is detected. This is only needed for 64-bit systems.
     mkdir /sys/kernel/tracing/instances/bootreceiver 0700 system system
     restorecon_recursive /sys/kernel/tracing/instances/bootreceiver
     write /sys/kernel/tracing/instances/bootreceiver/buffer_size_kb 1
