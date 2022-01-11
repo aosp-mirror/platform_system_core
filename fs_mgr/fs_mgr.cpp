@@ -170,6 +170,22 @@ static bool should_force_check(int fs_stat) {
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
+static bool umount_retry(const std::string& mount_point) {
+    int retry_count = 5;
+    bool umounted = false;
+
+    while (retry_count-- > 0) {
+        umounted = umount(mount_point.c_str()) == 0;
+        if (umounted) {
+            LINFO << __FUNCTION__ << "(): unmount(" << mount_point << ") succeeded";
+            break;
+        }
+        PERROR << __FUNCTION__ << "(): umount(" << mount_point << ") failed";
+        if (retry_count) sleep(1);
+    }
+    return umounted;
+}
+
 static void check_fs(const std::string& blk_device, const std::string& fs_type,
                      const std::string& target, int* fs_stat) {
     int status;
@@ -209,25 +225,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
                         tmpmnt_opts.c_str());
             PINFO << __FUNCTION__ << "(): mount(" << blk_device << "," << target << "," << fs_type
                   << ")=" << ret;
-            if (!ret) {
-                bool umounted = false;
-                int retry_count = 5;
-                while (retry_count-- > 0) {
-                    umounted = umount(target.c_str()) == 0;
-                    if (umounted) {
-                        LINFO << __FUNCTION__ << "(): unmount(" << target << ") succeeded";
-                        break;
-                    }
-                    PERROR << __FUNCTION__ << "(): umount(" << target << ") failed";
-                    if (retry_count) sleep(1);
-                }
-                if (!umounted) {
-                    // boot may fail but continue and leave it to later stage for now.
-                    PERROR << __FUNCTION__ << "(): umount(" << target << ") timed out";
-                    *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
-                }
-            } else {
+            if (ret) {
                 *fs_stat |= FS_STAT_RO_MOUNT_FAILED;
+            } else if (!umount_retry(target)) {
+                // boot may fail but continue and leave it to later stage for now.
+                PERROR << __FUNCTION__ << "(): umount(" << target << ") timed out";
+                *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
             }
         }
 
@@ -268,12 +271,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+                                      &status, false, LOG_KLOG | LOG_FILE, false, nullptr);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+                                      LOG_KLOG | LOG_FILE, false, nullptr);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -1009,12 +1012,11 @@ static bool should_use_metadata_encryption(const FstabEntry& entry) {
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(const FstabEntry& entry) {
     if (should_use_metadata_encryption(entry)) {
-        if (umount(entry.mount_point.c_str()) == 0) {
+        if (umount_retry(entry.mount_point)) {
             return FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION;
-        } else {
-            PERROR << "Could not umount " << entry.mount_point << " - fail since can't encrypt";
-            return FS_MGR_MNTALL_FAIL;
         }
+        PERROR << "Could not umount " << entry.mount_point << " - fail since can't encrypt";
+        return FS_MGR_MNTALL_FAIL;
     } else if (entry.fs_mgr_flags.file_encryption) {
         LINFO << entry.mount_point << " is file encrypted";
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
@@ -1807,9 +1809,13 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& alt_mount_po
     auto& mount_point = alt_mount_point.empty() ? entry.mount_point : alt_mount_point;
 
     // Run fsck if needed
-    prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    int ret = prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    // Wiped case doesn't require to try __mount below.
+    if (ret & FS_STAT_INVALID_MAGIC) {
+      return FS_MGR_DOMNT_FAILED;
+    }
 
-    int ret = __mount(entry.blk_device, mount_point, entry);
+    ret = __mount(entry.blk_device, mount_point, entry);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
     }
