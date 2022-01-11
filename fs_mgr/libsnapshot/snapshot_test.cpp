@@ -1297,6 +1297,92 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
     }
 }
 
+// Test that a transient merge consistency check failure can resume properly.
+TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
+    if (!IsCompressionEnabled()) {
+        // b/179111359
+        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+    }
+
+    auto old_sys_size = GetSize(sys_);
+    auto old_prd_size = GetSize(prd_);
+
+    // Grow |sys| but shrink |prd|.
+    SetSize(sys_, old_sys_size * 2);
+    sys_->set_estimate_cow_size(8_MiB);
+    SetSize(prd_, old_prd_size / 2);
+    prd_->set_estimate_cow_size(1_MiB);
+
+    AddOperationForPartitions();
+
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash("vnd_b"));
+    ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
+
+    sync();
+
+    // Assert that source partitions aren't affected.
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // After reboot, init does first stage mount.
+    auto init = NewManagerForFirstStageMount("_b");
+    ASSERT_NE(init, nullptr);
+    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    // Check that the target partitions have the same content.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
+    auto old_checker = init->merge_consistency_checker();
+
+    init->set_merge_consistency_checker(
+            [](const std::string&, const SnapshotStatus&) -> MergeFailureCode {
+                return MergeFailureCode::WrongMergeCountConsistencyCheck;
+            });
+
+    // Initiate the merge and wait for it to be completed.
+    ASSERT_TRUE(init->InitiateMerge());
+    {
+        // Check that the merge phase is FIRST_PHASE until at least one call
+        // to ProcessUpdateState() occurs.
+        ASSERT_TRUE(AcquireLock());
+        auto local_lock = std::move(lock_);
+        auto status = init->ReadSnapshotUpdateStatus(local_lock.get());
+        ASSERT_EQ(status.merge_phase(), MergePhase::FIRST_PHASE);
+    }
+
+    // Merge should have failed.
+    ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
+
+    // Simulate shutting down the device and creating partitions again.
+    ASSERT_TRUE(UnmapAll());
+
+    // Restore the checker.
+    init->set_merge_consistency_checker(std::move(old_checker));
+
+    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+
+    // Complete the merge.
+    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+
+    // Check that the target partitions have the same content after the merge.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name))
+                << "Content of " << name << " changes after the merge";
+    }
+}
+
 // Test that if new system partitions uses empty space in super, that region is not snapshotted.
 TEST_F(SnapshotUpdateTest, DirectWriteEmptySpace) {
     GTEST_SKIP() << "b/141889746";
