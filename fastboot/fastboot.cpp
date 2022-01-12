@@ -144,7 +144,7 @@ static Image images[] = {
     { "init_boot",
                   "init_boot.img",    "init_boot.sig",
                                                       "init_boot",
-                                                                  false, ImageType::BootCritical },
+                                                                  true,  ImageType::BootCritical },
     { nullptr,    "boot_other.img",   "boot.sig",     "boot",     true,  ImageType::Normal },
     { "cache",    "cache.img",        "cache.sig",    "cache",    true,  ImageType::Extra },
     { "dtbo",     "dtbo.img",         "dtbo.sig",     "dtbo",     true,  ImageType::BootCritical },
