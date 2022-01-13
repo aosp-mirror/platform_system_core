@@ -23,5 +23,5 @@ my_dist_files += $(HOST_OUT_EXECUTABLES)/e2fsdroid
 my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs
 my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs_casefold
 my_dist_files += $(HOST_OUT_EXECUTABLES)/sload_f2fs
-$(call dist-for-goals,dist_files sdk win_sdk,$(my_dist_files))
+$(call dist-for-goals,dist_files sdk,$(my_dist_files))
 my_dist_files :=
