@@ -344,6 +344,11 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void ReadBlocksToCache(const std::string& dm_block_device, const std::string& partition_name,
                            off_t offset, size_t size);
 
+    bool InitializeIouring(int io_depth);
+    void FinalizeIouring();
+    bool ReadBlocksAsync(const std::string& dm_block_device, const std::string& partition_name,
+                         size_t size);
+
     // COW device
     std::string cow_device_;
     // Source device
@@ -392,6 +397,8 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool attached_ = false;
     bool is_socket_present_;
     bool scratch_space_ = false;
+
+    std::unique_ptr<struct io_uring> ring_;
 };
 
 }  // namespace snapshot
