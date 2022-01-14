@@ -711,7 +711,7 @@ bool ReadAhead::RunThread() {
     CloseFds();
     reader_->CloseCowFd();
 
-    SNAP_LOG(INFO) << " ReadAheadAsync thread terminating....";
+    SNAP_LOG(INFO) << " ReadAhead thread terminating....";
     return true;
 }
 
