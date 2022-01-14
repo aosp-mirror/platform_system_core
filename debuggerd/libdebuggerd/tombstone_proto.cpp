@@ -353,6 +353,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
   thread.set_id(thread_info.tid);
   thread.set_name(thread_info.thread_name);
   thread.set_tagged_addr_ctrl(thread_info.tagged_addr_ctrl);
+  thread.set_pac_enabled_keys(thread_info.pac_enabled_keys);
 
   unwindstack::Maps* maps = unwinder->GetMaps();
   unwindstack::Memory* memory = unwinder->GetProcessMemory().get();
