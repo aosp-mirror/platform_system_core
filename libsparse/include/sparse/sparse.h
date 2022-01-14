@@ -244,21 +244,6 @@ int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
 int sparse_file_read(struct sparse_file *s, int fd, bool sparse, bool crc);
 
 /**
- * sparse_file_read_buf - read a buffer into a sparse file cookie
- *
- * @s - sparse file cookie
- * @buf - buffer to read from
- * @crc - verify the crc of a file in the Android sparse file format
- *
- * Reads a buffer into a sparse file cookie. The buffer must remain
- * valid until the sparse file cookie is freed. If crc is true, the
- * crc of the sparse file will be verified.
- *
- * Returns 0 on success, negative errno on error.
- */
-int sparse_file_read_buf(struct sparse_file *s, char *buf, bool crc);
-
-/**
  * sparse_file_import - import an existing sparse file
  *
  * @fd - file descriptor to read from
@@ -277,6 +262,7 @@ struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc);
  * sparse_file_import_buf - import an existing sparse file from a buffer
  *
  * @buf - buffer to read from
+ * @len - length of buffer
  * @verbose - print verbose errors while reading the sparse file
  * @crc - verify the crc of a file in the Android sparse file format
  *
@@ -286,7 +272,7 @@ struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc);
  *
  * Returns a new sparse file cookie on success, NULL on error.
  */
-struct sparse_file *sparse_file_import_buf(char* buf, bool verbose, bool crc);
+struct sparse_file* sparse_file_import_buf(char* buf, size_t len, bool verbose, bool crc);
 
 /**
  * sparse_file_import_auto - import an existing sparse or normal file
