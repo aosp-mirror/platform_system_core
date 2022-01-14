@@ -977,6 +977,63 @@ TEST_F(Fuzz, SparseZeroLength) {
     }
 }
 
+TEST_F(Fuzz, SparseZeroBlkSize) {
+    // handcrafted malform sparse file with zero as block size
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc2', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a zero block size in sparse file should fail";
+    }
+}
+
+TEST_F(Fuzz, SparseTrimmed) {
+    // handcrafted malform sparse file which is trimmed
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x80', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a trimmed sparse file should fail";
+    }
+}
+
+TEST_F(Fuzz, SparseInvalidChurk) {
+    // handcrafted malform sparse file with invalid churk
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a sparse file with invalid churk should fail";
+    }
+}
+
 TEST_F(Fuzz, SparseTooManyChunks) {
     SparseWrapper sparse(4096, 4096);  // 1 block, but we send two chunks that will use 2 blocks
     ASSERT_TRUE(*sparse) << "Sparse image creation failed";
