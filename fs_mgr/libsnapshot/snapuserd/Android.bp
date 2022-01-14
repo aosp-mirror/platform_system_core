@@ -185,6 +185,7 @@ cc_test {
         "libdm",
         "libext4_utils",
         "liburing",
+        "libgflags",
     ],
     include_dirs: ["bionic/libc/kernel"],
     header_libs: [
