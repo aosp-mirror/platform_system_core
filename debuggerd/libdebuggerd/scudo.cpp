@@ -108,7 +108,7 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
   for (size_t i = 0; i < arraysize(report->allocation_trace) && report->allocation_trace[i]; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(report->allocation_trace[i]);
     BacktraceFrame* f = heap_object->add_allocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   heap_object->set_deallocation_tid(report->deallocation_tid);
@@ -117,7 +117,7 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
     unwindstack::FrameData frame_data =
         unwinder->BuildFrameFromPcOnly(report->deallocation_trace[i]);
     BacktraceFrame* f = heap_object->add_deallocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   set_human_readable_cause(cause, untagged_fault_addr_);
