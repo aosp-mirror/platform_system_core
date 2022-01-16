@@ -502,13 +502,22 @@ int main(int argc, char** argv) {
         continue;
       }
 
-      struct iovec iov = {
+      struct iovec tagged_addr_iov = {
           &info.tagged_addr_ctrl,
           sizeof(info.tagged_addr_ctrl),
       };
       if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_TAGGED_ADDR_CTRL,
-                 reinterpret_cast<void*>(&iov)) == -1) {
+                 reinterpret_cast<void*>(&tagged_addr_iov)) == -1) {
         info.tagged_addr_ctrl = -1;
+      }
+
+      struct iovec pac_enabled_keys_iov = {
+          &info.pac_enabled_keys,
+          sizeof(info.pac_enabled_keys),
+      };
+      if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_PAC_ENABLED_KEYS,
+                 reinterpret_cast<void*>(&pac_enabled_keys_iov)) == -1) {
+        info.pac_enabled_keys = -1;
       }
 
       if (thread == g_target_thread) {

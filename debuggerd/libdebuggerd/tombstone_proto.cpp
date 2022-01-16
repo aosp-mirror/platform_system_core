@@ -312,8 +312,7 @@ static void dump_open_fds(Tombstone* tombstone, const OpenFilesList* open_files)
   }
 }
 
-void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame,
-                             unwindstack::Maps* maps) {
+void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame) {
   f->set_rel_pc(frame.rel_pc);
   f->set_pc(frame.pc);
   f->set_sp(frame.sp);
@@ -331,21 +330,20 @@ void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& fr
 
   f->set_function_offset(frame.function_offset);
 
-  if (frame.map_start == frame.map_end) {
+  if (frame.map_info == nullptr) {
     // No valid map associated with this frame.
     f->set_file_name("<unknown>");
-  } else if (!frame.map_name.empty()) {
-    f->set_file_name(frame.map_name);
+    return;
+  }
+
+  if (!frame.map_info->name().empty()) {
+    f->set_file_name(frame.map_info->GetFullName());
   } else {
-    f->set_file_name(StringPrintf("<anonymous:%" PRIx64 ">", frame.map_start));
+    f->set_file_name(StringPrintf("<anonymous:%" PRIx64 ">", frame.map_info->start()));
   }
+  f->set_file_map_offset(frame.map_info->elf_start_offset());
 
-  f->set_file_map_offset(frame.map_elf_start_offset);
-
-  auto map_info = maps->Find(frame.map_start);
-  if (map_info.get() != nullptr) {
-    f->set_build_id(map_info->GetPrintableBuildID());
-  }
+  f->set_build_id(frame.map_info->GetPrintableBuildID());
 }
 
 static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
@@ -355,6 +353,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
   thread.set_id(thread_info.tid);
   thread.set_name(thread_info.thread_name);
   thread.set_tagged_addr_ctrl(thread_info.tagged_addr_ctrl);
+  thread.set_pac_enabled_keys(thread_info.pac_enabled_keys);
 
   unwindstack::Maps* maps = unwinder->GetMaps();
   unwindstack::Memory* memory = unwinder->GetProcessMemory().get();
@@ -434,7 +433,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
     unwinder->SetDisplayBuildID(true);
     for (const auto& frame : unwinder->frames()) {
       BacktraceFrame* f = thread.add_current_backtrace();
-      fill_in_backtrace_frame(f, frame, maps);
+      fill_in_backtrace_frame(f, frame);
     }
   }
 

@@ -23,6 +23,7 @@
 #include <libavb/libavb.h>
 
 #include "avb_util.h"
+#include "fs_avb/fs_avb_util.h"
 #include "fs_avb_test_util.h"
 
 // Target classes or functions to test:
