@@ -1467,6 +1467,14 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     }
 
     RemoveAllUpdateState(lock);
+
+    if (UpdateUsesUserSnapshots(lock) && !device()->IsTestDevice()) {
+        if (snapuserd_client_) {
+            snapuserd_client_->DetachSnapuserd();
+            snapuserd_client_->CloseConnection();
+            snapuserd_client_ = nullptr;
+        }
+    }
 }
 
 void SnapshotManager::AcknowledgeMergeFailure(MergeFailureCode failure_code) {
@@ -3200,7 +3208,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
 
             // Terminate stale daemon if any
             std::unique_ptr<SnapuserdClient> snapuserd_client =
-                    SnapuserdClient::Connect(kSnapuserdSocket, 10s);
+                    SnapuserdClient::Connect(kSnapuserdSocket, 5s);
             if (snapuserd_client) {
                 snapuserd_client->DetachSnapuserd();
                 snapuserd_client->CloseConnection();

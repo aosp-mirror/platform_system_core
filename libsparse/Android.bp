@@ -96,12 +96,14 @@ python_binary_host {
 
 cc_fuzz {
     name: "sparse_fuzzer",
-    host_supported: false,
+    host_supported: true,
     srcs: [
         "sparse_fuzzer.cpp",
     ],
     static_libs: [
         "libsparse",
+        "libbase",
+        "libz",
         "liblog",
     ],
 }
