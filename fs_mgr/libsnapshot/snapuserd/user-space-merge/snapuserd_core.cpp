@@ -16,6 +16,10 @@
 
 #include "snapuserd_core.h"
 
+#include <sys/utsname.h>
+
+#include <android-base/properties.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 
 namespace android {
@@ -288,6 +292,136 @@ bool SnapshotHandler::InitCowDevice() {
     return ReadMetadata();
 }
 
+void SnapshotHandler::FinalizeIouring() {
+    io_uring_queue_exit(ring_.get());
+}
+
+bool SnapshotHandler::InitializeIouring(int io_depth) {
+    ring_ = std::make_unique<struct io_uring>();
+
+    int ret = io_uring_queue_init(io_depth, ring_.get(), 0);
+    if (ret) {
+        LOG(ERROR) << "io_uring_queue_init failed with ret: " << ret;
+        return false;
+    }
+
+    LOG(INFO) << "io_uring_queue_init success with io_depth: " << io_depth;
+    return true;
+}
+
+bool SnapshotHandler::ReadBlocksAsync(const std::string& dm_block_device,
+                                      const std::string& partition_name, size_t size) {
+    // 64k block size with io_depth of 64 is optimal
+    // for a single thread. We just need a single thread
+    // to read all the blocks from all dynamic partitions.
+    size_t io_depth = 64;
+    size_t bs = (64 * 1024);
+
+    if (!InitializeIouring(io_depth)) {
+        return false;
+    }
+
+    LOG(INFO) << "ReadBlockAsync start "
+              << " Block-device: " << dm_block_device << " Partition-name: " << partition_name
+              << " Size: " << size;
+
+    auto scope_guard = android::base::make_scope_guard([this]() -> void { FinalizeIouring(); });
+
+    std::vector<std::unique_ptr<struct iovec>> vecs;
+    using AlignedBuf = std::unique_ptr<void, decltype(free)*>;
+    std::vector<AlignedBuf> alignedBufVector;
+
+    /*
+     * TODO: We need aligned memory for DIRECT-IO. However, if we do
+     * a DIRECT-IO and verify the blocks then we need to inform
+     * update-verifier that block verification has been done and
+     * there is no need to repeat the same. We are not there yet
+     * as we need to see if there are any boot time improvements doing
+     * a DIRECT-IO.
+     *
+     * Also, we could you the same function post merge for block verification;
+     * again, we can do a DIRECT-IO instead of thrashing page-cache and
+     * hurting other applications.
+     *
+     * For now, we will just create aligned buffers but rely on buffered
+     * I/O until we have perf numbers to justify DIRECT-IO.
+     */
+    for (int i = 0; i < io_depth; i++) {
+        auto iovec = std::make_unique<struct iovec>();
+        vecs.push_back(std::move(iovec));
+
+        struct iovec* iovec_ptr = vecs[i].get();
+
+        if (posix_memalign(&iovec_ptr->iov_base, BLOCK_SZ, bs)) {
+            LOG(ERROR) << "posix_memalign failed";
+            return false;
+        }
+
+        iovec_ptr->iov_len = bs;
+        alignedBufVector.push_back(
+                std::unique_ptr<void, decltype(free)*>(iovec_ptr->iov_base, free));
+    }
+
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(dm_block_device.c_str(), O_RDONLY)));
+    if (fd.get() == -1) {
+        SNAP_PLOG(ERROR) << "File open failed - block-device " << dm_block_device
+                         << " partition-name: " << partition_name;
+        return false;
+    }
+
+    loff_t offset = 0;
+    size_t remain = size;
+    size_t read_sz = io_depth * bs;
+
+    while (remain > 0) {
+        size_t to_read = std::min(remain, read_sz);
+        size_t queue_size = to_read / bs;
+
+        for (int i = 0; i < queue_size; i++) {
+            struct io_uring_sqe* sqe = io_uring_get_sqe(ring_.get());
+            if (!sqe) {
+                SNAP_LOG(ERROR) << "io_uring_get_sqe() failed";
+                return false;
+            }
+
+            struct iovec* iovec_ptr = vecs[i].get();
+
+            io_uring_prep_read(sqe, fd.get(), iovec_ptr->iov_base, iovec_ptr->iov_len, offset);
+            sqe->flags |= IOSQE_ASYNC;
+            offset += bs;
+        }
+
+        int ret = io_uring_submit(ring_.get());
+        if (ret != queue_size) {
+            SNAP_LOG(ERROR) << "submit got: " << ret << " wanted: " << queue_size;
+            return false;
+        }
+
+        for (int i = 0; i < queue_size; i++) {
+            struct io_uring_cqe* cqe;
+
+            int ret = io_uring_wait_cqe(ring_.get(), &cqe);
+            if (ret) {
+                SNAP_PLOG(ERROR) << "wait_cqe failed" << ret;
+                return false;
+            }
+
+            if (cqe->res < 0) {
+                SNAP_LOG(ERROR) << "io failed with res: " << cqe->res;
+                return false;
+            }
+            io_uring_cqe_seen(ring_.get(), cqe);
+        }
+
+        remain -= to_read;
+    }
+
+    LOG(INFO) << "ReadBlockAsync complete: "
+              << " Block-device: " << dm_block_device << " Partition-name: " << partition_name
+              << " Size: " << size;
+    return true;
+}
+
 void SnapshotHandler::ReadBlocksToCache(const std::string& dm_block_device,
                                         const std::string& partition_name, off_t offset,
                                         size_t size) {
@@ -344,17 +478,22 @@ void SnapshotHandler::ReadBlocks(const std::string partition_name,
         return;
     }
 
-    int num_threads = 2;
-    size_t num_blocks = dev_sz >> BLOCK_SHIFT;
-    size_t num_blocks_per_thread = num_blocks / num_threads;
-    size_t read_sz_per_thread = num_blocks_per_thread << BLOCK_SHIFT;
-    off_t offset = 0;
+    if (IsIouringSupported()) {
+        std::async(std::launch::async, &SnapshotHandler::ReadBlocksAsync, this, dm_block_device,
+                   partition_name, dev_sz);
+    } else {
+        int num_threads = 2;
+        size_t num_blocks = dev_sz >> BLOCK_SHIFT;
+        size_t num_blocks_per_thread = num_blocks / num_threads;
+        size_t read_sz_per_thread = num_blocks_per_thread << BLOCK_SHIFT;
+        off_t offset = 0;
 
-    for (int i = 0; i < num_threads; i++) {
-        std::async(std::launch::async, &SnapshotHandler::ReadBlocksToCache, this, dm_block_device,
-                   partition_name, offset, read_sz_per_thread);
+        for (int i = 0; i < num_threads; i++) {
+            std::async(std::launch::async, &SnapshotHandler::ReadBlocksToCache, this,
+                       dm_block_device, partition_name, offset, read_sz_per_thread);
 
-        offset += read_sz_per_thread;
+            offset += read_sz_per_thread;
+        }
     }
 }
 
@@ -511,6 +650,34 @@ struct BufferState* SnapshotHandler::GetBufferState() {
     struct BufferState* ra_state =
             reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);
     return ra_state;
+}
+
+bool SnapshotHandler::IsIouringSupported() {
+    struct utsname uts;
+    unsigned int major, minor;
+
+    if (android::base::GetBoolProperty("snapuserd.test.io_uring.force_disable", false)) {
+        SNAP_LOG(INFO) << "io_uring disabled for testing";
+        return false;
+    }
+
+    if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
+        SNAP_LOG(ERROR) << "Could not parse the kernel version from uname. "
+                        << " io_uring not supported";
+        return false;
+    }
+
+    // We will only support kernels from 5.6 onwards as IOSQE_ASYNC flag and
+    // IO_URING_OP_READ/WRITE opcodes were introduced only on 5.6 kernel
+    if (major >= 5) {
+        if (major == 5 && minor < 6) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
 }
 
 }  // namespace snapshot
