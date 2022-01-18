@@ -31,3 +31,12 @@ TEST(UtilityTest, describe_tagged_addr_ctrl) {
       describe_tagged_addr_ctrl(0xf0000000 | PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_SYNC |
                                 PR_MTE_TCF_ASYNC | (0xfffe << PR_MTE_TAG_SHIFT)));
 }
+
+TEST(UtilityTest, describe_pac_enabled_keys) {
+  EXPECT_EQ("", describe_pac_enabled_keys(0));
+  EXPECT_EQ(" (PR_PAC_APIAKEY)", describe_pac_enabled_keys(PR_PAC_APIAKEY));
+  EXPECT_EQ(" (PR_PAC_APIAKEY, PR_PAC_APDBKEY)",
+            describe_pac_enabled_keys(PR_PAC_APIAKEY | PR_PAC_APDBKEY));
+  EXPECT_EQ(" (PR_PAC_APIAKEY, PR_PAC_APDBKEY, unknown 0x1000)",
+            describe_pac_enabled_keys(PR_PAC_APIAKEY | PR_PAC_APDBKEY | 0x1000));
+}

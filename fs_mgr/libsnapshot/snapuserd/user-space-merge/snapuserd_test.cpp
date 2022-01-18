@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <android-base/strings.h>
+#include <gflags/gflags.h>
+
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <linux/memfd.h>
@@ -27,6 +30,7 @@
 #include <string_view>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 #include <fs_mgr/file_wait.h>
 #include <gtest/gtest.h>
@@ -37,6 +41,8 @@
 #include <storage_literals/storage_literals.h>
 
 #include "snapuserd_core.h"
+
+DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
 
 namespace android {
 namespace snapshot {
@@ -857,5 +863,23 @@ TEST(Snapuserd_Test, Snapshot_Merge_Crash_Random_Inverted) {
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+
+    gflags::ParseCommandLineFlags(&argc, &argv, false);
+
+    android::base::SetProperty("ctl.stop", "snapuserd");
+
+    if (FLAGS_force_config == "iouring_disabled") {
+        if (!android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1")) {
+            return testing::AssertionFailure()
+                   << "Failed to disable property: snapuserd.test.io_uring.disabled";
+        }
+    }
+
+    int ret = RUN_ALL_TESTS();
+
+    if (FLAGS_force_config == "iouring_disabled") {
+        android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0");
+    }
+
+    return ret;
 }

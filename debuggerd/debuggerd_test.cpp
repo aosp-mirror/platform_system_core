@@ -173,6 +173,14 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
   *status = response.status;
 }
 
+static bool pac_supported() {
+#if defined(__aarch64__)
+  return getauxval(AT_HWCAP) & HWCAP_PACA;
+#else
+  return false;
+#endif
+}
+
 class CrasherTest : public ::testing::Test {
  public:
   pid_t crasher_pid = -1;
@@ -356,6 +364,12 @@ TEST_F(CrasherTest, smoke) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
     ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff3)"
                          R"( \(PR_TAGGED_ADDR_ENABLE, PR_MTE_TCF_SYNC, mask 0xfffe\))");
+  }
+
+  if (pac_supported()) {
+    // Test that the default PAC_ENABLED_KEYS value is set.
+    ASSERT_MATCH(result, R"(pac_enabled_keys: 000000000000000f)"
+                         R"( \(PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY\))");
   }
 }
 

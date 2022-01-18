@@ -100,7 +100,7 @@ TEST_F(UnicodeTest, UTF8toUTF16Normal) {
         0xF0, 0x90, 0x80, 0x80, // U+10000, 2 UTF-16 character
     };
 
-    char16_t output[1 + 1 + 1 + 2 + 1]; // Room for NULL
+    char16_t output[1 + 1 + 1 + 2 + 1];  // Room for null
 
     utf8_to_utf16(str, sizeof(str), output, sizeof(output) / sizeof(output[0]));
 
@@ -114,8 +114,7 @@ TEST_F(UnicodeTest, UTF8toUTF16Normal) {
             << "should be first half of surrogate U+10000";
     EXPECT_EQ(0xDC00, output[4])
             << "should be second half of surrogate U+10000";
-    EXPECT_EQ(NULL, output[5])
-            << "should be NULL terminated";
+    EXPECT_EQ(0, output[5]) << "should be null terminated";
 }
 
 TEST_F(UnicodeTest, strstr16EmptyTarget) {
