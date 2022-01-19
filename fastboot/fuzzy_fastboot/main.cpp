@@ -874,6 +874,12 @@ TEST_F(Fuzz, DownloadInvalid8) {
             << "Device did not respond with FAIL for malformed download command '" << cmd << "'";
 }
 
+TEST_F(Fuzz, DownloadInvalid9) {
+    std::string cmd("download:2PPPPPPPPPPPPPPPPPPPPPPPPPPPPPP");
+    EXPECT_EQ(fb->RawCommand(cmd), DEVICE_FAIL)
+            << "Device did not respond with FAIL for malformed download command '" << cmd << "'";
+}
+
 TEST_F(Fuzz, GetVarAllSpam) {
     auto start = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed;
@@ -994,6 +1000,23 @@ TEST_F(Fuzz, SparseZeroBlkSize) {
         EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
                 << "Flashing a zero block size in sparse file should fail";
     }
+}
+
+TEST_F(Fuzz, SparseVeryLargeBlkSize) {
+    // handcrafted sparse file with block size of ~4GB and divisible 4
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00',
+        '\x1c', '\x00', '\x0c', '\x00', '\xF0', '\xFF', '\xFF', '\xFF',
+        '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc3', '\xca', '\x00', '\x00',
+        '\x01', '\x00', '\x00', '\x00', '\x0c', '\x00', '\x00', '\x00',
+        '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+    ASSERT_EQ(HandleResponse(), SUCCESS) << "Not receive okay";
+    ASSERT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed";
 }
 
 TEST_F(Fuzz, SparseTrimmed) {
