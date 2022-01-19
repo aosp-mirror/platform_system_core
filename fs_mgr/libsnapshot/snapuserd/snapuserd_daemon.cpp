@@ -51,7 +51,12 @@ bool Daemon::StartDaemon(int argc, char** argv) {
     // is applied will check for the property. This is ok as the system
     // properties are valid at this point. We can't do this during first
     // stage init and hence use the command line flags to get the information.
-    if (!IsDmSnapshotTestingEnabled() && (FLAGS_user_snapshot || IsUserspaceSnapshotsEnabled())) {
+    bool user_snapshots = FLAGS_user_snapshot;
+    if (!user_snapshots) {
+        user_snapshots = (!IsDmSnapshotTestingEnabled() && IsUserspaceSnapshotsEnabled());
+    }
+
+    if (user_snapshots) {
         LOG(INFO) << "Starting daemon for user-space snapshots.....";
         return StartServerForUserspaceSnapshots(arg_start, argc, argv);
     } else {
