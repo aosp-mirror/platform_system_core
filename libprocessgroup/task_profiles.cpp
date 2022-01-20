@@ -207,7 +207,9 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
 
 SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
     : controller_(c), path_(p) {
-    FdCacheHelper::Init(controller_.GetTasksFilePath(path_), fd_);
+    FdCacheHelper::Init(controller_.GetTasksFilePath(path_), fd_[ProfileAction::RCT_TASK]);
+    // uid and pid don't matter because IsAppDependentPath ensures the path doesn't use them
+    FdCacheHelper::Init(controller_.GetProcsFilePath(path_, 0, 0), fd_[ProfileAction::RCT_PROCESS]);
 }
 
 bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_name) {
@@ -245,7 +247,40 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_nam
     return false;
 }
 
+ProfileAction::CacheUseResult SetCgroupAction::UseCachedFd(ResourceCacheType cache_type,
+                                                           int id) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_[cache_type])) {
+        // fd is cached, reuse it
+        if (!AddTidToCgroup(id, fd_[cache_type], controller()->name())) {
+            LOG(ERROR) << "Failed to add task into cgroup";
+            return ProfileAction::FAIL;
+        }
+        return ProfileAction::SUCCESS;
+    }
+
+    if (fd_[cache_type] == FdCacheHelper::FDS_INACCESSIBLE) {
+        // no permissions to access the file, ignore
+        return ProfileAction::SUCCESS;
+    }
+
+    if (cache_type == ResourceCacheType::RCT_TASK &&
+        fd_[cache_type] == FdCacheHelper::FDS_APP_DEPENDENT) {
+        // application-dependent path can't be used with tid
+        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        return ProfileAction::FAIL;
+    }
+
+    return ProfileAction::UNUSED;
+}
+
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    CacheUseResult result = UseCachedFd(ProfileAction::RCT_PROCESS, pid);
+    if (result != ProfileAction::UNUSED) {
+        return result == ProfileAction::SUCCESS;
+    }
+
+    // fd was not cached or cached fd can't be used
     std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
@@ -261,28 +296,12 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 }
 
 bool SetCgroupAction::ExecuteForTask(int tid) const {
-    std::lock_guard<std::mutex> lock(fd_mutex_);
-    if (FdCacheHelper::IsCached(fd_)) {
-        // fd is cached, reuse it
-        if (!AddTidToCgroup(tid, fd_, controller()->name())) {
-            LOG(ERROR) << "Failed to add task into cgroup";
-            return false;
-        }
-        return true;
+    CacheUseResult result = UseCachedFd(ProfileAction::RCT_TASK, tid);
+    if (result != ProfileAction::UNUSED) {
+        return result == ProfileAction::SUCCESS;
     }
 
-    if (fd_ == FdCacheHelper::FDS_INACCESSIBLE) {
-        // no permissions to access the file, ignore
-        return true;
-    }
-
-    if (fd_ == FdCacheHelper::FDS_APP_DEPENDENT) {
-        // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
-        return false;
-    }
-
-    // fd was not cached because cached fd can't be used
+    // fd was not cached or cached fd can't be used
     std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
@@ -297,14 +316,30 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     return true;
 }
 
-void SetCgroupAction::EnableResourceCaching() {
+void SetCgroupAction::EnableResourceCaching(ResourceCacheType cache_type) {
     std::lock_guard<std::mutex> lock(fd_mutex_);
-    FdCacheHelper::Cache(controller_.GetTasksFilePath(path_), fd_);
+    // Return early to prevent unnecessary calls to controller_.Get{Tasks|Procs}FilePath() which
+    // include regex evaluations
+    if (fd_[cache_type] != FdCacheHelper::FDS_NOT_CACHED) {
+        return;
+    }
+    switch (cache_type) {
+        case (ProfileAction::RCT_TASK):
+            FdCacheHelper::Cache(controller_.GetTasksFilePath(path_), fd_[cache_type]);
+            break;
+        case (ProfileAction::RCT_PROCESS):
+            // uid and pid don't matter because IsAppDependentPath ensures the path doesn't use them
+            FdCacheHelper::Cache(controller_.GetProcsFilePath(path_, 0, 0), fd_[cache_type]);
+            break;
+        default:
+            LOG(ERROR) << "Invalid cache type is specified!";
+            break;
+    }
 }
 
-void SetCgroupAction::DropResourceCaching() {
+void SetCgroupAction::DropResourceCaching(ResourceCacheType cache_type) {
     std::lock_guard<std::mutex> lock(fd_mutex_);
-    FdCacheHelper::Drop(fd_);
+    FdCacheHelper::Drop(fd_[cache_type]);
 }
 
 WriteFileAction::WriteFileAction(const std::string& path, const std::string& value,
@@ -332,13 +367,43 @@ bool WriteFileAction::WriteValueToFile(const std::string& value, const std::stri
     return true;
 }
 
-bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+ProfileAction::CacheUseResult WriteFileAction::UseCachedFd(ResourceCacheType cache_type,
+                                                           const std::string& value) const {
     std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_)) {
+        // fd is cached, reuse it
+        if (!WriteStringToFd(value, fd_)) {
+            if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << path_;
+            return ProfileAction::FAIL;
+        }
+        return ProfileAction::SUCCESS;
+    }
+
+    if (fd_ == FdCacheHelper::FDS_INACCESSIBLE) {
+        // no permissions to access the file, ignore
+        return ProfileAction::SUCCESS;
+    }
+
+    if (cache_type == ResourceCacheType::RCT_TASK && fd_ == FdCacheHelper::FDS_APP_DEPENDENT) {
+        // application-dependent path can't be used with tid
+        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        return ProfileAction::FAIL;
+    }
+    return ProfileAction::UNUSED;
+}
+
+bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     std::string value(value_);
-    std::string path(path_);
 
     value = StringReplace(value, "<uid>", std::to_string(uid), true);
     value = StringReplace(value, "<pid>", std::to_string(pid), true);
+
+    CacheUseResult result = UseCachedFd(ProfileAction::RCT_PROCESS, value);
+    if (result != ProfileAction::UNUSED) {
+        return result == ProfileAction::SUCCESS;
+    }
+
+    std::string path(path_);
     path = StringReplace(path, "<uid>", std::to_string(uid), true);
     path = StringReplace(path, "<pid>", std::to_string(pid), true);
 
@@ -346,51 +411,33 @@ bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
 }
 
 bool WriteFileAction::ExecuteForTask(int tid) const {
-    std::lock_guard<std::mutex> lock(fd_mutex_);
     std::string value(value_);
     int uid = getuid();
 
     value = StringReplace(value, "<uid>", std::to_string(uid), true);
     value = StringReplace(value, "<pid>", std::to_string(tid), true);
 
-    if (FdCacheHelper::IsCached(fd_)) {
-        // fd is cached, reuse it
-        if (!WriteStringToFd(value, fd_)) {
-            if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << path_;
-            return false;
-        }
-        return true;
-    }
-
-    if (fd_ == FdCacheHelper::FDS_INACCESSIBLE) {
-        // no permissions to access the file, ignore
-        return true;
-    }
-
-    if (fd_ == FdCacheHelper::FDS_APP_DEPENDENT) {
-        // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
-        return false;
+    CacheUseResult result = UseCachedFd(ProfileAction::RCT_TASK, value);
+    if (result != ProfileAction::UNUSED) {
+        return result == ProfileAction::SUCCESS;
     }
 
     return WriteValueToFile(value, path_, logfailures_);
 }
 
-void WriteFileAction::EnableResourceCaching() {
+void WriteFileAction::EnableResourceCaching(ResourceCacheType) {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     FdCacheHelper::Cache(path_, fd_);
 }
 
-void WriteFileAction::DropResourceCaching() {
+void WriteFileAction::DropResourceCaching(ResourceCacheType) {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     FdCacheHelper::Drop(fd_);
 }
 
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& profile : profiles_) {
-        if (!profile->ExecuteForProcess(uid, pid)) {
-            PLOG(WARNING) << "ExecuteForProcess failed for aggregate profile";
-        }
+        profile->ExecuteForProcess(uid, pid);
     }
     return true;
 }
@@ -402,15 +449,15 @@ bool ApplyProfileAction::ExecuteForTask(int tid) const {
     return true;
 }
 
-void ApplyProfileAction::EnableResourceCaching() {
+void ApplyProfileAction::EnableResourceCaching(ResourceCacheType cache_type) {
     for (const auto& profile : profiles_) {
-        profile->EnableResourceCaching();
+        profile->EnableResourceCaching(cache_type);
     }
 }
 
-void ApplyProfileAction::DropResourceCaching() {
+void ApplyProfileAction::DropResourceCaching(ResourceCacheType cache_type) {
     for (const auto& profile : profiles_) {
-        profile->DropResourceCaching();
+        profile->DropResourceCaching(cache_type);
     }
 }
 
@@ -440,33 +487,33 @@ bool TaskProfile::ExecuteForTask(int tid) const {
     return true;
 }
 
-void TaskProfile::EnableResourceCaching() {
+void TaskProfile::EnableResourceCaching(ProfileAction::ResourceCacheType cache_type) {
     if (res_cached_) {
         return;
     }
 
     for (auto& element : elements_) {
-        element->EnableResourceCaching();
+        element->EnableResourceCaching(cache_type);
     }
 
     res_cached_ = true;
 }
 
-void TaskProfile::DropResourceCaching() {
+void TaskProfile::DropResourceCaching(ProfileAction::ResourceCacheType cache_type) {
     if (!res_cached_) {
         return;
     }
 
     for (auto& element : elements_) {
-        element->DropResourceCaching();
+        element->DropResourceCaching(cache_type);
     }
 
     res_cached_ = false;
 }
 
-void TaskProfiles::DropResourceCaching() const {
+void TaskProfiles::DropResourceCaching(ProfileAction::ResourceCacheType cache_type) const {
     for (auto& iter : profiles_) {
-        iter.second->DropResourceCaching();
+        iter.second->DropResourceCaching(cache_type);
     }
 }
 
@@ -683,10 +730,13 @@ const ProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) cons
 }
 
 bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
-                                      const std::vector<std::string>& profiles) {
+                                      const std::vector<std::string>& profiles, bool use_fd_cache) {
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
+            if (use_fd_cache) {
+                profile->EnableResourceCaching(ProfileAction::RCT_PROCESS);
+            }
             if (!profile->ExecuteForProcess(uid, pid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " process profile";
             }
@@ -703,7 +753,7 @@ bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& prof
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
             if (use_fd_cache) {
-                profile->EnableResourceCaching();
+                profile->EnableResourceCaching(ProfileAction::RCT_TASK);
             }
             if (!profile->ExecuteForTask(tid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " task profile";
