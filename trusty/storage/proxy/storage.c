@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +25,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "log.h"
+#include "checkpoint_handling.h"
 #include "ipc.h"
+#include "log.h"
 #include "storage.h"
 
 #define FD_TBL_SIZE 64
 #define MAX_READ_SIZE 4096
+
+#define ALTERNATE_DATA_DIR "alternate/"
 
 enum sync_state {
     SS_UNUSED = -1,
@@ -43,6 +47,8 @@ static const char *ssdir_name;
 static enum sync_state fs_state;
 static enum sync_state dir_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
+
+static bool alternate_mode;
 
 static struct {
    struct storage_file_read_resp hdr;
@@ -216,6 +222,7 @@ int storage_file_open(struct storage_msg *msg,
                       const void *r, size_t req_len)
 {
     char *path = NULL;
+    char* parent_path;
     const struct storage_file_open_req *req = r;
     struct storage_file_open_resp resp = {0};
 
@@ -234,6 +241,24 @@ int storage_file_open(struct storage_msg *msg,
         goto err_response;
     }
 
+    /*
+     * TODO(b/210501710): Expose GSI image running state to vendor
+     * storageproxyd. We want to control data file paths in vendor_init, but we
+     * don't have access to the necessary property there yet. When we have
+     * access to that property we can set the root data path read-only and only
+     * allow creation of files in alternate/. Checking paths here temporarily
+     * until that is fixed.
+     *
+     * We are just checking for "/" instead of "alternate/" because we still
+     * want to still allow access to "persist/" in alternate mode (for now, this
+     * may change in the future).
+     */
+    if (alternate_mode && !strchr(req->name, '/')) {
+        ALOGE("%s: Cannot open root data file \"%s\" in alternate mode\n", __func__, req->name);
+        msg->result = STORAGE_ERR_ACCESS;
+        goto err_response;
+    }
+
     int rc = asprintf(&path, "%s/%s", ssdir_name, req->name);
     if (rc < 0) {
         ALOGE("%s: asprintf failed\n", __func__);
@@ -246,7 +271,23 @@ int storage_file_open(struct storage_msg *msg,
     if (req->flags & STORAGE_FILE_OPEN_TRUNCATE)
         open_flags |= O_TRUNC;
 
+    parent_path = dirname(path);
     if (req->flags & STORAGE_FILE_OPEN_CREATE) {
+        /*
+         * Create the alternate parent dir if needed & allowed.
+         *
+         * TODO(b/210501710): Expose GSI image running state to vendor
+         * storageproxyd. This directory should be created by vendor_init, once
+         * it has access to the necessary bit of information.
+         */
+        if (strstr(req->name, ALTERNATE_DATA_DIR) == req->name) {
+            rc = mkdir(parent_path, S_IRWXU);
+            if (rc && errno != EEXIST) {
+                ALOGE("%s: Could not create parent directory \"%s\": %s\n", __func__, parent_path,
+                      strerror(errno));
+            }
+        }
+
         /* open or create */
         if (req->flags & STORAGE_FILE_OPEN_CREATE_EXCLUSIVE) {
             /* create exclusive */
@@ -467,6 +508,9 @@ err_response:
 
 int storage_init(const char *dirname)
 {
+    /* If there is an active DSU image, use the alternate fs mode. */
+    alternate_mode = is_gsi_running();
+
     fs_state = SS_CLEAN;
     dir_state = SS_CLEAN;
     for (uint i = 0; i < FD_TBL_SIZE; i++) {
