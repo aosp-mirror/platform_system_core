@@ -86,7 +86,9 @@ cc_defaults {
         "libsnapshot_cow",
         "libz",
         "libext4_utils",
+        "liburing",
     ],
+    include_dirs: ["bionic/libc/kernel"],
 }
 
 cc_binary {
@@ -182,7 +184,10 @@ cc_test {
         "libfs_mgr",
         "libdm",
         "libext4_utils",
+        "liburing",
+        "libgflags",
     ],
+    include_dirs: ["bionic/libc/kernel"],
     header_libs: [
         "libstorage_literals_headers",
         "libfiemap_headers",

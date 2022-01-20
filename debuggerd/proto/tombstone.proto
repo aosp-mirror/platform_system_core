@@ -126,8 +126,9 @@ message Thread {
   repeated BacktraceFrame current_backtrace = 4;
   repeated MemoryDump memory_dump = 5;
   int64 tagged_addr_ctrl = 6;
+  int64 pac_enabled_keys = 8;
 
-  reserved 8 to 999;
+  reserved 9 to 999;
 }
 
 message BacktraceFrame {
