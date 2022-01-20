@@ -108,64 +108,42 @@ class SetAttributeAction : public ProfileAction {
     std::string value_;
 };
 
-// Abstract profile element for cached fd
-class CachedFdProfileAction : public ProfileAction {
-  public:
-    virtual void EnableResourceCaching();
-    virtual void DropResourceCaching();
-
-  protected:
-    enum FdState {
-        FDS_INACCESSIBLE = -1,
-        FDS_APP_DEPENDENT = -2,
-        FDS_NOT_CACHED = -3,
-    };
-
-    android::base::unique_fd fd_;
-    mutable std::mutex fd_mutex_;
-
-    static bool IsAppDependentPath(const std::string& path);
-
-    void InitFd(const std::string& path);
-    bool IsFdValid() const { return fd_ > FDS_INACCESSIBLE; }
-
-    virtual const std::string GetPath() const = 0;
-};
-
 // Set cgroup profile element
-class SetCgroupAction : public CachedFdProfileAction {
+class SetCgroupAction : public ProfileAction {
   public:
     SetCgroupAction(const CgroupController& c, const std::string& p);
 
     virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     virtual bool ExecuteForTask(int tid) const;
+    virtual void EnableResourceCaching();
+    virtual void DropResourceCaching();
 
     const CgroupController* controller() const { return &controller_; }
-
-  protected:
-    const std::string GetPath() const override { return controller_.GetTasksFilePath(path_); }
 
   private:
     CgroupController controller_;
     std::string path_;
+    android::base::unique_fd fd_;
+    mutable std::mutex fd_mutex_;
 
     static bool AddTidToCgroup(int tid, int fd, const char* controller_name);
 };
 
 // Write to file action
-class WriteFileAction : public CachedFdProfileAction {
+class WriteFileAction : public ProfileAction {
   public:
     WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
 
     virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     virtual bool ExecuteForTask(int tid) const;
-
-  protected:
-    const std::string GetPath() const override { return path_; }
+    virtual void EnableResourceCaching();
+    virtual void DropResourceCaching();
 
   private:
     std::string path_, value_;
     bool logfailures_;
+    android::base::unique_fd fd_;
+    mutable std::mutex fd_mutex_;
 
     static bool WriteValueToFile(const std::string& value, const std::string& path,
                                  bool logfailures);
