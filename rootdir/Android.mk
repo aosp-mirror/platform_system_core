@@ -75,14 +75,9 @@ ifeq ($(NATIVE_COVERAGE),true)
   EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
 endif
 
+EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
 ifeq ($(CLANG_COVERAGE),true)
-  ifeq ($(BIONIC_COVERAGE),false)
-    # http://b/210012154 Disable continuous coverage if instrumentation is on
-    # for bionic/libc
-    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw
-  else
-    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
-  endif
+  EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
 endif
 
 # Put it here instead of in init.rc module definition,
