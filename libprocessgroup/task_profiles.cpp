@@ -144,30 +144,13 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     return true;
 }
 
-bool SetCgroupAction::IsAppDependentPath(const std::string& path) {
-    return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
-}
-
-SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
-    : controller_(c), path_(p) {
-    // file descriptors for app-dependent paths can't be cached
-    if (IsAppDependentPath(path_)) {
-        // file descriptor is not cached
-        fd_.reset(FDS_APP_DEPENDENT);
-        return;
-    }
-
-    // file descriptor can be cached later on request
-    fd_.reset(FDS_NOT_CACHED);
-}
-
-void SetCgroupAction::EnableResourceCaching() {
+void CachedFdProfileAction::EnableResourceCaching() {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (fd_ != FDS_NOT_CACHED) {
         return;
     }
 
-    std::string tasks_path = controller_.GetTasksFilePath(path_);
+    std::string tasks_path = GetPath();
 
     if (access(tasks_path.c_str(), W_OK) != 0) {
         // file is not accessible
@@ -185,7 +168,7 @@ void SetCgroupAction::EnableResourceCaching() {
     fd_ = std::move(fd);
 }
 
-void SetCgroupAction::DropResourceCaching() {
+void CachedFdProfileAction::DropResourceCaching() {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (fd_ == FDS_NOT_CACHED) {
         return;
@@ -194,22 +177,59 @@ void SetCgroupAction::DropResourceCaching() {
     fd_.reset(FDS_NOT_CACHED);
 }
 
-bool SetCgroupAction::AddTidToCgroup(int tid, int fd) {
+bool CachedFdProfileAction::IsAppDependentPath(const std::string& path) {
+    return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
+}
+
+void CachedFdProfileAction::InitFd(const std::string& path) {
+    // file descriptors for app-dependent paths can't be cached
+    if (IsAppDependentPath(path)) {
+        // file descriptor is not cached
+        fd_.reset(FDS_APP_DEPENDENT);
+        return;
+    }
+    // file descriptor can be cached later on request
+    fd_.reset(FDS_NOT_CACHED);
+}
+
+SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
+    : controller_(c), path_(p) {
+    InitFd(controller_.GetTasksFilePath(path_));
+}
+
+bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_name) {
     if (tid <= 0) {
         return true;
     }
 
     std::string value = std::to_string(tid);
 
-    if (TEMP_FAILURE_RETRY(write(fd, value.c_str(), value.length())) < 0) {
-        // If the thread is in the process of exiting, don't flag an error
-        if (errno != ESRCH) {
-            PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
-            return false;
-        }
+    if (TEMP_FAILURE_RETRY(write(fd, value.c_str(), value.length())) == value.length()) {
+        return true;
     }
 
-    return true;
+    // If the thread is in the process of exiting, don't flag an error
+    if (errno == ESRCH) {
+        return true;
+    }
+
+    // ENOSPC is returned when cpuset cgroup that we are joining has no online cpus
+    if (errno == ENOSPC && !strcmp(controller_name, "cpuset")) {
+        // This is an abnormal case happening only in testing, so report it only once
+        static bool empty_cpuset_reported = false;
+
+        if (empty_cpuset_reported) {
+            return true;
+        }
+
+        LOG(ERROR) << "Failed to add task '" << value
+                   << "' into cpuset because all cpus in that cpuset are offline";
+        empty_cpuset_reported = true;
+    } else {
+        PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
+    }
+
+    return false;
 }
 
 bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
@@ -219,7 +239,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
         PLOG(WARNING) << "Failed to open " << procs_path;
         return false;
     }
-    if (!AddTidToCgroup(pid, tmp_fd)) {
+    if (!AddTidToCgroup(pid, tmp_fd, controller()->name())) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
@@ -231,7 +251,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (IsFdValid()) {
         // fd is cached, reuse it
-        if (!AddTidToCgroup(tid, fd_)) {
+        if (!AddTidToCgroup(tid, fd_, controller()->name())) {
             LOG(ERROR) << "Failed to add task into cgroup";
             return false;
         }
@@ -253,10 +273,10 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << tasks_path << ": " << strerror(errno);
+        PLOG(WARNING) << "Failed to open " << tasks_path;
         return false;
     }
-    if (!AddTidToCgroup(tid, tmp_fd)) {
+    if (!AddTidToCgroup(tid, tmp_fd, controller()->name())) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
@@ -264,37 +284,73 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     return true;
 }
 
-bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
-    std::string filepath(filepath_), value(value_);
+WriteFileAction::WriteFileAction(const std::string& path, const std::string& value,
+                                 bool logfailures)
+    : path_(path), value_(value), logfailures_(logfailures) {
+    InitFd(path_);
+}
 
-    filepath = StringReplace(filepath, "<uid>", std::to_string(uid), true);
-    filepath = StringReplace(filepath, "<pid>", std::to_string(pid), true);
-    value = StringReplace(value, "<uid>", std::to_string(uid), true);
-    value = StringReplace(value, "<pid>", std::to_string(pid), true);
+bool WriteFileAction::WriteValueToFile(const std::string& value, const std::string& path,
+                                       bool logfailures) {
+    // Use WriteStringToFd instead of WriteStringToFile because the latter will open file with
+    // O_TRUNC which causes kernfs_mutex contention
+    unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_WRONLY | O_CLOEXEC)));
 
-    if (!WriteStringToFile(value, filepath)) {
-        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+    if (tmp_fd < 0) {
+        if (logfailures) PLOG(WARNING) << "Failed to open " << path;
+        return false;
+    }
+
+    if (!WriteStringToFd(value, tmp_fd)) {
+        if (logfailures) PLOG(ERROR) << "Failed to write '" << value << "' to " << path;
         return false;
     }
 
     return true;
 }
 
+bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    std::string value(value_);
+    std::string path(path_);
+
+    value = StringReplace(value, "<uid>", std::to_string(uid), true);
+    value = StringReplace(value, "<pid>", std::to_string(pid), true);
+    path = StringReplace(path, "<uid>", std::to_string(uid), true);
+    path = StringReplace(path, "<pid>", std::to_string(pid), true);
+
+    return WriteValueToFile(value, path, logfailures_);
+}
+
 bool WriteFileAction::ExecuteForTask(int tid) const {
-    std::string filepath(filepath_), value(value_);
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    std::string value(value_);
     int uid = getuid();
 
-    filepath = StringReplace(filepath, "<uid>", std::to_string(uid), true);
-    filepath = StringReplace(filepath, "<pid>", std::to_string(tid), true);
     value = StringReplace(value, "<uid>", std::to_string(uid), true);
     value = StringReplace(value, "<pid>", std::to_string(tid), true);
 
-    if (!WriteStringToFile(value, filepath)) {
-        if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << filepath;
+    if (IsFdValid()) {
+        // fd is cached, reuse it
+        if (!WriteStringToFd(value, fd_)) {
+            if (logfailures_) PLOG(ERROR) << "Failed to write '" << value << "' to " << path_;
+            return false;
+        }
+        return true;
+    }
+
+    if (fd_ == FDS_INACCESSIBLE) {
+        // no permissions to access the file, ignore
+        return true;
+    }
+
+    if (fd_ == FDS_APP_DEPENDENT) {
+        // application-dependent path can't be used with tid
+        PLOG(ERROR) << "Application profile can't be applied to a thread";
         return false;
     }
 
-    return true;
+    return WriteValueToFile(value, path_, logfailures_);
 }
 
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
