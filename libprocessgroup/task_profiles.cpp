@@ -183,6 +183,12 @@ bool SetTimerSlackAction::ExecuteForTask(int tid) const {
     return true;
 }
 
+#else
+
+bool SetTimerSlackAction::ExecuteForTask(int) const {
+    return true;
+};
+
 #endif
 
 bool SetAttributeAction::ExecuteForProcess(uid_t, pid_t pid) const {

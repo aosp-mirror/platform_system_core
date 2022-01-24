@@ -73,9 +73,6 @@ class SetClampsAction : public ProfileAction {
     int clamp_;
 };
 
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-
 class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
@@ -87,17 +84,6 @@ class SetTimerSlackAction : public ProfileAction {
 
     static bool IsTimerSlackSupported(int tid);
 };
-
-#else
-
-class SetTimerSlackAction : public ProfileAction {
-  public:
-    SetTimerSlackAction(unsigned long) noexcept {}
-
-    virtual bool ExecuteForTask(int) const { return true; }
-};
-
-#endif
 
 // Set attribute profile element
 class SetAttributeAction : public ProfileAction {
