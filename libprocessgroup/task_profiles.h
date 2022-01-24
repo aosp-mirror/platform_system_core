@@ -65,8 +65,8 @@ class SetClampsAction : public ProfileAction {
   public:
     SetClampsAction(int boost, int clamp) noexcept : boost_(boost), clamp_(clamp) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
 
   protected:
     int boost_;
@@ -77,7 +77,7 @@ class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
 
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForTask(int tid) const override;
 
   private:
     unsigned long slack_;
@@ -91,8 +91,8 @@ class SetAttributeAction : public ProfileAction {
     SetAttributeAction(const ProfileAttribute* attribute, const std::string& value)
         : attribute_(attribute), value_(value) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
 
   private:
     const ProfileAttribute* attribute_;
@@ -104,10 +104,10 @@ class SetCgroupAction : public ProfileAction {
   public:
     SetCgroupAction(const CgroupController& c, const std::string& p);
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ResourceCacheType cache_type) override;
+    void DropResourceCaching(ResourceCacheType cache_type) override;
 
     const CgroupController* controller() const { return &controller_; }
 
@@ -126,10 +126,10 @@ class WriteFileAction : public ProfileAction {
   public:
     WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ResourceCacheType cache_type) override;
+    void DropResourceCaching(ResourceCacheType cache_type) override;
 
   private:
     std::string path_, value_;
@@ -165,10 +165,10 @@ class ApplyProfileAction : public ProfileAction {
     ApplyProfileAction(const std::vector<std::shared_ptr<TaskProfile>>& profiles)
         : profiles_(profiles) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ProfileAction::ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type) override;
+    void DropResourceCaching(ProfileAction::ResourceCacheType cache_type) override;
 
   private:
     std::vector<std::shared_ptr<TaskProfile>> profiles_;
