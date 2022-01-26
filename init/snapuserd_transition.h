@@ -51,6 +51,7 @@ class SnapuserdSelinuxHelper final {
   private:
     void RelaunchFirstStageSnapuserd();
     void ExecSnapuserd();
+    bool TestSnapuserdIsReady();
 
     std::unique_ptr<SnapshotManager> sm_;
     BlockDevInitializer block_dev_init_;
