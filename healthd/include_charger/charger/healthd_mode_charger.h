@@ -44,6 +44,11 @@ struct ChargerHealthInfo {
     aidl::android::hardware::health::BatteryStatus battery_status;
 };
 
+enum DirectRenderManager {
+    DRM_INNER,
+    DRM_OUTER,
+};
+
 // Configuration interface for charger. This includes:
 // - HalHealthLoop APIs that interests charger.
 // - configuration values that used to be provided by sysprops
@@ -101,6 +106,8 @@ class Charger {
     int64_t next_key_check_ = 0;
     int64_t next_pwr_check_ = 0;
     int64_t wait_batt_level_timestamp_ = 0;
+
+    DirectRenderManager drm_;
 
     key_state keys_[KEY_MAX + 1] = {};
 
