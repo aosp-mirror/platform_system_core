@@ -26,26 +26,29 @@
 // The monolithic policy variant is for legacy non-treble devices that contain a single SEPolicy
 // file located at /sepolicy and is directly loaded into the kernel SELinux subsystem.
 
-// The split policy is for supporting treble devices.  It splits the SEPolicy across files on
-// /system/etc/selinux (the 'plat' portion of the policy) and /vendor/etc/selinux (the 'vendor'
-// portion of the policy).  This is necessary to allow the system image to be updated independently
-// of the vendor image, while maintaining contributions from both partitions in the SEPolicy.  This
-// is especially important for VTS testing, where the SEPolicy on the Google System Image may not be
-// identical to the system image shipped on a vendor's device.
+// The split policy is for supporting treble devices and updateable apexes.  It splits the SEPolicy
+// across files on /system/etc/selinux (the 'plat' portion of the policy), /vendor/etc/selinux
+// (the 'vendor' portion of the policy), /system_ext/etc/selinux, /product/etc/selinux,
+// /odm/etc/selinux, and /dev/selinux (the apex portion of policy).  This is necessary to allow
+// images to be updated independently of the vendor image, while maintaining contributions from
+// multiple partitions in the SEPolicy.  This is especially important for VTS testing, where the
+// SEPolicy on the Google System Image may not be identical to the system image shipped on a
+// vendor's device.
 
 // The split SEPolicy is loaded as described below:
 // 1) There is a precompiled SEPolicy located at either /vendor/etc/selinux/precompiled_sepolicy or
 //    /odm/etc/selinux/precompiled_sepolicy if odm parition is present.  Stored along with this file
-//    are the sha256 hashes of the parts of the SEPolicy on /system, /system_ext and /product that
-//    were used to compile this precompiled policy.  The system partition contains a similar sha256
-//    of the parts of the SEPolicy that it currently contains.  Symmetrically, system_ext and
-//    product paritition contain sha256 hashes of their SEPolicy.  The init loads this
+//    are the sha256 hashes of the parts of the SEPolicy on /system, /system_ext, /product, and apex
+//    that were used to compile this precompiled policy.  The system partition contains a similar
+//    sha256 of the parts of the SEPolicy that it currently contains. Symmetrically, system_ext,
+//    product, and apex contain sha256 hashes of their SEPolicy. Init loads this
 //    precompiled_sepolicy directly if and only if the hashes along with the precompiled SEPolicy on
-//    /vendor or /odm match the hashes for system, system_ext and product SEPolicy, respectively.
-// 2) If these hashes do not match, then either /system or /system_ext or /product (or some of them)
-//    have been updated out of sync with /vendor (or /odm if it is present) and the init needs to
-//    compile the SEPolicy.  /system contains the SEPolicy compiler, secilc, and it is used by the
-//    OpenSplitPolicy() function below to compile the SEPolicy to a temp directory and load it.
+//    /vendor or /odm match the hashes for system, system_ext, product, and apex SEPolicy,
+//    respectively.
+// 2) If these hashes do not match, then either /system or /system_ext /product, or apex (or some of
+//    them) have been updated out of sync with /vendor (or /odm if it is present) and the init needs
+//    to compile the SEPolicy.  /system contains the SEPolicy compiler, secilc, and it is used by
+//    the OpenSplitPolicy() function below to compile the SEPolicy to a temp directory and load it.
 //    That function contains even more documentation with the specific implementation details of how
 //    the SEPolicy is compiled if needed.
 
@@ -58,19 +61,25 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fstream>
 
+#include <CertUtils.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/result.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
+#include <fsverity_init.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
+#include <mini_keyctl_utils.h>
 #include <selinux/android.h>
+#include <ziparchive/zip_archive.h>
 
 #include "block_dev_initializer.h"
 #include "debug_ramdisk.h"
@@ -247,6 +256,7 @@ Result<std::string> FindPrecompiledSplitPolicy() {
              precompiled_sepolicy + ".system_ext_sepolicy_and_mapping.sha256"},
             {"/product/etc/selinux/product_sepolicy_and_mapping.sha256",
              precompiled_sepolicy + ".product_sepolicy_and_mapping.sha256"},
+            {"/dev/selinux/apex_sepolicy.sha256", precompiled_sepolicy + ".apex_sepolicy.sha256"},
     };
 
     for (const auto& [actual_id_path, precompiled_id_path] : sepolicy_hashes) {
@@ -325,7 +335,7 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
     // * vendor -- policy needed due to logic contained in the vendor image,
     // * mapping -- mapping policy which helps preserve forward-compatibility of non-platform policy
     //   with newer versions of platform policy.
-    // * (optional) policy needed due to logic on product, system_ext, or odm images.
+    // * (optional) policy needed due to logic on product, system_ext, odm, or apex.
     // secilc is invoked to compile the above three policy files into a single monolithic policy
     // file. This file is then loaded into the kernel.
 
@@ -421,6 +431,12 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
     if (access(odm_policy_cil_file.c_str(), F_OK) == -1) {
         odm_policy_cil_file.clear();
     }
+
+    // apex_sepolicy.cil is default but optional.
+    std::string apex_policy_cil_file("/dev/selinux/apex_sepolicy.cil");
+    if (access(apex_policy_cil_file.c_str(), F_OK) == -1) {
+        apex_policy_cil_file.clear();
+    }
     const std::string version_as_string = std::to_string(SEPOLICY_VERSION);
 
     // clang-format off
@@ -463,6 +479,9 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
     if (!odm_policy_cil_file.empty()) {
         compile_args.push_back(odm_policy_cil_file.c_str());
     }
+    if (!apex_policy_cil_file.empty()) {
+        compile_args.push_back(apex_policy_cil_file.c_str());
+    }
     compile_args.push_back(nullptr);
 
     if (!ForkExecveAndWaitForCompletion(compile_args[0], (char**)compile_args.data())) {
@@ -487,6 +506,197 @@ bool OpenMonolithicPolicy(PolicyFile* policy_file) {
     }
     policy_file->path = kSepolicyFile;
     return true;
+}
+
+constexpr const char* kSigningCertRelease =
+        "/system/etc/selinux/com.android.sepolicy.cert-release.der";
+constexpr const char* kFsVerityProcPath = "/proc/sys/fs/verity";
+const std::string kSepolicyApexMetadataDir = "/metadata/sepolicy/";
+const std::string kSepolicyApexSystemDir = "/system/etc/selinux/apex/";
+const std::string kSepolicyZip = "SEPolicy.zip";
+const std::string kSepolicySignature = "SEPolicy.zip.sig";
+
+const std::string kTmpfsDir = "/dev/selinux/";
+
+// Files that are deleted after policy is compiled/loaded.
+const std::vector<std::string> kApexSepolicyTmp{"apex_sepolicy.cil", "apex_sepolicy.sha256"};
+// Files that need to persist because they are used by userspace processes.
+const std::vector<std::string> kApexSepolicy{"apex_file_contexts", "apex_property_contexts",
+                                             "apex_service_contexts", "apex_seapp_contexts",
+                                             "apex_test"};
+
+Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileName) {
+    ZipEntry entry;
+    std::string dstPath = kTmpfsDir + fileName;
+
+    int ret = FindEntry(archive, fileName, &entry);
+    if (ret != 0) {
+        // All files are optional. If a file doesn't exist, return without error.
+        return {};
+    }
+
+    unique_fd fd(TEMP_FAILURE_RETRY(
+            open(dstPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR)));
+    if (fd == -1) {
+        return Error() << "Failed to open " << dstPath;
+    }
+
+    ret = ExtractEntryToFile(archive, &entry, fd);
+    if (ret != 0) {
+        return Error() << "Failed to extract entry \"" << fileName << "\" ("
+                       << entry.uncompressed_length << " bytes) to \"" << dstPath
+                       << "\": " << ErrorCodeString(ret);
+    }
+
+    return {};
+}
+
+Result<void> GetPolicyFromApex(const std::string& dir) {
+    LOG(INFO) << "Loading APEX Sepolicy from " << dir + kSepolicyZip;
+    unique_fd fd(open((dir + kSepolicyZip).c_str(), O_RDONLY | O_BINARY | O_CLOEXEC));
+    if (fd < 0) {
+        return ErrnoError() << "Failed to open package " << dir + kSepolicyZip;
+    }
+
+    ZipArchiveHandle handle;
+    int ret = OpenArchiveFd(fd.get(), (dir + kSepolicyZip).c_str(), &handle,
+                            /*assume_ownership=*/false);
+    if (ret < 0) {
+        return Error() << "Failed to open package " << dir + kSepolicyZip << ": "
+                       << ErrorCodeString(ret);
+    }
+
+    auto handle_guard = android::base::make_scope_guard([&handle] { CloseArchive(handle); });
+
+    for (const auto& file : kApexSepolicy) {
+        auto extract = PutFileInTmpfs(handle, file);
+        if (!extract.ok()) {
+            return extract.error();
+        }
+    }
+    for (const auto& file : kApexSepolicyTmp) {
+        auto extract = PutFileInTmpfs(handle, file);
+        if (!extract.ok()) {
+            return extract.error();
+        }
+    }
+    return {};
+}
+
+Result<void> LoadSepolicyApexCerts() {
+    key_serial_t keyring_id = android::GetKeyringId(".fs-verity");
+    if (keyring_id < 0) {
+        return Error() << "Failed to find .fs-verity keyring id";
+    }
+
+    // TODO(b/199914227) the release key should always exist. Once it's checked in, start
+    // throwing an error here if it doesn't exist.
+    if (access(kSigningCertRelease, F_OK) == 0) {
+        LoadKeyFromFile(keyring_id, "fsv_sepolicy_apex_release", kSigningCertRelease);
+    }
+    return {};
+}
+
+Result<void> SepolicyFsVerityCheck() {
+    return Error() << "TODO implementent support for fsverity SEPolicy.";
+}
+
+Result<void> SepolicyCheckSignature(const std::string& dir) {
+    std::string signature;
+    if (!android::base::ReadFileToString(dir + kSepolicySignature, &signature)) {
+        return ErrnoError() << "Failed to read " << kSepolicySignature;
+    }
+
+    std::fstream sepolicyZip(dir + kSepolicyZip, std::ios::in | std::ios::binary);
+    if (!sepolicyZip) {
+        return Error() << "Failed to open " << kSepolicyZip;
+    }
+    sepolicyZip.seekg(0);
+    std::string sepolicyStr((std::istreambuf_iterator<char>(sepolicyZip)),
+                            std::istreambuf_iterator<char>());
+
+    auto releaseKey = extractPublicKeyFromX509(kSigningCertRelease);
+    if (!releaseKey.ok()) {
+        return releaseKey.error();
+    }
+
+    return verifySignature(sepolicyStr, signature, *releaseKey);
+}
+
+Result<void> SepolicyVerify(const std::string& dir, bool supportsFsVerity) {
+    if (supportsFsVerity) {
+        auto fsVerityCheck = SepolicyFsVerityCheck();
+        if (fsVerityCheck.ok()) {
+            return fsVerityCheck;
+        }
+        // TODO(b/199914227) If the device supports fsverity, but we fail here, we should fail to
+        // boot and not carry on. For now, fallback to a signature checkuntil the fsverity
+        // logic is implemented.
+        LOG(INFO) << "Falling back to standard signature check. " << fsVerityCheck.error();
+    }
+
+    auto sepolicySignature = SepolicyCheckSignature(dir);
+    if (!sepolicySignature.ok()) {
+        return Error() << "Apex SEPolicy failed signature check";
+    }
+    return {};
+}
+
+void CleanupApexSepolicy() {
+    for (const auto& file : kApexSepolicyTmp) {
+        std::string path = kTmpfsDir + file;
+        unlink(path.c_str());
+    }
+}
+
+// Updatable sepolicy is shipped within an zip within an APEX. Because
+// it needs to be available before Apexes are mounted, apexd copies
+// the zip from the APEX and stores it in /metadata/sepolicy. If there is
+// no updatable sepolicy in /metadata/sepolicy, then the updatable policy is
+// loaded from /system/etc/selinux/apex. Init performs the following
+// steps on boot:
+//
+// 1. Validates the zip by checking its signature against a public key that is
+// stored in /system/etc/selinux.
+// 2. Extracts files from zip and stores them in /dev/selinux.
+// 3. Checks if the apex_sepolicy.sha256 matches the sha256 of precompiled_sepolicy.
+// if so, the precompiled sepolicy is used. Otherwise, an on-device compile of the policy
+// is used. This is the same flow as on-device compilation of policy for Treble.
+// 4. Cleans up files in /dev/selinux which are no longer needed.
+// 5. Restorecons the remaining files in /dev/selinux.
+// 6. Sets selinux into enforcing mode and continues normal booting.
+//
+void PrepareApexSepolicy() {
+    bool supportsFsVerity = access(kFsVerityProcPath, F_OK) == 0;
+    if (supportsFsVerity) {
+        auto loadSepolicyApexCerts = LoadSepolicyApexCerts();
+        if (!loadSepolicyApexCerts.ok()) {
+            // TODO(b/199914227) If the device supports fsverity, but we fail here, we should fail
+            // to boot and not carry on. For now, fallback to a signature checkuntil the fsverity
+            // logic is implemented.
+            LOG(INFO) << loadSepolicyApexCerts.error();
+        }
+    }
+    // If apex sepolicy zip exists in /metadata/sepolicy, use that, otherwise use version on
+    // /system.
+    auto dir = (access((kSepolicyApexMetadataDir + kSepolicyZip).c_str(), F_OK) == 0)
+                       ? kSepolicyApexMetadataDir
+                       : kSepolicyApexSystemDir;
+
+    auto sepolicyVerify = SepolicyVerify(dir, supportsFsVerity);
+    if (!sepolicyVerify.ok()) {
+        LOG(INFO) << "Error: " << sepolicyVerify.error();
+        // If signature verification fails, fall back to version on /system.
+        // This file doesn't need to be verified because it lives on the system partition which
+        // is signed and protected by verified boot.
+        dir = kSepolicyApexSystemDir;
+    }
+
+    auto apex = GetPolicyFromApex(dir);
+    if (!apex.ok()) {
+        // TODO(b/199914227) Make failure fatal. For now continue booting with non-apex sepolicy.
+        LOG(ERROR) << apex.error();
+    }
 }
 
 void ReadPolicy(std::string* policy) {
@@ -740,9 +950,12 @@ int SetupSelinux(char** argv) {
 
     LOG(INFO) << "Opening SELinux policy";
 
+    PrepareApexSepolicy();
+
     // Read the policy before potentially killing snapuserd.
     std::string policy;
     ReadPolicy(&policy);
+    CleanupApexSepolicy();
 
     auto snapuserd_helper = SnapuserdSelinuxHelper::CreateIfNeeded();
     if (snapuserd_helper) {
@@ -758,6 +971,13 @@ int SetupSelinux(char** argv) {
         // Before enforcing, finish the pending snapuserd transition.
         snapuserd_helper->FinishTransition();
         snapuserd_helper = nullptr;
+    }
+
+    // This restorecon is intentionally done before SelinuxSetEnforcement because the permissions
+    // needed to transition files from tmpfs to *_contexts_file context should not be granted to
+    // any process after selinux is set into enforcing mode.
+    if (selinux_android_restorecon("/dev/selinux/", SELINUX_ANDROID_RESTORECON_RECURSE) == -1) {
+        PLOG(FATAL) << "restorecon failed of /dev/selinux failed";
     }
 
     SelinuxSetEnforcement();
