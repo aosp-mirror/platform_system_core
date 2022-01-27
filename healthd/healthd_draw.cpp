@@ -99,6 +99,15 @@ void HealthdDraw::blank_screen(bool blank, int drm) {
     gr_fb_blank(blank, drm);
 }
 
+/* support screen rotation for foldable phone */
+void HealthdDraw::rotate_screen(int drm) {
+    if (!graphics_available) return;
+    if (drm == 0)
+        gr_rotate(GRRotation::RIGHT /* landscape mode */);
+    else
+        gr_rotate(GRRotation::NONE /* Portrait mode */);
+}
+
 void HealthdDraw::clear_screen(void) {
     if (!graphics_available) return;
     gr_color(0, 0, 0, 255);
