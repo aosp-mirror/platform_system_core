@@ -327,7 +327,7 @@ void Charger::UpdateScreenState(int64_t now) {
 
 #if !defined(__ANDROID_VNDK__)
         if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
-            healthd_draw_->blank_screen(true);
+            healthd_draw_->blank_screen(true, static_cast<int>(drm_));
             screen_blanked_ = true;
         }
 #endif
@@ -337,7 +337,7 @@ void Charger::UpdateScreenState(int64_t now) {
     if (batt_anim_.num_cycles > 0 && batt_anim_.cur_cycle == batt_anim_.num_cycles) {
         reset_animation(&batt_anim_);
         next_screen_transition_ = -1;
-        healthd_draw_->blank_screen(true);
+        healthd_draw_->blank_screen(true, static_cast<int>(drm_));
         screen_blanked_ = true;
         LOGV("[%" PRId64 "] animation done\n", now);
         if (configuration_->ChargerIsOnline()) {
@@ -348,8 +348,16 @@ void Charger::UpdateScreenState(int64_t now) {
 
     disp_time = batt_anim_.frames[batt_anim_.cur_frame].disp_time;
 
+    /* turn off all screen */
+    if (screen_switch_ == SCREEN_SWITCH_ENABLE) {
+        healthd_draw_->blank_screen(true, 0 /* drm */);
+        healthd_draw_->blank_screen(true, 1 /* drm */);
+        screen_blanked_ = true;
+        screen_switch_ = SCREEN_SWITCH_DISABLE;
+    }
+
     if (screen_blanked_) {
-        healthd_draw_->blank_screen(false);
+        healthd_draw_->blank_screen(false, static_cast<int>(drm_));
         screen_blanked_ = false;
     }
 
@@ -452,7 +460,26 @@ int Charger::SetKeyCallback(int code, int value) {
     return 0;
 }
 
+int Charger::SetSwCallback(int code, int value) {
+    if (code > SW_MAX) return -1;
+    if (code == SW_LID) {
+        if ((screen_switch_ == SCREEN_SWITCH_DEFAULT) || ((value != 0) && (drm_ == DRM_INNER)) ||
+            ((value == 0) && (drm_ == DRM_OUTER))) {
+            screen_switch_ = SCREEN_SWITCH_ENABLE;
+            drm_ = (value != 0) ? DRM_OUTER : DRM_INNER;
+            keys_[code].pending = true;
+        }
+    }
+
+    return 0;
+}
+
 void Charger::UpdateInputState(input_event* ev) {
+    if (ev->type == EV_SW && ev->code == SW_LID) {
+        SetSwCallback(ev->code, ev->value);
+        return;
+    }
+
     if (ev->type != EV_KEY) return;
     SetKeyCallback(ev->code, ev->value);
 }
@@ -511,10 +538,26 @@ void Charger::ProcessKey(int code, int64_t now) {
     key->pending = false;
 }
 
+void Charger::ProcessHallSensor(int code) {
+    key_state* key = &keys_[code];
+
+    if (code == SW_LID) {
+        if (key->pending) {
+            reset_animation(&batt_anim_);
+            kick_animation(&batt_anim_);
+            RequestDisableSuspend();
+        }
+    }
+
+    key->pending = false;
+}
+
 void Charger::HandleInputState(int64_t now) {
     ProcessKey(KEY_POWER, now);
 
     if (next_key_check_ != -1 && now > next_key_check_) next_key_check_ = -1;
+
+    ProcessHallSensor(SW_LID);
 }
 
 void Charger::HandlePowerSupplyState(int64_t now) {
@@ -743,8 +786,13 @@ void Charger::OnInit(struct healthd_config* config) {
             batt_anim_.frames[i].surface = scale_frames[i];
         }
     }
+    drm_ = DRM_INNER;
+    screen_switch_ = SCREEN_SWITCH_DEFAULT;
     ev_sync_key_state(std::bind(&Charger::SetKeyCallback, this, std::placeholders::_1,
                                 std::placeholders::_2));
+
+    (void)ev_sync_sw_state(
+            std::bind(&Charger::SetSwCallback, this, std::placeholders::_1, std::placeholders::_2));
 
     next_screen_transition_ = -1;
     next_key_check_ = -1;
