@@ -35,6 +35,9 @@ class HealthdDraw {
   // Blanks screen if true, unblanks if false.
   virtual void blank_screen(bool blank, int drm);
 
+  // Rotate screen.
+  virtual void rotate_screen(int drm);
+
   static std::unique_ptr<HealthdDraw> Create(animation *anim);
 
  protected:
