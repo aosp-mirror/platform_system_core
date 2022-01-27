@@ -94,9 +94,9 @@ void HealthdDraw::redraw_screen(const animation* batt_anim, GRSurface* surf_unkn
     gr_flip();
 }
 
-void HealthdDraw::blank_screen(bool blank) {
+void HealthdDraw::blank_screen(bool blank, int drm) {
     if (!graphics_available) return;
-    gr_fb_blank(blank);
+    gr_fb_blank(blank, drm);
 }
 
 void HealthdDraw::clear_screen(void) {
@@ -139,6 +139,8 @@ int HealthdDraw::draw_text(const GRFont* font, int x, int y, const char* str) {
 void HealthdDraw::determine_xy(const animation::text_field& field,
                                const int length, int* x, int* y) {
   *x = field.pos_x;
+  screen_width_ = gr_fb_width() / (kSplitScreen ? 2 : 1);
+  screen_height_ = gr_fb_height();
 
   int str_len_px = length * field.font->char_width;
   if (field.pos_x == CENTER_VAL) {
