@@ -599,8 +599,13 @@ bool UserSnapshotServer::WaitForSocket() {
         return false;
     }
 
-    // We must re-initialize property service access, since we launched before
-    // second-stage init.
+    // This initialization of system property is important. When daemon is
+    // launched post selinux transition (before init second stage),
+    // bionic libc initializes system property as part of __libc_init_common();
+    // however that initialization fails silently given that fact that we don't
+    // have /dev/__properties__ setup which is created at init second stage.
+    //
+    // At this point, we have the handlers setup and is safe to setup property.
     __system_properties_init();
 
     if (!android::base::WaitForProperty("snapuserd.proxy_ready", "true")) {

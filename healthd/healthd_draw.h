@@ -31,8 +31,9 @@ class HealthdDraw {
   // Redraws screen.
   void redraw_screen(const animation* batt_anim, GRSurface* surf_unknown);
 
+  // According to the index of Direct Rendering Manager,
   // Blanks screen if true, unblanks if false.
-  virtual void blank_screen(bool blank);
+  virtual void blank_screen(bool blank, int drm);
 
   static std::unique_ptr<HealthdDraw> Create(animation *anim);
 
