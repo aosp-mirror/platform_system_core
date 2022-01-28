@@ -457,12 +457,10 @@ static int sparse_file_read_sparse(struct sparse_file* s, SparseFileSource* sour
   return 0;
 }
 
-static int sparse_file_read_normal(struct sparse_file* s, int fd) {
+static int do_sparse_file_read_normal(struct sparse_file* s, int fd, uint32_t* buf, int64_t offset,
+                                      int64_t remain) {
   int ret;
-  uint32_t* buf = (uint32_t*)malloc(s->block_size);
-  unsigned int block = 0;
-  int64_t remain = s->len;
-  int64_t offset = 0;
+  unsigned int block = offset / s->block_size;
   unsigned int to_read;
   unsigned int i;
   bool sparse_block;
@@ -476,7 +474,6 @@ static int sparse_file_read_normal(struct sparse_file* s, int fd) {
     ret = read_all(fd, buf, to_read);
     if (ret < 0) {
       error("failed to read sparse file");
-      free(buf);
       return ret;
     }
 
@@ -504,20 +501,93 @@ static int sparse_file_read_normal(struct sparse_file* s, int fd) {
     block++;
   }
 
-  free(buf);
   return 0;
 }
 
-int sparse_file_read(struct sparse_file* s, int fd, bool sparse, bool crc) {
-  if (crc && !sparse) {
+static int sparse_file_read_normal(struct sparse_file* s, int fd) {
+  int ret;
+  uint32_t* buf = (uint32_t*)malloc(s->block_size);
+
+  if (!buf)
+    return -ENOMEM;
+
+  ret = do_sparse_file_read_normal(s, fd, buf, 0, s->len);
+  free(buf);
+  return ret;
+}
+
+#ifdef __linux__
+static int sparse_file_read_hole(struct sparse_file* s, int fd) {
+  int ret;
+  uint32_t* buf = (uint32_t*)malloc(s->block_size);
+  int64_t end = 0;
+  int64_t start = 0;
+
+  if (!buf) {
+    return -ENOMEM;
+  }
+
+  do {
+    start = lseek(fd, end, SEEK_DATA);
+    if (start < 0) {
+      if (errno == ENXIO)
+        /* The rest of the file is a hole */
+        break;
+
+      error("could not seek to data");
+      free(buf);
+      return -errno;
+    } else if (start > s->len) {
+      break;
+    }
+
+    end = lseek(fd, start, SEEK_HOLE);
+    if (end < 0) {
+      error("could not seek to end");
+      free(buf);
+      return -errno;
+    }
+    end = std::min(end, s->len);
+
+    start = ALIGN_DOWN(start, s->block_size);
+    end = ALIGN(end, s->block_size);
+    if (lseek(fd, start, SEEK_SET) < 0) {
+      free(buf);
+      return -errno;
+    }
+
+    ret = do_sparse_file_read_normal(s, fd, buf, start, end - start);
+    if (ret) {
+      free(buf);
+      return ret;
+    }
+  } while (end < s->len);
+
+  free(buf);
+  return 0;
+}
+#else
+static int sparse_file_read_hole(struct sparse_file* s __unused, int fd __unused) {
+  return -ENOTSUP;
+}
+#endif
+
+int sparse_file_read(struct sparse_file* s, int fd, enum sparse_read_mode mode, bool crc) {
+  if (crc && mode != SPARSE_READ_MODE_SPARSE) {
     return -EINVAL;
   }
 
-  if (sparse) {
-    SparseFileFdSource source(fd);
-    return sparse_file_read_sparse(s, &source, crc);
-  } else {
-    return sparse_file_read_normal(s, fd);
+  switch (mode) {
+    case SPARSE_READ_MODE_SPARSE: {
+      SparseFileFdSource source(fd);
+      return sparse_file_read_sparse(s, &source, crc);
+    }
+    case SPARSE_READ_MODE_NORMAL:
+      return sparse_file_read_normal(s, fd);
+    case SPARSE_READ_MODE_HOLE:
+      return sparse_file_read_hole(s, fd);
+    default:
+      return -EINVAL;
   }
 }
 
