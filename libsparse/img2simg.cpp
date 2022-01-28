@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
   }
 
   sparse_file_verbose(s);
-  ret = sparse_file_read(s, in, false, false);
+  ret = sparse_file_read(s, in, SPARSE_READ_MODE_NORMAL, false);
   if (ret) {
     fprintf(stderr, "Failed to read file\n");
     exit(-1);
