@@ -225,23 +225,42 @@ int sparse_file_foreach_chunk(struct sparse_file *s, bool sparse, bool crc,
 	int (*write)(void *priv, const void *data, size_t len, unsigned int block,
 		     unsigned int nr_blocks),
 	void *priv);
+
+/**
+ * enum sparse_read_mode - The method to use when reading in files
+ * @SPARSE_READ_MODE_NORMAL: The input is a regular file. Constant chunks of
+ *                           data (including holes) will be be converted to
+ *                           fill chunks.
+ * @SPARSE_READ_MODE_SPARSE: The input is an Android sparse file.
+ * @SPARSE_READ_MODE_HOLE: The input is a regular file. Holes will be converted
+ *                         to "don't care" chunks. Other constant chunks will
+ *                         be converted to fill chunks.
+ */
+enum sparse_read_mode {
+	SPARSE_READ_MODE_NORMAL = false,
+	SPARSE_READ_MODE_SPARSE = true,
+	SPARSE_READ_MODE_HOLE,
+};
+
 /**
  * sparse_file_read - read a file into a sparse file cookie
  *
  * @s - sparse file cookie
  * @fd - file descriptor to read from
- * @sparse - read a file in the Android sparse file format
+ * @mode - mode to use when reading the input file
  * @crc - verify the crc of a file in the Android sparse file format
  *
- * Reads a file into a sparse file cookie.  If sparse is true, the file is
- * assumed to be in the Android sparse file format.  If sparse is false, the
- * file will be sparsed by looking for block aligned chunks of all zeros or
- * another 32 bit value.  If crc is true, the crc of the sparse file will be
- * verified.
+ * Reads a file into a sparse file cookie. If @mode is
+ * %SPARSE_READ_MODE_SPARSE, the file is assumed to be in the Android sparse
+ * file format. If @mode is %SPARSE_READ_MODE_NORMAL, the file will be sparsed
+ * by looking for block aligned chunks of all zeros or another 32 bit value. If
+ * @mode is %SPARSE_READ_MODE_HOLE, the file will be sparsed like
+ * %SPARSE_READ_MODE_NORMAL, but holes in the file will be converted to "don't
+ * care" chunks. If crc is true, the crc of the sparse file will be verified.
  *
  * Returns 0 on success, negative errno on error.
  */
-int sparse_file_read(struct sparse_file *s, int fd, bool sparse, bool crc);
+int sparse_file_read(struct sparse_file *s, int fd, enum sparse_read_mode mode, bool crc);
 
 /**
  * sparse_file_import - import an existing sparse file
