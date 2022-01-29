@@ -41,11 +41,9 @@ enum sync_state {
     SS_DIRTY =  1,
 };
 
-static int ssdir_fd = -1;
 static const char *ssdir_name;
 
 static enum sync_state fs_state;
-static enum sync_state dir_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
 
 static bool alternate_mode;
@@ -58,10 +56,6 @@ static struct {
 static uint32_t insert_fd(int open_flags, int fd)
 {
     uint32_t handle = fd;
-
-    if (open_flags & O_CREAT) {
-        dir_state = SS_DIRTY;
-    }
 
     if (handle < FD_TBL_SIZE) {
             fd_state[fd] = SS_CLEAN; /* fd clean */
@@ -193,7 +187,6 @@ int storage_file_delete(struct storage_msg *msg,
         goto err_response;
     }
 
-    dir_state = SS_DIRTY;
     rc = unlink(path);
     if (rc < 0) {
         rc = errno;
@@ -217,12 +210,21 @@ err_response:
     return ipc_respond(msg, NULL, 0);
 }
 
+static void sync_parent(const char* path) {
+    int parent_fd;
+    char* parent_path = dirname(path);
+    parent_fd = TEMP_FAILURE_RETRY(open(parent_path, O_RDONLY));
+    if (parent_fd >= 0) {
+        fsync(parent_fd);
+        close(parent_fd);
+    } else {
+        ALOGE("%s: failed to open parent directory \"%s\" for sync: %s\n", __func__, parent_path,
+              strerror(errno));
+    }
+}
 
-int storage_file_open(struct storage_msg *msg,
-                      const void *r, size_t req_len)
-{
-    char *path = NULL;
-    char* parent_path;
+int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len) {
+    char* path = NULL;
     const struct storage_file_open_req *req = r;
     struct storage_file_open_resp resp = {0};
 
@@ -271,7 +273,6 @@ int storage_file_open(struct storage_msg *msg,
     if (req->flags & STORAGE_FILE_OPEN_TRUNCATE)
         open_flags |= O_TRUNC;
 
-    parent_path = dirname(path);
     if (req->flags & STORAGE_FILE_OPEN_CREATE) {
         /*
          * Create the alternate parent dir if needed & allowed.
@@ -281,8 +282,11 @@ int storage_file_open(struct storage_msg *msg,
          * it has access to the necessary bit of information.
          */
         if (strstr(req->name, ALTERNATE_DATA_DIR) == req->name) {
+            char* parent_path = dirname(path);
             rc = mkdir(parent_path, S_IRWXU);
-            if (rc && errno != EEXIST) {
+            if (rc == 0) {
+                sync_parent(parent_path);
+            } else if (errno != EEXIST) {
                 ALOGE("%s: Could not create parent directory \"%s\": %s\n", __func__, parent_path,
                       strerror(errno));
             }
@@ -319,6 +323,10 @@ int storage_file_open(struct storage_msg *msg,
         }
         msg->result = translate_errno(rc);
         goto err_response;
+    }
+
+    if (open_flags & O_CREAT) {
+        sync_parent(path);
     }
     free(path);
 
@@ -512,16 +520,10 @@ int storage_init(const char *dirname)
     alternate_mode = is_gsi_running();
 
     fs_state = SS_CLEAN;
-    dir_state = SS_CLEAN;
     for (uint i = 0; i < FD_TBL_SIZE; i++) {
         fd_state[i] = SS_UNUSED;  /* uninstalled */
     }
 
-    ssdir_fd = open(dirname, O_RDONLY);
-    if (ssdir_fd < 0) {
-        ALOGE("failed to open ss root dir \"%s\": %s\n",
-               dirname, strerror(errno));
-    }
     ssdir_name = dirname;
     return 0;
 }
@@ -545,25 +547,16 @@ int storage_sync_checkpoint(void)
          }
     }
 
-    /* check if we need to sync the directory */
-    if (dir_state == SS_DIRTY) {
-        if (fs_state == SS_CLEAN) {
-            rc = fsync(ssdir_fd);
-            if (rc < 0) {
-                ALOGE("fsync for ssdir failed: %s\n", strerror(errno));
-                return rc;
-            }
-        }
-        dir_state = SS_CLEAN;  /* set to clean */
-    }
-
-    /* check if we need to sync the whole fs */
+    /* check if we need to sync all filesystems */
     if (fs_state == SS_DIRTY) {
-        rc = syscall(SYS_syncfs, ssdir_fd);
-        if (rc < 0) {
-            ALOGE("syncfs failed: %s\n", strerror(errno));
-            return rc;
-        }
+        /*
+         * We sync all filesystems here because we don't know what filesystem
+         * needs syncing if there happen to be other filesystems symlinked under
+         * the root data directory. This should not happen in the normal case
+         * because our fd table is large enough to handle the few open files we
+         * use.
+         */
+        sync();
         fs_state = SS_CLEAN;
     }
 
