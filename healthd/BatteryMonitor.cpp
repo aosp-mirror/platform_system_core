@@ -92,6 +92,7 @@ BatteryMonitor::BatteryMonitor()
       mBatteryDevicePresent(false),
       mBatteryFixedCapacity(0),
       mBatteryFixedTemperature(0),
+      mChargerDockOnline(false),
       mHealthInfo(std::make_unique<HealthInfo_2_1>()) {
     initHealthInfo(mHealthInfo.get());
 }
@@ -196,6 +197,7 @@ BatteryMonitor::PowerSupplyType BatteryMonitor::readPowerSupplyType(const String
             {"USB_PD", ANDROID_POWER_SUPPLY_TYPE_AC},
             {"USB_PD_DRP", ANDROID_POWER_SUPPLY_TYPE_USB},
             {"Wireless", ANDROID_POWER_SUPPLY_TYPE_WIRELESS},
+            {"Dock", ANDROID_POWER_SUPPLY_TYPE_DOCK},
             {NULL, 0},
     };
     std::string buf;
@@ -319,9 +321,21 @@ void BatteryMonitor::updateValues(void) {
             case ANDROID_POWER_SUPPLY_TYPE_WIRELESS:
                 props.chargerWirelessOnline = true;
                 break;
+            case ANDROID_POWER_SUPPLY_TYPE_DOCK:
+                mChargerDockOnline = true;
+                break;
             default:
-                KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
-                             mChargerNames[i].string());
+                path.clear();
+                path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH,
+                                  mChargerNames[i].string());
+                if (access(path.string(), R_OK) == 0) {
+                    mChargerDockOnline = true;
+                    KLOG_INFO(LOG_TAG, "%s: online\n",
+                              mChargerNames[i].string());
+                } else {
+                    KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
+                                 mChargerNames[i].string());
+                }
             }
             path.clear();
             path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
@@ -391,8 +405,8 @@ void BatteryMonitor::logValues(const android::hardware::health::V2_1::HealthInfo
 
 bool BatteryMonitor::isChargerOnline() {
     const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
-    return props.chargerAcOnline | props.chargerUsbOnline |
-            props.chargerWirelessOnline;
+    return props.chargerAcOnline | props.chargerUsbOnline | props.chargerWirelessOnline |
+           mChargerDockOnline;
 }
 
 int BatteryMonitor::getChargeStatus() {
@@ -477,10 +491,10 @@ void BatteryMonitor::dumpState(int fd) {
     char vs[128];
     const HealthInfo_1_0& props = mHealthInfo->legacy.legacy;
 
-    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d current_max: %d voltage_max: %d\n",
-             props.chargerAcOnline, props.chargerUsbOnline,
-             props.chargerWirelessOnline, props.maxChargingCurrent,
-             props.maxChargingVoltage);
+    snprintf(vs, sizeof(vs),
+             "ac: %d usb: %d wireless: %d dock: %d current_max: %d voltage_max: %d\n",
+             props.chargerAcOnline, props.chargerUsbOnline, props.chargerWirelessOnline,
+             mChargerDockOnline, props.maxChargingCurrent, props.maxChargingVoltage);
     write(fd, vs, strlen(vs));
     snprintf(vs, sizeof(vs), "status: %d health: %d present: %d\n",
              props.batteryStatus, props.batteryHealth, props.batteryPresent);
@@ -554,6 +568,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             case ANDROID_POWER_SUPPLY_TYPE_AC:
             case ANDROID_POWER_SUPPLY_TYPE_USB:
             case ANDROID_POWER_SUPPLY_TYPE_WIRELESS:
+            case ANDROID_POWER_SUPPLY_TYPE_DOCK:
                 path.clear();
                 path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
                 if (access(path.string(), R_OK) == 0)
@@ -690,6 +705,17 @@ void BatteryMonitor::init(struct healthd_config *hc) {
 
             case ANDROID_POWER_SUPPLY_TYPE_UNKNOWN:
                 break;
+            }
+
+            // Look for "is_dock" file
+            path.clear();
+            path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH, name);
+            if (access(path.string(), R_OK) == 0) {
+                path.clear();
+                path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
+                if (access(path.string(), R_OK) == 0)
+                    mChargerNames.add(String8(name));
+
             }
         }
     }
