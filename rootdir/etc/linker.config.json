@@ -20,6 +20,8 @@
     "libicuuc.so",
     // resolv
     "libnetd_resolv.so",
+    // netd
+    "libnetd_updatable.so",
     // nn
     "libneuralnetworks.so",
     // statsd
