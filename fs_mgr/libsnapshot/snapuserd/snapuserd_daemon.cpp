@@ -80,6 +80,8 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
 
     MaskAllSignalsExceptIntAndTerm();
 
+    user_server_.SetServerRunning();
+
     if (FLAGS_socket_handoff) {
         return user_server_.RunForSocketHandoff();
     }
@@ -170,7 +172,10 @@ void Daemon::MaskAllSignals() {
 }
 
 void Daemon::Interrupt() {
-    if (IsUserspaceSnapshotsEnabled()) {
+    // TODO: We cannot access system property during first stage init.
+    // Until we remove the dm-snapshot code, we will have this check
+    // and verify it through a temp variable.
+    if (user_server_.IsServerRunning()) {
         user_server_.Interrupt();
     } else {
         server_.Interrupt();
@@ -178,7 +183,7 @@ void Daemon::Interrupt() {
 }
 
 void Daemon::ReceivedSocketSignal() {
-    if (IsUserspaceSnapshotsEnabled()) {
+    if (user_server_.IsServerRunning()) {
         user_server_.ReceivedSocketSignal();
     } else {
         server_.ReceivedSocketSignal();
