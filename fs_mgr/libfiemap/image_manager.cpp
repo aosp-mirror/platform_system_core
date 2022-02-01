@@ -744,6 +744,116 @@ bool ImageManager::MapAllImages(const std::function<bool(std::set<std::string>)>
     return CreateLogicalPartitions(*metadata.get(), data_partition_name);
 }
 
+std::ostream& operator<<(std::ostream& os, android::fs_mgr::Extent* extent) {
+    if (auto e = extent->AsLinearExtent()) {
+        return os << "<begin:" << e->physical_sector() << ", end:" << e->end_sector()
+                  << ", device:" << e->device_index() << ">";
+    }
+    return os << "<unknown>";
+}
+
+static bool CompareExtent(android::fs_mgr::Extent* a, android::fs_mgr::Extent* b) {
+    if (auto linear_a = a->AsLinearExtent()) {
+        auto linear_b = b->AsLinearExtent();
+        if (!linear_b) {
+            return false;
+        }
+        return linear_a->physical_sector() == linear_b->physical_sector() &&
+               linear_a->num_sectors() == linear_b->num_sectors() &&
+               linear_a->device_index() == linear_b->device_index();
+    }
+    return false;
+}
+
+static bool CompareExtents(android::fs_mgr::Partition* oldp, android::fs_mgr::Partition* newp) {
+    const auto& old_extents = oldp->extents();
+    const auto& new_extents = newp->extents();
+
+    auto old_iter = old_extents.begin();
+    auto new_iter = new_extents.begin();
+    while (true) {
+        if (old_iter == old_extents.end()) {
+            if (new_iter == new_extents.end()) {
+                break;
+            }
+            LOG(ERROR) << "Unexpected extent added: " << (*new_iter);
+            return false;
+        }
+        if (new_iter == new_extents.end()) {
+            LOG(ERROR) << "Unexpected extent removed: " << (*old_iter);
+            return false;
+        }
+
+        if (!CompareExtent(old_iter->get(), new_iter->get())) {
+            LOG(ERROR) << "Extents do not match: " << old_iter->get() << ", " << new_iter->get();
+            return false;
+        }
+
+        old_iter++;
+        new_iter++;
+    }
+    return true;
+}
+
+bool ImageManager::ValidateImageMaps() {
+    if (!MetadataExists(metadata_dir_)) {
+        LOG(INFO) << "ImageManager skipping verification; no images for " << metadata_dir_;
+        return true;
+    }
+
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        LOG(ERROR) << "ImageManager skipping verification; failed to open " << metadata_dir_;
+        return true;
+    }
+
+    for (const auto& partition : metadata->partitions) {
+        auto name = GetPartitionName(partition);
+        auto image_path = GetImageHeaderPath(name);
+        auto fiemap = SplitFiemap::Open(image_path);
+        if (fiemap == nullptr) {
+            LOG(ERROR) << "SplitFiemap::Open(\"" << image_path << "\") failed";
+            return false;
+        }
+        if (!fiemap->HasPinnedExtents()) {
+            LOG(ERROR) << "Image doesn't have pinned extents: " << image_path;
+            return false;
+        }
+
+        android::fs_mgr::PartitionOpener opener;
+        auto builder = android::fs_mgr::MetadataBuilder::New(*metadata.get(), &opener);
+        if (!builder) {
+            LOG(ERROR) << "Could not create metadata builder: " << image_path;
+            return false;
+        }
+
+        auto new_p = builder->AddPartition("_temp_for_verify", 0);
+        if (!new_p) {
+            LOG(ERROR) << "Could not add temporary partition: " << image_path;
+            return false;
+        }
+
+        auto partition_size = android::fs_mgr::GetPartitionSize(*metadata.get(), partition);
+        if (!FillPartitionExtents(builder.get(), new_p, fiemap.get(), partition_size)) {
+            LOG(ERROR) << "Could not fill partition extents: " << image_path;
+            return false;
+        }
+
+        auto old_p = builder->FindPartition(name);
+        if (!old_p) {
+            LOG(ERROR) << "Could not find metadata for " << image_path;
+            return false;
+        }
+
+        if (!CompareExtents(old_p, new_p)) {
+            LOG(ERROR) << "Metadata for " << image_path << " does not match fiemap";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,
                                                  const std::chrono::milliseconds& timeout_ms,
                                                  const std::string& name) {
