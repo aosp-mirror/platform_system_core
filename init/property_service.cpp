@@ -1107,6 +1107,7 @@ void PropertyLoadBootDefaults() {
     LoadPropertiesFromSecondStageRes(&properties);
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
+    load_properties_from_file("/system_dlkm/etc/build.prop", nullptr, &properties);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
     // all updated.
     // if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
