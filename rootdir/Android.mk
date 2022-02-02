@@ -110,7 +110,8 @@ endif
 ifdef BOARD_USES_METADATA_PARTITION
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
 endif
-ifdef BOARD_USES_SYSTEM_DLKM_PARTITION
+ifdef BOARD_USES_SYSTEM_DLKMIMAGE
+  # /system_dlkm mount point
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_dlkm
 endif
 
