@@ -85,6 +85,10 @@ static void print_thread_header(CallbackType callback, const Tombstone& tombston
     CB(should_log, "tagged_addr_ctrl: %016" PRIx64 "%s", thread.tagged_addr_ctrl(),
        describe_tagged_addr_ctrl(thread.tagged_addr_ctrl()).c_str());
   }
+  if (thread.pac_enabled_keys() != -1) {
+    CB(should_log, "pac_enabled_keys: %016" PRIx64 "%s", thread.pac_enabled_keys(),
+       describe_pac_enabled_keys(thread.pac_enabled_keys()).c_str());
+  }
 }
 
 static void print_register_row(CallbackType callback, int word_size,

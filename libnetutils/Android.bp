@@ -23,7 +23,6 @@ cc_library_shared {
     },
 
     srcs: [
-        "checksum.c",
         "dhcpclient.c",
         "dhcpmsg.c",
         "ifc_utils.c",
@@ -35,6 +34,10 @@ cc_library_shared {
         "liblog",
     ],
 
+    static_libs: [
+        "libip_checksum",
+    ],
+
     cflags: ["-Werror"],
 
     export_include_dirs: ["include"],
@@ -43,21 +46,6 @@ cc_library_shared {
         "//apex_available:platform",
         "com.android.tethering",
     ],
-}
-
-cc_library_static {
-    name: "libipchecksum",
-
-    srcs: [
-        "checksum.c",
-    ],
-
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-
-    export_include_dirs: ["include"],
 }
 
 cc_binary {

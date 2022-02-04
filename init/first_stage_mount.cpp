@@ -191,8 +191,6 @@ static bool GetRootEntry(FstabEntry* root_entry) {
     auto& dm = android::dm::DeviceMapper::Instance();
     if (dm.GetState("vroot") != android::dm::DmDeviceState::INVALID) {
         root_entry->fs_mgr_flags.avb = true;
-    } else {
-        root_entry->fs_mgr_flags.verify = true;
     }
     return true;
 }

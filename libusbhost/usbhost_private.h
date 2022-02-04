@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The Android Open Source Project
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,10 @@
 
 #pragma once
 
-#include <stdbool.h>
+#define LOG_TAG "usbhost"
+#include <log/log.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * is_data_checkpoint_active() - Check for an active, uncommitted checkpoint of
- * /data. If a checkpoint is active, storage should not commit any
- * rollback-protected writes to /data.
- * @active: Out parameter that will be set to the result of the check.
- *
- * Return: 0 if active was set and is valid, non-zero otherwise.
- */
-int is_data_checkpoint_active(bool* active);
-
-bool is_gsi_running();
-
-#ifdef __cplusplus
-}
-#endif
+// Somewhat arbitrary: Sony has reported needing more than 4KiB (but less
+// than 8KiB), and some frameworks code had 16KiB without any explanation,
+// so we went with the largest of those.
+#define MAX_DESCRIPTORS_LENGTH (16 * 1024)
