@@ -119,9 +119,11 @@ int WriteCallback(void* priv, const void* data, size_t len) {
 }
 
 int FlashSparseData(int fd, std::vector<char>& downloaded_data) {
-    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(), true, false);
+    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(),
+                                                      downloaded_data.size(), true, false);
     if (!file) {
-        return -ENOENT;
+        // Invalid sparse format
+        return -EINVAL;
     }
     return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(fd));
 }
@@ -172,7 +174,8 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
         return -EOVERFLOW;
     } else if (data.size() < block_device_size &&
                (partition_name == "boot" || partition_name == "boot_a" ||
-                partition_name == "boot_b")) {
+                partition_name == "boot_b" || partition_name == "init_boot" ||
+                partition_name == "init_boot_a" || partition_name == "init_boot_b")) {
         CopyAVBFooter(&data, block_device_size);
     }
     if (android::base::GetProperty("ro.system.build.type", "") != "user") {
