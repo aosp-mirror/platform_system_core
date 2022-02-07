@@ -88,3 +88,32 @@ java_test_host {
 
     test_suites: ["general-tests"],
 }
+
+cc_test {
+    name: "vts_fs_test",
+    test_suites: [
+        "vts",
+        "device-tests",
+    ],
+    test_options: {
+        min_shipping_api_level: 33,
+    },
+    require_root: true,
+    auto_gen_config: true,
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    srcs: [
+        "vts_fs_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libfs_mgr",
+    ],
+    static_libs: [
+        "libfstab",
+        "libgmock",
+        "libgtest",
+    ],
+}
