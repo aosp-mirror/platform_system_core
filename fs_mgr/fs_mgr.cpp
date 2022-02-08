@@ -2256,7 +2256,8 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
 #if ALLOW_ADBD_DISABLE_VERITY == 0
     // Allowlist the mount point if user build.
     static const std::vector<const std::string> kAllowedPaths = {
-            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+            "/odm",         "/odm_dlkm",   "/oem",    "/product",
+            "/system_dlkm", "/system_ext", "/vendor", "/vendor_dlkm",
     };
     static const std::vector<const std::string> kAllowedPrefixes = {
             "/mnt/product/",
