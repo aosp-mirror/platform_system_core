@@ -299,21 +299,16 @@ void androidSetCreateThreadFunc(android_create_thread_fn func)
 int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
-    int lasterr = 0;
     int curr_pri = getpriority(PRIO_PROCESS, tid);
 
     if (curr_pri == pri) {
         return rc;
     }
 
-    if (rc) {
-        lasterr = errno;
-    }
-
     if (setpriority(PRIO_PROCESS, tid, pri) < 0) {
         rc = INVALID_OPERATION;
     } else {
-        errno = lasterr;
+        errno = 0;
     }
 
     return rc;
