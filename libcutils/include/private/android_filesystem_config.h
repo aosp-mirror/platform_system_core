@@ -132,6 +132,7 @@
 #define AID_UWB 1083              /* UWB subsystem */
 #define AID_THREAD_NETWORK 1084   /* Thread Network subsystem */
 #define AID_DICED 1085            /* Android's DICE daemon */
+#define AID_DMESGD 1086           /* dmesg parsing daemon for kernel report collection */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
