@@ -1084,7 +1084,11 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer *buf)
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
-        if (partition == "vbmeta" || partition == "vbmeta_a" || partition == "vbmeta_b") {
+        // The vbmeta partition might have additional prefix if running in virtual machine
+        // e.g., guest_vbmeta_a.
+        if (android::base::EndsWith(partition, "vbmeta") ||
+            android::base::EndsWith(partition, "vbmeta_a") ||
+            android::base::EndsWith(partition, "vbmeta_b")) {
             rewrite_vbmeta_buffer(buf, false /* vbmeta_in_boot */);
         } else if (!has_vbmeta_partition() &&
                    (partition == "boot" || partition == "boot_a" || partition == "boot_b")) {
