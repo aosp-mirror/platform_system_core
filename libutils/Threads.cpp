@@ -84,14 +84,6 @@ struct thread_data_t {
         delete t;
         setpriority(PRIO_PROCESS, 0, prio);
 
-        // A new thread will be in its parent's sched group by default,
-        // so we just need to handle the background case.
-        // currently set to system_background group which is different
-        // from background group for app.
-        if (prio >= ANDROID_PRIORITY_BACKGROUND) {
-            SetTaskProfiles(0, {"SCHED_SP_SYSTEM"}, true);
-        }
-
         if (name) {
             androidSetThreadName(name);
             free(name);
@@ -312,12 +304,6 @@ int androidSetThreadPriority(pid_t tid, int pri)
 
     if (curr_pri == pri) {
         return rc;
-    }
-
-    if (pri >= ANDROID_PRIORITY_BACKGROUND) {
-        rc = SetTaskProfiles(tid, {"SCHED_SP_SYSTEM"}, true) ? 0 : -1;
-    } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
-        rc = SetTaskProfiles(tid, {"SCHED_SP_FOREGROUND"}, true) ? 0 : -1;
     }
 
     if (rc) {
