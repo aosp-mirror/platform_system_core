@@ -691,6 +691,14 @@ bool SnapshotHandler::IsIouringSupported() {
         return false;
     }
 
+    // During selinux init transition, libsnapshot will propagate the
+    // status of io_uring enablement. As properties are not initialized,
+    // we cannot query system property.
+    if (is_io_uring_enabled_) {
+        return true;
+    }
+
+    // Finally check the system property
     return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
 }
 

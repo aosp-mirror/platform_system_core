@@ -28,6 +28,7 @@ DEFINE_bool(no_socket, false,
 DEFINE_bool(socket_handoff, false,
             "If true, perform a socket hand-off with an existing snapuserd instance, then exit.");
 DEFINE_bool(user_snapshot, false, "If true, user-space snapshots are used");
+DEFINE_bool(io_uring, false, "If true, io_uring feature is enabled");
 
 namespace android {
 namespace snapshot {
@@ -81,6 +82,9 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
     MaskAllSignalsExceptIntAndTerm();
 
     user_server_.SetServerRunning();
+    if (FLAGS_io_uring) {
+        user_server_.SetIouringEnabled();
+    }
 
     if (FLAGS_socket_handoff) {
         return user_server_.RunForSocketHandoff();

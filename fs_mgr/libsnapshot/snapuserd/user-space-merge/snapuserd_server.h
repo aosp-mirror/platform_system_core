@@ -85,6 +85,7 @@ class UserSnapshotServer {
     bool is_socket_present_ = false;
     int num_partitions_merge_complete_ = 0;
     bool is_server_running_ = false;
+    bool io_uring_enabled_ = false;
 
     std::mutex lock_;
 
@@ -139,6 +140,8 @@ class UserSnapshotServer {
     void ReceivedSocketSignal() { received_socket_signal_ = true; }
     void SetServerRunning() { is_server_running_ = true; }
     bool IsServerRunning() { return is_server_running_; }
+    void SetIouringEnabled() { io_uring_enabled_ = true; }
+    bool IsIouringEnabled() { return io_uring_enabled_; }
 };
 
 }  // namespace snapshot

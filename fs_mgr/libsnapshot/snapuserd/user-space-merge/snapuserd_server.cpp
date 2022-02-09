@@ -471,6 +471,7 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
     }
 
     snapuserd->SetSocketPresent(is_socket_present_);
+    snapuserd->SetIouringEnabled(io_uring_enabled_);
 
     if (!snapuserd->InitializeWorkers()) {
         LOG(ERROR) << "Failed to initialize workers";
