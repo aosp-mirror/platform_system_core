@@ -101,7 +101,6 @@ cc_defaults {
             cflags: ["-fvisibility=protected"],
 
             shared_libs: [
-                "libprocessgroup",
                 "libvndksupport",
             ],
 
