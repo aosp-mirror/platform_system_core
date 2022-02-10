@@ -197,6 +197,9 @@ message SnapshotUpdateStatus {
 
     // user-space snapshots
     bool userspace_snapshots = 9;
+
+    // io_uring support
+    bool io_uring_enabled = 10;
 }
 
 // Next: 10
