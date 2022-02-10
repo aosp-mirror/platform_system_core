@@ -293,7 +293,6 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
 void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
-    handler->snapuserd()->SetSocketPresent(is_socket_present_);
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -470,6 +469,9 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;
     }
+
+    snapuserd->SetSocketPresent(is_socket_present_);
+    snapuserd->SetIouringEnabled(io_uring_enabled_);
 
     if (!snapuserd->InitializeWorkers()) {
         LOG(ERROR) << "Failed to initialize workers";
