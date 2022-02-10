@@ -39,7 +39,21 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 }
 
 bool SnapshotHandler::InitializeWorkers() {
-    for (int i = 0; i < kNumWorkerThreads; i++) {
+    int num_worker_threads = kNumWorkerThreads;
+
+    // We will need multiple worker threads only during
+    // device boot after OTA. For all other purposes,
+    // one thread is sufficient. We don't want to consume
+    // unnecessary memory especially during OTA install phase
+    // when daemon will be up during entire post install phase.
+    //
+    // During boot up, we need multiple threads primarily for
+    // update-verification.
+    if (is_socket_present_) {
+        num_worker_threads = 1;
+    }
+
+    for (int i = 0; i < num_worker_threads; i++) {
         std::unique_ptr<Worker> wt =
                 std::make_unique<Worker>(cow_device_, backing_store_device_, control_device_,
                                          misc_name_, base_path_merge_, GetSharedPtr());
@@ -677,6 +691,14 @@ bool SnapshotHandler::IsIouringSupported() {
         return false;
     }
 
+    // During selinux init transition, libsnapshot will propagate the
+    // status of io_uring enablement. As properties are not initialized,
+    // we cannot query system property.
+    if (is_io_uring_enabled_) {
+        return true;
+    }
+
+    // Finally check the system property
     return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
 }
 

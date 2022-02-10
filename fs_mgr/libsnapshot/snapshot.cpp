@@ -1685,6 +1685,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
 
     if (UpdateUsesUserSnapshots(lock.get()) && transition == InitTransition::SELINUX_DETACH) {
         snapuserd_argv->emplace_back("-user_snapshot");
+        if (UpdateUsesIouring(lock.get())) {
+            snapuserd_argv->emplace_back("-io_uring");
+        }
     }
 
     size_t num_cows = 0;
@@ -2060,6 +2063,11 @@ bool SnapshotManager::UpdateUsesCompression() {
 bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
     return update_status.compression_enabled();
+}
+
+bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.io_uring_enabled();
 }
 
 bool SnapshotManager::UpdateUsesUserSnapshots() {
@@ -2877,6 +2885,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_source_build_fingerprint(old_status.source_build_fingerprint());
         status.set_merge_phase(old_status.merge_phase());
         status.set_userspace_snapshots(old_status.userspace_snapshots());
+        status.set_io_uring_enabled(old_status.io_uring_enabled());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3200,6 +3209,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             status.set_userspace_snapshots(IsUserspaceSnapshotsEnabled());
             if (IsUserspaceSnapshotsEnabled()) {
                 is_snapshot_userspace_ = true;
+                status.set_io_uring_enabled(IsIouringEnabled());
                 LOG(INFO) << "User-space snapshots enabled";
             } else {
                 is_snapshot_userspace_ = false;

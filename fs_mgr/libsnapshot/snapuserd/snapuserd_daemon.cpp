@@ -28,6 +28,7 @@ DEFINE_bool(no_socket, false,
 DEFINE_bool(socket_handoff, false,
             "If true, perform a socket hand-off with an existing snapuserd instance, then exit.");
 DEFINE_bool(user_snapshot, false, "If true, user-space snapshots are used");
+DEFINE_bool(io_uring, false, "If true, io_uring feature is enabled");
 
 namespace android {
 namespace snapshot {
@@ -51,7 +52,12 @@ bool Daemon::StartDaemon(int argc, char** argv) {
     // is applied will check for the property. This is ok as the system
     // properties are valid at this point. We can't do this during first
     // stage init and hence use the command line flags to get the information.
-    if (!IsDmSnapshotTestingEnabled() && (FLAGS_user_snapshot || IsUserspaceSnapshotsEnabled())) {
+    bool user_snapshots = FLAGS_user_snapshot;
+    if (!user_snapshots) {
+        user_snapshots = (!IsDmSnapshotTestingEnabled() && IsUserspaceSnapshotsEnabled());
+    }
+
+    if (user_snapshots) {
         LOG(INFO) << "Starting daemon for user-space snapshots.....";
         return StartServerForUserspaceSnapshots(arg_start, argc, argv);
     } else {
@@ -74,6 +80,11 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
     signal(SIGUSR1, Daemon::SignalHandler);
 
     MaskAllSignalsExceptIntAndTerm();
+
+    user_server_.SetServerRunning();
+    if (FLAGS_io_uring) {
+        user_server_.SetIouringEnabled();
+    }
 
     if (FLAGS_socket_handoff) {
         return user_server_.RunForSocketHandoff();
@@ -165,7 +176,10 @@ void Daemon::MaskAllSignals() {
 }
 
 void Daemon::Interrupt() {
-    if (IsUserspaceSnapshotsEnabled()) {
+    // TODO: We cannot access system property during first stage init.
+    // Until we remove the dm-snapshot code, we will have this check
+    // and verify it through a temp variable.
+    if (user_server_.IsServerRunning()) {
         user_server_.Interrupt();
     } else {
         server_.Interrupt();
@@ -173,7 +187,7 @@ void Daemon::Interrupt() {
 }
 
 void Daemon::ReceivedSocketSignal() {
-    if (IsUserspaceSnapshotsEnabled()) {
+    if (user_server_.IsServerRunning()) {
         user_server_.ReceivedSocketSignal();
     } else {
         server_.ReceivedSocketSignal();
