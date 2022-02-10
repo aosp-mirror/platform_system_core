@@ -14,6 +14,11 @@
 // limitations under the License.
 //
 
+package {
+    // See: http://go/android-license-faq
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
 cc_fuzz {
   name: "libfstab_fuzzer",
   srcs: [
