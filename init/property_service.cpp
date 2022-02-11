@@ -1035,8 +1035,8 @@ static void property_initialize_ro_vendor_api_level() {
     constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
 
     // Api level properties of the board. The order of the properties must be kept.
-    std::vector<std::string> BOARD_API_LEVEL_PROPS = {
-            "ro.board.api_level", "ro.board.first_api_level", "ro.vendor.build.version.sdk"};
+    std::vector<std::string> BOARD_API_LEVEL_PROPS = {"ro.board.api_level",
+                                                      "ro.board.first_api_level"};
     // Api level properties of the device. The order of the properties must be kept.
     std::vector<std::string> DEVICE_API_LEVEL_PROPS = {"ro.product.first_api_level",
                                                        "ro.build.version.sdk"};
