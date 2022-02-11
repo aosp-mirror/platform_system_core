@@ -319,6 +319,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void SetMergedBlockCountForNextCommit(int x) { total_ra_blocks_merged_ = x; }
     int GetTotalBlocksToMerge() { return total_ra_blocks_merged_; }
     void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
+    void SetIouringEnabled(bool io_uring_enabled) { is_io_uring_enabled_ = io_uring_enabled; }
     bool MergeInitiated() { return merge_initiated_; }
     double GetMergePercentage() { return merge_completion_percentage_; }
 
@@ -396,6 +397,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool merge_initiated_ = false;
     bool attached_ = false;
     bool is_socket_present_;
+    bool is_io_uring_enabled_ = false;
     bool scratch_space_ = false;
 
     std::unique_ptr<struct io_uring> ring_;
