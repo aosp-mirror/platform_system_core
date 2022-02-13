@@ -1,5 +1,7 @@
 LOCAL_PATH:= $(call my-dir)
 
+$(eval $(call declare-1p-copy-files,system/core/rootdir,))
+
 #######################################
 # init-debug.rc
 include $(CLEAR_VARS)
