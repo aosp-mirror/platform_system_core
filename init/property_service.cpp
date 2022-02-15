@@ -1035,8 +1035,8 @@ static void property_initialize_ro_vendor_api_level() {
     constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
 
     // Api level properties of the board. The order of the properties must be kept.
-    std::vector<std::string> BOARD_API_LEVEL_PROPS = {
-            "ro.board.api_level", "ro.board.first_api_level", "ro.vendor.build.version.sdk"};
+    std::vector<std::string> BOARD_API_LEVEL_PROPS = {"ro.board.api_level",
+                                                      "ro.board.first_api_level"};
     // Api level properties of the device. The order of the properties must be kept.
     std::vector<std::string> DEVICE_API_LEVEL_PROPS = {"ro.product.first_api_level",
                                                        "ro.build.version.sdk"};
@@ -1107,6 +1107,7 @@ void PropertyLoadBootDefaults() {
     LoadPropertiesFromSecondStageRes(&properties);
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
+    load_properties_from_file("/system_dlkm/etc/build.prop", nullptr, &properties);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
     // all updated.
     // if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
@@ -1171,6 +1172,9 @@ void CreateSerializedPropertyInfo() {
         // Don't check for failure here, since we don't always have all of these partitions.
         // E.g. In case of recovery, the vendor partition will not have mounted and we
         // still need the system / platform properties to function.
+        if (access("/dev/selinux/apex_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
+        }
         if (access("/system_ext/etc/selinux/system_ext_property_contexts", R_OK) != -1) {
             LoadPropertyInfoFromFile("/system_ext/etc/selinux/system_ext_property_contexts",
                                      &property_infos);
@@ -1194,6 +1198,7 @@ void CreateSerializedPropertyInfo() {
         LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/product_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/odm_property_contexts", &property_infos);
+        LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
     }
 
     auto serialized_contexts = std::string();

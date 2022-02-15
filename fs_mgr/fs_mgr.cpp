@@ -170,6 +170,22 @@ static bool should_force_check(int fs_stat) {
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
+static bool umount_retry(const std::string& mount_point) {
+    int retry_count = 5;
+    bool umounted = false;
+
+    while (retry_count-- > 0) {
+        umounted = umount(mount_point.c_str()) == 0;
+        if (umounted) {
+            LINFO << __FUNCTION__ << "(): unmount(" << mount_point << ") succeeded";
+            break;
+        }
+        PERROR << __FUNCTION__ << "(): umount(" << mount_point << ") failed";
+        if (retry_count) sleep(1);
+    }
+    return umounted;
+}
+
 static void check_fs(const std::string& blk_device, const std::string& fs_type,
                      const std::string& target, int* fs_stat) {
     int status;
@@ -209,25 +225,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
                         tmpmnt_opts.c_str());
             PINFO << __FUNCTION__ << "(): mount(" << blk_device << "," << target << "," << fs_type
                   << ")=" << ret;
-            if (!ret) {
-                bool umounted = false;
-                int retry_count = 5;
-                while (retry_count-- > 0) {
-                    umounted = umount(target.c_str()) == 0;
-                    if (umounted) {
-                        LINFO << __FUNCTION__ << "(): unmount(" << target << ") succeeded";
-                        break;
-                    }
-                    PERROR << __FUNCTION__ << "(): umount(" << target << ") failed";
-                    if (retry_count) sleep(1);
-                }
-                if (!umounted) {
-                    // boot may fail but continue and leave it to later stage for now.
-                    PERROR << __FUNCTION__ << "(): umount(" << target << ") timed out";
-                    *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
-                }
-            } else {
+            if (ret) {
                 *fs_stat |= FS_STAT_RO_MOUNT_FAILED;
+            } else if (!umount_retry(target)) {
+                // boot may fail but continue and leave it to later stage for now.
+                PERROR << __FUNCTION__ << "(): umount(" << target << ") timed out";
+                *fs_stat |= FS_STAT_RO_UNMOUNT_FAILED;
             }
         }
 
@@ -268,12 +271,12 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+                                      &status, false, LOG_KLOG | LOG_FILE, false, nullptr);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+                                      LOG_KLOG | LOG_FILE, false, nullptr);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -1009,12 +1012,11 @@ static bool should_use_metadata_encryption(const FstabEntry& entry) {
 // Check to see if a mountable volume has encryption requirements
 static int handle_encryptable(const FstabEntry& entry) {
     if (should_use_metadata_encryption(entry)) {
-        if (umount(entry.mount_point.c_str()) == 0) {
+        if (umount_retry(entry.mount_point)) {
             return FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION;
-        } else {
-            PERROR << "Could not umount " << entry.mount_point << " - fail since can't encrypt";
-            return FS_MGR_MNTALL_FAIL;
         }
+        PERROR << "Could not umount " << entry.mount_point << " - fail since can't encrypt";
+        return FS_MGR_MNTALL_FAIL;
     } else if (entry.fs_mgr_flags.file_encryption) {
         LINFO << entry.mount_point << " is file encrypted";
         return FS_MGR_MNTALL_DEV_FILE_ENCRYPTED;
@@ -1443,14 +1445,6 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 // Skips mounting the device.
                 continue;
             }
-        } else if ((current_entry.fs_mgr_flags.verify)) {
-            int rc = fs_mgr_setup_verity(&current_entry, true);
-            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
-                LINFO << "Verity disabled";
-            } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
-                LERROR << "Could not set up verified partition, skipping!";
-                continue;
-            }
         }
 
         int last_idx_inspected;
@@ -1612,13 +1606,6 @@ int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab) {
         if (current_entry.fs_mgr_flags.avb || !current_entry.avb_keys.empty()) {
             if (!AvbHandle::TearDownAvbHashtree(&current_entry, true /* wait */)) {
                 LERROR << "Failed to tear down AVB on mount point: " << current_entry.mount_point;
-                ret |= FsMgrUmountStatus::ERROR_VERITY;
-                continue;
-            }
-        } else if ((current_entry.fs_mgr_flags.verify)) {
-            if (!fs_mgr_teardown_verity(&current_entry)) {
-                LERROR << "Failed to tear down verified partition on mount point: "
-                       << current_entry.mount_point;
                 ret |= FsMgrUmountStatus::ERROR_VERITY;
                 continue;
             }
@@ -1822,9 +1809,13 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& alt_mount_po
     auto& mount_point = alt_mount_point.empty() ? entry.mount_point : alt_mount_point;
 
     // Run fsck if needed
-    prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    int ret = prepare_fs_for_mount(entry.blk_device, entry, mount_point);
+    // Wiped case doesn't require to try __mount below.
+    if (ret & FS_STAT_INVALID_MAGIC) {
+      return FS_MGR_DOMNT_FAILED;
+    }
 
-    int ret = __mount(entry.blk_device, mount_point, entry);
+    ret = __mount(entry.blk_device, mount_point, entry);
     if (ret) {
       ret = (errno == EBUSY) ? FS_MGR_DOMNT_BUSY : FS_MGR_DOMNT_FAILED;
     }
@@ -1912,14 +1903,6 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
                 LERROR << "Failed to set up AVB on standalone partition: "
                        << fstab_entry.mount_point << ", skipping!";
                 // Skips mounting the device.
-                continue;
-            }
-        } else if (fstab_entry.fs_mgr_flags.verify) {
-            int rc = fs_mgr_setup_verity(&fstab_entry, true);
-            if (rc == FS_MGR_SETUP_VERITY_DISABLED || rc == FS_MGR_SETUP_VERITY_SKIPPED) {
-                LINFO << "Verity disabled";
-            } else if (rc != FS_MGR_SETUP_VERITY_SUCCESS) {
-                LERROR << "Could not set up verified partition, skipping!";
                 continue;
             }
         }
@@ -2044,7 +2027,9 @@ static bool PrepareZramBackingDevice(off64_t size) {
 
     ConfigureIoScheduler(loop_device);
 
-    ConfigureQueueDepth(loop_device, "/");
+    if (auto ret = ConfigureQueueDepth(loop_device, "/"); !ret.ok()) {
+        LOG(DEBUG) << "Failed to config queue depth: " << ret.error().message();
+    }
 
     // set block size & direct IO
     unique_fd loop_fd(TEMP_FAILURE_RETRY(open(loop_device.c_str(), O_RDWR | O_CLOEXEC)));
@@ -2138,7 +2123,7 @@ bool fs_mgr_swapon_all(const Fstab& fstab) {
 }
 
 bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+    if (!entry.fs_mgr_flags.avb) {
         return false;
     }
 
@@ -2149,17 +2134,12 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
         return false;
     }
 
-    const char* status;
     std::vector<DeviceMapper::TargetInfo> table;
     if (!dm.GetTableStatus(mount_point, &table) || table.empty() || table[0].data.empty()) {
-        if (!entry.fs_mgr_flags.verify_at_boot) {
-            return false;
-        }
-        status = "V";
-    } else {
-        status = table[0].data.c_str();
+        return false;
     }
 
+    auto status = table[0].data.c_str();
     if (*status == 'C' || *status == 'V') {
         return true;
     }
@@ -2168,7 +2148,7 @@ bool fs_mgr_is_verity_enabled(const FstabEntry& entry) {
 }
 
 std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+    if (!entry.fs_mgr_flags.avb) {
         return {};
     }
     DeviceMapper& dm = DeviceMapper::Instance();
@@ -2204,7 +2184,7 @@ std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::Fsta
 }
 
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.verify && !entry.fs_mgr_flags.avb) {
+    if (!entry.fs_mgr_flags.avb) {
         return false;
     }
 
@@ -2276,7 +2256,8 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
 #if ALLOW_ADBD_DISABLE_VERITY == 0
     // Allowlist the mount point if user build.
     static const std::vector<const std::string> kAllowedPaths = {
-            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+            "/odm",         "/odm_dlkm",   "/oem",    "/product",
+            "/system_dlkm", "/system_ext", "/vendor", "/vendor_dlkm",
     };
     static const std::vector<const std::string> kAllowedPrefixes = {
             "/mnt/product/",
@@ -2338,5 +2319,24 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
         return false;
     }
     LINFO << report << ret;
+    return true;
+}
+
+bool fs_mgr_load_verity_state(int* mode) {
+    // unless otherwise specified, use EIO mode.
+    *mode = VERITY_MODE_EIO;
+
+    // The bootloader communicates verity mode via the kernel commandline
+    std::string verity_mode;
+    if (!fs_mgr_get_boot_config("veritymode", &verity_mode)) {
+        return false;
+    }
+
+    if (verity_mode == "enforcing") {
+        *mode = VERITY_MODE_DEFAULT;
+    } else if (verity_mode == "logging") {
+        *mode = VERITY_MODE_LOGGING;
+    }
+
     return true;
 }

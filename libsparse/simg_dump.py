@@ -120,7 +120,7 @@ def main():
                           "output offset", "output blocks", "type", "hash"])
 
     offset = 0
-    for i in xrange(1, total_chunks + 1):
+    for i in range(1, total_chunks + 1):
       header_bin = FH.read(12)
       header = struct.unpack("<2H2I", header_bin)
       chunk_type = header[0]
@@ -159,7 +159,7 @@ def main():
           if showhash:
             h = hashlib.sha1()
             data = fill_bin * (blk_sz / 4);
-            for block in xrange(chunk_sz):
+            for block in range(chunk_sz):
               h.update(data)
             curhash = h.hexdigest()
       elif chunk_type == 0xCAC3:

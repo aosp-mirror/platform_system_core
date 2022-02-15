@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The Android Open Source Project
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,12 @@
 
 #pragma once
 
-#include <stdbool.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <jni.h>
 
 /**
- * is_data_checkpoint_active() - Check for an active, uncommitted checkpoint of
- * /data. If a checkpoint is active, storage should not commit any
- * rollback-protected writes to /data.
- * @active: Out parameter that will be set to the result of the check.
+ * Reads USB descriptors from `fd`.
  *
- * Return: 0 if active was set and is valid, non-zero otherwise.
+ * Returns a byte[] on success,
+ * or returns NULL and logs an appropriate error on failure.
  */
-int is_data_checkpoint_active(bool* active);
-
-bool is_gsi_running();
-
-#ifdef __cplusplus
-}
-#endif
+jbyteArray usb_jni_read_descriptors(JNIEnv* env, int fd);

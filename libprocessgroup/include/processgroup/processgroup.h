@@ -35,6 +35,8 @@ bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& pr
 
 #ifndef __ANDROID_VNDK__
 
+bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
+
 static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
 bool UsePerAppMemcg();
