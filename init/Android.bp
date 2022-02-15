@@ -202,6 +202,12 @@ libinit_cc_defaults {
     visibility: [":__subpackages__"],
 }
 
+cc_library_headers {
+    name: "libinit_headers",
+    export_include_dirs: ["."],
+    visibility: [":__subpackages__"],
+}
+
 cc_library_static {
     name: "libinit",
     recovery_available: true,
