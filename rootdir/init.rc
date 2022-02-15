@@ -1087,7 +1087,7 @@ on boot
 
     # to access dm-<num> sysfs
     mkdir /dev/sys/block/by-name 0755 system system
-    symlink /sys/devices/virtual/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
 
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
