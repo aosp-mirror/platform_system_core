@@ -25,7 +25,6 @@ getdents64: 1
 faccessat: 1
 recvmsg: 1
 recvfrom: 1
-sysinfo: 1
 
 process_vm_readv: 1
 
