@@ -89,19 +89,7 @@ init_host_sources = [
     "host_init_verifier.cpp",
 ]
 
-soong_config_module_type {
-    name: "libinit_cc_defaults",
-    module_type: "cc_defaults",
-    config_namespace: "ANDROID",
-    bool_variables: [
-        "PRODUCT_INSTALL_DEBUG_POLICY_TO_SYSTEM_EXT",
-    ],
-    properties: [
-        "cflags",
-    ],
-}
-
-libinit_cc_defaults {
+cc_defaults {
     name: "init_defaults",
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
@@ -121,7 +109,6 @@ libinit_cc_defaults {
         "-DDUMP_ON_UMOUNT_FAILURE=0",
         "-DSHUTDOWN_ZERO_TIMEOUT=0",
         "-DINIT_FULL_SOURCES",
-        "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=0",
     ],
     product_variables: {
         debuggable: {
@@ -150,27 +137,16 @@ libinit_cc_defaults {
             cppflags: ["-DUSER_MODE_LINUX"],
         },
     },
-    soong_config_variables: {
-        PRODUCT_INSTALL_DEBUG_POLICY_TO_SYSTEM_EXT: {
-            cflags: [
-                "-UINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT",
-                "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=1",
-            ],
-        },
-    },
     static_libs: [
         "libavb",
         "libc++fs",
         "libcgrouprc_format",
-        "libfsverity_init",
         "liblmkd_utils",
-        "libmini_keyctl_static",
         "libmodprobe",
         "libprocinfo",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsigningutils",
         "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
@@ -181,7 +157,6 @@ libinit_cc_defaults {
         "libbacktrace",
         "libbase",
         "libbootloader_message",
-        "libcrypto",
         "libcutils",
         "libdl",
         "libext4_utils",
@@ -196,7 +171,6 @@ libinit_cc_defaults {
         "libprocessgroup_setup",
         "libselinux",
         "libutils",
-        "libziparchive",
     ],
     bootstrap: true,
     visibility: [":__subpackages__"],
@@ -254,20 +228,17 @@ cc_binary {
     stem: "init",
     defaults: ["init_defaults"],
     static_libs: ["libinit"],
+    required: [
+        "e2fsdroid",
+        "init.rc",
+        "mke2fs",
+        "sload_f2fs",
+        "make_f2fs",
+        "ueventd.rc",
+    ],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
     target: {
-        platform: {
-            required: [
-                "init.rc",
-                "ueventd.rc",
-                "e2fsdroid",
-                "extra_free_kbytes.sh",
-                "make_f2fs",
-                "mke2fs",
-                "sload_f2fs",
-            ],
-        },
         recovery: {
             cflags: ["-DRECOVERY"],
             exclude_static_libs: [
@@ -277,45 +248,16 @@ cc_binary {
                 "libbinder",
                 "libutils",
             ],
-            required: [
-                "init_recovery.rc",
-                "ueventd.rc.recovery",
-                "e2fsdroid.recovery",
-                "make_f2fs.recovery",
-                "mke2fs.recovery",
-                "sload_f2fs.recovery",
-            ],
         },
     },
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
-soong_config_module_type {
-    name: "init_first_stage_cc_defaults",
-    module_type: "cc_defaults",
-    config_namespace: "ANDROID",
-    bool_variables: ["BOARD_BUILD_SYSTEM_ROOT_IMAGE", "BOARD_USES_RECOVERY_AS_BOOT"],
-    properties: ["installable"],
-}
-
-// Do not install init_first_stage even with mma if we're system-as-root.
-// Otherwise, it will overwrite the symlink.
-init_first_stage_cc_defaults {
-    name: "init_first_stage_defaults",
-    soong_config_variables: {
-        BOARD_BUILD_SYSTEM_ROOT_IMAGE: {
-            installable: false,
-        },
-        BOARD_USES_RECOVERY_AS_BOOT: {
-            installable: false,
-        },
-    },
-}
-
+// This currently is only for the VM usecase.
+// TODO(jiyong): replace init_first_stage in Android.mk with this
 cc_binary {
-    name: "init_first_stage",
-    stem: "init",
-    defaults: ["init_first_stage_defaults"],
+    name: "init_first_stage_soong",
+    stem: "init_vendor",
 
     srcs: [
         "block_dev_initializer.cpp",
@@ -326,6 +268,7 @@ cc_binary {
         "first_stage_mount.cpp",
         "reboot_utils.cpp",
         "selabel.cpp",
+        "selinux.cpp",
         "service_utils.cpp",
         "snapuserd_transition.cpp",
         "switch_root.cpp",
@@ -340,16 +283,23 @@ cc_binary {
         "libfec",
         "libfec_rs",
         "libsquashfs_utils",
+        "liblogwrap",
+        "libext4_utils",
         "libcrypto_utils",
+        "libsparse",
         "libavb",
+        "libkeyutils",
         "liblp",
         "libcutils",
         "libbase",
         "liblog",
         "libcrypto_static",
+        "libdl",
+        "libz",
         "libselinux",
         "libcap",
         "libgsi",
+        "libcom.android.sysprop.apex",
         "liblzma",
         "libunwindstack_no_dex",
         "libbacktrace_no_dex",
@@ -363,7 +313,6 @@ cc_binary {
     ],
 
     static_executable: true,
-    system_shared_libs: [],
 
     cflags: [
         "-Wall",
@@ -414,23 +363,8 @@ cc_binary {
 
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
-
-        // First stage init is weird: it may start without stdout/stderr, and no /proc.
         hwaddress: false,
     },
-
-    // Install adb_debug.prop into debug ramdisk.
-    // This allows adb root on a user build, when debug ramdisk is used.
-    required: ["adb_debug.prop"],
-
-    ramdisk: true,
-
-    install_in_root: true,
-}
-
-phony {
-    name: "init_system",
-    required: ["init_second_stage"],
 }
 
 // Tests
@@ -572,9 +506,4 @@ cc_binary {
             enabled: false,
         },
     },
-}
-
-sh_binary {
-    name: "extra_free_kbytes.sh",
-    src: "extra_free_kbytes.sh",
 }
