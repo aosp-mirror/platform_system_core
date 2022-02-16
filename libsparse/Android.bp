@@ -85,25 +85,23 @@ python_binary_host {
     srcs: ["simg_dump.py"],
     version: {
         py2: {
-            enabled: false,
-        },
-        py3: {
             embedded_launcher: true,
             enabled: true,
+        },
+        py3: {
+            enabled: false,
         },
     },
 }
 
 cc_fuzz {
     name: "sparse_fuzzer",
-    host_supported: true,
+    host_supported: false,
     srcs: [
         "sparse_fuzzer.cpp",
     ],
     static_libs: [
         "libsparse",
-        "libbase",
-        "libz",
         "liblog",
     ],
 }
