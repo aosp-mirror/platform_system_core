@@ -30,9 +30,11 @@ cc_library {
     export_include_dirs: ["include"],
     target: {
         android: {
-            header_libs: ["jni_headers"],
+            cflags: [
+                "-g",
+                "-DUSE_LIBLOG",
+            ],
             shared_libs: ["liblog"],
-            srcs: ["usbhost_jni.cpp"],
         },
         darwin: {
             enabled: false,

@@ -36,9 +36,7 @@ int Usage() {
                  "  dump\n"
                  "    Print snapshot states.\n"
                  "  merge\n"
-                 "    Deprecated.\n"
-                 "  map\n"
-                 "    Map all partitions at /dev/block/mapper\n";
+                 "    Deprecated.\n";
     return EX_USAGE;
 }
 
