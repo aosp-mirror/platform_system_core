@@ -84,6 +84,12 @@ struct thread_data_t {
         delete t;
         setpriority(PRIO_PROCESS, 0, prio);
 
+        // A new thread will be in its parent's sched group by default,
+        // so we just need to handle the background case.
+        if (prio >= ANDROID_PRIORITY_BACKGROUND) {
+            SetTaskProfiles(0, {"SCHED_SP_BACKGROUND"}, true);
+        }
+
         if (name) {
             androidSetThreadName(name);
             free(name);
@@ -299,16 +305,30 @@ void androidSetCreateThreadFunc(android_create_thread_fn func)
 int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
+    int lasterr = 0;
     int curr_pri = getpriority(PRIO_PROCESS, tid);
 
     if (curr_pri == pri) {
         return rc;
     }
 
+    if (pri >= ANDROID_PRIORITY_BACKGROUND) {
+        rc = SetTaskProfiles(tid, {"SCHED_SP_BACKGROUND"}, true) ? 0 : -1;
+    } else if (curr_pri >= ANDROID_PRIORITY_BACKGROUND) {
+        SchedPolicy policy = SP_FOREGROUND;
+        // Change to the sched policy group of the process.
+        get_sched_policy(getpid(), &policy);
+        rc = SetTaskProfiles(tid, {get_sched_policy_profile_name(policy)}, true) ? 0 : -1;
+    }
+
+    if (rc) {
+        lasterr = errno;
+    }
+
     if (setpriority(PRIO_PROCESS, tid, pri) < 0) {
         rc = INVALID_OPERATION;
     } else {
-        errno = 0;
+        errno = lasterr;
     }
 
     return rc;
@@ -673,7 +693,7 @@ status_t Thread::run(const char* name, int32_t priority, size_t stack)
     mThread = thread_id_t(-1);
 
     // hold a strong reference on ourself
-    mHoldSelf = sp<Thread>::fromExisting(this);
+    mHoldSelf = this;
 
     mRunning = true;
 
