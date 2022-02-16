@@ -108,7 +108,7 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
   for (size_t i = 0; i < arraysize(report->allocation_trace) && report->allocation_trace[i]; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(report->allocation_trace[i]);
     BacktraceFrame* f = heap_object->add_allocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data);
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
   }
 
   heap_object->set_deallocation_tid(report->deallocation_tid);
@@ -117,7 +117,7 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
     unwindstack::FrameData frame_data =
         unwinder->BuildFrameFromPcOnly(report->deallocation_trace[i]);
     BacktraceFrame* f = heap_object->add_deallocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data);
+    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
   }
 
   set_human_readable_cause(cause, untagged_fault_addr_);
@@ -135,7 +135,7 @@ void ScudoCrashData::DumpCause(log_t* log, unwindstack::Unwinder* unwinder) cons
   if (error_info_.reports[1].error_type != UNKNOWN) {
     _LOG(log, logtype::HEADER,
          "\nNote: multiple potential causes for this crash were detected, listing them in "
-         "decreasing order of likelihood.\n");
+         "decreasing order of probability.\n");
   }
 
   size_t report_num = 0;

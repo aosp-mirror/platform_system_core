@@ -29,13 +29,8 @@
 namespace android {
 namespace init {
 
-enum class SnapshotDriver {
-    DM_SNAPSHOT,
-    DM_USER,
-};
-
 // Fork and exec a new copy of snapuserd.
-void LaunchFirstStageSnapuserd(SnapshotDriver driver);
+void LaunchFirstStageSnapuserd();
 
 class SnapuserdSelinuxHelper final {
     using SnapshotManager = android::snapshot::SnapshotManager;
@@ -56,7 +51,6 @@ class SnapuserdSelinuxHelper final {
   private:
     void RelaunchFirstStageSnapuserd();
     void ExecSnapuserd();
-    bool TestSnapuserdIsReady();
 
     std::unique_ptr<SnapshotManager> sm_;
     BlockDevInitializer block_dev_init_;
@@ -81,9 +75,6 @@ bool IsFirstStageSnapuserdRunning();
 
 // Return the pid of the first-stage instances of snapuserd, if it was started.
 std::optional<pid_t> GetSnapuserdFirstStagePid();
-
-// Return snapuserd info strings that were set during first-stage init.
-std::vector<std::string> GetSnapuserdFirstStageInfo();
 
 // Save an open fd to /system/bin (in the ramdisk) into an environment. This is
 // used to later execveat() snapuserd.

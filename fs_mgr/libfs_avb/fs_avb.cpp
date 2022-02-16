@@ -37,7 +37,6 @@
 
 #include "avb_ops.h"
 #include "avb_util.h"
-#include "fs_avb/fs_avb_util.h"
 #include "sha.h"
 #include "util.h"
 

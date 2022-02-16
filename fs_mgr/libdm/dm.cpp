@@ -170,18 +170,19 @@ static bool IsRecovery() {
     return access("/system/bin/recovery", F_OK) == 0;
 }
 
-bool DeviceMapper::CreateEmptyDevice(const std::string& name) {
+bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
+                                const std::chrono::milliseconds& timeout_ms) {
     std::string uuid = GenerateUuid();
-    return CreateDevice(name, uuid);
-}
+    if (!CreateDevice(name, uuid)) {
+        return false;
+    }
 
-bool DeviceMapper::WaitForDevice(const std::string& name,
-                                 const std::chrono::milliseconds& timeout_ms, std::string* path) {
     // We use the unique path for testing whether the device is ready. After
     // that, it's safe to use the dm-N path which is compatible with callers
     // that expect it to be formatted as such.
     std::string unique_path;
-    if (!GetDeviceUniquePath(name, &unique_path) || !GetDmDevicePathByName(name, path)) {
+    if (!LoadTableAndActivate(name, table) || !GetDeviceUniquePath(name, &unique_path) ||
+        !GetDmDevicePathByName(name, path)) {
         DeleteDevice(name);
         return false;
     }
@@ -204,25 +205,6 @@ bool DeviceMapper::WaitForDevice(const std::string& name,
         DeleteDevice(name);
         return false;
     }
-    return true;
-}
-
-bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table, std::string* path,
-                                const std::chrono::milliseconds& timeout_ms) {
-    if (!CreateEmptyDevice(name)) {
-        return false;
-    }
-
-    if (!LoadTableAndActivate(name, table)) {
-        DeleteDevice(name);
-        return false;
-    }
-
-    if (!WaitForDevice(name, timeout_ms, path)) {
-        DeleteDevice(name);
-        return false;
-    }
-
     return true;
 }
 
@@ -645,62 +627,6 @@ std::optional<std::string> DeviceMapper::GetParentBlockDeviceByPath(const std::s
 
 bool DeviceMapper::TargetInfo::IsOverflowSnapshot() const {
     return spec.target_type == "snapshot"s && data == "Overflow"s;
-}
-
-// Find directories in format of "/sys/block/dm-X".
-static int DmNameFilter(const dirent* de) {
-    if (android::base::StartsWith(de->d_name, "dm-")) {
-        return 1;
-    }
-    return 0;
-}
-
-std::map<std::string, std::string> DeviceMapper::FindDmPartitions() {
-    static constexpr auto DM_PATH_PREFIX = "/sys/block/";
-    dirent** namelist;
-    int n = scandir(DM_PATH_PREFIX, &namelist, DmNameFilter, alphasort);
-    if (n == -1) {
-        PLOG(ERROR) << "Failed to scan dir " << DM_PATH_PREFIX;
-        return {};
-    }
-    if (n == 0) {
-        LOG(ERROR) << "No dm block device found.";
-        free(namelist);
-        return {};
-    }
-
-    static constexpr auto DM_PATH_SUFFIX = "/dm/name";
-    static constexpr auto DEV_PATH = "/dev/block/";
-    std::map<std::string, std::string> dm_block_devices;
-    while (n--) {
-        std::string path = DM_PATH_PREFIX + std::string(namelist[n]->d_name) + DM_PATH_SUFFIX;
-        std::string content;
-        if (!android::base::ReadFileToString(path, &content)) {
-            PLOG(WARNING) << "Failed to read " << path;
-        } else {
-            std::string dm_block_name = android::base::Trim(content);
-            // AVB is using 'vroot' for the root block device but we're expecting 'system'.
-            if (dm_block_name == "vroot") {
-                dm_block_name = "system";
-            } else if (android::base::EndsWith(dm_block_name, "-verity")) {
-                auto npos = dm_block_name.rfind("-verity");
-                dm_block_name = dm_block_name.substr(0, npos);
-            } else if (!android::base::GetProperty("ro.boot.avb_version", "").empty()) {
-                // Verified Boot 1.0 doesn't add a -verity suffix. On AVB 2 devices,
-                // if DAP is enabled, then a -verity suffix must be used to
-                // differentiate between dm-linear and dm-verity devices. If we get
-                // here, we're AVB 2 and looking at a non-verity partition.
-                free(namelist[n]);
-                continue;
-            }
-
-            dm_block_devices.emplace(dm_block_name, DEV_PATH + std::string(namelist[n]->d_name));
-        }
-        free(namelist[n]);
-    }
-    free(namelist);
-
-    return dm_block_devices;
 }
 
 }  // namespace dm

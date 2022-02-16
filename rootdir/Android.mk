@@ -149,9 +149,6 @@ LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm_dlkm
 # via /odm/lib/modules directly.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /odm/odm_dlkm/etc $(TARGET_ROOT_OUT)/odm_dlkm/etc
 
-# For /system_dlkm partition
-LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_dlkm
-
 ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
 else
@@ -212,5 +209,16 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) echo -n > $@
 	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
 		echo $(lib) >> $@;)
+
+#######################################
+# adb_debug.prop in debug ramdisk
+include $(CLEAR_VARS)
+LOCAL_MODULE := adb_debug.prop
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_PATH := $(TARGET_DEBUG_RAMDISK_OUT)
+include $(BUILD_PREBUILT)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
