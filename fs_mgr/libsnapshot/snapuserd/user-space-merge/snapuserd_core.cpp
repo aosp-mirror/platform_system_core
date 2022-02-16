@@ -694,8 +694,10 @@ bool SnapshotHandler::IsIouringSupported() {
     // During selinux init transition, libsnapshot will propagate the
     // status of io_uring enablement. As properties are not initialized,
     // we cannot query system property.
+    //
+    // TODO: b/219642530: Intermittent I/O failures observed
     if (is_io_uring_enabled_) {
-        return true;
+        return false;
     }
 
     // Finally check the system property
