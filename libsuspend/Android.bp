@@ -6,7 +6,6 @@ package {
 
 cc_library {
     name: "libsuspend",
-    vendor_available: true,
     srcs: [
         "autosuspend.c",
         "autosuspend_wakeup_count.cpp",

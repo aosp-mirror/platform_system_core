@@ -48,8 +48,7 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_AC,
         ANDROID_POWER_SUPPLY_TYPE_USB,
         ANDROID_POWER_SUPPLY_TYPE_WIRELESS,
-        ANDROID_POWER_SUPPLY_TYPE_BATTERY,
-        ANDROID_POWER_SUPPLY_TYPE_DOCK
+        ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
     BatteryMonitor();
@@ -76,8 +75,6 @@ class BatteryMonitor {
     bool mBatteryDevicePresent;
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
-    // TODO(b/214126090): to migrate to AIDL HealthInfo
-    bool mChargerDockOnline;
     std::unique_ptr<android::hardware::health::V2_1::HealthInfo> mHealthInfo;
 
     int readFromFile(const String8& path, std::string* buf);
