@@ -85,7 +85,7 @@ bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_na
 
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
@@ -100,7 +100,7 @@ bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
 
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
