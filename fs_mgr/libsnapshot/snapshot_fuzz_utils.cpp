@@ -139,7 +139,7 @@ std::vector<DeviceMapper::TargetInfo> GetTableInfoIfExists(const std::string& de
     auto& dm = DeviceMapper::Instance();
     std::vector<DeviceMapper::TargetInfo> table;
     if (!dm.GetTableInfo(dev_name, &table)) {
-        PCHECK(errno == ENODEV || errno == ENXIO);
+        PCHECK(errno == ENODEV);
         return {};
     }
     return table;
@@ -488,7 +488,7 @@ std::unique_ptr<AutoDevice> SnapshotFuzzEnv::CheckMountFormatData(const std::str
             .fs_type = "ext4",
             .mount_point = mount_point,
     };
-    CHECK(0 == fs_mgr_do_format(entry));
+    CHECK(0 == fs_mgr_do_format(entry, false /* crypt_footer */));
     CHECK(0 == fs_mgr_do_mount_one(entry));
     return std::make_unique<AutoUnmount>(mount_point);
 }
