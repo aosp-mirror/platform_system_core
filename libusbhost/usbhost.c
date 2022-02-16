@@ -18,9 +18,20 @@
 #define _GNU_SOURCE
 #endif
 
-#include <usbhost/usbhost.h>
+// #define DEBUG 1
+#if DEBUG
 
-#include "usbhost_private.h"
+#ifdef USE_LIBLOG
+#define LOG_TAG "usbhost"
+#include "log/log.h"
+#define D ALOGD
+#else
+#define D printf
+#endif
+
+#else
+#define D(...)
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,19 +48,12 @@
 #include <errno.h>
 #include <ctype.h>
 #include <poll.h>
+#include <pthread.h>
 
 #include <linux/usbdevice_fs.h>
+#include <asm/byteorder.h>
 
-// #define DEBUG 1
-#if defined(DEBUG)
-#if defined(__BIONIC__)
-#define D ALOGD
-#else
-#define D printf
-#endif
-#else
-#define D(...)
-#endif
+#include "usbhost/usbhost.h"
 
 #define DEV_DIR             "/dev"
 #define DEV_BUS_DIR         DEV_DIR "/bus"
@@ -71,6 +75,8 @@ struct usb_host_context {
     int                         wdd;
     int                         wddbus;
 };
+
+#define MAX_DESCRIPTORS_LENGTH 4096
 
 struct usb_device {
     char dev_name[64];

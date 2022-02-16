@@ -22,7 +22,6 @@
 #include <linux/dm-ioctl.h>
 
 #include <functional>
-#include <optional>
 #include <string>
 
 #include <fstab/fstab.h>
@@ -56,6 +55,9 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION 6
 #define FS_MGR_MNTALL_DEV_FILE_ENCRYPTED 5
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 4
+#define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 3
+#define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 2
+#define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
 
@@ -64,13 +66,6 @@ struct MountAllResult {
     int code;
     // Whether userdata was mounted as a result of |fs_mgr_mount_all| call.
     bool userdata_mounted;
-};
-
-struct HashtreeInfo {
-    // The hash algorithm used to build the merkle tree.
-    std::string algorithm;
-    // The root digest of the merkle tree.
-    std::string root_digest;
 };
 
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.
@@ -93,9 +88,9 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 bool fs_mgr_load_verity_state(int* mode);
 // Returns true if verity is enabled on this particular FstabEntry.
 bool fs_mgr_is_verity_enabled(const android::fs_mgr::FstabEntry& entry);
-// Returns the verity hashtree information of this particular FstabEntry. Returns std::nullopt
-// if the input isn't a dm-verity entry, or if there is an error.
-std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::FstabEntry& entry);
+// Returns the hash algorithm used to build the hashtree of this particular FstabEntry. Returns an
+// empty string if the input isn't a dm-verity entry, or if there is an error.
+std::string fs_mgr_get_hashtree_algorithm(const android::fs_mgr::FstabEntry& entry);
 
 bool fs_mgr_swapon_all(const android::fs_mgr::Fstab& fstab);
 bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
@@ -104,7 +99,7 @@ bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
 // device is in "check_at_most_once" mode.
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry);
 
-int fs_mgr_do_format(const android::fs_mgr::FstabEntry& entry);
+int fs_mgr_do_format(const android::fs_mgr::FstabEntry& entry, bool reserve_footer);
 
 #define FS_MGR_SETUP_VERITY_SKIPPED  (-3)
 #define FS_MGR_SETUP_VERITY_DISABLED (-2)

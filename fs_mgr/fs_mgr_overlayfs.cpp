@@ -322,17 +322,6 @@ std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
 const auto kLowerdirOption = "lowerdir="s;
 const auto kUpperdirOption = "upperdir="s;
 
-static inline bool KernelSupportsUserXattrs() {
-    struct utsname uts;
-    uname(&uts);
-
-    int major, minor;
-    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
-        return false;
-    }
-    return major > 5 || (major == 5 && minor >= 15);
-}
-
 // default options for mount_point, returns empty string for none available.
 std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
@@ -341,9 +330,6 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
                ",workdir=" + candidate + kWorkName;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
         ret += ",override_creds=off";
-    }
-    if (KernelSupportsUserXattrs()) {
-        ret += ",userxattr";
     }
     return ret;
 }
@@ -880,14 +866,9 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
             errno = save_errno;
         }
         entry.flags &= ~MS_RDONLY;
-        entry.flags |= MS_SYNCHRONOUS;
-        entry.fs_options = "nodiscard";
         fs_mgr_set_blk_ro(device_path, false);
     }
-    // check_fs requires apex runtime library
-    if (fs_mgr_overlayfs_already_mounted("/data", false)) {
-        entry.fs_mgr_flags.check = true;
-    }
+    entry.fs_mgr_flags.check = true;
     auto save_errno = errno;
     if (mounted) mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
@@ -1152,7 +1133,7 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
     if (!images->BackingImageExists(partition_name)) {
-        static constexpr uint64_t kMinimumSize = 64_MiB;
+        static constexpr uint64_t kMinimumSize = 16_MiB;
         static constexpr uint64_t kMaximumSize = 2_GiB;
 
         uint64_t size = std::clamp(info.size / 2, kMinimumSize, kMaximumSize);
