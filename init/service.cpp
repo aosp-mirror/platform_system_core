@@ -397,6 +397,14 @@ Result<void> Service::ExecStart() {
     return {};
 }
 
+static void ClosePipe(const std::array<int, 2>* pipe) {
+    for (const auto fd : *pipe) {
+        if (fd >= 0) {
+            close(fd);
+        }
+    }
+}
+
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
@@ -426,6 +434,12 @@ Result<void> Service::Start() {
         // It is not an error to try to start a service that is already running.
         reboot_on_failure.Disable();
         return {};
+    }
+
+    std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd(new std::array<int, 2>{-1, -1},
+                                                                     ClosePipe);
+    if (pipe(pipefd->data()) < 0) {
+        return ErrnoError() << "pipe()";
     }
 
     bool needs_console = (flags_ & SVC_CONSOLE);
@@ -532,6 +546,13 @@ Result<void> Service::Start() {
             LOG(ERROR) << "failed to write pid to files: " << result.error();
         }
 
+        // Wait until the cgroups have been created and until the cgroup controllers have been
+        // activated.
+        if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
+            PLOG(ERROR) << "failed to read from notification channel";
+        }
+        pipefd.reset();
+
         if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
             LOG(ERROR) << "failed to set task profiles";
         }
@@ -616,6 +637,10 @@ Result<void> Service::Start() {
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
+    }
+
+    if (write((*pipefd)[1], "", 1) < 0) {
+        return ErrnoError() << "sending notification failed";
     }
 
     NotifyStateChange("running");
