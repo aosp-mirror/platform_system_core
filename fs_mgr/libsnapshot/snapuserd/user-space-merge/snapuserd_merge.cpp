@@ -461,6 +461,14 @@ bool Worker::InitializeIouring() {
         return false;
     }
 
+    {
+        // TODO: b/219642530 - Disable io_uring for merge
+        // until we figure out the cause of intermittent
+        // IO failures.
+        merge_async_ = false;
+        return true;
+    }
+
     ring_ = std::make_unique<struct io_uring>();
 
     int ret = io_uring_queue_init(queue_depth_, ring_.get(), 0);
