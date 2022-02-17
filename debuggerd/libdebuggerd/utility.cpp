@@ -41,6 +41,7 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Unwinder.h>
 
+using android::base::StringPrintf;
 using android::base::unique_fd;
 
 bool is_allowed_in_logcat(enum logtype ltype) {
@@ -275,9 +276,10 @@ bool signal_has_si_addr(const siginfo_t* si) {
     case SIGBUS:
     case SIGFPE:
     case SIGILL:
-    case SIGSEGV:
     case SIGTRAP:
       return true;
+    case SIGSEGV:
+      return si->si_code != SEGV_MTEAERR;
     default:
       return false;
   }
@@ -402,6 +404,8 @@ const char* get_sigcode(const siginfo_t* si) {
         case TRAP_HWBKPT: return "TRAP_HWBKPT";
         case TRAP_UNK:
           return "TRAP_UNDIAGNOSED";
+        case TRAP_PERF:
+          return "TRAP_PERF";
       }
       if ((si->si_code & 0xff) == SIGTRAP) {
         switch ((si->si_code >> 8) & 0xff) {
@@ -423,7 +427,7 @@ const char* get_sigcode(const siginfo_t* si) {
             return "PTRACE_EVENT_STOP";
         }
       }
-      static_assert(NSIGTRAP == TRAP_UNK, "missing TRAP_* si_code");
+      static_assert(NSIGTRAP == TRAP_PERF, "missing TRAP_* si_code");
       break;
   }
   // Then the other codes...
@@ -440,6 +444,42 @@ const char* get_sigcode(const siginfo_t* si) {
   }
   // Then give up...
   return "?";
+}
+
+#define DESCRIBE_FLAG(flag) \
+  if (value & flag) {       \
+    desc += ", ";           \
+    desc += #flag;          \
+    value &= ~flag;         \
+  }
+
+static std::string describe_end(long value, std::string& desc) {
+  if (value) {
+    desc += StringPrintf(", unknown 0x%lx", value);
+  }
+  return desc.empty() ? "" : " (" + desc.substr(2) + ")";
+}
+
+std::string describe_tagged_addr_ctrl(long value) {
+  std::string desc;
+  DESCRIBE_FLAG(PR_TAGGED_ADDR_ENABLE);
+  DESCRIBE_FLAG(PR_MTE_TCF_SYNC);
+  DESCRIBE_FLAG(PR_MTE_TCF_ASYNC);
+  if (value & PR_MTE_TAG_MASK) {
+    desc += StringPrintf(", mask 0x%04lx", (value & PR_MTE_TAG_MASK) >> PR_MTE_TAG_SHIFT);
+    value &= ~PR_MTE_TAG_MASK;
+  }
+  return describe_end(value, desc);
+}
+
+std::string describe_pac_enabled_keys(long value) {
+  std::string desc;
+  DESCRIBE_FLAG(PR_PAC_APIAKEY);
+  DESCRIBE_FLAG(PR_PAC_APIBKEY);
+  DESCRIBE_FLAG(PR_PAC_APDAKEY);
+  DESCRIBE_FLAG(PR_PAC_APDBKEY);
+  DESCRIBE_FLAG(PR_PAC_APGAKEY);
+  return describe_end(value, desc);
 }
 
 void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix) {

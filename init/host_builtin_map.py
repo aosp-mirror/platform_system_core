@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Generates the builtins map to be used by host_init_verifier.
 
 It copies the builtin function map from builtins.cpp, then replaces do_xxx() functions with the
@@ -39,8 +39,7 @@ for line in function_map:
   match = DO_REGEX.match(line)
   if match:
     if match.group(1) in check_functions:
-      print line.replace('do_', 'check_'),
+      line = line.replace('do_', 'check_')
     else:
-      print FUNCTION_REGEX.sub('check_stub', line),
-  else:
-    print line,
+      line = FUNCTION_REGEX.sub('check_stub', line)
+  print(line, end=' ')

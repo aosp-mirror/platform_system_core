@@ -28,6 +28,10 @@
 
 #include "socket.h"
 
+#ifndef _WIN32
+#include <sys/select.h>
+#endif
+
 #include <android-base/errors.h>
 #include <android-base/stringprintf.h>
 
