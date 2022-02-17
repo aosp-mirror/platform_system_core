@@ -77,6 +77,43 @@ monolithic init .rc files.  This additionally will aid in merge
 conflict resolution when multiple services are added to the system, as
 each one will go into a separate file.
 
+Versioned RC files within APEXs
+-------------------------------
+
+With the arrival of mainline on Android Q, the individual mainline
+modules carry their own init.rc files within their boundaries. Init
+processes these files according to the naming pattern `/apex/*/etc/*rc`.
+
+Because APEX modules must run on more than one release of Android,
+they may require different parameters as part of the services they
+define. This is achieved, starting in Android T, by incorporating
+the SDK version information in the name of the init file.  The suffix
+is changed from `.rc` to `.#rc` where # is the first SDK where that
+RC file is accepted. An init file specific to SDK=31 might be named
+`init.31rc`. With this scheme, an APEX may include multiple init files. An
+example is appropriate.
+
+For an APEX module with the following files in /apex/sample-module/apex/etc/:
+
+   1. init.rc
+   2. init.32rc
+   4. init.35rc
+
+The selection rule chooses the highest `.#rc` value that does not
+exceed the SDK of the currently running system. The unadorned `.rc`
+is interpreted as sdk=0.
+
+When this APEX is installed on a device with SDK <=31, the system will
+process init.rc.  When installed on a device running SDK 32, 33, or 34,
+it will use init.32rc.  When installed on a device running SDKs >= 35,
+it will choose init.35rc
+
+This versioning scheme is used only for the init files within APEX
+modules; it does not apply to the init files stored in /system/etc/init,
+/vendor/etc/init, or other directories.
+
+This naming scheme is available after Android S.
+
 Actions
 -------
 Actions are named sequences of commands.  Actions have a trigger which
@@ -404,6 +441,33 @@ at three times:
    3. Any time that property c transitions to value d, while property a already equals b.
 
 
+Trigger Sequence
+----------------
+
+Init uses the following sequence of triggers during early boot. These are the
+built-in triggers defined in init.cpp.
+
+   1. `early-init` - The first in the sequence, triggered after cgroups has been configured
+      but before ueventd's coldboot is complete.
+   2. `init` - Triggered after coldboot is complete.
+   3. `charger` - Triggered if `ro.bootmode == "charger"`.
+   4. `late-init` - Triggered if `ro.bootmode != "charger"`, or via healthd triggering a boot
+      from charging mode.
+
+Remaining triggers are configured in `init.rc` and are not built-in. The default sequence for
+these is specified under the "on late-init" event in `init.rc`. Actions internal to `init.rc`
+have been omitted.
+
+   1. `early-fs` - Start vold.
+   2. `fs` - Vold is up. Mount partitions not marked as first-stage or latemounted.
+   3. `post-fs` - Configure anything dependent on early mounts.
+   4. `late-fs` - Mount partitions marked as latemounted.
+   5. `post-fs-data` - Mount and configure `/data`; set up encryption. `/metadata` is
+      reformatted here if it couldn't mount in first-stage init.
+   6. `zygote-start` - Start the zygote.
+   7. `early-boot` - After zygote has started.
+   8. `boot` - After `early-boot` actions have completed.
+
 Commands
 --------
 
@@ -423,11 +487,6 @@ Commands
   not already running.  See the start entry for more information on
   starting services.
 
-`class_start_post_data <serviceclass>`
-> Like `class_start`, but only considers services that were started
-  after /data was mounted, and that were running at the time
- `class_reset_post_data` was called. Only used for FDE devices.
-
 `class_stop <serviceclass>`
 > Stop and disable all services of the specified class if they are
   currently running.
@@ -437,12 +496,9 @@ Commands
   currently running, without disabling them. They can be restarted
   later using `class_start`.
 
-`class_reset_post_data <serviceclass>`
-> Like `class_reset`, but only considers services that were started
-  after /data was mounted. Only used for FDE devices.
-
-`class_restart <serviceclass>`
-> Restarts all services of the specified class.
+`class_restart [--only-enabled] <serviceclass>`
+> Restarts all services of the specified class. If `--only-enabled` is
+  specified, then disabled services are skipped.
 
 `copy <src> <dst>`
 > Copies a file. Similar to write, but useful for binary/large
@@ -543,8 +599,7 @@ provides the `aidl_lazy_test_1` interface.
   Properties are expanded within _level_.
 
 `mark_post_data`
-> Used to mark the point right after /data is mounted. Used to implement the
-  `class_reset_post_data` and `class_start_post_data` commands.
+> Used to mark the point right after /data is mounted.
 
 `mkdir <path> [<mode>] [<owner>] [<group>] [encryption=<action>] [key=<key>]`
 > Create a directory at _path_, optionally with the given mode, owner, and
@@ -586,9 +641,10 @@ provides the `aidl_lazy_test_1` interface.
   configurations. Intended to be used only once when apexd notifies the mount
   event by setting `apexd.status` to ready.
 
-`restart <service>`
+`restart [--only-if-running] <service>`
 > Stops and restarts a running service, does nothing if the service is currently
-  restarting, otherwise, it just starts the service.
+  restarting, otherwise, it just starts the service. If "--only-if-running" is
+  specified, the service is only restarted if it is already running.
 
 `restorecon <path> [ <path>\* ]`
 > Restore the file named by _path_ to the security context specified
@@ -666,10 +722,13 @@ provides the `aidl_lazy_test_1` interface.
   fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
   under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
-`verity_update_state <mount-point>`
+`verity_update_state`
 > Internal implementation detail used to update dm-verity state and
   set the partition._mount-point_.verified properties used by adb remount
-  because fs\_mgr can't set them directly itself.
+  because fs\_mgr can't set them directly itself. This is required since
+  Android 12, because CtsNativeVerifiedBootTestCases will read property
+  "partition.${partition}.verified.hash_alg" to check that sha1 is not used.
+  See https://r.android.com/1546980 for more details.
 
 `wait <path> [ <timeout> ]`
 > Poll for the existence of the given file and return when found,

@@ -99,7 +99,7 @@ TEST(property_service, check_fingerprint_with_legacy_build_id) {
 
     std::string vbmeta_digest = GetProperty("ro.boot.vbmeta.digest", "");
     ASSERT_GE(vbmeta_digest.size(), 8u);
-    std::string build_id = GetProperty("ro.boot.build.id", "");
+    std::string build_id = GetProperty("ro.build.id", "");
     // Check that the build id is constructed with the prefix of vbmeta digest
     std::string expected_build_id = legacy_build_id + "." + vbmeta_digest.substr(0, 8);
     ASSERT_EQ(expected_build_id, build_id);
