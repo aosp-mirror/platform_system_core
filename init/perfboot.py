@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (C) 2015 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,7 +39,7 @@ $ ./perfboot.py --iterations=30 -v --output=data.tsv --tags=eventtags.txt
 
 import argparse
 import atexit
-import cStringIO
+import io
 import glob
 import inspect
 import logging
@@ -102,7 +102,7 @@ class IntervalAdjuster(object):
             self._wait_cpu_cool_down(self._product, self._temp_paths)
         else:
             if self._waited:
-                print 'Waiting for %d seconds' % self._interval
+                print('Waiting for %d seconds' % self._interval)
                 time.sleep(self._interval)
         self._waited = True
 
@@ -119,9 +119,9 @@ class IntervalAdjuster(object):
         threshold = IntervalAdjuster._CPU_COOL_DOWN_THRESHOLDS.get(
             self._product)
         if threshold is None:
-            print 'No CPU temperature threshold is set for ' + self._product
-            print ('Just wait %d seconds' %
-                   IntervalAdjuster._CPU_COOL_DOWN_WAIT_TIME_DEFAULT)
+            print('No CPU temperature threshold is set for ' + self._product)
+            print(('Just wait %d seconds' %
+                   IntervalAdjuster._CPU_COOL_DOWN_WAIT_TIME_DEFAULT))
             time.sleep(IntervalAdjuster._CPU_COOL_DOWN_WAIT_TIME_DEFAULT)
             return
         while True:
@@ -129,8 +129,8 @@ class IntervalAdjuster(object):
             if temp < threshold:
                 logging.info('Current CPU temperature %s' % temp)
                 return
-            print 'Waiting until CPU temperature (%d) falls below %d' % (
-                temp, threshold)
+            print('Waiting until CPU temperature (%d) falls below %d' % (
+                temp, threshold))
             time.sleep(IntervalAdjuster._CPU_COOL_DOWN_WAIT_INTERVAL)
 
 
@@ -260,7 +260,7 @@ def filter_event_tags(tags, device):
 
 def get_values(record, tag):
     """Gets values that matches |tag| from |record|."""
-    keys = [key for key in record.keys() if key[0] == tag]
+    keys = [key for key in list(record.keys()) if key[0] == tag]
     return [record[k] for k in sorted(keys)]
 
 
@@ -304,7 +304,7 @@ def output_results(filename, record_list, tags):
     with open(filename, 'w') as f:
         f.write('\t'.join(labels) + '\n')
         for record in record_list:
-            line = cStringIO.StringIO()
+            line = io.StringIO()
             invalid_line = False
             for i, tag in enumerate(tags):
                 if i != 0:
@@ -319,7 +319,7 @@ def output_results(filename, record_list, tags):
                 logging.error('Invalid record found: ' + line.getvalue())
             line.write('\n')
             f.write(line.getvalue())
-    print 'Wrote: ' + filename
+    print(('Wrote: ' + filename))
 
 
 def median(data):
@@ -349,9 +349,9 @@ def print_summary(record_list, end_tag):
     # Filter out invalid data.
     end_times = [get_last_value(record, end_tag) for record in record_list
                  if get_last_value(record, end_tag) != 0]
-    print 'mean:', int(round(mean(end_times))), 'ms'
-    print 'median:', int(round(median(end_times))), 'ms'
-    print 'standard deviation:', int(round(stddev(end_times))), 'ms'
+    print(('mean:', int(round(mean(end_times))), 'ms'))
+    print(('median:', int(round(median(end_times))), 'ms'))
+    print(('standard deviation:', int(round(stddev(end_times))), 'ms'))
 
 
 def do_iteration(device, interval_adjuster, event_tags_re, end_tag):
@@ -359,7 +359,7 @@ def do_iteration(device, interval_adjuster, event_tags_re, end_tag):
     device.wait()
     interval_adjuster.wait()
     device.reboot()
-    print 'Rebooted the device'
+    print('Rebooted the device, waiting for tag', end_tag)
     record = {}
     booted = False
     while not booted:
@@ -372,7 +372,7 @@ def do_iteration(device, interval_adjuster, event_tags_re, end_tag):
                 stdout=subprocess.PIPE)
         for line in readlines_unbuffered(p):
             if t.is_timedout():
-                print '*** Timed out ***'
+                print('*** Timed out ***')
                 return record
             m = event_tags_re.search(line)
             if not m:
@@ -381,8 +381,8 @@ def do_iteration(device, interval_adjuster, event_tags_re, end_tag):
             event_time = int(m.group('time'))
             pid = m.group('pid')
             record[(tag, pid)] = event_time
-            print 'Event log recorded: %s (%s) - %d ms' % (
-                tag, pid, event_time)
+            print(('Event log recorded: %s (%s) - %d ms' % (
+                tag, pid, event_time)))
             if tag == end_tag:
                 booted = True
                 t.cancel()
@@ -420,7 +420,7 @@ def parse_args():
 
 def install_apks(device, apk_dir):
     for apk in glob.glob(os.path.join(apk_dir, '*.apk')):
-        print 'Installing: ' + apk
+        print('Installing: ' + apk)
         device.install(apk, replace=True)
 
 
@@ -452,7 +452,7 @@ def main():
     event_tags_re = make_event_tags_re(event_tags)
 
     for i in range(args.iterations):
-        print 'Run #%d ' % i
+        print('Run #%d ' % i)
         record = do_iteration(
             device, interval_adjuster, event_tags_re, end_tag)
         record_list.append(record)

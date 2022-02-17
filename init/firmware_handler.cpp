@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <glob.h>
+#include <grp.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -81,9 +82,9 @@ static bool IsBooting() {
     return access("/dev/.booting", F_OK) == 0;
 }
 
-ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid,
+ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid, gid_t gid,
                                                  std::string handler_path)
-    : devpath(std::move(devpath)), uid(uid), handler_path(std::move(handler_path)) {
+    : devpath(std::move(devpath)), uid(uid), gid(gid), handler_path(std::move(handler_path)) {
     auto wildcard_position = this->devpath.find('*');
     if (wildcard_position != std::string::npos) {
         if (wildcard_position == this->devpath.length() - 1) {
@@ -97,13 +98,17 @@ ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid,
     }
 }
 
+ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid,
+                                                 std::string handler_path)
+    : ExternalFirmwareHandler(devpath, uid, 0, handler_path) {}
+
 FirmwareHandler::FirmwareHandler(std::vector<std::string> firmware_directories,
                                  std::vector<ExternalFirmwareHandler> external_firmware_handlers)
     : firmware_directories_(std::move(firmware_directories)),
       external_firmware_handlers_(std::move(external_firmware_handlers)) {}
 
 Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handler, uid_t uid,
-                                                        const Uevent& uevent) const {
+                                                        gid_t gid, const Uevent& uevent) const {
     unique_fd child_stdout;
     unique_fd parent_stdout;
     if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &child_stdout, &parent_stdout)) {
@@ -139,6 +144,13 @@ Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handl
             c_args.emplace_back(arg.data());
         }
         c_args.emplace_back(nullptr);
+
+        if (gid != 0) {
+            if (setgid(gid) != 0) {
+                fprintf(stderr, "setgid() failed: %s", strerror(errno));
+                _exit(EXIT_FAILURE);
+            }
+        }
 
         if (setuid(uid) != 0) {
             fprintf(stderr, "setuid() failed: %s", strerror(errno));
@@ -196,8 +208,8 @@ std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
                       << "' for devpath: '" << uevent.path << "' firmware: '" << uevent.firmware
                       << "'";
 
-            auto result =
-                    RunExternalHandler(external_handler.handler_path, external_handler.uid, uevent);
+            auto result = RunExternalHandler(external_handler.handler_path, external_handler.uid,
+                                             external_handler.gid, uevent);
             if (!result.ok()) {
                 LOG(ERROR) << "Using default firmware; External firmware handler failed: "
                            << result.error();
