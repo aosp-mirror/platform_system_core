@@ -306,7 +306,7 @@ ScopedAStatus TrustyKeyMintDevice::earlyBootEnded() {
 }
 
 ScopedAStatus TrustyKeyMintDevice::convertStorageKeyToEphemeral(
-        const std::vector<uint8_t>& storageKeyBlob, std::vector<uint8_t>* ephemeralKeyBlob) {
+        const vector<uint8_t>& storageKeyBlob, vector<uint8_t>* ephemeralKeyBlob) {
     keymaster::ExportKeyRequest request(impl_->message_version());
     request.SetKeyMaterial(storageKeyBlob.data(), storageKeyBlob.size());
     request.key_format = KM_KEY_FORMAT_RAW;
@@ -319,6 +319,19 @@ ScopedAStatus TrustyKeyMintDevice::convertStorageKeyToEphemeral(
         *ephemeralKeyBlob = {response.key_data, response.key_data + response.key_data_length};
     }
     return ScopedAStatus::ok();
+}
+
+ScopedAStatus TrustyKeyMintDevice::getRootOfTrustChallenge(array<uint8_t, 16>* /* challenge */) {
+    return kmError2ScopedAStatus(KM_ERROR_UNIMPLEMENTED);
+}
+
+ScopedAStatus TrustyKeyMintDevice::getRootOfTrust(const array<uint8_t, 16>& /* challenge */,
+                                                  vector<uint8_t>* /* rootOfTrust */) {
+    return kmError2ScopedAStatus(KM_ERROR_UNIMPLEMENTED);
+}
+
+ScopedAStatus TrustyKeyMintDevice::sendRootOfTrust(const vector<uint8_t>& /* rootOfTrust */) {
+    return kmError2ScopedAStatus(KM_ERROR_UNIMPLEMENTED);
 }
 
 }  // namespace aidl::android::hardware::security::keymint::trusty
