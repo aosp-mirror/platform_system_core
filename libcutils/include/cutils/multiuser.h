@@ -30,6 +30,7 @@ extern userid_t multiuser_get_user_id(uid_t uid);
 extern appid_t multiuser_get_app_id(uid_t uid);
 
 extern uid_t multiuser_get_uid(userid_t user_id, appid_t app_id);
+extern uid_t multiuser_get_supplemental_uid(userid_t user_id, appid_t app_id);
 
 extern gid_t multiuser_get_cache_gid(userid_t user_id, appid_t app_id);
 extern gid_t multiuser_get_ext_gid(userid_t user_id, appid_t app_id);
