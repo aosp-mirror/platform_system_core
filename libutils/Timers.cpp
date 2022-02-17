@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-//
-// Timer functions.
-//
 #include <utils/Timers.h>
 
 #include <limits.h>
@@ -24,11 +21,12 @@
 #include <time.h>
 
 #include <android-base/macros.h>
+#include <utils/Log.h>
 
 static constexpr size_t clock_id_max = 5;
 
 static void checkClockId(int clock) {
-    if (clock < 0 || clock >= clock_id_max) abort();
+    LOG_ALWAYS_FATAL_IF(clock < 0 || clock >= clock_id_max, "invalid clock id");
 }
 
 #if defined(__linux__)
@@ -56,18 +54,10 @@ nsecs_t systemTime(int clock) {
 }
 #endif
 
-int toMillisecondTimeoutDelay(nsecs_t referenceTime, nsecs_t timeoutTime)
-{
-    nsecs_t timeoutDelayMillis;
-    if (timeoutTime > referenceTime) {
-        uint64_t timeoutDelay = uint64_t(timeoutTime - referenceTime);
-        if (timeoutDelay > uint64_t((INT_MAX - 1) * 1000000LL)) {
-            timeoutDelayMillis = -1;
-        } else {
-            timeoutDelayMillis = (timeoutDelay + 999999LL) / 1000000LL;
-        }
-    } else {
-        timeoutDelayMillis = 0;
-    }
-    return (int)timeoutDelayMillis;
+int toMillisecondTimeoutDelay(nsecs_t referenceTime, nsecs_t timeoutTime) {
+    if (timeoutTime <= referenceTime) return 0;
+
+    uint64_t timeoutDelay = uint64_t(timeoutTime - referenceTime);
+    if (timeoutDelay > uint64_t((INT_MAX - 1) * 1000000LL)) return -1;
+    return (timeoutDelay + 999999LL) / 1000000LL;
 }
