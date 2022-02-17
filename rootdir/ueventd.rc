@@ -67,9 +67,9 @@ subsystem dma_heap
 # CDMA radio interface MUX
 /dev/ppp                  0660   radio      vpn
 
-# Virtualisation is managed by Virt Manager
-/dev/kvm                  0600   virtmanager root
-/dev/vhost-vsock          0600   virtmanager root
+# Virtualization is managed by VirtualizationService.
+/dev/kvm                  0600   virtualizationservice root
+/dev/vhost-vsock          0600   virtualizationservice root
 
 # sysfs properties
 /sys/devices/platform/trusty.*      trusty_version        0440  root   log

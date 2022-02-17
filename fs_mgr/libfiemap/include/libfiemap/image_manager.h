@@ -174,6 +174,9 @@ class ImageManager final : public IImageManager {
     // Writes |bytes| zeros at the beginning of the passed image
     FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes);
 
+    // Validate that all images still have the same block map.
+    bool ValidateImageMaps();
+
   private:
     ImageManager(const std::string& metadata_dir, const std::string& data_dir,
                  const DeviceInfo& device_info);

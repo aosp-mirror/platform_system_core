@@ -25,9 +25,11 @@
 
 #if __has_feature(address_sanitizer)
 #include <sanitizer/asan_interface.h>
+#elif __has_feature(hwaddress_sanitizer)
+#include <sanitizer/hwasan_interface.h>
 #endif
 
-#if __has_feature(address_sanitizer)
+#if __has_feature(address_sanitizer) || __has_feature(hwaddress_sanitizer)
 // Load asan.options if it exists since these are not yet in the environment.
 // Always ensure detect_container_overflow=0 as there are false positives with this check.
 // Always ensure abort_on_error=1 to ensure we reboot to bootloader for development builds.
@@ -51,6 +53,8 @@ using namespace android::init;
 int main(int argc, char** argv) {
 #if __has_feature(address_sanitizer)
     __asan_set_error_report_callback(AsanReportCallback);
+#elif __has_feature(hwaddress_sanitizer)
+    __hwasan_set_error_report_callback(AsanReportCallback);
 #endif
     // Boost prio which will be restored later
     setpriority(PRIO_PROCESS, 0, -20);

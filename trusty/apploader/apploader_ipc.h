@@ -44,6 +44,7 @@ enum apploader_command : uint32_t {
  * @APPLOADER_ERR_ALREADY_EXISTS:       application has already been loaded
  * @APPLOADER_ERR_INTERNAL:             miscellaneous or internal apploader
  *                                      error not covered by the above
+ * @APPLOADER_ERR_INVALID_VERSION:      invalid application version
  */
 enum apploader_error : uint32_t {
     APPLOADER_NO_ERROR = 0,
@@ -54,6 +55,7 @@ enum apploader_error : uint32_t {
     APPLOADER_ERR_LOADING_FAILED,
     APPLOADER_ERR_ALREADY_EXISTS,
     APPLOADER_ERR_INTERNAL,
+    APPLOADER_ERR_INVALID_VERSION,
 };
 
 /**
