@@ -40,6 +40,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     bool IsRecovery() const override;
     std::unique_ptr<IImageManager> OpenImageManager() const override;
     bool IsFirstStageInit() const override;
+    android::dm::IDeviceMapper& GetDeviceMapper() override;
 
     void set_first_stage_init(bool value) { first_stage_init_ = value; }
 

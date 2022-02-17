@@ -25,6 +25,7 @@
 struct ThreadInfo {
   std::unique_ptr<unwindstack::Regs> registers;
   long tagged_addr_ctrl = -1;
+  long pac_enabled_keys = -1;
 
   pid_t uid;
 
