@@ -29,6 +29,7 @@
 #include <thread>
 
 #include <android-base/file.h>
+#include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
@@ -678,4 +679,14 @@ TEST(libdm, DeleteDeviceDeferredWaitsForLastReference) {
     ASSERT_EQ(DmDeviceState::INVALID, dm.GetState("libdm-test-dm-linear"));
     ASSERT_NE(0, access(path.c_str(), F_OK));
     ASSERT_EQ(ENOENT, errno);
+}
+
+TEST(libdm, CreateEmptyDevice) {
+    DeviceMapper& dm = DeviceMapper::Instance();
+    ASSERT_TRUE(dm.CreateEmptyDevice("empty-device"));
+    auto guard =
+            android::base::make_scope_guard([&]() { dm.DeleteDeviceIfExists("empty-device", 5s); });
+
+    // Empty device should be in suspended state.
+    ASSERT_EQ(DmDeviceState::SUSPENDED, dm.GetState("empty-device"));
 }
