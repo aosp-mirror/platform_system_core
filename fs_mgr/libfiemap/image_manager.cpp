@@ -854,6 +854,24 @@ bool ImageManager::ValidateImageMaps() {
     return true;
 }
 
+bool ImageManager::IsImageDisabled(const std::string& name) {
+    if (!MetadataExists(metadata_dir_)) {
+        return true;
+    }
+
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        return false;
+    }
+
+    auto partition = FindPartition(*metadata.get(), name);
+    if (!partition) {
+        return false;
+    }
+
+    return !!(partition->attributes & LP_PARTITION_ATTR_DISABLED);
+}
+
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,
                                                  const std::chrono::milliseconds& timeout_ms,
                                                  const std::string& name) {
