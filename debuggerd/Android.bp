@@ -391,6 +391,9 @@ cc_binary {
     apex_available: [
         "com.android.runtime",
     ],
+
+    // Required for tests.
+    required: ["crash_dump.policy"],
 }
 
 cc_binary {
