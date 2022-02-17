@@ -43,9 +43,15 @@ std::unique_ptr<VBMetaData> LoadAndVerifyVbmetaByPath(
 std::unique_ptr<FsAvbHashtreeDescriptor> GetHashtreeDescriptor(
         const std::string& avb_partition_name, VBMetaData&& vbmeta);
 
+std::unique_ptr<FsAvbHashDescriptor> GetHashDescriptor(
+        const std::string& partition_name, const std::vector<VBMetaData>& vbmeta_images);
+
 // Gets the hash descriptor for avb_partition_name from the vbmeta.
 std::unique_ptr<FsAvbHashDescriptor> GetHashDescriptor(const std::string& avb_partition_name,
                                                        VBMetaData&& vbmeta);
+
+std::string GetAvbPropertyDescriptor(const std::string& key,
+                                     const std::vector<VBMetaData>& vbmeta_images);
 
 }  // namespace fs_mgr
 }  // namespace android

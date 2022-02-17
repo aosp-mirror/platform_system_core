@@ -127,9 +127,12 @@
 #define AID_EXT_DATA_RW 1078      /* GID for app-private data directories on external storage */
 #define AID_EXT_OBB_RW 1079       /* GID for OBB directories on external storage */
 #define AID_CONTEXT_HUB 1080      /* GID for access to the Context Hub */
-#define AID_VIRTMANAGER 1081      /* VirtManager daemon */
+#define AID_VIRTUALIZATIONSERVICE 1081 /* VirtualizationService daemon */
 #define AID_ARTD 1082             /* ART Service daemon */
 #define AID_UWB 1083              /* UWB subsystem */
+#define AID_THREAD_NETWORK 1084   /* Thread Network subsystem */
+#define AID_DICED 1085            /* Android's DICE daemon */
+#define AID_DMESGD 1086           /* dmesg parsing daemon for kernel report collection */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
@@ -157,6 +160,7 @@
 #define AID_READPROC 3009     /* Allow /proc read access */
 #define AID_WAKELOCK 3010     /* Allow system wakelock read/write access */
 #define AID_UHID 3011         /* Allow read/write to /dev/uhid node */
+#define AID_READTRACEFS 3012  /* Allow tracefs read */
 
 /* The range 5000-5999 is also reserved for vendor partition. */
 #define AID_OEM_RESERVED_2_START 5000

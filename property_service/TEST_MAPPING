@@ -1,0 +1,7 @@
+{
+  "presubmit": [
+    {
+      "name": "propertyinfoserializer_tests"
+    }
+  ]
+}
