@@ -34,7 +34,6 @@
 #include <selinux/selinux.h>
 
 #include "fs_mgr_priv.h"
-#include "cryptfs.h"
 
 using android::base::unique_fd;
 
@@ -58,7 +57,7 @@ static int get_dev_sz(const std::string& fs_blkdev, uint64_t* dev_sz) {
 }
 
 static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_point,
-                       bool crypt_footer, bool needs_projid, bool needs_metadata_csum) {
+                       bool needs_projid, bool needs_metadata_csum) {
     uint64_t dev_sz;
     int rc = 0;
 
@@ -68,9 +67,6 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
     }
 
     /* Format the partition using the calculated length */
-    if (crypt_footer) {
-        dev_sz -= CRYPT_FOOTER_OFFSET;
-    }
 
     std::string size_str = std::to_string(dev_sz / 4096);
 
@@ -120,8 +116,8 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
     return rc;
 }
 
-static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt_footer,
-                       bool needs_projid, bool needs_casefold, bool fs_compress) {
+static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs_projid,
+                       bool needs_casefold, bool fs_compress) {
     if (!dev_sz) {
         int rc = get_dev_sz(fs_blkdev, &dev_sz);
         if (rc) {
@@ -130,9 +126,6 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
     }
 
     /* Format the partition using the calculated length */
-    if (crypt_footer) {
-        dev_sz -= CRYPT_FOOTER_OFFSET;
-    }
 
     std::string size_str = std::to_string(dev_sz / 4096);
 
@@ -159,7 +152,7 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool crypt
     return logwrap_fork_execvp(args.size(), args.data(), nullptr, false, LOG_KLOG, false, nullptr);
 }
 
-int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
+int fs_mgr_do_format(const FstabEntry& entry) {
     LERROR << __FUNCTION__ << ": Format " << entry.blk_device << " as '" << entry.fs_type << "'";
 
     bool needs_casefold = false;
@@ -171,10 +164,10 @@ int fs_mgr_do_format(const FstabEntry& entry, bool crypt_footer) {
     }
 
     if (entry.fs_type == "f2fs") {
-        return format_f2fs(entry.blk_device, entry.length, crypt_footer, needs_projid,
-                           needs_casefold, entry.fs_mgr_flags.fs_compress);
+        return format_f2fs(entry.blk_device, entry.length, needs_projid, needs_casefold,
+                           entry.fs_mgr_flags.fs_compress);
     } else if (entry.fs_type == "ext4") {
-        return format_ext4(entry.blk_device, entry.mount_point, crypt_footer, needs_projid,
+        return format_ext4(entry.blk_device, entry.mount_point, needs_projid,
                            entry.fs_mgr_flags.ext_meta_csum);
     } else {
         LERROR << "File system type '" << entry.fs_type << "' is not supported";
