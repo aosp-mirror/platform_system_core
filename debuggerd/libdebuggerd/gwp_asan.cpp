@@ -147,7 +147,7 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
   for (size_t i = 0; i != num_frames; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     BacktraceFrame* f = heap_object->add_allocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   heap_object->set_deallocation_tid(__gwp_asan_get_deallocation_thread_id(responsible_allocation_));
@@ -156,7 +156,7 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
   for (size_t i = 0; i != num_frames; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     BacktraceFrame* f = heap_object->add_deallocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   set_human_readable_cause(cause, crash_address_);
