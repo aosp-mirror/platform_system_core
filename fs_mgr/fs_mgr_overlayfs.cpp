@@ -1122,6 +1122,23 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
     return true;
 }
 
+static inline uint64_t GetIdealDataScratchSize() {
+    BlockDeviceInfo super_info;
+    PartitionOpener opener;
+    if (!opener.GetInfo(fs_mgr_get_super_partition_name(), &super_info)) {
+        LERROR << "could not get block device info for super";
+        return 0;
+    }
+
+    struct statvfs s;
+    if (statvfs("/data", &s) < 0) {
+        PERROR << "could not statfs /data";
+        return 0;
+    }
+
+    return std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
+}
+
 static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exists, bool* change) {
     *partition_exists = false;
     if (change) *change = false;
@@ -1137,13 +1154,6 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return true;
     }
 
-    BlockDeviceInfo info;
-    PartitionOpener opener;
-    if (!opener.GetInfo(fs_mgr_get_super_partition_name(), &info)) {
-        LERROR << "could not get block device info for super";
-        return false;
-    }
-
     if (change) *change = true;
 
     // Note: calling RemoveDisabledImages here ensures that we do not race with
@@ -1153,10 +1163,11 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
     if (!images->BackingImageExists(partition_name)) {
-        static constexpr uint64_t kMinimumSize = 64_MiB;
-        static constexpr uint64_t kMaximumSize = 2_GiB;
+        uint64_t size = GetIdealDataScratchSize();
+        if (!size) {
+            size = 2_GiB;
+        }
 
-        uint64_t size = std::clamp(info.size / 2, kMinimumSize, kMaximumSize);
         auto flags = IImageManager::CREATE_IMAGE_DEFAULT;
 
         if (!images->CreateBackingImage(partition_name, size, flags)) {
