@@ -96,7 +96,7 @@ cc_test {
         "device-tests",
     ],
     test_options: {
-        min_shipping_api_level: 33,
+        min_shipping_api_level: 31,
     },
     require_root: true,
     auto_gen_config: true,
