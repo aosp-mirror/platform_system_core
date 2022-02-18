@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/prctl.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -73,22 +74,40 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
 
   std::map<pid_t, ThreadInfo> threads;
   threads[tid] = ThreadInfo{
-      .registers = std::move(regs),
-      .uid = uid,
-      .tid = tid,
-      .thread_name = std::move(thread_name),
-      .pid = pid,
-      .command_line = std::move(command_line),
-      .selinux_label = std::move(selinux_label),
-      .siginfo = siginfo,
+    .registers = std::move(regs), .uid = uid, .tid = tid, .thread_name = std::move(thread_name),
+    .pid = pid, .command_line = std::move(command_line), .selinux_label = std::move(selinux_label),
+    .siginfo = siginfo,
+#if defined(__aarch64__)
+    // Only supported on aarch64 for now.
+        .tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0),
+    .pac_enabled_keys = prctl(PR_PAC_GET_ENABLED_KEYS, 0, 0, 0, 0),
+#endif
   };
+  if (pid == tid) {
+    const ThreadInfo& thread = threads[pid];
+    if (!iterate_tids(pid, [&threads, &thread](pid_t tid) {
+          threads[tid] = ThreadInfo{
+              .uid = thread.uid,
+              .tid = tid,
+              .pid = thread.pid,
+              .command_line = thread.command_line,
+              .thread_name = get_thread_name(tid),
+              .tagged_addr_ctrl = thread.tagged_addr_ctrl,
+              .pac_enabled_keys = thread.pac_enabled_keys,
+          };
+        })) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to open /proc/%d/task: %s", pid,
+                            strerror(errno));
+    }
+  }
 
   unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch());
   auto process_memory =
       unwindstack::Memory::CreateProcessMemoryCached(getpid());
   unwinder.SetProcessMemory(process_memory);
   if (!unwinder.Init()) {
-    async_safe_fatal("failed to init unwinder object");
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to init unwinder object");
+    return;
   }
 
   ProcessInfo process_info;
