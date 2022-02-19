@@ -46,8 +46,6 @@
 #include "partition_cow_creator.h"
 #include "utility.h"
 
-#include <android-base/properties.h>
-
 // Mock classes are not used. Header included to ensure mocked class definition aligns with the
 // class itself.
 #include <libsnapshot/mock_device_info.h>
