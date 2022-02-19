@@ -275,6 +275,24 @@ sh_test {
     ],
 }
 
+cc_test {
+    name: "vts_ota_config_test",
+    srcs: [
+        "vts_ota_config_test.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+    ],
+    test_suites: [
+        "vts",
+    ],
+    test_options: {
+        min_shipping_api_level: 33,
+    },
+    auto_gen_config: true,
+    require_root: true,
+}
+
 cc_binary {
     name: "snapshotctl",
     srcs: [
