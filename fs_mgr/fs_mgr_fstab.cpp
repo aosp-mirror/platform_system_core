@@ -657,7 +657,12 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
             if (partition_ext4 == fstab->end()) {
                 auto new_entry = *GetEntryForMountPoint(fstab, mount_point);
                 new_entry.fs_type = "ext4";
-                fstab->emplace_back(new_entry);
+                auto it = std::find_if(fstab->rbegin(), fstab->rend(),
+                                       [&mount_point](const auto& entry) {
+                                           return entry.mount_point == mount_point;
+                                       });
+                auto end_of_mount_point_group = fstab->begin() + std::distance(it, fstab->rend());
+                fstab->insert(end_of_mount_point_group, new_entry);
             }
         }
     }
