@@ -29,10 +29,10 @@ uid_t multiuser_get_uid(userid_t user_id, appid_t app_id) {
     return (user_id * AID_USER_OFFSET) + (app_id % AID_USER_OFFSET);
 }
 
-uid_t multiuser_get_supplemental_uid(userid_t user_id, appid_t app_id) {
-    int supplementalProcessOffset = AID_SUPPLEMENTAL_PROCESS_START - AID_APP_START;
+uid_t multiuser_get_sdk_sandbox_uid(userid_t user_id, appid_t app_id) {
+    int sdk_sandbox_offset = AID_SDK_SANDBOX_PROCESS_START - AID_APP_START;
     if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
-        return (user_id * AID_USER_OFFSET) + (app_id % AID_USER_OFFSET) + supplementalProcessOffset;
+        return (user_id * AID_USER_OFFSET) + (app_id % AID_USER_OFFSET) + sdk_sandbox_offset;
     } else {
         return -1;
     }
