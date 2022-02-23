@@ -29,7 +29,7 @@ static int GetVsrLevel() {
 
 TEST(fs, ErofsSupported) {
     // S and higher for this test.
-    if (GetVsrLevel() < 31) {
+    if (GetVsrLevel() < __ANDROID_API_S__) {
         GTEST_SKIP();
     }
 
@@ -85,10 +85,10 @@ TEST(fs, PartitionTypes) {
             continue;
         }
 
-        if (vsr_level <= 32) {
+        if (vsr_level < __ANDROID_API_T__) {
             continue;
         }
-        if (vsr_level == 33 && parent_bdev != super_bdev) {
+        if (vsr_level == __ANDROID_API_T__ && parent_bdev != super_bdev) {
             // Only check for dynamic partitions at this VSR level.
             continue;
         }
@@ -99,4 +99,13 @@ TEST(fs, PartitionTypes) {
             EXPECT_NE(entry.fs_type, "ext4") << entry.mount_point;
         }
     }
+}
+
+TEST(fs, NoDtFstab) {
+    if (GetVsrLevel() <= __ANDROID_API_S__) {
+        GTEST_SKIP();
+    }
+
+    android::fs_mgr::Fstab fstab;
+    EXPECT_FALSE(android::fs_mgr::ReadFstabFromDt(&fstab, false));
 }
