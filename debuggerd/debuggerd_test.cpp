@@ -1409,6 +1409,16 @@ __attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpTyp
   return true;
 }
 
+extern "C" void foo() {
+  LOG(INFO) << "foo";
+  std::this_thread::sleep_for(1s);
+}
+
+extern "C" void bar() {
+  LOG(INFO) << "bar";
+  std::this_thread::sleep_for(1s);
+}
+
 TEST_F(CrasherTest, seccomp_tombstone) {
   int intercept_result;
   unique_fd output_fd;
@@ -1416,6 +1426,11 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   static const auto dump_type = kDebuggerdTombstone;
   StartProcess(
       []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
         raise_debugger_signal(dump_type);
         _exit(0);
       },
@@ -1430,16 +1445,8 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
-}
-
-extern "C" void foo() {
-  LOG(INFO) << "foo";
-  std::this_thread::sleep_for(1s);
-}
-
-extern "C" void bar() {
-  LOG(INFO) << "bar";
-  std::this_thread::sleep_for(1s);
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
 TEST_F(CrasherTest, seccomp_backtrace) {

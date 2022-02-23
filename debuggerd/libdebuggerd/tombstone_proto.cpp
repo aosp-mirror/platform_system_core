@@ -48,6 +48,7 @@
 
 #include <android/log.h>
 #include <bionic/macros.h>
+#include <bionic/reserved_signals.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -346,6 +347,93 @@ void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& fr
   f->set_build_id(frame.map_info->GetPrintableBuildID());
 }
 
+static void dump_registers(unwindstack::Unwinder* unwinder,
+                           const std::unique_ptr<unwindstack::Regs>& regs, Thread& thread,
+                           bool memory_dump) {
+  if (regs == nullptr) {
+    return;
+  }
+
+  unwindstack::Maps* maps = unwinder->GetMaps();
+  unwindstack::Memory* memory = unwinder->GetProcessMemory().get();
+
+  regs->IterateRegisters([&thread, memory_dump, maps, memory](const char* name, uint64_t value) {
+    Register r;
+    r.set_name(name);
+    r.set_u64(value);
+    *thread.add_registers() = r;
+
+    if (memory_dump) {
+      MemoryDump dump;
+
+      dump.set_register_name(name);
+      std::shared_ptr<unwindstack::MapInfo> map_info = maps->Find(untag_address(value));
+      if (map_info) {
+        dump.set_mapping_name(map_info->name());
+      }
+
+      constexpr size_t kNumBytesAroundRegister = 256;
+      constexpr size_t kNumTagsAroundRegister = kNumBytesAroundRegister / kTagGranuleSize;
+      char buf[kNumBytesAroundRegister];
+      uint8_t tags[kNumTagsAroundRegister];
+      ssize_t bytes = dump_memory(buf, sizeof(buf), tags, sizeof(tags), &value, memory);
+      if (bytes == -1) {
+        return;
+      }
+      dump.set_begin_address(value);
+      dump.set_memory(buf, bytes);
+
+      bool has_tags = false;
+#if defined(__aarch64__)
+      for (size_t i = 0; i < kNumTagsAroundRegister; ++i) {
+        if (tags[i] != 0) {
+          has_tags = true;
+        }
+      }
+#endif  // defined(__aarch64__)
+
+      if (has_tags) {
+        dump.mutable_arm_mte_metadata()->set_memory_tags(tags, kNumTagsAroundRegister);
+      }
+
+      *thread.add_memory_dump() = std::move(dump);
+    }
+  });
+}
+
+static void log_unwinder_error(unwindstack::Unwinder* unwinder) {
+  if (unwinder->LastErrorCode() == unwindstack::ERROR_NONE) {
+    return;
+  }
+
+  async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error code: %s",
+                        unwinder->LastErrorCodeString());
+  async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error address: 0x%" PRIx64,
+                        unwinder->LastErrorAddress());
+}
+
+static void dump_thread_backtrace(unwindstack::Unwinder* unwinder, Thread& thread) {
+  if (unwinder->NumFrames() == 0) {
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to unwind");
+    log_unwinder_error(unwinder);
+    return;
+  }
+
+  if (unwinder->elf_from_memory_not_file()) {
+    auto backtrace_note = thread.mutable_backtrace_note();
+    *backtrace_note->Add() =
+        "Function names and BuildId information is missing for some frames due";
+    *backtrace_note->Add() = "to unreadable libraries. For unwinds of apps, only shared libraries";
+    *backtrace_note->Add() = "found under the lib/ directory are readable.";
+    *backtrace_note->Add() = "On this device, run setenforce 0 to make the libraries readable.";
+  }
+  unwinder->SetDisplayBuildID(true);
+  for (const auto& frame : unwinder->frames()) {
+    BacktraceFrame* f = thread.add_current_backtrace();
+    fill_in_backtrace_frame(f, frame);
+  }
+}
+
 static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
                         const ThreadInfo& thread_info, bool memory_dump = false) {
   Thread thread;
@@ -355,95 +443,30 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
   thread.set_tagged_addr_ctrl(thread_info.tagged_addr_ctrl);
   thread.set_pac_enabled_keys(thread_info.pac_enabled_keys);
 
-  unwindstack::Maps* maps = unwinder->GetMaps();
-  unwindstack::Memory* memory = unwinder->GetProcessMemory().get();
-
-  thread_info.registers->IterateRegisters(
-      [&thread, memory_dump, maps, memory](const char* name, uint64_t value) {
-        Register r;
-        r.set_name(name);
-        r.set_u64(value);
-        *thread.add_registers() = r;
-
-        if (memory_dump) {
-          MemoryDump dump;
-
-          dump.set_register_name(name);
-          std::shared_ptr<unwindstack::MapInfo> map_info = maps->Find(untag_address(value));
-          if (map_info) {
-            dump.set_mapping_name(map_info->name());
-          }
-
-          constexpr size_t kNumBytesAroundRegister = 256;
-          constexpr size_t kNumTagsAroundRegister = kNumBytesAroundRegister / kTagGranuleSize;
-          char buf[kNumBytesAroundRegister];
-          uint8_t tags[kNumTagsAroundRegister];
-          size_t start_offset = 0;
-          ssize_t bytes = dump_memory(buf, sizeof(buf), tags, sizeof(tags), &value, memory);
-          if (bytes == -1) {
-            return;
-          }
-          dump.set_begin_address(value);
-
-          if (start_offset + bytes > sizeof(buf)) {
-            async_safe_fatal("dump_memory overflowed? start offset = %zu, bytes read = %zd",
-                             start_offset, bytes);
-          }
-
-          dump.set_memory(buf, bytes);
-
-          bool has_tags = false;
-#if defined(__aarch64__)
-          for (size_t i = 0; i < kNumTagsAroundRegister; ++i) {
-            if (tags[i] != 0) {
-              has_tags = true;
-            }
-          }
-#endif  // defined(__aarch64__)
-
-          if (has_tags) {
-            dump.mutable_arm_mte_metadata()->set_memory_tags(tags, kNumTagsAroundRegister);
-          }
-
-          *thread.add_memory_dump() = std::move(dump);
-        }
-      });
-
-  std::unique_ptr<unwindstack::Regs> regs_copy(thread_info.registers->Clone());
-  unwinder->SetRegs(regs_copy.get());
-  unwinder->Unwind();
-  if (unwinder->NumFrames() == 0) {
-    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to unwind");
-    if (unwinder->LastErrorCode() != unwindstack::ERROR_NONE) {
-      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error code: %s",
-                            unwinder->LastErrorCodeString());
-      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "  error address: 0x%" PRIx64,
-                            unwinder->LastErrorAddress());
+  if (thread_info.pid == getpid() && thread_info.pid != thread_info.tid) {
+    // Fallback path for non-main thread, doing unwind from running process.
+    unwindstack::ThreadUnwinder thread_unwinder(kMaxFrames, unwinder->GetMaps());
+    if (!thread_unwinder.Init()) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                            "Unable to initialize ThreadUnwinder object.");
+      log_unwinder_error(&thread_unwinder);
+      return;
     }
+
+    std::unique_ptr<unwindstack::Regs> initial_regs;
+    thread_unwinder.UnwindWithSignal(BIONIC_SIGNAL_BACKTRACE, thread_info.tid, &initial_regs);
+    dump_registers(&thread_unwinder, initial_regs, thread, memory_dump);
+    dump_thread_backtrace(&thread_unwinder, thread);
   } else {
-    if (unwinder->elf_from_memory_not_file()) {
-      auto backtrace_note = thread.mutable_backtrace_note();
-      *backtrace_note->Add() =
-          "Function names and BuildId information is missing for some frames due";
-      *backtrace_note->Add() =
-          "to unreadable libraries. For unwinds of apps, only shared libraries";
-      *backtrace_note->Add() = "found under the lib/ directory are readable.";
-      *backtrace_note->Add() = "On this device, run setenforce 0 to make the libraries readable.";
-    }
-    unwinder->SetDisplayBuildID(true);
-    for (const auto& frame : unwinder->frames()) {
-      BacktraceFrame* f = thread.add_current_backtrace();
-      fill_in_backtrace_frame(f, frame);
-    }
+    dump_registers(unwinder, thread_info.registers, thread, memory_dump);
+    std::unique_ptr<unwindstack::Regs> regs_copy(thread_info.registers->Clone());
+    unwinder->SetRegs(regs_copy.get());
+    unwinder->Unwind();
+    dump_thread_backtrace(unwinder, thread);
   }
 
   auto& threads = *tombstone->mutable_threads();
   threads[thread_info.tid] = thread;
-}
-
-static void dump_main_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
-                             const ThreadInfo& thread_info) {
-  dump_thread(tombstone, unwinder, thread_info, true);
 }
 
 static void dump_mappings(Tombstone* tombstone, unwindstack::Unwinder* unwinder) {
@@ -663,7 +686,8 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::Unwinder* unwind
 
   dump_abort_message(&result, unwinder, process_info);
 
-  dump_main_thread(&result, unwinder, main_thread);
+  // Dump the main thread, but save the memory around the registers.
+  dump_thread(&result, unwinder, main_thread, /* memory_dump */ true);
 
   for (const auto& [tid, thread_info] : threads) {
     if (tid != target_thread) {

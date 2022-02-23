@@ -26,16 +26,26 @@
 #include <android-base/unique_fd.h>
 #include <cgroup_map.h>
 
-class ProfileAttribute {
+class IProfileAttribute {
+  public:
+    virtual ~IProfileAttribute() = 0;
+    virtual void Reset(const CgroupController& controller, const std::string& file_name) = 0;
+    virtual const CgroupController* controller() const = 0;
+    virtual const std::string& file_name() const = 0;
+    virtual bool GetPathForTask(int tid, std::string* path) const = 0;
+};
+
+class ProfileAttribute : public IProfileAttribute {
   public:
     ProfileAttribute(const CgroupController& controller, const std::string& file_name)
         : controller_(controller), file_name_(file_name) {}
+    ~ProfileAttribute() = default;
 
-    const CgroupController* controller() const { return &controller_; }
-    const std::string& file_name() const { return file_name_; }
-    void Reset(const CgroupController& controller, const std::string& file_name);
+    const CgroupController* controller() const override { return &controller_; }
+    const std::string& file_name() const override { return file_name_; }
+    void Reset(const CgroupController& controller, const std::string& file_name) override;
 
-    bool GetPathForTask(int tid, std::string* path) const;
+    bool GetPathForTask(int tid, std::string* path) const override;
 
   private:
     CgroupController controller_;
@@ -65,22 +75,19 @@ class SetClampsAction : public ProfileAction {
   public:
     SetClampsAction(int boost, int clamp) noexcept : boost_(boost), clamp_(clamp) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
 
   protected:
     int boost_;
     int clamp_;
 };
 
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-
 class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
 
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForTask(int tid) const override;
 
   private:
     unsigned long slack_;
@@ -88,28 +95,17 @@ class SetTimerSlackAction : public ProfileAction {
     static bool IsTimerSlackSupported(int tid);
 };
 
-#else
-
-class SetTimerSlackAction : public ProfileAction {
-  public:
-    SetTimerSlackAction(unsigned long) noexcept {}
-
-    virtual bool ExecuteForTask(int) const { return true; }
-};
-
-#endif
-
 // Set attribute profile element
 class SetAttributeAction : public ProfileAction {
   public:
-    SetAttributeAction(const ProfileAttribute* attribute, const std::string& value)
+    SetAttributeAction(const IProfileAttribute* attribute, const std::string& value)
         : attribute_(attribute), value_(value) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
 
   private:
-    const ProfileAttribute* attribute_;
+    const IProfileAttribute* attribute_;
     std::string value_;
 };
 
@@ -118,10 +114,10 @@ class SetCgroupAction : public ProfileAction {
   public:
     SetCgroupAction(const CgroupController& c, const std::string& p);
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ResourceCacheType cache_type) override;
+    void DropResourceCaching(ResourceCacheType cache_type) override;
 
     const CgroupController* controller() const { return &controller_; }
 
@@ -140,10 +136,10 @@ class WriteFileAction : public ProfileAction {
   public:
     WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ResourceCacheType cache_type) override;
+    void DropResourceCaching(ResourceCacheType cache_type) override;
 
   private:
     std::string path_, value_;
@@ -179,10 +175,10 @@ class ApplyProfileAction : public ProfileAction {
     ApplyProfileAction(const std::vector<std::shared_ptr<TaskProfile>>& profiles)
         : profiles_(profiles) {}
 
-    virtual bool ExecuteForProcess(uid_t uid, pid_t pid) const;
-    virtual bool ExecuteForTask(int tid) const;
-    virtual void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type);
-    virtual void DropResourceCaching(ProfileAction::ResourceCacheType cache_type);
+    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
+    bool ExecuteForTask(int tid) const override;
+    void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type) override;
+    void DropResourceCaching(ProfileAction::ResourceCacheType cache_type) override;
 
   private:
     std::vector<std::shared_ptr<TaskProfile>> profiles_;
@@ -194,7 +190,7 @@ class TaskProfiles {
     static TaskProfiles& GetInstance();
 
     TaskProfile* GetProfile(const std::string& name) const;
-    const ProfileAttribute* GetAttribute(const std::string& name) const;
+    const IProfileAttribute* GetAttribute(const std::string& name) const;
     void DropResourceCaching(ProfileAction::ResourceCacheType cache_type) const;
     bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
                             bool use_fd_cache);
@@ -202,7 +198,7 @@ class TaskProfiles {
 
   private:
     std::map<std::string, std::shared_ptr<TaskProfile>> profiles_;
-    std::map<std::string, std::unique_ptr<ProfileAttribute>> attributes_;
+    std::map<std::string, std::unique_ptr<IProfileAttribute>> attributes_;
 
     TaskProfiles();
 
