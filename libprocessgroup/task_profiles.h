@@ -59,6 +59,8 @@ class ProfileAction {
 
     virtual ~ProfileAction() {}
 
+    virtual const char* Name() const = 0;
+
     // Default implementations will fail
     virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; };
     virtual bool ExecuteForTask(int) const { return false; };
@@ -75,6 +77,7 @@ class SetClampsAction : public ProfileAction {
   public:
     SetClampsAction(int boost, int clamp) noexcept : boost_(boost), clamp_(clamp) {}
 
+    const char* Name() const override { return "SetClamps"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
 
@@ -87,6 +90,7 @@ class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
 
+    const char* Name() const override { return "SetTimerSlack"; }
     bool ExecuteForTask(int tid) const override;
 
   private:
@@ -101,6 +105,7 @@ class SetAttributeAction : public ProfileAction {
     SetAttributeAction(const IProfileAttribute* attribute, const std::string& value)
         : attribute_(attribute), value_(value) {}
 
+    const char* Name() const override { return "SetAttribute"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
 
@@ -114,6 +119,7 @@ class SetCgroupAction : public ProfileAction {
   public:
     SetCgroupAction(const CgroupController& c, const std::string& p);
 
+    const char* Name() const override { return "SetCgroup"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
     void EnableResourceCaching(ResourceCacheType cache_type) override;
@@ -136,6 +142,7 @@ class WriteFileAction : public ProfileAction {
   public:
     WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
 
+    const char* Name() const override { return "WriteFile"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
     void EnableResourceCaching(ResourceCacheType cache_type) override;
@@ -154,8 +161,9 @@ class WriteFileAction : public ProfileAction {
 
 class TaskProfile {
   public:
-    TaskProfile() : res_cached_(false) {}
+    TaskProfile(const std::string& name) : name_(name), res_cached_(false) {}
 
+    const std::string& Name() const { return name_; }
     void Add(std::unique_ptr<ProfileAction> e) { elements_.push_back(std::move(e)); }
     void MoveTo(TaskProfile* profile);
 
@@ -165,6 +173,7 @@ class TaskProfile {
     void DropResourceCaching(ProfileAction::ResourceCacheType cache_type);
 
   private:
+    const std::string name_;
     bool res_cached_;
     std::vector<std::unique_ptr<ProfileAction>> elements_;
 };
@@ -175,6 +184,7 @@ class ApplyProfileAction : public ProfileAction {
     ApplyProfileAction(const std::vector<std::shared_ptr<TaskProfile>>& profiles)
         : profiles_(profiles) {}
 
+    const char* Name() const override { return "ApplyProfileAction"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
     void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type) override;
