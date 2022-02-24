@@ -608,13 +608,13 @@ void BatteryMonitor::init(struct healthd_config *hc) {
 
         while ((entry = readdir(dir.get()))) {
             const char* name = entry->d_name;
-            std::vector<String8>::iterator itIgnoreName;
 
             if (!strcmp(name, ".") || !strcmp(name, ".."))
                 continue;
 
-            itIgnoreName = find(hc->ignorePowerSupplyNames.begin(),
-                                hc->ignorePowerSupplyNames.end(), String8(name));
+            std::vector<String8>::iterator itIgnoreName =
+                    find(hc->ignorePowerSupplyNames.begin(), hc->ignorePowerSupplyNames.end(),
+                         String8(name));
             if (itIgnoreName != hc->ignorePowerSupplyNames.end())
                 continue;
 
