@@ -531,6 +531,13 @@ void SnapshotHandler::SetMergeInProgress(size_t ra_index) {
     {
         std::unique_lock<std::mutex> lock(blk_state->m_lock);
 
+        // We may have fallback from Async-merge to synchronous merging
+        // on the existing block. There is no need to reset as the
+        // merge is already in progress.
+        if (blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS) {
+            return;
+        }
+
         CHECK(blk_state->merge_state_ == MERGE_GROUP_STATE::GROUP_MERGE_PENDING);
 
         // First set the state to RA_READY so that in-flight I/O will drain
