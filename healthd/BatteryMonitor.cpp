@@ -121,14 +121,13 @@ static std::optional<T> mapSysfsString(const char* str, SysfsStringEnumMap<T> ma
 }
 
 static void initHealthInfo(HealthInfo* health_info) {
-    *health_info = HealthInfo{};
-
-    // Enum values may be zero initialized, so they need to be initialized properly.
-    health_info->batteryCapacityLevel = BatteryCapacityLevel::UNSUPPORTED;
-    health_info->batteryChargeTimeToFullNowSeconds =
-            (int64_t)HealthInfo::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED;
-    health_info->batteryStatus = BatteryStatus::UNKNOWN;
-    health_info->batteryHealth = BatteryHealth::UNKNOWN;
+    *health_info = {
+            .batteryCapacityLevel = BatteryCapacityLevel::UNSUPPORTED,
+            .batteryChargeTimeToFullNowSeconds =
+                    (int64_t)HealthInfo::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED,
+            .batteryStatus = BatteryStatus::UNKNOWN,
+            .batteryHealth = BatteryHealth::UNKNOWN,
+    };
 }
 
 BatteryMonitor::BatteryMonitor()
