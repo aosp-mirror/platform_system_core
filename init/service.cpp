@@ -467,6 +467,47 @@ void Service::ConfigureMemcg() {
     }
 }
 
+// Enters namespaces, sets environment variables, writes PID files and runs the service executable.
+void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
+                         const std::vector<Descriptor>& descriptors,
+                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
+    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+        LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
+    }
+
+    for (const auto& [key, value] : environment_vars_) {
+        setenv(key.c_str(), value.c_str(), 1);
+    }
+
+    for (const auto& descriptor : descriptors) {
+        descriptor.Publish();
+    }
+
+    if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
+        LOG(ERROR) << "failed to write pid to files: " << result.error();
+    }
+
+    // Wait until the cgroups have been created and until the cgroup controllers have been
+    // activated.
+    if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
+        PLOG(ERROR) << "failed to read from notification channel";
+    }
+    pipefd.reset();
+
+    if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
+        LOG(ERROR) << "failed to set task profiles";
+    }
+
+    // As requested, set our gid, supplemental gids, uid, context, and
+    // priority. Aborts on failure.
+    SetProcessAttributesAndCaps();
+
+    if (!ExpandArgsAndExecv(args_, sigstop_)) {
+        PLOG(ERROR) << "cannot execv('" << args_[0]
+                    << "'). See the 'Debugging init' section of init's README.md for tips";
+    }
+}
+
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
@@ -577,45 +618,7 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-
-        if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace);
-            !result.ok()) {
-            LOG(FATAL) << "Service '" << name_
-                       << "' failed to set up namespaces: " << result.error();
-        }
-
-        for (const auto& [key, value] : environment_vars_) {
-            setenv(key.c_str(), value.c_str(), 1);
-        }
-
-        for (const auto& descriptor : descriptors) {
-            descriptor.Publish();
-        }
-
-        if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
-            LOG(ERROR) << "failed to write pid to files: " << result.error();
-        }
-
-        // Wait until the cgroups have been created and until the cgroup controllers have been
-        // activated.
-        if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
-            PLOG(ERROR) << "failed to read from notification channel";
-        }
-        pipefd.reset();
-
-        if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
-            LOG(ERROR) << "failed to set task profiles";
-        }
-
-        // As requested, set our gid, supplemental gids, uid, context, and
-        // priority. Aborts on failure.
-        SetProcessAttributesAndCaps();
-
-        if (!ExpandArgsAndExecv(args_, sigstop_)) {
-            PLOG(ERROR) << "cannot execv('" << args_[0]
-                        << "'). See the 'Debugging init' section of init's README.md for tips";
-        }
-
+        RunService(override_mount_namespace, descriptors, std::move(pipefd));
         _exit(127);
     }
 
