@@ -425,6 +425,48 @@ Result<void> Service::CheckConsole() {
     return {};
 }
 
+// Configures the memory cgroup properties for the service.
+void Service::ConfigureMemcg() {
+    if (swappiness_ != -1) {
+        if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
+            PLOG(ERROR) << "setProcessGroupSwappiness failed";
+        }
+    }
+
+    if (soft_limit_in_bytes_ != -1) {
+        if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
+            PLOG(ERROR) << "setProcessGroupSoftLimit failed";
+        }
+    }
+
+    size_t computed_limit_in_bytes = limit_in_bytes_;
+    if (limit_percent_ != -1) {
+        long page_size = sysconf(_SC_PAGESIZE);
+        long num_pages = sysconf(_SC_PHYS_PAGES);
+        if (page_size > 0 && num_pages > 0) {
+            size_t max_mem = SIZE_MAX;
+            if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
+                max_mem = size_t(num_pages) * size_t(page_size);
+            }
+            computed_limit_in_bytes =
+                    std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
+        }
+    }
+
+    if (!limit_property_.empty()) {
+        // This ends up overwriting computed_limit_in_bytes but only if the
+        // property is defined.
+        computed_limit_in_bytes =
+                android::base::GetUintProperty(limit_property_, computed_limit_in_bytes, SIZE_MAX);
+    }
+
+    if (computed_limit_in_bytes != size_t(-1)) {
+        if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
+            PLOG(ERROR) << "setProcessGroupLimit failed";
+        }
+    }
+}
+
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
@@ -603,44 +645,7 @@ Result<void> Service::Start() {
         PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
                     << ") failed for service '" << name_ << "'";
     } else if (use_memcg) {
-        if (swappiness_ != -1) {
-            if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
-                PLOG(ERROR) << "setProcessGroupSwappiness failed";
-            }
-        }
-
-        if (soft_limit_in_bytes_ != -1) {
-            if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
-                PLOG(ERROR) << "setProcessGroupSoftLimit failed";
-            }
-        }
-
-        size_t computed_limit_in_bytes = limit_in_bytes_;
-        if (limit_percent_ != -1) {
-            long page_size = sysconf(_SC_PAGESIZE);
-            long num_pages = sysconf(_SC_PHYS_PAGES);
-            if (page_size > 0 && num_pages > 0) {
-                size_t max_mem = SIZE_MAX;
-                if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
-                    max_mem = size_t(num_pages) * size_t(page_size);
-                }
-                computed_limit_in_bytes =
-                        std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
-            }
-        }
-
-        if (!limit_property_.empty()) {
-            // This ends up overwriting computed_limit_in_bytes but only if the
-            // property is defined.
-            computed_limit_in_bytes = android::base::GetUintProperty(
-                    limit_property_, computed_limit_in_bytes, SIZE_MAX);
-        }
-
-        if (computed_limit_in_bytes != size_t(-1)) {
-            if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
-                PLOG(ERROR) << "setProcessGroupLimit failed";
-            }
-        }
+        ConfigureMemcg();
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {

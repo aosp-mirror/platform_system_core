@@ -146,6 +146,7 @@ class Service {
     void SetProcessAttributesAndCaps();
     void ResetFlagsForStart();
     Result<void> CheckConsole();
+    void ConfigureMemcg();
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
