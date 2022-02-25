@@ -108,3 +108,65 @@ TEST(errors, result_in_status) {
     status_t b = g(false);
     EXPECT_EQ(PERMISSION_DENIED, b);
 }
+
+TEST(errors, conversion_promotion) {
+    constexpr size_t successVal = 10ull;
+    auto f = [&](bool success) -> Result<size_t, StatusT> {
+        OR_RETURN(success_or_fail(success));
+        return successVal;
+    };
+    auto s = f(true);
+    ASSERT_TRUE(s.ok());
+    EXPECT_EQ(s.value(), successVal);
+    auto r = f(false);
+    EXPECT_TRUE(!r.ok());
+    EXPECT_EQ(PERMISSION_DENIED, r.error().code());
+}
+
+TEST(errors, conversion_promotion_bool) {
+    constexpr size_t successVal = true;
+    auto f = [&](bool success) -> Result<bool, StatusT> {
+        OR_RETURN(success_or_fail(success));
+        return successVal;
+    };
+    auto s = f(true);
+    ASSERT_TRUE(s.ok());
+    EXPECT_EQ(s.value(), successVal);
+    auto r = f(false);
+    EXPECT_TRUE(!r.ok());
+    EXPECT_EQ(PERMISSION_DENIED, r.error().code());
+}
+
+TEST(errors, conversion_promotion_char) {
+    constexpr char successVal = 'a';
+    auto f = [&](bool success) -> Result<unsigned char, StatusT> {
+        OR_RETURN(success_or_fail(success));
+        return successVal;
+    };
+    auto s = f(true);
+    ASSERT_TRUE(s.ok());
+    EXPECT_EQ(s.value(), successVal);
+    auto r = f(false);
+    EXPECT_TRUE(!r.ok());
+    EXPECT_EQ(PERMISSION_DENIED, r.error().code());
+}
+
+struct IntContainer {
+  // Implicit conversion from int is desired
+  IntContainer(int val) : val_(val) {}
+  int val_;
+};
+
+TEST(errors, conversion_construct) {
+    constexpr int successVal = 10;
+    auto f = [&](bool success) -> Result<IntContainer, StatusT> {
+        OR_RETURN(success_or_fail(success));
+        return successVal;
+    };
+    auto s = f(true);
+    ASSERT_TRUE(s.ok());
+    EXPECT_EQ(s.value().val_, successVal);
+    auto r = f(false);
+    EXPECT_TRUE(!r.ok());
+    EXPECT_EQ(PERMISSION_DENIED, r.error().code());
+}
