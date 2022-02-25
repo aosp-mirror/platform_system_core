@@ -405,6 +405,26 @@ static void ClosePipe(const std::array<int, 2>* pipe) {
     }
 }
 
+Result<void> Service::CheckConsole() {
+    if (!(flags_ & SVC_CONSOLE)) {
+        return {};
+    }
+
+    if (proc_attr_.console.empty()) {
+        proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
+    }
+
+    // Make sure that open call succeeds to ensure a console driver is
+    // properly registered for the device node
+    int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
+    if (console_fd < 0) {
+        flags_ |= SVC_DISABLED;
+        return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
+    }
+    close(console_fd);
+    return {};
+}
+
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
@@ -442,20 +462,8 @@ Result<void> Service::Start() {
         return ErrnoError() << "pipe()";
     }
 
-    bool needs_console = (flags_ & SVC_CONSOLE);
-    if (needs_console) {
-        if (proc_attr_.console.empty()) {
-            proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
-        }
-
-        // Make sure that open call succeeds to ensure a console driver is
-        // properly registered for the device node
-        int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
-        if (console_fd < 0) {
-            flags_ |= SVC_DISABLED;
-            return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
-        }
-        close(console_fd);
+    if (Result<void> result = CheckConsole(); !result.ok()) {
+        return result;
     }
 
     struct stat sb;

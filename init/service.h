@@ -145,6 +145,7 @@ class Service {
     void KillProcessGroup(int signal, bool report_oneshot = false);
     void SetProcessAttributesAndCaps();
     void ResetFlagsForStart();
+    Result<void> CheckConsole();
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
