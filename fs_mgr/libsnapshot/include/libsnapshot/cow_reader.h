@@ -92,7 +92,7 @@ class ICowOpIter {
   public:
     virtual ~ICowOpIter() {}
 
-    // True if there are more items to read, false otherwise.
+    // True if there are no more items to read forward, false otherwise.
     virtual bool Done() = 0;
 
     // Read the current operation.
@@ -100,6 +100,12 @@ class ICowOpIter {
 
     // Advance to the next item.
     virtual void Next() = 0;
+
+    // Advance to the previous item.
+    virtual void Prev() = 0;
+
+    // True if there are no more items to read backwards, false otherwise
+    virtual bool RDone() = 0;
 };
 
 class CowReader final : public ICowReader {
