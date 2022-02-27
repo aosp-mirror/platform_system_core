@@ -1034,7 +1034,7 @@ located at /init within the recovery ramdisk. These devices first switch root to
 /first_stage_ramdisk to remove the recovery components from the environment, then proceed the same
 as 2). Note that the decision to boot normally into Android instead of booting
 into recovery mode is made if androidboot.force_normal_boot=1 is present in the
-kernel commandline.
+kernel commandline, or in bootconfig with Android S and later.
 
 Once first stage init finishes it execs /system/bin/init with the "selinux_setup" argument. This
 phase is where SELinux is optionally compiled and loaded onto the system. selinux.cpp contains more
