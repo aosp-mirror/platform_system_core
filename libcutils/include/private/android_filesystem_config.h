@@ -133,6 +133,9 @@
 #define AID_THREAD_NETWORK 1084   /* Thread Network subsystem */
 #define AID_DICED 1085            /* Android's DICE daemon */
 #define AID_DMESGD 1086           /* dmesg parsing daemon for kernel report collection */
+#define AID_JC_WEAVER 1087        /* Javacard Weaver HAL - to manage omapi ARA rules */
+#define AID_JC_STRONGBOX 1088     /* Javacard Strongbox HAL - to manage omapi ARA rules */
+#define AID_JC_IDENTITYCRED 1089  /* Javacard Identity Cred HAL - to manage omapi ARA rules */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
