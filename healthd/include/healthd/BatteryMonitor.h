@@ -25,6 +25,10 @@
 
 #include <healthd/healthd.h>
 
+namespace aidl::android::hardware::health {
+class HealthInfo;
+}  // namespace aidl::android::hardware::health
+
 namespace android {
 namespace hardware {
 namespace health {
@@ -59,9 +63,10 @@ class BatteryMonitor {
     status_t getProperty(int id, struct BatteryProperty *val);
     void dumpState(int fd);
 
-    const android::hardware::health::V1_0::HealthInfo& getHealthInfo_1_0() const;
-    const android::hardware::health::V2_0::HealthInfo& getHealthInfo_2_0() const;
-    const android::hardware::health::V2_1::HealthInfo& getHealthInfo_2_1() const;
+    android::hardware::health::V1_0::HealthInfo getHealthInfo_1_0() const;
+    android::hardware::health::V2_0::HealthInfo getHealthInfo_2_0() const;
+    android::hardware::health::V2_1::HealthInfo getHealthInfo_2_1() const;
+    const aidl::android::hardware::health::HealthInfo& getHealthInfo() const;
 
     void updateValues(void);
     void logValues(void);
@@ -76,15 +81,16 @@ class BatteryMonitor {
     bool mBatteryDevicePresent;
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
-    // TODO(b/214126090): to migrate to AIDL HealthInfo
-    bool mChargerDockOnline;
-    std::unique_ptr<android::hardware::health::V2_1::HealthInfo> mHealthInfo;
+    std::unique_ptr<aidl::android::hardware::health::HealthInfo> mHealthInfo;
 
     int readFromFile(const String8& path, std::string* buf);
     PowerSupplyType readPowerSupplyType(const String8& path);
     bool getBooleanField(const String8& path);
     int getIntField(const String8& path);
     bool isScopedPowerSupply(const char* name);
+
+    static void logValues(const aidl::android::hardware::health::HealthInfo& health_info,
+                          const struct healthd_config& healthd_config);
 };
 
 }; // namespace android
