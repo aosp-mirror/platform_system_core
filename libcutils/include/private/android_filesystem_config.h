@@ -210,9 +210,9 @@
  */
 #define AID_OVERFLOWUID 65534 /* unmapped user in the user namespace */
 
-/* use the ranges below to determine whether a process is supplemental */
-#define AID_SUPPLEMENTAL_PROCESS_START 20000 /* start of uids allocated to supplemental process */
-#define AID_SUPPLEMENTAL_PROCESS_END 29999   /* end of uids allocated to supplemental process */
+/* use the ranges below to determine whether a process is sdk sandbox */
+#define AID_SDK_SANDBOX_PROCESS_START 20000 /* start of uids allocated to sdk sandbox processes */
+#define AID_SDK_SANDBOX_PROCESS_END 29999   /* end of uids allocated to sdk sandbox processes */
 
 /* use the ranges below to determine whether a process is isolated */
 #define AID_ISOLATED_START 90000 /* start of uids for fully isolated sandboxed processes */
