@@ -279,7 +279,6 @@ bool ReadAhead::ReadAheadAsyncIO() {
             sqe = io_uring_get_sqe(ring_.get());
             if (!sqe) {
                 SNAP_PLOG(ERROR) << "io_uring_get_sqe failed during read-ahead";
-                snapuserd_->ReadAheadIOFailed();
                 return false;
             }
 
@@ -309,7 +308,6 @@ bool ReadAhead::ReadAheadAsyncIO() {
             if (ret != pending_ios_to_submit) {
                 SNAP_PLOG(ERROR) << "io_uring_submit failed for read-ahead: "
                                  << " io submit: " << ret << " expected: " << pending_ios_to_submit;
-                snapuserd_->ReadAheadIOFailed();
                 return false;
             }
 
@@ -321,14 +319,12 @@ bool ReadAhead::ReadAheadAsyncIO() {
             // Read XOR data from COW file in parallel when I/O's are in-flight
             if (xor_processing_required && !ReadXorData(block_index, xor_op_index, xor_op_vec)) {
                 SNAP_LOG(ERROR) << "ReadXorData failed";
-                snapuserd_->ReadAheadIOFailed();
                 return false;
             }
 
             // Fetch I/O completions
             if (!ReapIoCompletions(pending_ios_to_complete)) {
                 SNAP_LOG(ERROR) << "ReapIoCompletions failed";
-                snapuserd_->ReadAheadIOFailed();
                 return false;
             }
 
@@ -393,26 +389,36 @@ void ReadAhead::UpdateScratchMetadata() {
 }
 
 bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
+    bool status = true;
+
     // Reap I/O completions
     while (pending_ios_to_complete) {
         struct io_uring_cqe* cqe;
 
+        // We need to make sure to reap all the I/O's submitted
+        // even if there are any errors observed.
+        //
+        // io_uring_wait_cqe can potentially return -EAGAIN or -EINTR;
+        // these error codes are not truly I/O errors; we can retry them
+        // by re-populating the SQE entries and submitting the I/O
+        // request back. However, we don't do that now; instead we
+        // will fallback to synchronous I/O.
         int ret = io_uring_wait_cqe(ring_.get(), &cqe);
         if (ret) {
             SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << ret;
-            return false;
+            status = false;
         }
 
         if (cqe->res < 0) {
             SNAP_LOG(ERROR) << "Read-ahead - io_uring_Wait_cqe failed with res: " << cqe->res;
-            return false;
+            status = false;
         }
 
         io_uring_cqe_seen(ring_.get(), cqe);
         pending_ios_to_complete -= 1;
     }
 
-    return true;
+    return status;
 }
 
 void ReadAhead::ProcessXorData(size_t& block_xor_index, size_t& xor_index,
@@ -610,17 +616,37 @@ bool ReadAhead::ReadAheadIOStart() {
         return ReconstructDataFromCow();
     }
 
+    bool retry = false;
+    bool ra_status;
+
+    // Start Async read-ahead
     if (read_ahead_async_) {
-        if (!ReadAheadAsyncIO()) {
-            SNAP_LOG(ERROR) << "ReadAheadAsyncIO failed - io_uring processing failure.";
-            return false;
+        ra_status = ReadAheadAsyncIO();
+        if (!ra_status) {
+            SNAP_LOG(ERROR) << "ReadAheadAsyncIO failed - Falling back synchronous I/O";
+            FinalizeIouring();
+            RAResetIter(total_blocks_merged_);
+            retry = true;
+            read_ahead_async_ = false;
         }
-    } else {
-        if (!ReadAheadSyncIO()) {
+    }
+
+    // Check if we need to fallback and retry the merge
+    //
+    // If the device doesn't support async operations, we
+    // will directly enter here (aka devices with 4.x kernels)
+
+    const bool ra_sync_required = (retry || !read_ahead_async_);
+
+    if (ra_sync_required) {
+        ra_status = ReadAheadSyncIO();
+        if (!ra_status) {
             SNAP_LOG(ERROR) << "ReadAheadSyncIO failed";
             return false;
         }
     }
+
+    SNAP_LOG(DEBUG) << "Read-ahead: total_ra_blocks_merged: " << total_ra_blocks_completed_;
 
     // Wait for the merge to finish for the previous RA window. We shouldn't
     // be touching the scratch space until merge is complete of previous RA
@@ -646,6 +672,7 @@ bool ReadAhead::ReadAheadIOStart() {
         offset += BLOCK_SZ;
     }
 
+    total_ra_blocks_completed_ += total_blocks_merged_;
     snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged_);
 
     // Flush the data only if we have a overlapping blocks in the region
@@ -761,6 +788,13 @@ bool ReadAhead::RAIterDone() {
 
 void ReadAhead::RAIterNext() {
     cowop_iter_->Next();
+}
+
+void ReadAhead::RAResetIter(uint64_t num_blocks) {
+    while (num_blocks && !cowop_iter_->RDone()) {
+        cowop_iter_->Prev();
+        num_blocks -= 1;
+    }
 }
 
 const CowOperation* ReadAhead::GetRAOpIter() {

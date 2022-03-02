@@ -109,9 +109,9 @@ cc_test {
     ],
     shared_libs: [
         "libbase",
-        "libfs_mgr",
     ],
     static_libs: [
+        "libfs_mgr",
         "libfstab",
         "libgmock",
         "libgtest",
