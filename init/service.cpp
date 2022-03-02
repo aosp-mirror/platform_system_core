@@ -405,6 +405,109 @@ static void ClosePipe(const std::array<int, 2>* pipe) {
     }
 }
 
+Result<void> Service::CheckConsole() {
+    if (!(flags_ & SVC_CONSOLE)) {
+        return {};
+    }
+
+    if (proc_attr_.console.empty()) {
+        proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
+    }
+
+    // Make sure that open call succeeds to ensure a console driver is
+    // properly registered for the device node
+    int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
+    if (console_fd < 0) {
+        flags_ |= SVC_DISABLED;
+        return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
+    }
+    close(console_fd);
+    return {};
+}
+
+// Configures the memory cgroup properties for the service.
+void Service::ConfigureMemcg() {
+    if (swappiness_ != -1) {
+        if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
+            PLOG(ERROR) << "setProcessGroupSwappiness failed";
+        }
+    }
+
+    if (soft_limit_in_bytes_ != -1) {
+        if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
+            PLOG(ERROR) << "setProcessGroupSoftLimit failed";
+        }
+    }
+
+    size_t computed_limit_in_bytes = limit_in_bytes_;
+    if (limit_percent_ != -1) {
+        long page_size = sysconf(_SC_PAGESIZE);
+        long num_pages = sysconf(_SC_PHYS_PAGES);
+        if (page_size > 0 && num_pages > 0) {
+            size_t max_mem = SIZE_MAX;
+            if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
+                max_mem = size_t(num_pages) * size_t(page_size);
+            }
+            computed_limit_in_bytes =
+                    std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
+        }
+    }
+
+    if (!limit_property_.empty()) {
+        // This ends up overwriting computed_limit_in_bytes but only if the
+        // property is defined.
+        computed_limit_in_bytes =
+                android::base::GetUintProperty(limit_property_, computed_limit_in_bytes, SIZE_MAX);
+    }
+
+    if (computed_limit_in_bytes != size_t(-1)) {
+        if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
+            PLOG(ERROR) << "setProcessGroupLimit failed";
+        }
+    }
+}
+
+// Enters namespaces, sets environment variables, writes PID files and runs the service executable.
+void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
+                         const std::vector<Descriptor>& descriptors,
+                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
+    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+        LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
+    }
+
+    for (const auto& [key, value] : environment_vars_) {
+        setenv(key.c_str(), value.c_str(), 1);
+    }
+
+    for (const auto& descriptor : descriptors) {
+        descriptor.Publish();
+    }
+
+    if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
+        LOG(ERROR) << "failed to write pid to files: " << result.error();
+    }
+
+    // Wait until the cgroups have been created and until the cgroup controllers have been
+    // activated.
+    if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
+        PLOG(ERROR) << "failed to read from notification channel";
+    }
+    pipefd.reset();
+
+    if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
+        LOG(ERROR) << "failed to set task profiles";
+    }
+
+    // As requested, set our gid, supplemental gids, uid, context, and
+    // priority. Aborts on failure.
+    SetProcessAttributesAndCaps();
+
+    if (!ExpandArgsAndExecv(args_, sigstop_)) {
+        PLOG(ERROR) << "cannot execv('" << args_[0]
+                    << "'). See the 'Debugging init' section of init's README.md for tips";
+    }
+}
+
 Result<void> Service::Start() {
     auto reboot_on_failure = make_scope_guard([this] {
         if (on_failure_reboot_target_) {
@@ -442,20 +545,8 @@ Result<void> Service::Start() {
         return ErrnoError() << "pipe()";
     }
 
-    bool needs_console = (flags_ & SVC_CONSOLE);
-    if (needs_console) {
-        if (proc_attr_.console.empty()) {
-            proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
-        }
-
-        // Make sure that open call succeeds to ensure a console driver is
-        // properly registered for the device node
-        int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
-        if (console_fd < 0) {
-            flags_ |= SVC_DISABLED;
-            return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
-        }
-        close(console_fd);
+    if (Result<void> result = CheckConsole(); !result.ok()) {
+        return result;
     }
 
     struct stat sb;
@@ -527,45 +618,7 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-
-        if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace);
-            !result.ok()) {
-            LOG(FATAL) << "Service '" << name_
-                       << "' failed to set up namespaces: " << result.error();
-        }
-
-        for (const auto& [key, value] : environment_vars_) {
-            setenv(key.c_str(), value.c_str(), 1);
-        }
-
-        for (const auto& descriptor : descriptors) {
-            descriptor.Publish();
-        }
-
-        if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
-            LOG(ERROR) << "failed to write pid to files: " << result.error();
-        }
-
-        // Wait until the cgroups have been created and until the cgroup controllers have been
-        // activated.
-        if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
-            PLOG(ERROR) << "failed to read from notification channel";
-        }
-        pipefd.reset();
-
-        if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
-            LOG(ERROR) << "failed to set task profiles";
-        }
-
-        // As requested, set our gid, supplemental gids, uid, context, and
-        // priority. Aborts on failure.
-        SetProcessAttributesAndCaps();
-
-        if (!ExpandArgsAndExecv(args_, sigstop_)) {
-            PLOG(ERROR) << "cannot execv('" << args_[0]
-                        << "'). See the 'Debugging init' section of init's README.md for tips";
-        }
-
+        RunService(override_mount_namespace, descriptors, std::move(pipefd));
         _exit(127);
     }
 
@@ -595,44 +648,7 @@ Result<void> Service::Start() {
         PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
                     << ") failed for service '" << name_ << "'";
     } else if (use_memcg) {
-        if (swappiness_ != -1) {
-            if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
-                PLOG(ERROR) << "setProcessGroupSwappiness failed";
-            }
-        }
-
-        if (soft_limit_in_bytes_ != -1) {
-            if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
-                PLOG(ERROR) << "setProcessGroupSoftLimit failed";
-            }
-        }
-
-        size_t computed_limit_in_bytes = limit_in_bytes_;
-        if (limit_percent_ != -1) {
-            long page_size = sysconf(_SC_PAGESIZE);
-            long num_pages = sysconf(_SC_PHYS_PAGES);
-            if (page_size > 0 && num_pages > 0) {
-                size_t max_mem = SIZE_MAX;
-                if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
-                    max_mem = size_t(num_pages) * size_t(page_size);
-                }
-                computed_limit_in_bytes =
-                        std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
-            }
-        }
-
-        if (!limit_property_.empty()) {
-            // This ends up overwriting computed_limit_in_bytes but only if the
-            // property is defined.
-            computed_limit_in_bytes = android::base::GetUintProperty(
-                    limit_property_, computed_limit_in_bytes, SIZE_MAX);
-        }
-
-        if (computed_limit_in_bytes != size_t(-1)) {
-            if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
-                PLOG(ERROR) << "setProcessGroupLimit failed";
-            }
-        }
+        ConfigureMemcg();
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
