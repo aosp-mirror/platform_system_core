@@ -31,20 +31,20 @@ TEST(MultiuserTest, TestMerge) {
     EXPECT_EQ(1050000U, multiuser_get_uid(10, 50000));
 }
 
-TEST(MultiuserTest, TestSupplementalUid) {
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(0, 0));
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(0, 1000));
-    EXPECT_EQ(20000U, multiuser_get_supplemental_uid(0, 10000));
-    EXPECT_EQ(25000U, multiuser_get_supplemental_uid(0, 15000));
-    EXPECT_EQ(29999U, multiuser_get_supplemental_uid(0, 19999));
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(0, 50000));
+TEST(MultiuserTest, TestSdkSandboxUid) {
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 0));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 1000));
+    EXPECT_EQ(20000U, multiuser_get_sdk_sandbox_uid(0, 10000));
+    EXPECT_EQ(25000U, multiuser_get_sdk_sandbox_uid(0, 15000));
+    EXPECT_EQ(29999U, multiuser_get_sdk_sandbox_uid(0, 19999));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 50000));
 
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(10, 0));
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(10, 1000));
-    EXPECT_EQ(1020000U, multiuser_get_supplemental_uid(10, 10000));
-    EXPECT_EQ(1025000U, multiuser_get_supplemental_uid(10, 15000));
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(10, 20000));
-    EXPECT_EQ(ERR_UID, multiuser_get_supplemental_uid(10, 50000));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 0));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 1000));
+    EXPECT_EQ(1020000U, multiuser_get_sdk_sandbox_uid(10, 10000));
+    EXPECT_EQ(1025000U, multiuser_get_sdk_sandbox_uid(10, 15000));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 20000));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 50000));
 }
 
 TEST(MultiuserTest, TestSplitUser) {
