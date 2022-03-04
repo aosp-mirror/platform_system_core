@@ -809,6 +809,9 @@ class SnapshotManager final : public ISnapshotManager {
     // userspace snapshots.
     bool UpdateUsesUserSnapshots(LockedFile* lock);
 
+    // Check if io_uring API's need to be used
+    bool UpdateUsesIouring(LockedFile* lock);
+
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
                               const std::chrono::milliseconds& timeout_ms = {});
