@@ -136,6 +136,7 @@
 #define AID_JC_WEAVER 1087        /* Javacard Weaver HAL - to manage omapi ARA rules */
 #define AID_JC_STRONGBOX 1088     /* Javacard Strongbox HAL - to manage omapi ARA rules */
 #define AID_JC_IDENTITYCRED 1089  /* Javacard Identity Cred HAL - to manage omapi ARA rules */
+#define AID_SDK_SANDBOX 1090      /* SDK sandbox virtual UID */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
