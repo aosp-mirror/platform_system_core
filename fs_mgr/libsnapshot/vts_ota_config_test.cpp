@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2021 The Android Open Source Project
+// Copyright (C) 2022 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,27 +14,10 @@
 // limitations under the License.
 //
 
-package {
-    // See: http://go/android-license-faq
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
+#include <android-base/properties.h>
+#include <gtest/gtest.h>
 
-cc_fuzz {
-  name: "libfstab_fuzzer",
-  srcs: [
-    "fs_mgr_fstab_fuzzer.cpp",
-  ],
-  static_libs: [
-    "libfstab",
-  ],
-  shared_libs: [
-    "libbase",
-  ],
-
-  dictionary: "fstab.dict",
-  fuzz_config: {
-    cc: [
-      "yochiang@google.com",
-    ],
-  },
+TEST(VAB, Enabled) {
+    ASSERT_TRUE(android::base::GetBoolProperty("ro.virtual_ab.enabled", false));
+    ASSERT_TRUE(android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false));
 }

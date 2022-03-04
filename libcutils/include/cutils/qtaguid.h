@@ -34,24 +34,6 @@ extern int qtaguid_tagSocket(int sockfd, int tag, uid_t uid);
 extern int qtaguid_untagSocket(int sockfd);
 
 /*
- * For the given uid, switch counter sets.
- * The kernel only keeps a limited number of sets.
- * 2 for now.
- */
-extern int qtaguid_setCounterSet(int counterSetNum, uid_t uid);
-
-/*
- * Delete all tag info that relates to the given tag an uid.
- * If the tag is 0, then ALL info about the uid is freed.
- * The delete data also affects active tagged sockets, which are
- * then untagged.
- * The calling process can only operate on its own tags.
- * Unless it is part of the happy AID_NET_BW_ACCT group.
- * In which case it can clobber everything.
- */
-extern int qtaguid_deleteTagData(int tag, uid_t uid);
-
-/*
  * Enable/disable qtaguid functionnality at a lower level.
  * When pacified, the kernel will accept commands but do nothing.
  */

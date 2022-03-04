@@ -44,4 +44,9 @@ cc_library {
     shared_libs: ["android.hardware.graphics.allocator@2.0"],
     header_libs: ["libhardware_headers"],
     min_sdk_version: "29",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.media.swcodec",
+        "test_com.android.media.swcodec",
+    ],
 }
