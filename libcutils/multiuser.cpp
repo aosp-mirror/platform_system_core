@@ -38,6 +38,16 @@ uid_t multiuser_get_sdk_sandbox_uid(userid_t user_id, appid_t app_id) {
     }
 }
 
+uid_t multiuser_convert_sdk_sandbox_to_app_uid(uid_t uid) {
+    appid_t app_id = multiuser_get_app_id(uid);
+    int sdk_sandbox_offset = AID_SDK_SANDBOX_PROCESS_START - AID_APP_START;
+    if (app_id >= AID_SDK_SANDBOX_PROCESS_START && app_id <= AID_SDK_SANDBOX_PROCESS_END) {
+        return uid - sdk_sandbox_offset;
+    } else {
+        return -1;
+    }
+}
+
 gid_t multiuser_get_cache_gid(userid_t user_id, appid_t app_id) {
     if (app_id >= AID_APP_START && app_id <= AID_APP_END) {
         return multiuser_get_uid(user_id, (app_id - AID_APP_START) + AID_CACHE_GID_START);
