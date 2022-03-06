@@ -145,6 +145,12 @@ class Service {
     void KillProcessGroup(int signal, bool report_oneshot = false);
     void SetProcessAttributesAndCaps();
     void ResetFlagsForStart();
+    Result<void> CheckConsole();
+    void ConfigureMemcg();
+    void RunService(
+            const std::optional<MountNamespace>& override_mount_namespace,
+            const std::vector<Descriptor>& descriptors,
+            std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
