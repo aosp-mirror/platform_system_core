@@ -202,7 +202,7 @@ Result<void> ServiceParser::ParseInterface(std::vector<std::string>&& args) {
     const std::string fullname = interface_name + "/" + instance_name;
 
     for (const auto& svc : *service_list_) {
-        if (svc->interfaces().count(fullname) > 0) {
+        if (svc->interfaces().count(fullname) > 0 && !service_->is_override()) {
             return Error() << "Interface '" << fullname << "' redefined in " << service_->name()
                            << " but is already defined by " << svc->name();
         }
