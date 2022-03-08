@@ -646,7 +646,8 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         PLOG(FATAL) << "failed to create signalfd";
     }
 
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd); !result.ok()) {
+    constexpr int flags = EPOLLIN | EPOLLPRI;
+    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd, flags); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
