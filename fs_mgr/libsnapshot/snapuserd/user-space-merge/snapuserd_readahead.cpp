@@ -395,9 +395,6 @@ bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
     while (pending_ios_to_complete) {
         struct io_uring_cqe* cqe;
 
-        // We need to make sure to reap all the I/O's submitted
-        // even if there are any errors observed.
-        //
         // io_uring_wait_cqe can potentially return -EAGAIN or -EINTR;
         // these error codes are not truly I/O errors; we can retry them
         // by re-populating the SQE entries and submitting the I/O
@@ -407,11 +404,13 @@ bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
         if (ret) {
             SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << ret;
             status = false;
+            break;
         }
 
         if (cqe->res < 0) {
             SNAP_LOG(ERROR) << "Read-ahead - io_uring_Wait_cqe failed with res: " << cqe->res;
             status = false;
+            break;
         }
 
         io_uring_cqe_seen(ring_.get(), cqe);
