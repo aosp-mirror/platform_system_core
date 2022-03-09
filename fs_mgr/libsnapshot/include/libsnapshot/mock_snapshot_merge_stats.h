@@ -28,10 +28,7 @@ class MockSnapshotMergeStats final : public ISnapshotMergeStats {
     virtual ~MockSnapshotMergeStats() = default;
     // Called when merge starts or resumes.
     MOCK_METHOD(bool, Start, (), (override));
-    MOCK_METHOD(void, set_state, (android::snapshot::UpdateState, bool), (override));
-    MOCK_METHOD(void, set_cow_file_size, (uint64_t), ());
-    MOCK_METHOD(void, set_total_cow_size_bytes, (uint64_t), (override));
-    MOCK_METHOD(void, set_estimated_cow_size_bytes, (uint64_t), (override));
+    MOCK_METHOD(void, set_state, (android::snapshot::UpdateState), (override));
     MOCK_METHOD(void, set_boot_complete_time_ms, (uint32_t), (override));
     MOCK_METHOD(void, set_boot_complete_to_merge_start_time_ms, (uint32_t), (override));
     MOCK_METHOD(void, set_merge_failure_code, (MergeFailureCode), (override));
@@ -45,6 +42,7 @@ class MockSnapshotMergeStats final : public ISnapshotMergeStats {
     MOCK_METHOD(MergeFailureCode, merge_failure_code, (), (override));
     MOCK_METHOD(std::unique_ptr<Result>, Finish, (), (override));
     MOCK_METHOD(bool, WriteState, (), (override));
+    MOCK_METHOD(SnapshotMergeReport*, report, (), (override));
 
     using ISnapshotMergeStats::Result;
     // Return nullptr if any failure.
