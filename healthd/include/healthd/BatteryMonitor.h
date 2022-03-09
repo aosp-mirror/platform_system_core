@@ -82,15 +82,6 @@ class BatteryMonitor {
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
     std::unique_ptr<aidl::android::hardware::health::HealthInfo> mHealthInfo;
-
-    int readFromFile(const String8& path, std::string* buf);
-    PowerSupplyType readPowerSupplyType(const String8& path);
-    bool getBooleanField(const String8& path);
-    int getIntField(const String8& path);
-    bool isScopedPowerSupply(const char* name);
-
-    static void logValues(const aidl::android::hardware::health::HealthInfo& health_info,
-                          const struct healthd_config& healthd_config);
 };
 
 }; // namespace android
