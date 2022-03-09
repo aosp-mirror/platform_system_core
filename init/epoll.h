@@ -46,8 +46,13 @@ class Epoll {
             std::optional<std::chrono::milliseconds> timeout);
 
   private:
+    struct Info {
+        std::shared_ptr<Handler> handler;
+        uint32_t events;
+    };
+
     android::base::unique_fd epoll_fd_;
-    std::map<int, std::shared_ptr<Handler>> epoll_handlers_;
+    std::map<int, Info> epoll_handlers_;
 };
 
 }  // namespace init
