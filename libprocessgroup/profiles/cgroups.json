@@ -38,10 +38,7 @@
     "Controllers": [
       {
         "Controller": "freezer",
-        "Path": ".",
-        "Mode": "0755",
-        "UID": "system",
-        "GID": "system"
+        "Path": "."
       }
     ]
   }
