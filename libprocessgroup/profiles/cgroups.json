@@ -3,7 +3,7 @@
     {
       "Controller": "blkio",
       "Path": "/dev/blkio",
-      "Mode": "0755",
+      "Mode": "0775",
       "UID": "system",
       "GID": "system"
     },
@@ -32,7 +32,7 @@
   ],
   "Cgroups2": {
     "Path": "/sys/fs/cgroup",
-    "Mode": "0755",
+    "Mode": "0775",
     "UID": "system",
     "GID": "system",
     "Controllers": [
