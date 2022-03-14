@@ -79,7 +79,11 @@ endif
 
 EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
 ifeq ($(CLANG_COVERAGE),true)
-  EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
+  ifeq ($(CLANG_COVERAGE_CONTINUOUS_MODE),true)
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw
+  else
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
+  endif
 endif
 
 # Put it here instead of in init.rc module definition,
