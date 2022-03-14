@@ -130,6 +130,9 @@ cc_defaults {
             enabled: true,
         },
     },
+    fuzz_config: {
+       cc: ["smoreland@google.com"],
+    },
 }
 
 cc_library {
