@@ -50,11 +50,6 @@
 // log all reference counting operations
 #define PRINT_REFS 0
 
-// Continue after logging a stack trace if ~RefBase discovers that reference
-// count has never been incremented. Normally we conspicuously crash in that
-// case.
-#define DEBUG_REFBASE_DESTRUCTION 1
-
 #if !defined(_WIN32) && !defined(__APPLE__)
 // CallStack is only supported on linux type platforms.
 #define CALLSTACK_ENABLED 1
@@ -751,16 +746,18 @@ RefBase::~RefBase()
         }
     } else if (mRefs->mStrong.load(std::memory_order_relaxed) == INITIAL_STRONG_VALUE) {
         // We never acquired a strong reference on this object.
-#if DEBUG_REFBASE_DESTRUCTION
-        // Treating this as fatal is prone to causing boot loops. For debugging, it's
-        // better to treat as non-fatal.
-        ALOGD("RefBase: Explicit destruction, weak count = %d (in %p)", mRefs->mWeak.load(), this);
+
+        // TODO: make this fatal, but too much code in Android manages RefBase with
+        // new/delete manually (or using other mechanisms such as std::make_unique).
+        // However, this is dangerous because it's also common for code to use the
+        // sp<T>(T*) constructor, assuming that if the object is around, it is already
+        // owned by an sp<>.
+        ALOGW("RefBase: Explicit destruction, weak count = %d (in %p). Use sp<> to manage this "
+              "object.",
+              mRefs->mWeak.load(), this);
 
 #if CALLSTACK_ENABLED
         CallStack::logStack(LOG_TAG);
-#endif
-#else
-        LOG_ALWAYS_FATAL("RefBase: Explicit destruction, weak count = %d", mRefs->mWeak.load());
 #endif
     }
     // For debugging purposes, clear mRefs.  Ineffective against outstanding wp's.
