@@ -33,7 +33,6 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -47,7 +46,6 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
-#include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <backtrace/Backtrace.h>
@@ -776,82 +774,6 @@ static Result<void> ConnectEarlyStageSnapuserdAction(const BuiltinArguments& arg
     return {};
 }
 
-static bool SystemReadSmokeTest() {
-    std::string dev = "/dev/block/mapper/system"s + fs_mgr_get_slot_suffix();
-    android::base::unique_fd fd(open(dev.c_str(), O_RDONLY));
-    if (fd < 0) {
-        PLOG(ERROR) << "open " << dev << " failed, will not diangose snapuserd hangs";
-        return false;
-    }
-
-    for (size_t i = 1; i <= 100; i++) {
-        // Skip around the partition a bit.
-        size_t offset = i * 4096 * 512;
-
-        char b;
-        ssize_t n = TEMP_FAILURE_RETRY(pread(fd.get(), &b, 1, offset));
-        if (n < 0) {
-            PLOG(ERROR) << "snapuserd smoke test read failed";
-            return false;
-        }
-    }
-    return true;
-}
-
-static void DiagnoseSnapuserdHang(pid_t pid) {
-    bool succeeded = false;
-
-    std::mutex m;
-    std::condition_variable cv;
-
-    // Enforce an ordering between this and the thread startup, by taking the
-    // lock before we lanuch the thread.
-    std::unique_lock<std::mutex> cv_lock(m);
-
-    std::thread t([&]() -> void {
-        std::lock_guard<std::mutex> lock(m);
-        succeeded = SystemReadSmokeTest();
-        cv.notify_all();
-    });
-
-    auto join = android::base::make_scope_guard([&]() -> void {
-        // If the smoke test is hung, then this will too. We expect the device to
-        // automatically reboot once the watchdog kicks in.
-        t.join();
-    });
-
-    auto now = std::chrono::system_clock::now();
-    auto deadline = now + 10s;
-    auto status = cv.wait_until(cv_lock, deadline);
-    if (status == std::cv_status::timeout) {
-        LOG(ERROR) << "snapuserd smoke test timed out";
-    } else if (!succeeded) {
-        LOG(ERROR) << "snapuserd smoke test failed";
-    }
-
-    if (succeeded) {
-        LOG(INFO) << "snapuserd smoke test succeeded";
-        return;
-    }
-
-    while (true) {
-        LOG(ERROR) << "snapuserd problem detected, printing open fds";
-
-        std::error_code ec;
-        std::string proc_dir = "/proc/" + std::to_string(pid) + "/fd";
-        for (const auto& entry : std::filesystem::directory_iterator(proc_dir)) {
-            std::string target;
-            if (android::base::Readlink(entry.path(), &target)) {
-                LOG(ERROR) << "snapuserd opened: " << target;
-            } else {
-                LOG(ERROR) << "snapuserd opened: " << entry.path();
-            }
-        }
-
-        std::this_thread::sleep_for(10s);
-    }
-}
-
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -864,11 +786,6 @@ int SecondStageMain(int argc, char** argv) {
     SetStdioToDevNull(argv);
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
-
-    if (auto pid = GetSnapuserdFirstStagePid()) {
-        std::thread t(DiagnoseSnapuserdHang, *pid);
-        t.detach();
-    }
 
     // Update $PATH in the case the second stage init is newer than first stage init, where it is
     // first set.
