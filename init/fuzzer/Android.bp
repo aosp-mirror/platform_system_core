@@ -60,3 +60,13 @@ cc_fuzz {
     ],
     defaults: ["libinit_defaults"],
 }
+
+cc_fuzz {
+    name: "init_ueventHandler_fuzzer",
+    srcs: [
+        "init_ueventHandler_fuzzer.cpp",
+    ],
+    defaults: [
+        "libinit_defaults",
+    ],
+}
