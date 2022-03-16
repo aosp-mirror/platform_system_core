@@ -140,7 +140,8 @@ class SetCgroupAction : public ProfileAction {
 // Write to file action
 class WriteFileAction : public ProfileAction {
   public:
-    WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
+    WriteFileAction(const std::string& task_path, const std::string& proc_path,
+                    const std::string& value, bool logfailures);
 
     const char* Name() const override { return "WriteFile"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
@@ -149,13 +150,13 @@ class WriteFileAction : public ProfileAction {
     void DropResourceCaching(ResourceCacheType cache_type) override;
 
   private:
-    std::string path_, value_;
+    std::string task_path_, proc_path_, value_;
     bool logfailures_;
-    android::base::unique_fd fd_;
+    android::base::unique_fd fd_[ProfileAction::RCT_COUNT];
     mutable std::mutex fd_mutex_;
 
-    static bool WriteValueToFile(const std::string& value, const std::string& path,
-                                 bool logfailures);
+    bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, int uid, int pid,
+                          bool logfailures) const;
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, const std::string& value) const;
 };
 

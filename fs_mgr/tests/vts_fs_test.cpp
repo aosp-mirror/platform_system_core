@@ -102,7 +102,7 @@ TEST(fs, PartitionTypes) {
 }
 
 TEST(fs, NoDtFstab) {
-    if (GetVsrLevel() <= __ANDROID_API_S__) {
+    if (GetVsrLevel() < __ANDROID_API_Q__) {
         GTEST_SKIP();
     }
 
