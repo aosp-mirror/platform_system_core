@@ -1085,9 +1085,11 @@ on boot
     mkdir /dev/sys/fs/by-name 0755 system system
     symlink /sys/fs/f2fs/${dev.mnt.dev.data} /dev/sys/fs/by-name/userdata
 
-    # to access dm-<num> sysfs
+    # dev.mnt.dev.data=dm-N, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0, or
+    # dev.mnt.dev.data=sdaN/mmcblk0pN, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0
     mkdir /dev/sys/block/by-name 0755 system system
-    symlink /sys/devices/virtual/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.rootdisk.data} /dev/sys/block/by-name/rootdisk
 
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
@@ -1099,8 +1101,9 @@ on boot
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
-    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    # this requires enabling selinux entry for sda/mmcblk0 in vendor side
     write /dev/sys/block/by-name/userdata/queue/discard_max_bytes 134217728
+    write /dev/sys/block/by-name/rootdisk/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
