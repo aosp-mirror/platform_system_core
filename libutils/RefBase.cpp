@@ -50,7 +50,7 @@
 // log all reference counting operations
 #define PRINT_REFS 0
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if defined(__linux__)
 // CallStack is only supported on linux type platforms.
 #define CALLSTACK_ENABLED 1
 #else
