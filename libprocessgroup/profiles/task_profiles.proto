@@ -25,11 +25,12 @@ message TaskProfiles {
     repeated AggregateProfiles aggregateprofiles = 3 [json_name = "AggregateProfiles"];
 }
 
-// Next: 4
+// Next: 5
 message Attribute {
     string name = 1 [json_name = "Name"];
     string controller = 2 [json_name = "Controller"];
     string file = 3 [json_name = "File"];
+    string optional = 4 [json_name = "Optional"];
 }
 
 // Next: 3
