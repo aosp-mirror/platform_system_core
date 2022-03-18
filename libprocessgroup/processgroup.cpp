@@ -442,8 +442,8 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
-    gid_t cgroup_uid = AID_SYSTEM;
-    uid_t cgroup_gid = AID_SYSTEM;
+    uid_t cgroup_uid = AID_SYSTEM;
+    gid_t cgroup_gid = AID_SYSTEM;
     int ret = 0;
 
     if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
