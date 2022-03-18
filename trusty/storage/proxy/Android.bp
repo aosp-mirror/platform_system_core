@@ -35,7 +35,10 @@ cc_binary {
         "liblog",
         "libhardware_legacy",
     ],
-    header_libs: ["libcutils_headers"],
+    header_libs: [
+        "libcutils_headers",
+        "libgsi_headers",
+    ],
 
     static_libs: [
         "libfstab",
