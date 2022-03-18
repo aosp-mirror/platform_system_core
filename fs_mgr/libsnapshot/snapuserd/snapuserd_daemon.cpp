@@ -223,8 +223,6 @@ void Daemon::SignalHandler(int signal) {
 int main(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
 
-    LOG(INFO) << "snapuserd daemon about to start";
-
     android::snapshot::Daemon& daemon = android::snapshot::Daemon::Instance();
 
     if (!daemon.StartDaemon(argc, argv)) {
