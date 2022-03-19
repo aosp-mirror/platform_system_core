@@ -287,11 +287,16 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->fs_mgr_flags.avb = true;
             entry->vbmeta_partition = arg;
         } else if (StartsWith(flag, "keydirectory=")) {
-            // The metadata flag is followed by an = and the directory for the keys.
+            // The keydirectory flag enables metadata encryption.  It is
+            // followed by an = and the directory containing the metadata
+            // encryption key.
             entry->metadata_key_dir = arg;
         } else if (StartsWith(flag, "metadata_encryption=")) {
-            // Specify the cipher and flags to use for metadata encryption
-            entry->metadata_encryption = arg;
+            // The metadata_encryption flag specifies the cipher and flags to
+            // use for metadata encryption, if the defaults aren't sufficient.
+            // It doesn't actually enable metadata encryption; that is done by
+            // "keydirectory".
+            entry->metadata_encryption_options = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
