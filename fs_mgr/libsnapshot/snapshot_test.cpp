@@ -2411,8 +2411,15 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
     SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, 18_MiB);
 
-    AddOperationForPartitions({sys_});
+    // Make sure |prd| does not fit in super at all. On VABC, this means we
+    // fake an extra large COW for |vnd| to fill up super.
+    vnd_->set_estimate_cow_size(30_MiB);
+    prd_->set_estimate_cow_size(30_MiB);
+
+    AddOperationForPartitions();
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2422,8 +2429,25 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
         GTEST_SKIP() << "Test does not apply to userspace snapshots";
     }
 
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    // Test that partitions prioritize using space in super.
+    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
+    ASSERT_NE(tgt, nullptr);
+    ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
+    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
+    ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+
+    // Assert that source partitions aren't affected.
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
     ASSERT_TRUE(UnmapAll());
 
     class DmStatusFailure final : public DeviceMapperWrapper {
