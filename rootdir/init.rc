@@ -1008,12 +1008,6 @@ on post-fs-data
     # module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.tzdata/etc/tz /data/misc/zoneinfo
 
-    # If there is no post-fs-data action in the init.<device>.rc file, you
-    # must uncomment this line, otherwise encrypted filesystems
-    # won't work.
-    # Set indication (checked by vold) that we have finished this action
-    #setprop vold.post_fs_data_done 1
-
     # sys.memfd_use set to false by default, which keeps it disabled
     # until it is confirmed that apps and vendor processes don't make
     # IOCTLs on ashmem fds any more.
