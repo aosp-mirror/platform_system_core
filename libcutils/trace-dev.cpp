@@ -71,38 +71,38 @@ void atrace_setup()
 
 void atrace_begin_body(const char* name)
 {
-    WRITE_MSG("B|%d|", "%s", name, "");
+    WRITE_MSG("B|%d|", "%s", "", name, "");
 }
 
 void atrace_end_body()
 {
-    WRITE_MSG("E|%d", "%s", "", "");
+    WRITE_MSG("E|%d", "%s", "", "", "");
 }
 
 void atrace_async_begin_body(const char* name, int32_t cookie)
 {
-    WRITE_MSG("S|%d|", "|%" PRId32, name, cookie);
+    WRITE_MSG("S|%d|", "|%" PRId32, "", name, cookie);
 }
 
 void atrace_async_end_body(const char* name, int32_t cookie)
 {
-    WRITE_MSG("F|%d|", "|%" PRId32, name, cookie);
+    WRITE_MSG("F|%d|", "|%" PRId32, "", name, cookie);
 }
 
 void atrace_instant_body(const char* name) {
-    WRITE_MSG("I|%d|", "%s", name, "");
+    WRITE_MSG("I|%d|", "%s", "", name, "");
 }
 
-void atrace_instant_for_track_body(const char* trackName, const char* name) {
-    WRITE_MSG("N|%d|", "|%s", trackName, name);
+void atrace_instant_for_track_body(const char* track_name, const char* name) {
+    WRITE_MSG("N|%d|", "%s", track_name, name, "");
 }
 
 void atrace_int_body(const char* name, int32_t value)
 {
-    WRITE_MSG("C|%d|", "|%" PRId32, name, value);
+    WRITE_MSG("C|%d|", "|%" PRId32, "", name, value);
 }
 
 void atrace_int64_body(const char* name, int64_t value)
 {
-    WRITE_MSG("C|%d|", "|%" PRId64, name, value);
+    WRITE_MSG("C|%d|", "|%" PRId64, "", name, value);
 }
