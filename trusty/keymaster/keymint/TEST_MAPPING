@@ -3,5 +3,10 @@
     {
       "name" : "vts_treble_vintf_framework_test"
     }
+  ],
+  "hwasan-postsubmit" : [
+    {
+      "name" : "vts_treble_vintf_framework_test"
+    }
   ]
 }
