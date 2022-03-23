@@ -71,10 +71,9 @@ class Status {
 }  // namespace
 
 ScopedAStatus TrustyRemotelyProvisionedComponentDevice::getHardwareInfo(RpcHardwareInfo* info) {
-    info->versionNumber = 2;
+    info->versionNumber = 1;
     info->rpcAuthorName = "Google";
     info->supportedEekCurve = RpcHardwareInfo::CURVE_25519;
-    info->uniqueId = "Trusty: My password is ******";
     return ScopedAStatus::ok();
 }
 

@@ -33,7 +33,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -126,12 +125,8 @@ namespace {
 
 bool fs_mgr_in_recovery() {
     // Check the existence of recovery binary instead of using the compile time
-    // __ANDROID_RECOVERY__ macro.
-    // If BOARD_USES_RECOVERY_AS_BOOT is true, both normal and recovery boot
-    // mode would use the same init binary, which would mean during normal boot
-    // the '/init' binary is actually a symlink pointing to
-    // init_second_stage.recovery, which would be compiled with
-    // __ANDROID_RECOVERY__ defined.
+    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
+    // defined, albeit not in recovery. More details: system/core/init/README.md
     return fs_mgr_access("/system/bin/recovery");
 }
 
@@ -327,17 +322,6 @@ std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
 const auto kLowerdirOption = "lowerdir="s;
 const auto kUpperdirOption = "upperdir="s;
 
-static inline bool KernelSupportsUserXattrs() {
-    struct utsname uts;
-    uname(&uts);
-
-    int major, minor;
-    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
-        return false;
-    }
-    return major > 5 || (major == 5 && minor >= 15);
-}
-
 // default options for mount_point, returns empty string for none available.
 std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
@@ -346,9 +330,6 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
                ",workdir=" + candidate + kWorkName;
     if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
         ret += ",override_creds=off";
-    }
-    if (KernelSupportsUserXattrs()) {
-        ret += ",userxattr";
     }
     return ret;
 }
@@ -885,14 +866,9 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
             errno = save_errno;
         }
         entry.flags &= ~MS_RDONLY;
-        entry.flags |= MS_SYNCHRONOUS;
-        entry.fs_options = "nodiscard";
         fs_mgr_set_blk_ro(device_path, false);
     }
-    // check_fs requires apex runtime library
-    if (fs_mgr_overlayfs_already_mounted("/data", false)) {
-        entry.fs_mgr_flags.check = true;
-    }
+    entry.fs_mgr_flags.check = true;
     auto save_errno = errno;
     if (mounted) mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {
@@ -1126,23 +1102,6 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
     return true;
 }
 
-static inline uint64_t GetIdealDataScratchSize() {
-    BlockDeviceInfo super_info;
-    PartitionOpener opener;
-    if (!opener.GetInfo(fs_mgr_get_super_partition_name(), &super_info)) {
-        LERROR << "could not get block device info for super";
-        return 0;
-    }
-
-    struct statvfs s;
-    if (statvfs("/data", &s) < 0) {
-        PERROR << "could not statfs /data";
-        return 0;
-    }
-
-    return std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
-}
-
 static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exists, bool* change) {
     *partition_exists = false;
     if (change) *change = false;
@@ -1158,6 +1117,13 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return true;
     }
 
+    BlockDeviceInfo info;
+    PartitionOpener opener;
+    if (!opener.GetInfo(fs_mgr_get_super_partition_name(), &info)) {
+        LERROR << "could not get block device info for super";
+        return false;
+    }
+
     if (change) *change = true;
 
     // Note: calling RemoveDisabledImages here ensures that we do not race with
@@ -1167,11 +1133,10 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
     if (!images->BackingImageExists(partition_name)) {
-        uint64_t size = GetIdealDataScratchSize();
-        if (!size) {
-            size = 2_GiB;
-        }
+        static constexpr uint64_t kMinimumSize = 16_MiB;
+        static constexpr uint64_t kMaximumSize = 2_GiB;
 
+        uint64_t size = std::clamp(info.size / 2, kMinimumSize, kMaximumSize);
         auto flags = IImageManager::CREATE_IMAGE_DEFAULT;
 
         if (!images->CreateBackingImage(partition_name, size, flags)) {
@@ -1412,35 +1377,18 @@ bool fs_mgr_overlayfs_setup(const char* backing, const char* mount_point, bool* 
     return ret;
 }
 
-struct MapInfo {
-    // If set, partition is owned by ImageManager.
-    std::unique_ptr<IImageManager> images;
-    // If set, and images is null, this is a DAP partition.
-    std::string name;
-    // If set, and images and name are empty, this is a non-dynamic partition.
-    std::string device;
-
-    MapInfo() = default;
-    MapInfo(MapInfo&&) = default;
-    ~MapInfo() {
-        if (images) {
-            images->UnmapImageDevice(name);
-        } else if (!name.empty()) {
-            DestroyLogicalPartition(name);
-        }
-    }
-};
-
 // Note: This function never returns the DSU scratch device in recovery or fastbootd,
 // because the DSU scratch is created in the first-stage-mount, which is not run in recovery.
-static std::optional<MapInfo> EnsureScratchMapped() {
-    MapInfo info;
-    info.device = GetBootScratchDevice();
-    if (!info.device.empty()) {
-        return {std::move(info)};
+static bool EnsureScratchMapped(std::string* device, bool* mapped) {
+    *mapped = false;
+    *device = GetBootScratchDevice();
+    if (!device->empty()) {
+        return true;
     }
+
     if (!fs_mgr_in_recovery()) {
-        return {};
+        errno = EINVAL;
+        return false;
     }
 
     auto partition_name = android::base::Basename(kScratchMountPoint);
@@ -1450,15 +1398,11 @@ static std::optional<MapInfo> EnsureScratchMapped() {
     // would otherwise always be mapped.
     auto images = IImageManager::Open("remount", 10s);
     if (images && images->BackingImageExists(partition_name)) {
-        if (images->IsImageDisabled(partition_name)) {
-            return {};
+        if (!images->MapImageDevice(partition_name, 10s, device)) {
+            return false;
         }
-        if (!images->MapImageDevice(partition_name, 10s, &info.device)) {
-            return {};
-        }
-        info.name = partition_name;
-        info.images = std::move(images);
-        return {std::move(info)};
+        *mapped = true;
+        return true;
     }
 
     // Avoid uart spam by first checking for a scratch partition.
@@ -1466,12 +1410,12 @@ static std::optional<MapInfo> EnsureScratchMapped() {
     auto super_device = fs_mgr_overlayfs_super_device(metadata_slot);
     auto metadata = ReadCurrentMetadata(super_device);
     if (!metadata) {
-        return {};
+        return false;
     }
 
     auto partition = FindPartition(*metadata.get(), partition_name);
     if (!partition) {
-        return {};
+        return false;
     }
 
     CreateLogicalPartitionParams params = {
@@ -1481,11 +1425,11 @@ static std::optional<MapInfo> EnsureScratchMapped() {
             .force_writable = true,
             .timeout_ms = 10s,
     };
-    if (!CreateLogicalPartition(params, &info.device)) {
-        return {};
+    if (!CreateLogicalPartition(params, device)) {
+        return false;
     }
-    info.name = partition_name;
-    return {std::move(info)};
+    *mapped = true;
+    return true;
 }
 
 // This should only be reachable in recovery, where DSU scratch is not
@@ -1639,35 +1583,26 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
         fs_mgr_overlayfs_teardown_one(overlay_mount_point, teardown_dir, ignore_change);
     }
 
-    if (mount_point.empty()) {
-        // Throw away the entire partition.
-        auto partition_name = android::base::Basename(kScratchMountPoint);
-        auto images = IImageManager::Open("remount", 10s);
-        if (images && images->BackingImageExists(partition_name)) {
-            if (images->DisableImage(partition_name)) {
-                LOG(INFO) << "Disabled scratch partition for: " << kScratchMountPoint;
-            } else {
-                LOG(ERROR) << "Unable to disable scratch partition for " << kScratchMountPoint;
-            }
-        }
-    }
-
-    if (auto info = EnsureScratchMapped(); info.has_value()) {
-        // Map scratch device, mount kScratchMountPoint and teardown kScratchMountPoint.
+    // Map scratch device, mount kScratchMountPoint and teardown kScratchMountPoint.
+    bool mapped = false;
+    std::string scratch_device;
+    if (EnsureScratchMapped(&scratch_device, &mapped)) {
         fs_mgr_overlayfs_umount_scratch();
-        if (fs_mgr_overlayfs_mount_scratch(info->device, fs_mgr_overlayfs_scratch_mount_type())) {
+        if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {
             bool should_destroy_scratch = false;
             fs_mgr_overlayfs_teardown_one(kScratchMountPoint, teardown_dir, ignore_change,
                                           &should_destroy_scratch);
-            fs_mgr_overlayfs_umount_scratch();
             if (should_destroy_scratch) {
                 fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, nullptr);
             }
+            fs_mgr_overlayfs_umount_scratch();
+        }
+        if (mapped) {
+            DestroyLogicalPartition(android::base::Basename(kScratchMountPoint));
         }
     }
 
     // Teardown DSU overlay if present.
-    std::string scratch_device;
     if (MapDsuScratchDevice(&scratch_device)) {
         fs_mgr_overlayfs_umount_scratch();
         if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {

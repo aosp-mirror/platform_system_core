@@ -3,10 +3,5 @@
     {
       "name": "libhealthd_charger_test"
     }
-  ],
-  "hwasan-postsubmit": [
-    {
-      "name": "libhealthd_charger_test"
-    }
   ]
 }

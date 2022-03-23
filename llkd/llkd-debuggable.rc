@@ -1,5 +1,5 @@
 on property:ro.debuggable=1
-    setprop llk.enable ${ro.llk.enable:-0}
+    setprop llk.enable ${ro.llk.enable:-1}
     setprop khungtask.enable ${ro.khungtask.enable:-1}
 
 on property:ro.llk.enable=eng
@@ -16,4 +16,4 @@ service llkd-1 /system/bin/llkd
     capabilities KILL IPC_LOCK SYS_PTRACE DAC_OVERRIDE SYS_ADMIN
     file /dev/kmsg w
     file /proc/sysrq-trigger w
-    task_profiles ServiceCapacityLow
+    writepid /dev/cpuset/system-background/tasks
