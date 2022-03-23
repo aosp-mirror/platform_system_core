@@ -3,5 +3,10 @@
     {
       "name": "propertyinfoserializer_tests"
     }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "propertyinfoserializer_tests"
+    }
   ]
 }
