@@ -9,5 +9,16 @@
     {
       "name": "MicrodroidHostTestCases"
     }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "CtsInitTestCases"
+    },
+    {
+      "name": "init_kill_services_test"
+    },
+    {
+      "name": "MicrodroidHostTestCases"
+    }
   ]
 }

@@ -16,19 +16,46 @@
       "File": "top-app/cpus"
     },
     {
+      "Name": "MemStats",
+      "Controller": "memory",
+      "File": "memory.stat"
+    },
+    {
       "Name": "MemLimit",
       "Controller": "memory",
-      "File": "memory.limit_in_bytes"
+      "File": "memory.limit_in_bytes",
+      "FileV2": "memory.max"
     },
     {
       "Name": "MemSoftLimit",
       "Controller": "memory",
-      "File": "memory.soft_limit_in_bytes"
+      "File": "memory.soft_limit_in_bytes",
+      "FileV2": "memory.low"
     },
     {
       "Name": "MemSwappiness",
       "Controller": "memory",
       "File": "memory.swappiness"
+    },
+    {
+      "Name": "MemUsage",
+      "Controller": "memory",
+      "File": "memory.usage_in_bytes"
+    },
+    {
+      "Name": "MemAndSwapUsage",
+      "Controller": "memory",
+      "File": "memory.memsw.usage_in_bytes"
+    },
+    {
+      "Name": "MemPressureLevel",
+      "Controller": "memory",
+      "File": "memory.pressure_level"
+    },
+    {
+      "Name": "MemCgroupEventControl",
+      "Controller": "memory",
+      "File": "cgroup.event_control"
     },
     {
       "Name": "UClampMin",
