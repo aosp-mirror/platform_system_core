@@ -69,23 +69,9 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     return true;
 }
 
-bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name) {
-    auto controller = CgroupMap::GetInstance().FindControllerByPath(path);
-
-    if (!controller.HasValue()) {
-        return false;
-    }
-
-    if (cgroup_name) {
-        *cgroup_name = controller.name();
-    }
-
-    return true;
-}
-
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
@@ -100,7 +86,7 @@ bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
 
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
@@ -126,16 +112,11 @@ static bool isMemoryCgroupSupported() {
 }
 
 void DropTaskProfilesResourceCaching() {
-    TaskProfiles::GetInstance().DropResourceCaching(ProfileAction::RCT_TASK);
-    TaskProfiles::GetInstance().DropResourceCaching(ProfileAction::RCT_PROCESS);
+    TaskProfiles::GetInstance().DropResourceCaching();
 }
 
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, false);
-}
-
-bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, true);
+    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles);
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
@@ -211,7 +192,7 @@ void removeAllProcessGroups() {
     for (std::string cgroup_root_path : cgroups) {
         std::unique_ptr<DIR, decltype(&closedir)> root(opendir(cgroup_root_path.c_str()), closedir);
         if (root == NULL) {
-            PLOG(ERROR) << __func__ << " failed to open " << cgroup_root_path;
+            PLOG(ERROR) << "Failed to open " << cgroup_root_path;
         } else {
             dirent* dir;
             while ((dir = readdir(root.get())) != nullptr) {
@@ -297,8 +278,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
             // This happens when process is already dead
             return 0;
         }
-        PLOG(WARNING) << __func__ << " failed to open process cgroup uid " << uid << " pid "
-                      << initialPid;
+        PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
         return -1;
     }
 
@@ -436,15 +416,13 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_process
     return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/, max_processes);
 }
 
-static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
-                                      bool activate_controllers) {
+static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup) {
     auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
-    uid_t cgroup_uid = AID_SYSTEM;
-    gid_t cgroup_gid = AID_SYSTEM;
-    int ret = 0;
+    gid_t cgroup_uid = AID_SYSTEM;
+    uid_t cgroup_gid = AID_SYSTEM;
 
     if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
         PLOG(ERROR) << "Failed to get stats for " << cgroup;
@@ -458,13 +436,6 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
         PLOG(ERROR) << "Failed to make and chown " << uid_path;
         return -errno;
     }
-    if (activate_controllers) {
-        ret = CgroupMap::GetInstance().ActivateControllers(uid_path);
-        if (ret) {
-            LOG(ERROR) << "Failed to activate controllers in " << uid_path;
-            return ret;
-        }
-    }
 
     auto uid_pid_path = ConvertUidPidToPath(cgroup.c_str(), uid, initialPid);
 
@@ -475,6 +446,7 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     auto uid_pid_procs_file = uid_pid_path + PROCESSGROUP_CGROUP_PROCS_FILE;
 
+    int ret = 0;
     if (!WriteStringToFile(std::to_string(initialPid), uid_pid_procs_file)) {
         ret = -errno;
         PLOG(ERROR) << "Failed to write '" << initialPid << "' to " << uid_pid_procs_file;
@@ -494,14 +466,14 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     if (isMemoryCgroupSupported() && UsePerAppMemcg()) {
         CgroupGetControllerPath("memory", &cgroup);
         cgroup += "/apps";
-        int ret = createProcessGroupInternal(uid, initialPid, cgroup, false);
+        int ret = createProcessGroupInternal(uid, initialPid, cgroup);
         if (ret != 0) {
             return ret;
         }
     }
 
     CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &cgroup);
-    return createProcessGroupInternal(uid, initialPid, cgroup, true);
+    return createProcessGroupInternal(uid, initialPid, cgroup);
 }
 
 static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t value) {
