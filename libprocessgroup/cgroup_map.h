@@ -62,8 +62,6 @@ class CgroupMap {
 
     static CgroupMap& GetInstance();
     CgroupController FindController(const std::string& name) const;
-    CgroupController FindControllerByPath(const std::string& path) const;
-    int ActivateControllers(const std::string& path) const;
 
   private:
     bool loaded_ = false;
