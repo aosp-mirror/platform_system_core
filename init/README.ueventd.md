@@ -147,6 +147,12 @@ directories. If stdout cannot be read, or the program returns with any exit code
 Ueventd will additionally log all messages sent to stderr from the external program to the serial
 console after the external program has exited.
 
+If the kernel command-line argument `firmware_class.path` is set, this path
+will be used first by the kernel to search for the firmware files. If found,
+ueventd will not be called at all. See the
+[kernel documentation](https://www.kernel.org/doc/html/v5.10/driver-api/firmware/fw_search_path.html)
+for more details on this feature.
+
 ## Coldboot
 --------
 Ueventd must create devices in `/dev` for all devices that have already sent their uevents before

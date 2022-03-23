@@ -1,5 +1,7 @@
 LOCAL_PATH:= $(call my-dir)
 
+$(eval $(call declare-1p-copy-files,system/core/rootdir,))
+
 #######################################
 # init-debug.rc
 include $(CLEAR_VARS)
@@ -77,7 +79,11 @@ endif
 
 EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
 ifeq ($(CLANG_COVERAGE),true)
-  EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
+  ifeq ($(CLANG_COVERAGE_CONTINUOUS_MODE),true)
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw
+  else
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
+  endif
 endif
 
 # Put it here instead of in init.rc module definition,
@@ -109,9 +115,6 @@ else
 endif
 ifdef BOARD_USES_METADATA_PARTITION
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
-endif
-ifdef BOARD_USES_SYSTEM_DLKM_PARTITION
-  LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_dlkm
 endif
 
 # For /odm partition.
@@ -151,6 +154,9 @@ LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm_dlkm
 # Note that /odm_dlkm/lib is omitted because odm DLKMs should be accessed
 # via /odm/lib/modules directly.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /odm/odm_dlkm/etc $(TARGET_ROOT_OUT)/odm_dlkm/etc
+
+# For /system_dlkm partition
+LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_dlkm
 
 ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
@@ -197,15 +203,9 @@ LOCAL_MODULE_CLASS := ETC
 LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
 LOCAL_MODULE_STEM := $(LOCAL_MODULE)
 include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := $(addsuffix .so,\
-  $(ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-  $(HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-  $(UBSAN_RUNTIME_LIBRARY) \
-  $(TSAN_RUNTIME_LIBRARY) \
-  $(2ND_ADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-  $(2ND_HWADDRESS_SANITIZER_RUNTIME_LIBRARY) \
-  $(2ND_UBSAN_RUNTIME_LIBRARY) \
-  $(2ND_TSAN_RUNTIME_LIBRARY))
+$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := \
+    $(SANITIZER_STEMS) \
+    $(2ND_SANITIZER_STEMS)
 $(LOCAL_BUILT_MODULE):
 	@echo "Generate: $@"
 	@mkdir -p $(dir $@)

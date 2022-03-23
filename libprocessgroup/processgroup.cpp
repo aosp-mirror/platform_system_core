@@ -85,7 +85,7 @@ bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_na
 
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
@@ -100,7 +100,7 @@ bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
 
 bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
-    const ProfileAttribute* attr = tp.GetAttribute(attr_name);
+    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
 
     if (attr == nullptr) {
         return false;
@@ -211,7 +211,7 @@ void removeAllProcessGroups() {
     for (std::string cgroup_root_path : cgroups) {
         std::unique_ptr<DIR, decltype(&closedir)> root(opendir(cgroup_root_path.c_str()), closedir);
         if (root == NULL) {
-            PLOG(ERROR) << "Failed to open " << cgroup_root_path;
+            PLOG(ERROR) << __func__ << " failed to open " << cgroup_root_path;
         } else {
             dirent* dir;
             while ((dir = readdir(root.get())) != nullptr) {
@@ -297,7 +297,8 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
             // This happens when process is already dead
             return 0;
         }
-        PLOG(WARNING) << "Failed to open process cgroup uid " << uid << " pid " << initialPid;
+        PLOG(WARNING) << __func__ << " failed to open process cgroup uid " << uid << " pid "
+                      << initialPid;
         return -1;
     }
 
@@ -441,8 +442,8 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
-    gid_t cgroup_uid = AID_SYSTEM;
-    uid_t cgroup_gid = AID_SYSTEM;
+    uid_t cgroup_uid = AID_SYSTEM;
+    gid_t cgroup_gid = AID_SYSTEM;
     int ret = 0;
 
     if (stat(cgroup.c_str(), &cgroup_stat) == 1) {

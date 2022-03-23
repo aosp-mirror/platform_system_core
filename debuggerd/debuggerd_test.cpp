@@ -88,7 +88,7 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
     struct sigaction old_sigaction;                                \
     struct sigaction new_sigaction = {};                           \
     new_sigaction.sa_handler = [](int) {};                         \
-    if (sigaction(SIGALRM, &new_sigaction, &new_sigaction) != 0) { \
+    if (sigaction(SIGALRM, &new_sigaction, &old_sigaction) != 0) { \
       err(1, "sigaction failed");                                  \
     }                                                              \
     alarm(seconds);                                                \
@@ -1409,6 +1409,16 @@ __attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpTyp
   return true;
 }
 
+extern "C" void foo() {
+  LOG(INFO) << "foo";
+  std::this_thread::sleep_for(1s);
+}
+
+extern "C" void bar() {
+  LOG(INFO) << "bar";
+  std::this_thread::sleep_for(1s);
+}
+
 TEST_F(CrasherTest, seccomp_tombstone) {
   int intercept_result;
   unique_fd output_fd;
@@ -1416,6 +1426,11 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   static const auto dump_type = kDebuggerdTombstone;
   StartProcess(
       []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
         raise_debugger_signal(dump_type);
         _exit(0);
       },
@@ -1430,16 +1445,8 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
-}
-
-extern "C" void foo() {
-  LOG(INFO) << "foo";
-  std::this_thread::sleep_for(1s);
-}
-
-extern "C" void bar() {
-  LOG(INFO) << "bar";
-  std::this_thread::sleep_for(1s);
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
 TEST_F(CrasherTest, seccomp_backtrace) {
@@ -1818,9 +1825,9 @@ static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
 TEST_F(CrasherTest, unreadable_elf) {
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  std::string tmp_so_name;
+  StartProcess([&tmp_so_name]() {
     TemporaryDir td;
-    std::string tmp_so_name;
     if (!CopySharedLibrary(td.path, &tmp_so_name)) {
       _exit(1);
     }
@@ -1850,6 +1857,8 @@ TEST_F(CrasherTest, unreadable_elf) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(NOTE: Function names and BuildId information is missing )");
+  std::string match_str = "NOTE:   " + tmp_so_name;
+  ASSERT_MATCH(result, match_str);
 }
 
 TEST(tombstoned, proto) {

@@ -99,6 +99,7 @@ class ReadAhead {
     void InitializeRAIter();
     bool RAIterDone();
     void RAIterNext();
+    void RAResetIter(uint64_t num_blocks);
     const CowOperation* GetRAOpIter();
 
     void InitializeBuffer();
@@ -151,12 +152,16 @@ class ReadAhead {
     std::unique_ptr<uint8_t[]> ra_temp_meta_buffer_;
     BufferSink bufsink_;
 
+    uint64_t total_ra_blocks_completed_ = 0;
     bool read_ahead_async_ = false;
-    // Queue depth of 32 seems optimal. We don't want
+    // Queue depth of 8 seems optimal. We don't want
     // to have a huge depth as it may put more memory pressure
     // on the kernel worker threads given that we use
-    // IOSQE_ASYNC flag.
-    int queue_depth_ = 32;
+    // IOSQE_ASYNC flag - ASYNC flags can potentially
+    // result in EINTR; Since we don't restart
+    // syscalls and fallback to synchronous I/O, we
+    // don't want huge queue depth
+    int queue_depth_ = 8;
     std::unique_ptr<struct io_uring> ring_;
 };
 
@@ -210,11 +215,12 @@ class Worker {
 
     // Merge related ops
     bool Merge();
-    bool MergeOrderedOps(const std::unique_ptr<ICowOpIter>& cowop_iter);
-    bool MergeOrderedOpsAsync(const std::unique_ptr<ICowOpIter>& cowop_iter);
-    bool MergeReplaceZeroOps(const std::unique_ptr<ICowOpIter>& cowop_iter);
+    bool AsyncMerge();
+    bool SyncMerge();
+    bool MergeOrderedOps();
+    bool MergeOrderedOpsAsync();
+    bool MergeReplaceZeroOps();
     int PrepareMerge(uint64_t* source_offset, int* pending_ops,
-                     const std::unique_ptr<ICowOpIter>& cowop_iter,
                      std::vector<const CowOperation*>* replace_zero_vec = nullptr);
 
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
@@ -238,12 +244,18 @@ class Worker {
     unique_fd base_path_merge_fd_;
     unique_fd ctrl_fd_;
 
+    std::unique_ptr<ICowOpIter> cowop_iter_;
+    size_t ra_block_index_ = 0;
+    uint64_t blocks_merged_in_group_ = 0;
     bool merge_async_ = false;
-    // Queue depth of 32 seems optimal. We don't want
+    // Queue depth of 8 seems optimal. We don't want
     // to have a huge depth as it may put more memory pressure
     // on the kernel worker threads given that we use
-    // IOSQE_ASYNC flag.
-    int queue_depth_ = 32;
+    // IOSQE_ASYNC flag - ASYNC flags can potentially
+    // result in EINTR; Since we don't restart
+    // syscalls and fallback to synchronous I/O, we
+    // don't want huge queue depth
+    int queue_depth_ = 8;
     std::unique_ptr<struct io_uring> ring_;
 
     std::shared_ptr<SnapshotHandler> snapuserd_;
@@ -319,6 +331,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void SetMergedBlockCountForNextCommit(int x) { total_ra_blocks_merged_ = x; }
     int GetTotalBlocksToMerge() { return total_ra_blocks_merged_; }
     void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
+    void SetIouringEnabled(bool io_uring_enabled) { is_io_uring_enabled_ = io_uring_enabled; }
     bool MergeInitiated() { return merge_initiated_; }
     double GetMergePercentage() { return merge_completion_percentage_; }
 
@@ -396,6 +409,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool merge_initiated_ = false;
     bool attached_ = false;
     bool is_socket_present_;
+    bool is_io_uring_enabled_ = false;
     bool scratch_space_ = false;
 
     std::unique_ptr<struct io_uring> ring_;
