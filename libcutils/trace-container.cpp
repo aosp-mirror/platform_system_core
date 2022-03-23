@@ -131,29 +131,41 @@ static inline uint64_t gettime(clockid_t clk_id)
 
 // Write trace events to container trace file. Note that we need to amend tid and time information
 // here comparing to normal ftrace, where those informations are added by kernel.
-#define WRITE_MSG_IN_CONTAINER_LOCKED(ph, sep_before_name, value_format, name, value) { \
+#define WRITE_MSG_IN_CONTAINER_LOCKED(ph, sep_before_name, value_format, \
+        track_name, name, value) { \
     char buf[CONTAINER_ATRACE_MESSAGE_LENGTH]; \
+    const char* track_name_sep = track_name[0] != '\0' ? "|" : ""; \
     int pid = getpid(); \
     int tid = gettid(); \
     uint64_t ts = gettime(CLOCK_MONOTONIC); \
     uint64_t tts = gettime(CLOCK_THREAD_CPUTIME_ID); \
     int len = snprintf( \
             buf, sizeof(buf), \
-            ph "|%d|%d|%" PRIu64 "|%" PRIu64 sep_before_name "%s" value_format, \
-            pid, tid, ts, tts, name, value); \
+            ph "|%d|%d|%" PRIu64 "|%" PRIu64 sep_before_name "%s%s%s" value_format, \
+            pid, tid, ts, tts, track_name, track_name_sep, name, value); \
     if (len >= (int) sizeof(buf)) { \
         int name_len = strlen(name) - (len - sizeof(buf)) - 1; \
         /* Truncate the name to make the message fit. */ \
         if (name_len > 0) { \
-            ALOGW("Truncated name in %s: %s\n", __FUNCTION__, name); \
             len = snprintf( \
-                    buf, sizeof(buf), \
-                    ph "|%d|%d|%" PRIu64 "|%" PRIu64 sep_before_name "%.*s" value_format, \
-                    pid, tid, ts, tts, name_len, name, value); \
+                buf, sizeof(buf), \
+                ph "|%d|%d|%" PRIu64 "|%" PRIu64 sep_before_name "%s%s%.*s" value_format, \
+                pid, tid, ts, tts, track_name, track_name_sep, name_len, name, value); \
         } else { \
-            /* Data is still too long. Drop it. */ \
-            ALOGW("Data is too long in %s: %s\n", __FUNCTION__, name); \
-            len = 0; \
+            int track_name_len = 0; \
+            if (track_name[0] != '\0') { \
+                track_name_len = strlen(track_name) - (len - strlen(name) - sizeof(buf)) - 2; \
+            } \
+            if (track_name_len <= 0){ \
+                /* Data is still too long. Drop it. */ \
+                len = 0; \
+            } else { \
+                /* Truncate the trackName and name to make the message fit. */ \
+                len = snprintf( \
+                    buf, sizeof(buf), \
+                    ph "|%d|%d|%" PRIu64 "|%" PRIu64 sep_before_name "%.*s|%.1s" value_format, \
+                    pid, tid, ts, tts, track_name_len, track_name, name, value); \
+            } \
         } \
     } \
     if (len > 0) { \
@@ -161,10 +173,10 @@ static inline uint64_t gettime(clockid_t clk_id)
     } \
 }
 
-#define WRITE_MSG_IN_CONTAINER(ph, sep_before_name, value_format, name, value) { \
+#define WRITE_MSG_IN_CONTAINER(ph, sep_before_name, value_format, track_name, name, value) { \
     pthread_rwlock_rdlock(&atrace_container_sock_rwlock); \
     if (atrace_container_sock_fd != -1) { \
-       WRITE_MSG_IN_CONTAINER_LOCKED(ph, sep_before_name, value_format, name, value); \
+       WRITE_MSG_IN_CONTAINER_LOCKED(ph, sep_before_name, value_format, track_name, name, value); \
     } \
     pthread_rwlock_unlock(&atrace_container_sock_rwlock); \
 }
@@ -172,93 +184,93 @@ static inline uint64_t gettime(clockid_t clk_id)
 void atrace_begin_body(const char* name)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("B", "|", "%s", name, "");
+        WRITE_MSG_IN_CONTAINER("B", "|", "%s", "", name, "");
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("B|%d|", "%s", name, "");
+    WRITE_MSG("B|%d|", "%s", "", name, "");
 }
 
 void atrace_end_body()
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("E", "", "%s", "", "");
+        WRITE_MSG_IN_CONTAINER("E", "", "%s", "", "", "");
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("E|%d", "%s", "", "");
+    WRITE_MSG("E|%d", "%s", "", "", "");
 }
 
 void atrace_async_begin_body(const char* name, int32_t cookie)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("S", "|", "|%d", name, cookie);
+        WRITE_MSG_IN_CONTAINER("S", "|", "|%d", "", name, cookie);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("S|%d|", "|%" PRId32, name, cookie);
+    WRITE_MSG("S|%d|", "|%" PRId32, "", name, cookie);
 }
 
 void atrace_async_end_body(const char* name, int32_t cookie)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("F", "|", "|%d", name, cookie);
+        WRITE_MSG_IN_CONTAINER("F", "|", "|%d", "", name, cookie);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("F|%d|", "|%" PRId32, name, cookie);
+    WRITE_MSG("F|%d|", "|%" PRId32, "", name, cookie);
 }
 
 void atrace_instant_body(const char* name) {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("I", "|", "%s", name, "");
+        WRITE_MSG_IN_CONTAINER("I", "|", "%s", "", name, "");
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("I|%d|", "%s", name, "");
+    WRITE_MSG("I|%d|", "%s", "", name, "");
 }
 
-void atrace_instant_for_track_body(const char* trackName, const char* name) {
+void atrace_instant_for_track_body(const char* track_name, const char* name) {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("N", "|", "|%s", trackName, name);
+        WRITE_MSG_IN_CONTAINER("N", "|", "%s", track_name, name, "");
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("N|%d|", "|%s", name, trackName);
+    WRITE_MSG("N|%d|", "%s", track_name, name, "");
 }
 
 void atrace_int_body(const char* name, int32_t value)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("C", "|", "|%" PRId32, name, value);
+        WRITE_MSG_IN_CONTAINER("C", "|", "|%" PRId32, "", name, value);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("C|%d|", "|%" PRId32, name, value);
+    WRITE_MSG("C|%d|", "|%" PRId32, "", name, value);
 }
 
 void atrace_int64_body(const char* name, int64_t value)
 {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("C", "|", "|%" PRId64, name, value);
+        WRITE_MSG_IN_CONTAINER("C", "|", "|%" PRId64, "", name, value);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("C|%d|", "|%" PRId64, name, value);
+    WRITE_MSG("C|%d|", "|%" PRId64, "", name, value);
 }

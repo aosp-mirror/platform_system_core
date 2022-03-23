@@ -129,11 +129,12 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
         return true;
     }
 
+    const std::string& file_name =
+            controller()->version() == 2 && !file_v2_name_.empty() ? file_v2_name_ : file_name_;
     if (subgroup.empty()) {
-        *path = StringPrintf("%s/%s", controller()->path(), file_name_.c_str());
+        *path = StringPrintf("%s/%s", controller()->path(), file_name.c_str());
     } else {
-        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(),
-                             file_name_.c_str());
+        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(), file_name.c_str());
     }
     return true;
 }
@@ -633,12 +634,19 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
         std::string name = attr[i]["Name"].asString();
         std::string controller_name = attr[i]["Controller"].asString();
         std::string file_attr = attr[i]["File"].asString();
+        std::string file_v2_attr = attr[i]["FileV2"].asString();
+
+        if (!file_v2_attr.empty() && file_attr.empty()) {
+            LOG(ERROR) << "Attribute " << name << " has FileV2 but no File property";
+            return false;
+        }
 
         auto controller = cg_map.FindController(controller_name);
         if (controller.HasValue()) {
             auto iter = attributes_.find(name);
             if (iter == attributes_.end()) {
-                attributes_[name] = std::make_unique<ProfileAttribute>(controller, file_attr);
+                attributes_[name] =
+                        std::make_unique<ProfileAttribute>(controller, file_attr, file_v2_attr);
             } else {
                 iter->second->Reset(controller, file_attr);
             }
