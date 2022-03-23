@@ -190,6 +190,8 @@ Result<Descriptor> FileDescriptor::Create() const {
     // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
     fcntl(fd, F_SETFL, flags);
 
+    LOG(INFO) << "Opened file '" << name << "', flags " << flags;
+
     return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
 
