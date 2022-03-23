@@ -1825,9 +1825,9 @@ static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
 TEST_F(CrasherTest, unreadable_elf) {
   int intercept_result;
   unique_fd output_fd;
-  StartProcess([]() {
+  std::string tmp_so_name;
+  StartProcess([&tmp_so_name]() {
     TemporaryDir td;
-    std::string tmp_so_name;
     if (!CopySharedLibrary(td.path, &tmp_so_name)) {
       _exit(1);
     }
@@ -1857,6 +1857,8 @@ TEST_F(CrasherTest, unreadable_elf) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(NOTE: Function names and BuildId information is missing )");
+  std::string match_str = "NOTE:   " + tmp_so_name;
+  ASSERT_MATCH(result, match_str);
 }
 
 TEST(tombstoned, proto) {

@@ -804,13 +804,18 @@ Init provides state information with the following properties.
 `init.svc.<name>`
 > State of a named service ("stopped", "stopping", "running", "restarting")
 
-`dev.mnt.blk.<mount_point>`
+`dev.mnt.dev.<mount_point>`, `dev.mnt.blk.<mount_point>`, `dev.mnt.rootdisk.<mount_point>`
 > Block device base name associated with a *mount_point*.
   The *mount_point* has / replaced by . and if referencing the root mount point
-  "/", it will use "/root", specifically `dev.mnt.blk.root`.
-  Meant for references to `/sys/device/block/${dev.mnt.blk.<mount_point>}/` and
-  `/sys/fs/ext4/${dev.mnt.blk.<mount_point>}/` to tune the block device
-  characteristics in a device agnostic manner.
+  "/", it will use "/root".
+  `dev.mnt.dev.<mount_point>` indicates a block device attached to filesystems.
+    (e.g., dm-N or sdaN/mmcblk0pN to access `/sys/fs/ext4/${dev.mnt.dev.<mount_point>}/`)
+
+  `dev.mnt.blk.<mount_point>` indicates the disk partition to the above block device.
+    (e.g., sdaN / mmcblk0pN to access `/sys/class/block/${dev.mnt.blk.<mount_point>}/`)
+
+  `dev.mnt.rootdisk.<mount_point>` indicates the root disk to contain the above disk partition.
+    (e.g., sda / mmcblk0 to access `/sys/class/block/${dev.mnt.rootdisk.<mount_point>}/queue`)
 
 Init responds to properties that begin with `ctl.`.  These properties take the format of
 `ctl.[<target>_]<command>` and the _value_ of the system property is used as a parameter.  The
