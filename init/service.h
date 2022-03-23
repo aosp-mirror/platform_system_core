@@ -80,8 +80,10 @@ class Service {
     Result<void> ExecStart();
     Result<void> Start();
     Result<void> StartIfNotDisabled();
+    Result<void> StartIfPostData();
     Result<void> Enable();
     void Reset();
+    void ResetIfPostData();
     void Stop();
     void Terminate();
     void Timeout();
@@ -97,14 +99,9 @@ class Service {
     void AddReapCallback(std::function<void(const siginfo_t& siginfo)> callback) {
         reap_callbacks_.emplace_back(std::move(callback));
     }
-    void SetStartedInFirstStage(pid_t pid);
-    bool MarkSocketPersistent(const std::string& socket_name);
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started() {
-        return exec_service_started_;
-    }
 
     const std::string& name() const { return name_; }
     const std::set<std::string>& classnames() const { return classnames_; }
@@ -147,18 +144,9 @@ class Service {
     void StopOrReset(int how);
     void KillProcessGroup(int signal, bool report_oneshot = false);
     void SetProcessAttributesAndCaps();
-    void ResetFlagsForStart();
-    Result<void> CheckConsole();
-    void ConfigureMemcg();
-    void RunService(
-            const std::optional<MountNamespace>& override_mount_namespace,
-            const std::vector<Descriptor>& descriptors,
-            std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
-    static pid_t exec_service_pid_;
 
     std::string name_;
     std::set<std::string> classnames_;
@@ -222,6 +210,8 @@ class Service {
     bool use_bootstrap_ns_ = false;
 
     bool post_data_ = false;
+
+    bool running_at_post_data_reset_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
 
