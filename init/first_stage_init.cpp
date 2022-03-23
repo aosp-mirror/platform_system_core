@@ -27,7 +27,6 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -108,39 +107,6 @@ bool ForceNormalBoot(const std::string& cmdline, const std::string& bootconfig) 
            cmdline.find("androidboot.force_normal_boot=1") != std::string::npos;
 }
 
-static void Copy(const char* src, const char* dst) {
-    if (link(src, dst) == 0) {
-        LOG(INFO) << "hard linking " << src << " to " << dst << " succeeded";
-        return;
-    }
-    PLOG(FATAL) << "hard linking " << src << " to " << dst << " failed, falling back to copy.";
-}
-
-// Move e2fsck before switching root, so that it is available at the same path
-// after switching root.
-void PrepareSwitchRoot() {
-    constexpr const char* src = "/system/bin/snapuserd";
-    constexpr const char* dst = "/first_stage_ramdisk/system/bin/snapuserd";
-
-    if (access(dst, X_OK) == 0) {
-        LOG(INFO) << dst << " already exists and it can be executed";
-        return;
-    }
-
-    if (access(src, F_OK) != 0) {
-        PLOG(INFO) << "Not moving " << src << " because it cannot be accessed";
-        return;
-    }
-
-    auto dst_dir = android::base::Dirname(dst);
-    std::error_code ec;
-    if (access(dst_dir.c_str(), F_OK) != 0) {
-        if (!fs::create_directories(dst_dir, ec)) {
-            LOG(FATAL) << "Cannot create " << dst_dir << ": " << ec.message();
-        }
-    }
-    Copy(src, dst);
-}
 }  // namespace
 
 std::string GetModuleLoadList(bool recovery, const std::string& dir_path) {
@@ -288,9 +254,6 @@ int FirstStageMain(int argc, char** argv) {
     // stage init
     CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"))
-
-    // First stage init stores Mainline sepolicy here.
-    CHECKCALL(mkdir("/dev/selinux", 0744));
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
@@ -338,11 +301,12 @@ int FirstStageMain(int argc, char** argv) {
                   << module_elapse_time.count() << " ms";
     }
 
+
     bool created_devices = false;
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
         if (!IsRecoveryMode()) {
             created_devices = DoCreateDevices();
-            if (!created_devices) {
+            if (!created_devices){
                 LOG(ERROR) << "Failed to create device nodes early";
             }
         }
@@ -366,30 +330,22 @@ int FirstStageMain(int argc, char** argv) {
     // If "/force_debuggable" is present, the second-stage init will use a userdebug
     // sepolicy and load adb_debug.prop to allow adb root, if the device is unlocked.
     if (access("/force_debuggable", F_OK) == 0) {
-        constexpr const char adb_debug_prop_src[] = "/adb_debug.prop";
-        constexpr const char userdebug_plat_sepolicy_cil_src[] = "/userdebug_plat_sepolicy.cil";
         std::error_code ec;  // to invoke the overloaded copy_file() that won't throw.
-        if (access(adb_debug_prop_src, F_OK) == 0 &&
-            !fs::copy_file(adb_debug_prop_src, kDebugRamdiskProp, ec)) {
-            LOG(WARNING) << "Can't copy " << adb_debug_prop_src << " to " << kDebugRamdiskProp
-                         << ": " << ec.message();
+        if (!fs::copy_file("/adb_debug.prop", kDebugRamdiskProp, ec) ||
+            !fs::copy_file("/userdebug_plat_sepolicy.cil", kDebugRamdiskSEPolicy, ec)) {
+            LOG(ERROR) << "Failed to setup debug ramdisk";
+        } else {
+            // setenv for second-stage init to read above kDebugRamdisk* files.
+            setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
         }
-        if (access(userdebug_plat_sepolicy_cil_src, F_OK) == 0 &&
-            !fs::copy_file(userdebug_plat_sepolicy_cil_src, kDebugRamdiskSEPolicy, ec)) {
-            LOG(WARNING) << "Can't copy " << userdebug_plat_sepolicy_cil_src << " to "
-                         << kDebugRamdiskSEPolicy << ": " << ec.message();
-        }
-        // setenv for second-stage init to read above kDebugRamdisk* files.
-        setenv("INIT_FORCE_DEBUGGABLE", "true", 1);
     }
 
     if (ForceNormalBoot(cmdline, bootconfig)) {
         mkdir("/first_stage_ramdisk", 0755);
-        PrepareSwitchRoot();
         // SwitchRoot() must be called with a mount point as the target, so we bind mount the
         // target directory to itself here.
         if (mount("/first_stage_ramdisk", "/first_stage_ramdisk", nullptr, MS_BIND, nullptr) != 0) {
-            PLOG(FATAL) << "Could not bind mount /first_stage_ramdisk to itself";
+            LOG(FATAL) << "Could not bind mount /first_stage_ramdisk to itself";
         }
         SwitchRoot("/first_stage_ramdisk");
     }

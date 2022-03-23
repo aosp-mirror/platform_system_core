@@ -76,11 +76,9 @@ std::optional<std::string> FindPhysicalPartition(const std::string& name);
 bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
                             bool* is_zero_length = nullptr);
 
-// Partition is O_WRONLY by default, caller should pass O_RDONLY for reading.
-// Caller may pass additional flags if needed. (O_EXCL | O_CLOEXEC | O_BINARY)
-// will be logically ORed internally.
+// If read, partition is readonly. Else it is write only.
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
-                   int flags = O_WRONLY);
+                   bool read = false);
 
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);
