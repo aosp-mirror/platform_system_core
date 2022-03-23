@@ -943,7 +943,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
     ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("adiantum", entry->metadata_encryption);
+    EXPECT_EQ("adiantum", entry->metadata_encryption_options);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption_WrappedKey) {
@@ -960,8 +960,8 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
     ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
-    auto parts = android::base::Split(entry->metadata_encryption, ":");
+    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption_options);
+    auto parts = android::base::Split(entry->metadata_encryption_options, ":");
     EXPECT_EQ(2U, parts.size());
     EXPECT_EQ("aes-256-xts", parts[0]);
     EXPECT_EQ("wrappedkey_v0", parts[1]);
@@ -1103,4 +1103,77 @@ source none6       swap   defaults      readahead_size_kb=0
     EXPECT_EQ("none6", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->readahead_size_kb);
+}
+
+TEST(fs_mgr, TransformFstabForDsu) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+system /system      erofs   ro  wait,logical,first_stage_mount
+system /system      ext4    ro  wait,logical,first_stage_mount
+vendor /vendor      ext4    ro  wait,logical,first_stage_mount
+data   /data        f2fs    noatime     wait
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    TransformFstabForDsu(&fstab, "dsu", {"system_gsi", "userdata_gsi"});
+    ASSERT_EQ(4U, fstab.size());
+
+    auto entry = fstab.begin();
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/vendor", entry->mount_point);
+    EXPECT_EQ("vendor", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/data", entry->mount_point);
+    EXPECT_EQ("userdata_gsi", entry->blk_device);
+    entry++;
+}
+
+TEST(fs_mgr, TransformFstabForDsu_synthesisExt4Entry) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+system /system      erofs   ro  wait,logical,first_stage_mount
+vendor /vendor      ext4    ro  wait,logical,first_stage_mount
+data   /data        f2fs    noatime     wait
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    TransformFstabForDsu(&fstab, "dsu", {"system_gsi", "userdata_gsi"});
+    ASSERT_EQ(4U, fstab.size());
+
+    auto entry = fstab.begin();
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("erofs", entry->fs_type);
+    entry++;
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("ext4", entry->fs_type);
+    entry++;
+
+    EXPECT_EQ("/vendor", entry->mount_point);
+    EXPECT_EQ("vendor", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/data", entry->mount_point);
+    EXPECT_EQ("userdata_gsi", entry->blk_device);
+    entry++;
 }

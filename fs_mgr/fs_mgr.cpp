@@ -364,8 +364,8 @@ static void tune_quota(const std::string& blk_device, const FstabEntry& entry,
                        const struct ext4_super_block* sb, int* fs_stat) {
     bool has_quota = (sb->s_feature_ro_compat & cpu_to_le32(EXT4_FEATURE_RO_COMPAT_QUOTA)) != 0;
     bool want_quota = entry.fs_mgr_flags.quota;
-    bool want_projid = android::base::GetBoolProperty("external_storage.projid.enabled", false);
-
+    // Enable projid support by default
+    bool want_projid = true;
     if (has_quota == want_quota) {
         return;
     }
@@ -2208,8 +2208,10 @@ std::string fs_mgr_get_super_partition_name(int slot) {
     // Devices upgrading to dynamic partitions are allowed to specify a super
     // partition name. This includes cuttlefish, which is a non-A/B device.
     std::string super_partition;
-    if (fs_mgr_get_boot_config_from_bootconfig_source("super_partition", &super_partition) ||
-        fs_mgr_get_boot_config_from_kernel_cmdline("super_partition", &super_partition)) {
+    if (fs_mgr_get_boot_config("force_super_partition", &super_partition)) {
+        return super_partition;
+    }
+    if (fs_mgr_get_boot_config("super_partition", &super_partition)) {
         if (fs_mgr_get_slot_suffix().empty()) {
             return super_partition;
         }
@@ -2256,7 +2258,8 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
 #if ALLOW_ADBD_DISABLE_VERITY == 0
     // Allowlist the mount point if user build.
     static const std::vector<const std::string> kAllowedPaths = {
-            "/odm", "/odm_dlkm", "/oem", "/product", "/system_ext", "/vendor", "/vendor_dlkm",
+            "/odm",         "/odm_dlkm",   "/oem",    "/product",
+            "/system_dlkm", "/system_ext", "/vendor", "/vendor_dlkm",
     };
     static const std::vector<const std::string> kAllowedPrefixes = {
             "/mnt/product/",

@@ -192,6 +192,10 @@ bool IsUserspaceSnapshotsEnabled() {
     return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
+bool IsIouringEnabled() {
+    return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+}
+
 std::string GetOtherPartitionName(const std::string& name) {
     auto suffix = android::fs_mgr::GetPartitionSlotSuffix(name);
     CHECK(suffix == "_a" || suffix == "_b");

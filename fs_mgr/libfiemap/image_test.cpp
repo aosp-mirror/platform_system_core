@@ -119,6 +119,7 @@ TEST_F(NativeTest, DisableImage) {
     ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestImageSize, false, nullptr));
     ASSERT_TRUE(manager_->BackingImageExists(base_name_));
     ASSERT_TRUE(manager_->DisableImage(base_name_));
+    ASSERT_TRUE(manager_->IsImageDisabled(base_name_));
     ASSERT_TRUE(manager_->RemoveDisabledImages());
     ASSERT_TRUE(!manager_->BackingImageExists(base_name_));
 }
