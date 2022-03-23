@@ -21,8 +21,6 @@ package {
 cc_library {
     name: "libcrypto_utils",
     vendor_available: true,
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
     recovery_available: true,
     vndk: {
         enabled: true,
@@ -44,7 +42,6 @@ cc_library {
             enabled: true,
         },
     },
-    min_sdk_version: "apex_inherit",
     apex_available: [
         "//apex_available:platform",
         "com.android.adbd",

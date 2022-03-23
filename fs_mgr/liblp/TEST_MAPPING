@@ -3,10 +3,5 @@
     {
       "name": "liblp_test"
     }
-  ],
-  "hwasan-postsubmit": [
-    {
-      "name": "liblp_test"
-    }
   ]
 }
