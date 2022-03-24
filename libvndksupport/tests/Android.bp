@@ -31,4 +31,6 @@ cc_test {
         "libvndksupport",
         "libbase",
     ],
+
+    test_suites: ["general-tests"],
 }

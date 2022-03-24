@@ -10,7 +10,8 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
     onrestart restart audioserver
     onrestart restart cameraserver
     onrestart restart media
+    onrestart restart media.tuner
     onrestart restart netd
     onrestart restart wificond
-    writepid /dev/cpuset/foreground/tasks
+    task_profiles ProcessCapacityHigh
     critical window=${zygote.critical_window.minute:-off} target=zygote-fatal

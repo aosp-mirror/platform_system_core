@@ -99,7 +99,7 @@ TEST(ueventd, setfscreatecon_IsPerThread) {
     const char* const contexts[] = {
         "u:object_r:audio_device:s0",
         "u:object_r:sensors_device:s0",
-        "u:object_r:video_device:s0"
+        "u:object_r:video_device:s0",
         "u:object_r:zero_device:s0",
     };
 

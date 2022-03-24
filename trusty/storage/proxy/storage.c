@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,12 +25,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "log.h"
+#include "checkpoint_handling.h"
 #include "ipc.h"
+#include "log.h"
 #include "storage.h"
 
 #define FD_TBL_SIZE 64
 #define MAX_READ_SIZE 4096
+
+#define ALTERNATE_DATA_DIR "alternate/"
 
 enum sync_state {
     SS_UNUSED = -1,
@@ -37,12 +41,12 @@ enum sync_state {
     SS_DIRTY =  1,
 };
 
-static int ssdir_fd = -1;
 static const char *ssdir_name;
 
 static enum sync_state fs_state;
-static enum sync_state dir_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
+
+static bool alternate_mode;
 
 static struct {
    struct storage_file_read_resp hdr;
@@ -52,10 +56,6 @@ static struct {
 static uint32_t insert_fd(int open_flags, int fd)
 {
     uint32_t handle = fd;
-
-    if (open_flags & O_CREAT) {
-        dir_state = SS_DIRTY;
-    }
 
     if (handle < FD_TBL_SIZE) {
             fd_state[fd] = SS_CLEAN; /* fd clean */
@@ -187,7 +187,6 @@ int storage_file_delete(struct storage_msg *msg,
         goto err_response;
     }
 
-    dir_state = SS_DIRTY;
     rc = unlink(path);
     if (rc < 0) {
         rc = errno;
@@ -211,11 +210,21 @@ err_response:
     return ipc_respond(msg, NULL, 0);
 }
 
+static void sync_parent(const char* path) {
+    int parent_fd;
+    char* parent_path = dirname(path);
+    parent_fd = TEMP_FAILURE_RETRY(open(parent_path, O_RDONLY));
+    if (parent_fd >= 0) {
+        fsync(parent_fd);
+        close(parent_fd);
+    } else {
+        ALOGE("%s: failed to open parent directory \"%s\" for sync: %s\n", __func__, parent_path,
+              strerror(errno));
+    }
+}
 
-int storage_file_open(struct storage_msg *msg,
-                      const void *r, size_t req_len)
-{
-    char *path = NULL;
+int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len) {
+    char* path = NULL;
     const struct storage_file_open_req *req = r;
     struct storage_file_open_resp resp = {0};
 
@@ -234,6 +243,24 @@ int storage_file_open(struct storage_msg *msg,
         goto err_response;
     }
 
+    /*
+     * TODO(b/210501710): Expose GSI image running state to vendor
+     * storageproxyd. We want to control data file paths in vendor_init, but we
+     * don't have access to the necessary property there yet. When we have
+     * access to that property we can set the root data path read-only and only
+     * allow creation of files in alternate/. Checking paths here temporarily
+     * until that is fixed.
+     *
+     * We are just checking for "/" instead of "alternate/" because we still
+     * want to still allow access to "persist/" in alternate mode (for now, this
+     * may change in the future).
+     */
+    if (alternate_mode && !strchr(req->name, '/')) {
+        ALOGE("%s: Cannot open root data file \"%s\" in alternate mode\n", __func__, req->name);
+        msg->result = STORAGE_ERR_ACCESS;
+        goto err_response;
+    }
+
     int rc = asprintf(&path, "%s/%s", ssdir_name, req->name);
     if (rc < 0) {
         ALOGE("%s: asprintf failed\n", __func__);
@@ -247,6 +274,24 @@ int storage_file_open(struct storage_msg *msg,
         open_flags |= O_TRUNC;
 
     if (req->flags & STORAGE_FILE_OPEN_CREATE) {
+        /*
+         * Create the alternate parent dir if needed & allowed.
+         *
+         * TODO(b/210501710): Expose GSI image running state to vendor
+         * storageproxyd. This directory should be created by vendor_init, once
+         * it has access to the necessary bit of information.
+         */
+        if (strstr(req->name, ALTERNATE_DATA_DIR) == req->name) {
+            char* parent_path = dirname(path);
+            rc = mkdir(parent_path, S_IRWXU);
+            if (rc == 0) {
+                sync_parent(parent_path);
+            } else if (errno != EEXIST) {
+                ALOGE("%s: Could not create parent directory \"%s\": %s\n", __func__, parent_path,
+                      strerror(errno));
+            }
+        }
+
         /* open or create */
         if (req->flags & STORAGE_FILE_OPEN_CREATE_EXCLUSIVE) {
             /* create exclusive */
@@ -278,6 +323,10 @@ int storage_file_open(struct storage_msg *msg,
         }
         msg->result = translate_errno(rc);
         goto err_response;
+    }
+
+    if (open_flags & O_CREAT) {
+        sync_parent(path);
     }
     free(path);
 
@@ -467,17 +516,14 @@ err_response:
 
 int storage_init(const char *dirname)
 {
+    /* If there is an active DSU image, use the alternate fs mode. */
+    alternate_mode = is_gsi_running();
+
     fs_state = SS_CLEAN;
-    dir_state = SS_CLEAN;
     for (uint i = 0; i < FD_TBL_SIZE; i++) {
         fd_state[i] = SS_UNUSED;  /* uninstalled */
     }
 
-    ssdir_fd = open(dirname, O_RDONLY);
-    if (ssdir_fd < 0) {
-        ALOGE("failed to open ss root dir \"%s\": %s\n",
-               dirname, strerror(errno));
-    }
     ssdir_name = dirname;
     return 0;
 }
@@ -501,25 +547,16 @@ int storage_sync_checkpoint(void)
          }
     }
 
-    /* check if we need to sync the directory */
-    if (dir_state == SS_DIRTY) {
-        if (fs_state == SS_CLEAN) {
-            rc = fsync(ssdir_fd);
-            if (rc < 0) {
-                ALOGE("fsync for ssdir failed: %s\n", strerror(errno));
-                return rc;
-            }
-        }
-        dir_state = SS_CLEAN;  /* set to clean */
-    }
-
-    /* check if we need to sync the whole fs */
+    /* check if we need to sync all filesystems */
     if (fs_state == SS_DIRTY) {
-        rc = syscall(SYS_syncfs, ssdir_fd);
-        if (rc < 0) {
-            ALOGE("syncfs failed: %s\n", strerror(errno));
-            return rc;
-        }
+        /*
+         * We sync all filesystems here because we don't know what filesystem
+         * needs syncing if there happen to be other filesystems symlinked under
+         * the root data directory. This should not happen in the normal case
+         * because our fd table is large enough to handle the few open files we
+         * use.
+         */
+        sync();
         fs_state = SS_CLEAN;
     }
 
