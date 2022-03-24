@@ -157,7 +157,7 @@ std::string GetModuleLoadList(bool recovery, const std::string& dir_path) {
 }
 
 #define MODULE_BASE_DIR "/lib/modules"
-bool LoadKernelModules(bool recovery, bool want_console, int& modules_loaded) {
+bool LoadKernelModules(bool recovery, bool want_console, bool want_parallel, int& modules_loaded) {
     struct utsname uts;
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
@@ -206,7 +206,8 @@ bool LoadKernelModules(bool recovery, bool want_console, int& modules_loaded) {
     }
 
     Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(recovery, MODULE_BASE_DIR));
-    bool retval = m.LoadListedModules(!want_console);
+    bool retval = (want_parallel) ? m.LoadModulesParallel(std::thread::hardware_concurrency())
+                                  : m.LoadListedModules(!want_console);
     modules_loaded = m.GetModuleCount();
     if (modules_loaded > 0) {
         return retval;
@@ -319,11 +320,13 @@ int FirstStageMain(int argc, char** argv) {
     }
 
     auto want_console = ALLOW_FIRST_STAGE_CONSOLE ? FirstStageConsole(cmdline, bootconfig) : 0;
+    auto want_parallel =
+            bootconfig.find("androidboot.load_modules_parallel = \"true\"") != std::string::npos;
 
     boot_clock::time_point module_start_time = boot_clock::now();
     int module_count = 0;
     if (!LoadKernelModules(IsRecoveryMode() && !ForceNormalBoot(cmdline, bootconfig), want_console,
-                           module_count)) {
+                           want_parallel, module_count)) {
         if (want_console != FirstStageConsoleParam::DISABLED) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
         } else {
