@@ -27,16 +27,16 @@ Linux, macOS, or Windows.
 1. Host sends a command, which is an ascii string in a single
    packet no greater than 64 bytes.
 
-2. Client response with a single packet no greater than 64 bytes.
+2. Client response with a single packet no greater than 256 bytes.
    The first four bytes of the response are "OKAY", "FAIL", "DATA",
    or "INFO".  Additional bytes may contain an (ascii) informative
    message.
 
-   a. INFO -> the remaining 60 bytes are an informative message
+   a. INFO -> the remaining 252 bytes are an informative message
       (providing progress or diagnostic messages).  They should
       be displayed and then step #2 repeats
 
-   b. FAIL -> the requested command failed.  The remaining 60 bytes
+   b. FAIL -> the requested command failed.  The remaining 252 bytes
       of the response (if present) provide a textual failure message
       to present to the user.  Stop.
 
@@ -53,13 +53,13 @@ Linux, macOS, or Windows.
    until the client has sent or received the number of bytes indicated
    in the "DATA" response above.
 
-4. Client responds with a single packet no greater than 64 bytes.
+4. Client responds with a single packet no greater than 256 bytes.
    The first four bytes of the response are "OKAY", "FAIL", or "INFO".
    Similar to #2:
 
-   a. INFO -> display the remaining 60 bytes and return to #4
+   a. INFO -> display the remaining 252 bytes and return to #4
 
-   b. FAIL -> display the remaining 60 bytes (if present) as a failure
+   b. FAIL -> display the remaining 252 bytes (if present) as a failure
       reason and consider the command failed.  Stop.
 
    c. OKAY -> success.  Go to #5
