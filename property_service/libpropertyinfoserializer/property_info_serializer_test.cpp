@@ -490,7 +490,6 @@ TEST(propertyinfoserializer, RealProperties) {
       {"media.recorder.show_manufacturer_and_model", "u:object_r:default_prop:s0"},
       {"net.bt.name", "u:object_r:system_prop:s0"},
       {"net.lte.ims.data.enabled", "u:object_r:net_radio_prop:s0"},
-      {"net.qtaguid_enabled", "u:object_r:system_prop:s0"},
       {"net.tcp.default_init_rwnd", "u:object_r:system_prop:s0"},
       {"nfc.initialized", "u:object_r:nfc_prop:s0"},
       {"persist.audio.fluence.speaker", "u:object_r:audio_prop:s0"},

@@ -874,6 +874,12 @@ TEST_F(Fuzz, DownloadInvalid8) {
             << "Device did not respond with FAIL for malformed download command '" << cmd << "'";
 }
 
+TEST_F(Fuzz, DownloadInvalid9) {
+    std::string cmd("download:2PPPPPPPPPPPPPPPPPPPPPPPPPPPPPP");
+    EXPECT_EQ(fb->RawCommand(cmd), DEVICE_FAIL)
+            << "Device did not respond with FAIL for malformed download command '" << cmd << "'";
+}
+
 TEST_F(Fuzz, GetVarAllSpam) {
     auto start = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed;
@@ -890,28 +896,51 @@ TEST_F(Fuzz, GetVarAllSpam) {
 
 TEST_F(Fuzz, BadCommandTooLarge) {
     std::string s = RandomString(FB_COMMAND_SZ + 1, rand_legal);
-    EXPECT_EQ(fb->RawCommand(s), DEVICE_FAIL)
+    RetCode ret = fb->RawCommand(s);
+    EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
             << "Device did not respond with failure after sending length " << s.size()
             << " string of random ASCII chars";
+    if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
     std::string s1 = RandomString(1000, rand_legal);
-    EXPECT_EQ(fb->RawCommand(s1), DEVICE_FAIL)
+    ret = fb->RawCommand(s1);
+    EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
             << "Device did not respond with failure after sending length " << s1.size()
             << " string of random ASCII chars";
+    if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
     std::string s2 = RandomString(1000, rand_illegal);
-    EXPECT_EQ(fb->RawCommand(s2), DEVICE_FAIL)
-            << "Device did not respond with failure after sending length " << s1.size()
+    ret = fb->RawCommand(s2);
+    EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
+            << "Device did not respond with failure after sending length " << s2.size()
             << " string of random non-ASCII chars";
+    if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
     std::string s3 = RandomString(1000, rand_char);
-    EXPECT_EQ(fb->RawCommand(s3), DEVICE_FAIL)
-            << "Device did not respond with failure after sending length " << s1.size()
+    ret = fb->RawCommand(s3);
+    EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
+            << "Device did not respond with failure after sending length " << s3.size()
             << " string of random chars";
+    if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
+
+    std::string s4 = RandomString(10 * 1024 * 1024, rand_legal);
+    ret = fb->RawCommand(s);
+    EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
+            << "Device did not respond with failure after sending length " << s4.size()
+            << " string of random ASCII chars ";
+    if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
+
+    ASSERT_TRUE(UsbStillAvailible()) << USB_PORT_GONE;
+    std::string resp;
+    EXPECT_EQ(fb->GetVar("product", &resp), SUCCESS)
+                << "Device is unresponsive to getvar command";
 }
 
 TEST_F(Fuzz, CommandTooLarge) {
     for (const std::string& s : CMDS) {
         std::string rs = RandomString(1000, rand_char);
-        EXPECT_EQ(fb->RawCommand(s + rs), DEVICE_FAIL)
-                << "Device did not respond with failure after '" << s + rs << "'";
+        RetCode ret;
+        ret = fb->RawCommand(s + rs);
+        EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
+                << "Device did not respond with failure " << ret << "after '" << s + rs << "'";
+        if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
         ASSERT_TRUE(UsbStillAvailible()) << USB_PORT_GONE;
         std::string resp;
         EXPECT_EQ(fb->GetVar("product", &resp), SUCCESS)
@@ -951,6 +980,80 @@ TEST_F(Fuzz, SparseZeroLength) {
     if (ret != DEVICE_FAIL) {  // if lazily parsed it better fail on a flash
         EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
                 << "Flashing zero length sparse image did not fail " << sparse.Rep();
+    }
+}
+
+TEST_F(Fuzz, SparseZeroBlkSize) {
+    // handcrafted malform sparse file with zero as block size
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc2', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a zero block size in sparse file should fail";
+    }
+}
+
+TEST_F(Fuzz, SparseVeryLargeBlkSize) {
+    // handcrafted sparse file with block size of ~4GB and divisible 4
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00',
+        '\x1c', '\x00', '\x0c', '\x00', '\xF0', '\xFF', '\xFF', '\xFF',
+        '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc3', '\xca', '\x00', '\x00',
+        '\x01', '\x00', '\x00', '\x00', '\x0c', '\x00', '\x00', '\x00',
+        '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+    ASSERT_EQ(HandleResponse(), SUCCESS) << "Not receive okay";
+    ASSERT_EQ(fb->Flash("userdata"), SUCCESS) << "Flashing sparse failed";
+}
+
+TEST_F(Fuzz, SparseTrimmed) {
+    // handcrafted malform sparse file which is trimmed
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x80', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a trimmed sparse file should fail";
+    }
+}
+
+TEST_F(Fuzz, SparseInvalidChurk) {
+    // handcrafted malform sparse file with invalid churk
+    const std::vector<char> buf = {
+        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
+        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
+        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
+    };
+
+    ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
+    ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
+
+    // It can either reject this download or reject it during flash
+    if (HandleResponse() != DEVICE_FAIL) {
+        EXPECT_EQ(fb->Flash("userdata"), DEVICE_FAIL)
+                << "Flashing a sparse file with invalid churk should fail";
     }
 }
 

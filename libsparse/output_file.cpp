@@ -54,6 +54,8 @@
 #define SPARSE_HEADER_LEN (sizeof(sparse_header_t))
 #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
 
+#define FILL_ZERO_BUFSIZE (2 * 1024 * 1024)
+
 #define container_of(inner, outer_t, elem) ((outer_t*)((char*)(inner)-offsetof(outer_t, elem)))
 
 struct output_file_ops {
@@ -391,13 +393,29 @@ static int write_sparse_data_chunk(struct output_file* out, uint64_t len, void* 
   ret = out->ops->write(out, data, len);
   if (ret < 0) return -1;
   if (zero_len) {
-    ret = out->ops->write(out, out->zero_buf, zero_len);
-    if (ret < 0) return -1;
+    uint64_t len = zero_len;
+    uint64_t write_len;
+    while (len) {
+      write_len = std::min(len, (uint64_t)FILL_ZERO_BUFSIZE);
+      ret = out->ops->write(out, out->zero_buf, write_len);
+      if (ret < 0) {
+        return ret;
+      }
+      len -= write_len;
+    }
   }
 
   if (out->use_crc) {
     out->crc32 = sparse_crc32(out->crc32, data, len);
-    if (zero_len) out->crc32 = sparse_crc32(out->crc32, out->zero_buf, zero_len);
+    if (zero_len) {
+      uint64_t len = zero_len;
+      uint64_t write_len;
+      while (len) {
+        write_len = std::min(len, (uint64_t)FILL_ZERO_BUFSIZE);
+        out->crc32 = sparse_crc32(out->crc32, out->zero_buf, write_len);
+        len -= write_len;
+      }
+    }
   }
 
   out->cur_out_ptr += rnd_up_len;
@@ -460,12 +478,12 @@ static int write_normal_fill_chunk(struct output_file* out, uint64_t len, uint32
   uint64_t write_len;
 
   /* Initialize fill_buf with the fill_val */
-  for (i = 0; i < out->block_size / sizeof(uint32_t); i++) {
+  for (i = 0; i < FILL_ZERO_BUFSIZE / sizeof(uint32_t); i++) {
     out->fill_buf[i] = fill_val;
   }
 
   while (len) {
-    write_len = std::min(len, (uint64_t)out->block_size);
+    write_len = std::min(len, (uint64_t)FILL_ZERO_BUFSIZE);
     ret = out->ops->write(out, out->fill_buf, write_len);
     if (ret < 0) {
       return ret;
@@ -512,13 +530,15 @@ static int output_file_init(struct output_file* out, int block_size, int64_t len
   out->crc32 = 0;
   out->use_crc = crc;
 
-  out->zero_buf = reinterpret_cast<char*>(calloc(block_size, 1));
+  // don't use sparse format block size as it can takes up to 32GB
+  out->zero_buf = reinterpret_cast<char*>(calloc(FILL_ZERO_BUFSIZE, 1));
   if (!out->zero_buf) {
     error_errno("malloc zero_buf");
     return -ENOMEM;
   }
 
-  out->fill_buf = reinterpret_cast<uint32_t*>(calloc(block_size, 1));
+  // don't use sparse format block size as it can takes up to 32GB
+  out->fill_buf = reinterpret_cast<uint32_t*>(calloc(FILL_ZERO_BUFSIZE, 1));
   if (!out->fill_buf) {
     error_errno("malloc fill_buf");
     ret = -ENOMEM;
