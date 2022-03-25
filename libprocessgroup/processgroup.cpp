@@ -464,7 +464,7 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
     gid_t cgroup_gid = AID_SYSTEM;
     int ret = 0;
 
-    if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
+    if (stat(cgroup.c_str(), &cgroup_stat) < 0) {
         PLOG(ERROR) << "Failed to get stats for " << cgroup;
     } else {
         cgroup_mode = cgroup_stat.st_mode;
