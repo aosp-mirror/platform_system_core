@@ -16,6 +16,13 @@
 
 #include <stdint.h>
 
-extern "C" void crash() {
+#include "crash_test.h"
+
+extern "C" {
+
+JITDescriptor __dex_debug_descriptor = {.version = 1};
+
+void crash() {
   *reinterpret_cast<volatile char*>(0xdead) = '1';
+}
 }

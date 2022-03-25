@@ -100,6 +100,7 @@ constexpr auto ID_PROP = "ro.build.id";
 constexpr auto LEGACY_ID_PROP = "ro.build.legacy.id";
 constexpr auto VBMETA_DIGEST_PROP = "ro.boot.vbmeta.digest";
 constexpr auto DIGEST_SIZE_USED = 8;
+constexpr auto API_LEVEL_CURRENT = 10000;
 
 static bool persistent_properties_loaded = false;
 
@@ -1017,6 +1018,39 @@ static void property_initialize_ro_cpu_abilist() {
     }
 }
 
+static int read_api_level_props(const std::vector<std::string>& api_level_props) {
+    int api_level = API_LEVEL_CURRENT;
+    for (const auto& api_level_prop : api_level_props) {
+        api_level = android::base::GetIntProperty(api_level_prop, API_LEVEL_CURRENT);
+        if (api_level != API_LEVEL_CURRENT) {
+            break;
+        }
+    }
+    return api_level;
+}
+
+static void property_initialize_ro_vendor_api_level() {
+    // ro.vendor.api_level shows the api_level that the vendor images (vendor, odm, ...) are
+    // required to support.
+    constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
+
+    // Api level properties of the board. The order of the properties must be kept.
+    std::vector<std::string> BOARD_API_LEVEL_PROPS = {"ro.board.api_level",
+                                                      "ro.board.first_api_level"};
+    // Api level properties of the device. The order of the properties must be kept.
+    std::vector<std::string> DEVICE_API_LEVEL_PROPS = {"ro.product.first_api_level",
+                                                       "ro.build.version.sdk"};
+
+    int api_level = std::min(read_api_level_props(BOARD_API_LEVEL_PROPS),
+                             read_api_level_props(DEVICE_API_LEVEL_PROPS));
+    std::string error;
+    uint32_t res = PropertySet(VENDOR_API_LEVEL_PROP, std::to_string(api_level), &error);
+    if (res != PROP_SUCCESS) {
+        LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << api_level << ": "
+                   << error << "(" << res << ")";
+    }
+}
+
 void PropertyLoadBootDefaults() {
     // We read the properties and their values into a map, in order to always allow properties
     // loaded in the later property files to override the properties in loaded in the earlier
@@ -1073,6 +1107,7 @@ void PropertyLoadBootDefaults() {
     LoadPropertiesFromSecondStageRes(&properties);
     load_properties_from_file("/system/build.prop", nullptr, &properties);
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
+    load_properties_from_file("/system_dlkm/etc/build.prop", nullptr, &properties);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
     // all updated.
     // if (SelinuxGetVendorAndroidVersion() <= __ANDROID_API_R__) {
@@ -1102,6 +1137,7 @@ void PropertyLoadBootDefaults() {
     property_derive_build_fingerprint();
     property_derive_legacy_build_fingerprint();
     property_initialize_ro_cpu_abilist();
+    property_initialize_ro_vendor_api_level();
 
     update_sys_usb_config();
 }
@@ -1136,14 +1172,15 @@ void CreateSerializedPropertyInfo() {
         // Don't check for failure here, since we don't always have all of these partitions.
         // E.g. In case of recovery, the vendor partition will not have mounted and we
         // still need the system / platform properties to function.
+        if (access("/dev/selinux/apex_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
+        }
         if (access("/system_ext/etc/selinux/system_ext_property_contexts", R_OK) != -1) {
             LoadPropertyInfoFromFile("/system_ext/etc/selinux/system_ext_property_contexts",
                                      &property_infos);
         }
-        if (!LoadPropertyInfoFromFile("/vendor/etc/selinux/vendor_property_contexts",
-                                      &property_infos)) {
-            // Fallback to nonplat_* if vendor_* doesn't exist.
-            LoadPropertyInfoFromFile("/vendor/etc/selinux/nonplat_property_contexts",
+        if (access("/vendor/etc/selinux/vendor_property_contexts", R_OK) != -1) {
+            LoadPropertyInfoFromFile("/vendor/etc/selinux/vendor_property_contexts",
                                      &property_infos);
         }
         if (access("/product/etc/selinux/product_property_contexts", R_OK) != -1) {
@@ -1158,12 +1195,10 @@ void CreateSerializedPropertyInfo() {
             return;
         }
         LoadPropertyInfoFromFile("/system_ext_property_contexts", &property_infos);
-        if (!LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos)) {
-            // Fallback to nonplat_* if vendor_* doesn't exist.
-            LoadPropertyInfoFromFile("/nonplat_property_contexts", &property_infos);
-        }
+        LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/product_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/odm_property_contexts", &property_infos);
+        LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
     }
 
     auto serialized_contexts = std::string();

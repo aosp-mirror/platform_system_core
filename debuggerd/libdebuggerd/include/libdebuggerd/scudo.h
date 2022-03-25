@@ -34,15 +34,11 @@ class ScudoCrashData {
 
   bool CrashIsMine() const;
 
-  void DumpCause(log_t* log, unwindstack::Unwinder* unwinder) const;
   void AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const;
 
  private:
   scudo_error_info error_info_ = {};
   uintptr_t untagged_fault_addr_;
-
-  void DumpReport(const scudo_error_report* report, log_t* log,
-                  unwindstack::Unwinder* unwinder) const;
 
   void FillInCause(Cause* cause, const scudo_error_report* report,
                    unwindstack::Unwinder* unwinder) const;
