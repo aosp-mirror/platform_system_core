@@ -13,6 +13,7 @@ cc_library_static {
     ],
     cflags: ["-Werror", "-Wall", "-Wextra"],
     export_include_dirs: ["."],
+    recovery_available: true,
 }
 
 cc_binary {
