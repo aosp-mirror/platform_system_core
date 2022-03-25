@@ -152,8 +152,10 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
 
     if (!root_path.empty()) {
         path = root_path;
-        path += "/";
-        path += cgroup_path;
+        if (cgroup_path != ".") {
+            path += "/";
+            path += cgroup_path;
+        }
     } else {
         path = cgroup_path;
     }
