@@ -460,19 +460,17 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
-    uid_t cgroup_uid = AID_SYSTEM;
     gid_t cgroup_gid = AID_SYSTEM;
     int ret = 0;
 
-    if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
+    if (stat(cgroup.c_str(), &cgroup_stat) < 0) {
         PLOG(ERROR) << "Failed to get stats for " << cgroup;
     } else {
         cgroup_mode = cgroup_stat.st_mode;
-        cgroup_uid = cgroup_stat.st_uid;
         cgroup_gid = cgroup_stat.st_gid;
     }
 
-    if (!MkdirAndChown(uid_path, cgroup_mode, cgroup_uid, cgroup_gid)) {
+    if (!MkdirAndChown(uid_path, cgroup_mode, uid, cgroup_gid)) {
         PLOG(ERROR) << "Failed to make and chown " << uid_path;
         return -errno;
     }
@@ -486,7 +484,7 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     auto uid_pid_path = ConvertUidPidToPath(cgroup.c_str(), uid, initialPid);
 
-    if (!MkdirAndChown(uid_pid_path, cgroup_mode, cgroup_uid, cgroup_gid)) {
+    if (!MkdirAndChown(uid_pid_path, cgroup_mode, uid, cgroup_gid)) {
         PLOG(ERROR) << "Failed to make and chown " << uid_pid_path;
         return -errno;
     }
