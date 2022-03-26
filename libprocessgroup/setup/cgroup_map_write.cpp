@@ -147,12 +147,17 @@ static bool Mkdir(const std::string& path, mode_t mode, const std::string& uid,
 static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* descriptors,
                                      const Json::Value& cgroup, const std::string& name,
                                      const std::string& root_path, int cgroups_version) {
+    const std::string cgroup_path = cgroup["Path"].asString();
     std::string path;
 
     if (!root_path.empty()) {
-        path = root_path + "/" + cgroup["Path"].asString();
+        path = root_path;
+        if (cgroup_path != ".") {
+            path += "/";
+            path += cgroup_path;
+        }
     } else {
-        path = cgroup["Path"].asString();
+        path = cgroup_path;
     }
 
     uint32_t controller_flags = 0;
