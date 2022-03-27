@@ -16,17 +16,21 @@
 
 #pragma once
 
+#include <mutex>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <android-base/thread_annotations.h>
+
 class Modprobe {
   public:
     Modprobe(const std::vector<std::string>&, const std::string load_file = "modules.load",
              bool use_blocklist = true);
 
+    bool LoadModulesParallel(int num_threads);
     bool LoadListedModules(bool strict = true);
     bool LoadWithAliases(const std::string& module_name, bool strict,
                          const std::string& parameters = "");
@@ -66,7 +70,9 @@ class Modprobe {
     std::vector<std::string> module_load_;
     std::unordered_map<std::string, std::string> module_options_;
     std::set<std::string> module_blocklist_;
+    std::mutex module_loaded_lock_;
     std::unordered_set<std::string> module_loaded_;
+    std::unordered_set<std::string> module_loaded_paths_;
     int module_count_ = 0;
     bool blocklist_enabled = false;
 };
