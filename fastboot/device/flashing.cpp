@@ -76,7 +76,7 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
 
 }  // namespace
 
-int FlashRawDataChunk(int fd, const char* data, size_t len) {
+int FlashRawDataChunk(PartitionHandle* handle, const char* data, size_t len) {
     size_t ret = 0;
     const size_t max_write_size = 1048576;
     void* aligned_buffer;
@@ -91,7 +91,15 @@ int FlashRawDataChunk(int fd, const char* data, size_t len) {
     while (ret < len) {
         int this_len = std::min(max_write_size, len - ret);
         memcpy(aligned_buffer_unique_ptr.get(), data, this_len);
-        int this_ret = write(fd, aligned_buffer_unique_ptr.get(), this_len);
+        // In case of non 4KB aligned writes, reopen without O_DIRECT flag
+        if (this_len & 0xFFF) {
+            if (handle->Reset(O_WRONLY) != true) {
+                PLOG(ERROR) << "Failed to reset file descriptor";
+                return -1;
+            }
+        }
+
+        int this_ret = write(handle->fd(), aligned_buffer_unique_ptr.get(), this_len);
         if (this_ret < 0) {
             PLOG(ERROR) << "Failed to flash data of len " << len;
             return -1;
@@ -102,8 +110,8 @@ int FlashRawDataChunk(int fd, const char* data, size_t len) {
     return 0;
 }
 
-int FlashRawData(int fd, const std::vector<char>& downloaded_data) {
-    int ret = FlashRawDataChunk(fd, downloaded_data.data(), downloaded_data.size());
+int FlashRawData(PartitionHandle* handle, const std::vector<char>& downloaded_data) {
+    int ret = FlashRawDataChunk(handle, downloaded_data.data(), downloaded_data.size());
     if (ret < 0) {
         return -errno;
     }
@@ -111,30 +119,30 @@ int FlashRawData(int fd, const std::vector<char>& downloaded_data) {
 }
 
 int WriteCallback(void* priv, const void* data, size_t len) {
-    int fd = reinterpret_cast<long long>(priv);
+    PartitionHandle* handle = reinterpret_cast<PartitionHandle*>(priv);
     if (!data) {
-        return lseek64(fd, len, SEEK_CUR) >= 0 ? 0 : -errno;
+        return lseek64(handle->fd(), len, SEEK_CUR) >= 0 ? 0 : -errno;
     }
-    return FlashRawDataChunk(fd, reinterpret_cast<const char*>(data), len);
+    return FlashRawDataChunk(handle, reinterpret_cast<const char*>(data), len);
 }
 
-int FlashSparseData(int fd, std::vector<char>& downloaded_data) {
+int FlashSparseData(PartitionHandle* handle, std::vector<char>& downloaded_data) {
     struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(),
                                                       downloaded_data.size(), true, false);
     if (!file) {
         // Invalid sparse format
         return -EINVAL;
     }
-    return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(fd));
+    return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(handle));
 }
 
-int FlashBlockDevice(int fd, std::vector<char>& downloaded_data) {
-    lseek64(fd, 0, SEEK_SET);
+int FlashBlockDevice(PartitionHandle* handle, std::vector<char>& downloaded_data) {
+    lseek64(handle->fd(), 0, SEEK_SET);
     if (downloaded_data.size() >= sizeof(SPARSE_HEADER_MAGIC) &&
         *reinterpret_cast<uint32_t*>(downloaded_data.data()) == SPARSE_HEADER_MAGIC) {
-        return FlashSparseData(fd, downloaded_data);
+        return FlashSparseData(handle, downloaded_data);
     } else {
-        return FlashRawData(fd, downloaded_data);
+        return FlashRawData(handle, downloaded_data);
     }
 }
 
@@ -181,7 +189,7 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
     if (android::base::GetProperty("ro.system.build.type", "") != "user") {
         WipeOverlayfsForPartition(device, partition_name);
     }
-    int result = FlashBlockDevice(handle.fd(), data);
+    int result = FlashBlockDevice(&handle, data);
     sync();
     return result;
 }
