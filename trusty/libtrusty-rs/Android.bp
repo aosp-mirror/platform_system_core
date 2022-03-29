@@ -26,3 +26,12 @@ rust_library {
         "libnix",
     ],
 }
+
+rust_test {
+    name: "libtrusty-rs-tests",
+    crate_name: "trusty_test",
+    srcs: ["tests/test.rs"],
+    rustlibs: [
+        "libtrusty-rs",
+    ]
+}
