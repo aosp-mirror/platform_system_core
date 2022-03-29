@@ -37,8 +37,12 @@ class IProfileAttribute {
 
 class ProfileAttribute : public IProfileAttribute {
   public:
-    ProfileAttribute(const CgroupController& controller, const std::string& file_name)
-        : controller_(controller), file_name_(file_name) {}
+    // Cgroup attributes may have different names in the v1 and v2 hierarchies. If `file_v2_name` is
+    // not empty, `file_name` is the name for the v1 hierarchy and `file_v2_name` is the name for
+    // the v2 hierarchy. If `file_v2_name` is empty, `file_name` is used for both hierarchies.
+    ProfileAttribute(const CgroupController& controller, const std::string& file_name,
+                     const std::string& file_v2_name)
+        : controller_(controller), file_name_(file_name), file_v2_name_(file_v2_name) {}
     ~ProfileAttribute() = default;
 
     const CgroupController* controller() const override { return &controller_; }
@@ -50,6 +54,7 @@ class ProfileAttribute : public IProfileAttribute {
   private:
     CgroupController controller_;
     std::string file_name_;
+    std::string file_v2_name_;
 };
 
 // Abstract profile element
