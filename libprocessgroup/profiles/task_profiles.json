@@ -76,6 +76,24 @@
       "Name": "FreezerState",
       "Controller": "freezer",
       "File": "cgroup.freeze"
+    },
+    {
+      "Name": "BfqWeight",
+      "Controller": "io",
+      "File": "blkio.bfq.weight",
+      "FileV2": "io.bfq.weight"
+    },
+    {
+      "Name": "CfqGroupIdle",
+      "Controller": "io",
+      "File": "blkio.group_idle",
+      "FileV2": "io.group_idle"
+    },
+    {
+      "Name": "CfqWeight",
+      "Controller": "io",
+      "File": "blkio.weight",
+      "FileV2": "io.weight"
     }
   ],
 
@@ -440,11 +458,30 @@
       "Name": "LowIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "blkio",
-            "Path": "background"
+            "Name": "BfqWeight",
+            "Value": "10",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "200",
+            "Optional": "true"
           }
         }
       ]
@@ -453,11 +490,30 @@
       "Name": "NormalIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "blkio",
-            "Path": ""
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
           }
         }
       ]
@@ -466,11 +522,30 @@
       "Name": "HighIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "blkio",
-            "Path": ""
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
           }
         }
       ]
@@ -479,11 +554,30 @@
       "Name": "MaxIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
+          "Name": "SetAttribute",
           "Params":
           {
-            "Controller": "blkio",
-            "Path": ""
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
           }
         }
       ]
