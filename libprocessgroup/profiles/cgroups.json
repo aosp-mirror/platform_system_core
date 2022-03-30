@@ -1,13 +1,6 @@
 {
   "Cgroups": [
     {
-      "Controller": "blkio",
-      "Path": "/dev/blkio",
-      "Mode": "0775",
-      "UID": "system",
-      "GID": "system"
-    },
-    {
       "Controller": "cpu",
       "Path": "/dev/cpuctl",
       "Mode": "0755",
@@ -39,6 +32,11 @@
       {
         "Controller": "freezer",
         "Path": "."
+      },
+      {
+        "Controller": "io",
+        "Path": ".",
+        "NeedsActivation": true
       }
     ]
   }
