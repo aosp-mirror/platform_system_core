@@ -209,6 +209,37 @@ static inline void atrace_async_end(uint64_t tag, const char* name, int32_t cook
 }
 
 /**
+ * Trace the beginning of an asynchronous event. In addition to the name and a
+ * cookie as in ATRACE_ASYNC_BEGIN/ATRACE_ASYNC_END, a track name argument is
+ * provided, which is the name of the row where this async event should be
+ * recorded. The track name, name, and cookie used to begin an event must be
+ * used to end it.
+ */
+#define ATRACE_ASYNC_FOR_TRACK_BEGIN(track_name, name, cookie) \
+    atrace_async_for_track_begin(ATRACE_TAG, track_name, name, cookie)
+static inline void atrace_async_for_track_begin(uint64_t tag, const char* track_name,
+                                                const char* name, int32_t cookie) {
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        void atrace_async_for_track_begin_body(const char*, const char*, int32_t);
+        atrace_async_for_track_begin_body(track_name, name, cookie);
+    }
+}
+
+/**
+ * Trace the end of an asynchronous event.
+ * This should correspond to a previous ATRACE_ASYNC_FOR_TRACK_BEGIN.
+ */
+#define ATRACE_ASYNC_FOR_TRACK_END(track_name, name, cookie) \
+    atrace_async_for_track_end(ATRACE_TAG, track_name, name, cookie)
+static inline void atrace_async_for_track_end(uint64_t tag, const char* track_name,
+                                              const char* name, int32_t cookie) {
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        void atrace_async_for_track_end_body(const char*, const char*, int32_t);
+        atrace_async_for_track_end_body(track_name, name, cookie);
+    }
+}
+
+/**
  * Trace an instantaneous context. name is used to identify the context.
  *
  * An "instant" is an event with no defined duration. Visually is displayed like a single marker
@@ -227,17 +258,18 @@ static inline void atrace_instant(uint64_t tag, const char* name) {
 
 /**
  * Trace an instantaneous context. name is used to identify the context.
- * trackName is the name of the row where the event should be recorded.
+ * track_name is the name of the row where the event should be recorded.
  *
  * An "instant" is an event with no defined duration. Visually is displayed like a single marker
  * in the timeline (rather than a span, in the case of begin/end events).
  */
 #define ATRACE_INSTANT_FOR_TRACK(trackName, name) \
     atrace_instant_for_track(ATRACE_TAG, trackName, name)
-static inline void atrace_instant_for_track(uint64_t tag, const char* trackName, const char* name) {
+static inline void atrace_instant_for_track(uint64_t tag, const char* track_name,
+                                            const char* name) {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
         void atrace_instant_for_track_body(const char*, const char*);
-        atrace_instant_for_track_body(trackName, name);
+        atrace_instant_for_track_body(track_name, name);
     }
 }
 
