@@ -829,7 +829,7 @@ on post-fs-data
     mkdir /data/misc/odsign/metrics 0770 root system
 
     # Directory for VirtualizationService temporary image files.
-    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
+    mkdir /data/misc/virtualizationservice 0700 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
