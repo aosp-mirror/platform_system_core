@@ -491,10 +491,15 @@ void Service::RunService(const std::optional<MountNamespace>& override_mount_nam
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
+    char byte = 0;
+    if (read((*pipefd)[0], &byte, 1) < 0) {
         PLOG(ERROR) << "failed to read from notification channel";
     }
     pipefd.reset();
+    if (!byte) {
+        LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
+        _exit(EXIT_FAILURE);
+    }
 
     if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
         LOG(ERROR) << "failed to set task profiles";
@@ -647,9 +652,14 @@ Result<void> Service::Start() {
                       limit_percent_ != -1 || !limit_property_.empty();
     errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
     if (errno != 0) {
-        PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                    << ") failed for service '" << name_ << "'";
-    } else if (use_memcg) {
+        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
+            return ErrnoError() << "sending notification failed";
+        }
+        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                       << ") failed for service '" << name_ << "'";
+    }
+
+    if (use_memcg) {
         ConfigureMemcg();
     }
 
@@ -657,7 +667,7 @@ Result<void> Service::Start() {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (write((*pipefd)[1], "", 1) < 0) {
+    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
         return ErrnoError() << "sending notification failed";
     }
 
