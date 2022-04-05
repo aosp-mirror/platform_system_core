@@ -629,6 +629,18 @@ static bool sync_ls(SyncConnection& sc, const char* path,
         if (!ReadFdExactly(sc.fd, buf, len)) return false;
         buf[len] = 0;
 
+        // Address the unlikely scenario wherein a
+        // compromised device/service might be able to
+        // traverse across directories on the host. Let's
+        // shut that door!
+        if (strchr(buf, '/')
+#if defined(_WIN32)
+            || strchr(buf, '\\')
+#endif
+           ) {
+          return false;
+        }
+
         func(msg.dent.mode, msg.dent.size, msg.dent.time, buf);
     }
 }
