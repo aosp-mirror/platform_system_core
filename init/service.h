@@ -102,6 +102,7 @@ class Service {
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
+    static pid_t exec_service_pid() { return exec_service_pid_; }
     static std::chrono::time_point<std::chrono::steady_clock> exec_service_started() {
         return exec_service_started_;
     }
