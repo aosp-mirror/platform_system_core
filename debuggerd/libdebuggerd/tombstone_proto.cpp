@@ -35,6 +35,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 #include <async_safe/log.h>
@@ -419,18 +420,29 @@ static void dump_thread_backtrace(unwindstack::Unwinder* unwinder, Thread& threa
     return;
   }
 
-  if (unwinder->elf_from_memory_not_file()) {
+  unwinder->SetDisplayBuildID(true);
+  std::set<std::string> unreadable_elf_files;
+  for (const auto& frame : unwinder->frames()) {
+    BacktraceFrame* f = thread.add_current_backtrace();
+    fill_in_backtrace_frame(f, frame);
+    if (frame.map_info != nullptr && frame.map_info->ElfFileNotReadable()) {
+      unreadable_elf_files.emplace(frame.map_info->name());
+    }
+  }
+
+  if (!unreadable_elf_files.empty()) {
+    auto unreadable_elf_files_proto = thread.mutable_unreadable_elf_files();
     auto backtrace_note = thread.mutable_backtrace_note();
     *backtrace_note->Add() =
         "Function names and BuildId information is missing for some frames due";
     *backtrace_note->Add() = "to unreadable libraries. For unwinds of apps, only shared libraries";
     *backtrace_note->Add() = "found under the lib/ directory are readable.";
     *backtrace_note->Add() = "On this device, run setenforce 0 to make the libraries readable.";
-  }
-  unwinder->SetDisplayBuildID(true);
-  for (const auto& frame : unwinder->frames()) {
-    BacktraceFrame* f = thread.add_current_backtrace();
-    fill_in_backtrace_frame(f, frame);
+    *backtrace_note->Add() = "Unreadable libraries:";
+    for (auto& name : unreadable_elf_files) {
+      *backtrace_note->Add() = "  " + name;
+      *unreadable_elf_files_proto->Add() = name;
+    }
   }
 }
 
