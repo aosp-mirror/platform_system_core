@@ -1,0 +1,58 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_library_static {
+    name: "libtombstoned_client_wrapper",
+    srcs: [
+        "wrapper.cpp",
+    ],
+    generated_sources: [
+        "libtombstoned_client_rust_bridge_code"
+    ],
+    header_libs: [
+        "libbase_headers",
+        "libdebuggerd_common_headers",
+    ],
+    shared_libs: [
+        "libtombstoned_client",
+    ],
+}
+
+rust_defaults {
+    name: "libtombstoned_client_rust_defaults",
+    crate_name: "tombstoned_client",
+    srcs: ["src/lib.rs"],
+    edition: "2021",
+    rustlibs: [
+        "libcxx",
+        "libthiserror",
+    ],
+    static_libs: [
+        "libtombstoned_client_wrapper",
+    ],
+    shared_libs: [
+        "libtombstoned_client",
+    ],
+}
+
+rust_library {
+    name: "libtombstoned_client_rust",
+    defaults: ["libtombstoned_client_rust_defaults"],
+    apex_available: ["com.android.virt"],
+}
+
+rust_test {
+    name: "libtombstoned_client_rust_test",
+    defaults: ["libtombstoned_client_rust_defaults"],
+    require_root: true,
+    test_suites: ["device-tests"],
+}
+
+genrule {
+    name: "libtombstoned_client_rust_bridge_code",
+    tools: ["cxxbridge"],
+    cmd: "$(location cxxbridge) $(in) >> $(out)",
+    srcs: ["src/lib.rs"],
+    out: ["libtombstoned_client_cxx_generated.cc"],
+}
