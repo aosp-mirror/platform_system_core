@@ -113,10 +113,10 @@ static void Copy(const char* src, const char* dst) {
         LOG(INFO) << "hard linking " << src << " to " << dst << " succeeded";
         return;
     }
-    PLOG(FATAL) << "hard linking " << src << " to " << dst << " failed, falling back to copy.";
+    PLOG(FATAL) << "hard linking " << src << " to " << dst << " failed";
 }
 
-// Move e2fsck before switching root, so that it is available at the same path
+// Move snapuserd before switching root, so that it is available at the same path
 // after switching root.
 void PrepareSwitchRoot() {
     constexpr const char* src = "/system/bin/snapuserd";
