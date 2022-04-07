@@ -17,6 +17,7 @@ cc_library_static {
     shared_libs: [
         "libtombstoned_client",
     ],
+    apex_available: ["com.android.virt"],
 }
 
 rust_defaults {
