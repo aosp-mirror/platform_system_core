@@ -51,8 +51,8 @@
 //!
 //! chann.send("Hello, world!".as_bytes()).unwrap();
 //!
-//! let mut read_buf = [0u8; 1024];
-//! let read_len = stream.read(&mut read_buf[..]).unwrap();
+//! let mut read_buf = Vec::new();
+//! let read_len = stream.recv(&mut read_buf).unwrap();
 //!
 //! let response = std::str::from_utf8(&read_buf[..read_len]).unwrap();
 //! assert_eq!("Hello, world!", response);
@@ -63,8 +63,8 @@
 use crate::sys::tipc_connect;
 use std::ffi::CString;
 use std::fs::File;
-use std::io;
 use std::io::prelude::*;
+use std::io::{ErrorKind, Result};
 use std::os::unix::prelude::AsRawFd;
 use std::path::Path;
 
@@ -72,6 +72,12 @@ mod sys;
 
 /// The default filesystem path for the Trusty IPC device.
 pub const DEFAULT_DEVICE: &str = "/dev/trusty-ipc-dev0";
+
+/// The maximum size an incoming TIPC message can be.
+///
+/// This can be used to pre-allocate buffer space in order to ensure that your
+/// read buffer can always hold an incoming message.
+pub const MAX_MESSAGE_SIZE: usize = 4096;
 
 /// A channel for communicating with a Trusty service.
 ///
@@ -92,7 +98,7 @@ impl TipcChannel {
     /// bytes. This is handled with a panic because the service names are all
     /// hard-coded constants, and so such an error should always be indicative of a
     /// bug in the calling code.
-    pub fn connect(device: impl AsRef<Path>, service: &str) -> io::Result<Self> {
+    pub fn connect(device: impl AsRef<Path>, service: &str) -> Result<Self> {
         let file = File::options().read(true).write(true).open(device)?;
 
         let srv_name = CString::new(service).expect("Service name contained null bytes");
@@ -107,7 +113,7 @@ impl TipcChannel {
     ///
     /// The entire contents of `buf` will be sent as a single message to the
     /// connected service.
-    pub fn send(&mut self, buf: &[u8]) -> io::Result<()> {
+    pub fn send(&mut self, buf: &[u8]) -> Result<()> {
         let write_len = self.0.write(buf)?;
 
         // Verify that the expected number of bytes were written. The entire message
@@ -125,19 +131,91 @@ impl TipcChannel {
         Ok(())
     }
 
-    /// Receives a message from the connected service.
+    /// Reads the next incoming message.
     ///
-    /// Returns the number of bytes in the received message, or any error that
-    /// occurred when reading the message. Blocks until there is a message to
-    /// receive if none is already ready to read.
+    /// Attempts to read the next incoming message from the connected service if any
+    /// exist. If the initial capacity of `buf` is not enough to hold the incoming
+    /// message the function repeatedly attempts to reserve additional space until
+    /// it is able to fully read the message.
+    ///
+    /// Blocks until there is an incoming message if there is not already a message
+    /// ready to be received.
     ///
     /// # Errors
     ///
-    /// Returns an error with native error code 90 (`EMSGSIZE`) if `buf` isn't large
+    /// If this function encounters an error of the kind [`ErrorKind::Interrupted`]
+    /// then the error is ignored and the operation will be tried again.
+    ///
+    /// If this function encounters an error with the error code `EMSGSIZE` then
+    /// additional space will be reserved in `buf` and the operation will be tried
+    /// again.
+    ///
+    /// If any other read error is encountered then this function immediately
+    /// returns the error to the caller, and the length of `buf` is set to 0.
+    pub fn recv(&mut self, buf: &mut Vec<u8>) -> Result<()> {
+        // If no space has been allocated in the buffer reserve enough space to hold any
+        // incoming message.
+        if buf.capacity() == 0 {
+            buf.reserve(MAX_MESSAGE_SIZE);
+        }
+
+        loop {
+            // Resize the vec to make its full capacity available to write into.
+            buf.resize(buf.capacity(), 0);
+
+            match self.0.read(buf.as_mut_slice()) {
+                Ok(len) => {
+                    buf.truncate(len);
+                    return Ok(());
+                }
+
+                Err(err) => {
+                    if let Some(libc::EMSGSIZE) = err.raw_os_error() {
+                        // Ensure that we didn't get `EMSGSIZE` when we already had enough capacity
+                        // to contain the maximum message size. This should never happen, but if it
+                        // does we don't want to hang by looping infinitely.
+                        assert!(
+                            buf.capacity() < MAX_MESSAGE_SIZE,
+                            "Received `EMSGSIZE` error when buffer capacity was already at maximum",
+                        );
+
+                        // If we didn't have enough space to hold the incoming message, reserve
+                        // enough space to fit the maximum message size regardless of how much
+                        // capacity the buffer already had.
+                        buf.reserve(MAX_MESSAGE_SIZE - buf.capacity());
+                    } else if err.kind() == ErrorKind::Interrupted {
+                        // If we get an interrupted error the operation can be retried as-is, i.e.
+                        // we don't need to allocate additional space.
+                        continue;
+                    } else {
+                        buf.truncate(0);
+                        return Err(err);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reads the next incoming message without allocating.
+    ///
+    /// Returns the number of bytes in the received message, or any error that
+    /// occurred when reading the message.
+    ///
+    /// Blocks until there is an incoming message if there is not already a message
+    /// ready to be received.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error with native error code `EMSGSIZE` if `buf` isn't large
     /// enough to contain the incoming message. Use
     /// [`raw_os_error`][std::io::Error::raw_os_error] to check the error code to
-    /// determine if you need to increase the size of `buf`.
-    pub fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    /// determine if you need to increase the size of `buf`. If error code
+    /// `EMSGSIZE` is returned the incoming message will not be dropped, and a
+    /// subsequent call to `recv_no_alloc` can still read it.
+    ///
+    /// An error of the [`ErrorKind::Interrupted`] kind is non-fatal and the read
+    /// operation should be retried if there is nothing else to do.
+    pub fn recv_no_alloc(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.0.read(buf)
     }
 
