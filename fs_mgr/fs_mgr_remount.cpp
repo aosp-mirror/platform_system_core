@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <getopt.h>
+#include <libavb_user/libavb_user.h>
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/types.h>
@@ -39,8 +40,6 @@
 #include <fs_mgr_overlayfs.h>
 #include <fs_mgr_priv.h>
 #include <fstab/fstab.h>
-#include <libavb_user/libavb_user.h>
-#include <libgsi/libgsid.h>
 
 namespace {
 
@@ -53,9 +52,7 @@ namespace {
                  "\tpartition\tspecific partition(s) (empty does all)\n"
                  "\n"
                  "Remount specified partition(s) read-write, by name or mount point.\n"
-                 "-R notwithstanding, verity must be disabled on partition(s).\n"
-                 "-R within a DSU guest system reboots into the DSU instead of the host system,\n"
-                 "this command would enable DSU (one-shot) if not already enabled.";
+                 "-R notwithstanding, verity must be disabled on partition(s).";
 
     ::exit(exit_status);
 }
@@ -126,26 +123,23 @@ static android::sp<android::os::IVold> GetVold() {
 
 using namespace std::chrono_literals;
 
-enum RemountStatus {
-    REMOUNT_SUCCESS = 0,
-    NOT_USERDEBUG,
-    BADARG,
-    NOT_ROOT,
-    NO_FSTAB,
-    UNKNOWN_PARTITION,
-    INVALID_PARTITION,
-    VERITY_PARTITION,
-    BAD_OVERLAY,
-    NO_MOUNTS,
-    REMOUNT_FAILED,
-    MUST_REBOOT,
-    BINDER_ERROR,
-    CHECKPOINTING,
-    GSID_ERROR,
-};
-
 static int do_remount(int argc, char* argv[]) {
-    RemountStatus retval = REMOUNT_SUCCESS;
+    enum {
+        SUCCESS = 0,
+        NOT_USERDEBUG,
+        BADARG,
+        NOT_ROOT,
+        NO_FSTAB,
+        UNKNOWN_PARTITION,
+        INVALID_PARTITION,
+        VERITY_PARTITION,
+        BAD_OVERLAY,
+        NO_MOUNTS,
+        REMOUNT_FAILED,
+        MUST_REBOOT,
+        BINDER_ERROR,
+        CHECKPOINTING
+    } retval = SUCCESS;
 
     // If somehow this executable is delivered on a "user" build, it can
     // not function, so providing a clear message to the caller rather than
@@ -344,45 +338,11 @@ static int do_remount(int argc, char* argv[]) {
         ++it;
     }
 
-    // If (1) remount requires a reboot to take effect, (2) system is currently
-    // running a DSU guest and (3) DSU is disabled, then enable DSU so that the
-    // next reboot would not take us back to the host system but stay within
-    // the guest system.
-    if (reboot_later) {
-        if (auto gsid = android::gsi::GetGsiService()) {
-            auto dsu_running = false;
-            if (auto status = gsid->isGsiRunning(&dsu_running); !status.isOk()) {
-                LOG(ERROR) << "Failed to get DSU running state: " << status;
-                return BINDER_ERROR;
-            }
-            auto dsu_enabled = false;
-            if (auto status = gsid->isGsiEnabled(&dsu_enabled); !status.isOk()) {
-                LOG(ERROR) << "Failed to get DSU enabled state: " << status;
-                return BINDER_ERROR;
-            }
-            if (dsu_running && !dsu_enabled) {
-                std::string dsu_slot;
-                if (auto status = gsid->getActiveDsuSlot(&dsu_slot); !status.isOk()) {
-                    LOG(ERROR) << "Failed to get active DSU slot: " << status;
-                    return BINDER_ERROR;
-                }
-                LOG(INFO) << "DSU is running but disabled, enable DSU so that we stay within the "
-                             "DSU guest system after reboot";
-                int error = 0;
-                if (auto status = gsid->enableGsi(/* oneShot = */ true, dsu_slot, &error);
-                    !status.isOk() || error != android::gsi::IGsiService::INSTALL_OK) {
-                    LOG(ERROR) << "Failed to enable DSU: " << status << ", error code: " << error;
-                    return !status.isOk() ? BINDER_ERROR : GSID_ERROR;
-                }
-                LOG(INFO) << "Successfully enabled DSU (one-shot mode)";
-            }
-        }
-    }
-
     if (partitions.empty() || just_disabled_verity) {
         if (reboot_later) reboot(setup_overlayfs);
         if (user_please_reboot_later) {
-            return MUST_REBOOT;
+            LOG(INFO) << "Now reboot your device for settings to take effect";
+            return 0;
         }
         LOG(WARNING) << "No partitions to remount";
         return retval;
@@ -411,25 +371,18 @@ static int do_remount(int argc, char* argv[]) {
         auto blk_device = entry.blk_device;
         auto mount_point = entry.mount_point;
 
-        auto found = false;
         for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
             auto& rentry = *it;
             if (mount_point == rentry.mount_point) {
                 blk_device = rentry.blk_device;
-                found = true;
                 break;
             }
             // Find overlayfs mount point?
             if ((mount_point == "/") && (rentry.mount_point == "/system")) {
                 blk_device = rentry.blk_device;
                 mount_point = "/system";
-                found = true;
                 break;
             }
-        }
-        if (!found) {
-            PLOG(INFO) << "skip unmounted partition dev:" << blk_device << " mnt:" << mount_point;
-            continue;
         }
         if (blk_device == "/dev/root") {
             auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
@@ -478,12 +431,6 @@ static int do_remount(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     android::base::InitLogging(argv, MyLogger);
     int result = do_remount(argc, argv);
-    if (result == MUST_REBOOT) {
-        LOG(INFO) << "Now reboot your device for settings to take effect";
-    } else if (result == REMOUNT_SUCCESS) {
-        printf("remount succeeded\n");
-    } else {
-        printf("remount failed\n");
-    }
+    printf("remount %s\n", result ? "failed" : "succeeded");
     return result;
 }

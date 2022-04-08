@@ -21,12 +21,9 @@
 #include <utils/TypeHelpers.h>
 
 /*
- * A class to provide efficient manipulation of bitsets.
+ * Contains some bit manipulation helpers.
  *
- * Consider using std::bitset<32> or std::bitset<64> if all you want is a class to do basic bit
- * manipulation (i.e. AND / OR / XOR / flip / etc). These classes are only needed if you want to
- * efficiently perform operations like finding the first set bit in a bitset and you want to
- * avoid using the built-in functions (e.g. __builtin_clz) on std::bitset::to_ulong.
+ * DO NOT USE: std::bitset<32> or std::bitset<64> preferred
  */
 
 namespace android {
@@ -49,9 +46,7 @@ struct BitSet32 {
     // Returns the number of marked bits in the set.
     inline uint32_t count() const { return count(value); }
 
-    static inline uint32_t count(uint32_t value) {
-        return static_cast<uint32_t>(__builtin_popcountl(value));
-    }
+    static inline uint32_t count(uint32_t value) { return __builtin_popcountl(value); }
 
     // Returns true if the bit set does not contain any marked bits.
     inline bool isEmpty() const { return isEmpty(value); }
@@ -133,7 +128,7 @@ struct BitSet32 {
     }
 
     static inline uint32_t getIndexOfBit(uint32_t value, uint32_t n) {
-        return static_cast<uint32_t>(__builtin_popcountl(value & ~(0xffffffffUL >> n)));
+        return __builtin_popcountl(value & ~(0xffffffffUL >> n));
     }
 
     inline bool operator== (const BitSet32& other) const { return value == other.value; }
@@ -158,17 +153,17 @@ private:
     // input, which is only guaranteed to be 16b, not 32. The compiler should optimize this away.
     static inline uint32_t clz_checked(uint32_t value) {
         if (sizeof(unsigned int) == sizeof(uint32_t)) {
-            return static_cast<uint32_t>(__builtin_clz(value));
+            return __builtin_clz(value);
         } else {
-            return static_cast<uint32_t>(__builtin_clzl(value));
+            return __builtin_clzl(value);
         }
     }
 
     static inline uint32_t ctz_checked(uint32_t value) {
         if (sizeof(unsigned int) == sizeof(uint32_t)) {
-            return static_cast<uint32_t>(__builtin_ctz(value));
+            return __builtin_ctz(value);
         } else {
-            return static_cast<uint32_t>(__builtin_ctzl(value));
+            return __builtin_ctzl(value);
         }
     }
 };
@@ -193,9 +188,7 @@ struct BitSet64 {
     // Returns the number of marked bits in the set.
     inline uint32_t count() const { return count(value); }
 
-    static inline uint32_t count(uint64_t value) {
-        return static_cast<uint32_t>(__builtin_popcountll(value));
-    }
+    static inline uint32_t count(uint64_t value) { return __builtin_popcountll(value); }
 
     // Returns true if the bit set does not contain any marked bits.
     inline bool isEmpty() const { return isEmpty(value); }
@@ -226,32 +219,26 @@ struct BitSet64 {
     // Result is undefined if all bits are unmarked.
     inline uint32_t firstMarkedBit() const { return firstMarkedBit(value); }
 
-    static inline uint32_t firstMarkedBit(uint64_t value) {
-        return static_cast<uint32_t>(__builtin_clzll(value));
-    }
+    static inline uint32_t firstMarkedBit(uint64_t value) { return __builtin_clzll(value); }
 
     // Finds the first unmarked bit in the set.
     // Result is undefined if all bits are marked.
     inline uint32_t firstUnmarkedBit() const { return firstUnmarkedBit(value); }
 
-    static inline uint32_t firstUnmarkedBit(uint64_t value) {
-        return static_cast<uint32_t>(__builtin_clzll(~value));
-    }
+    static inline uint32_t firstUnmarkedBit(uint64_t value) { return __builtin_clzll(~ value); }
 
     // Finds the last marked bit in the set.
     // Result is undefined if all bits are unmarked.
     inline uint32_t lastMarkedBit() const { return lastMarkedBit(value); }
 
-    static inline uint32_t lastMarkedBit(uint64_t value) {
-        return static_cast<uint32_t>(63 - __builtin_ctzll(value));
-    }
+    static inline uint32_t lastMarkedBit(uint64_t value) { return 63 - __builtin_ctzll(value); }
 
     // Finds the first marked bit in the set and clears it.  Returns the bit index.
     // Result is undefined if all bits are unmarked.
     inline uint32_t clearFirstMarkedBit() { return clearFirstMarkedBit(value); }
 
     static inline uint32_t clearFirstMarkedBit(uint64_t& value) {
-        uint32_t n = firstMarkedBit(value);
+        uint64_t n = firstMarkedBit(value);
         clearBit(value, n);
         return n;
     }
@@ -261,7 +248,7 @@ struct BitSet64 {
     inline uint32_t markFirstUnmarkedBit() { return markFirstUnmarkedBit(value); }
 
     static inline uint32_t markFirstUnmarkedBit(uint64_t& value) {
-        uint32_t n = firstUnmarkedBit(value);
+        uint64_t n = firstUnmarkedBit(value);
         markBit(value, n);
         return n;
     }
@@ -271,7 +258,7 @@ struct BitSet64 {
     inline uint32_t clearLastMarkedBit() { return clearLastMarkedBit(value); }
 
     static inline uint32_t clearLastMarkedBit(uint64_t& value) {
-        uint32_t n = lastMarkedBit(value);
+        uint64_t n = lastMarkedBit(value);
         clearBit(value, n);
         return n;
     }
@@ -281,7 +268,7 @@ struct BitSet64 {
     inline uint32_t getIndexOfBit(uint32_t n) const { return getIndexOfBit(value, n); }
 
     static inline uint32_t getIndexOfBit(uint64_t value, uint32_t n) {
-        return static_cast<uint32_t>(__builtin_popcountll(value & ~(0xffffffffffffffffULL >> n)));
+        return __builtin_popcountll(value & ~(0xffffffffffffffffULL >> n));
     }
 
     inline bool operator== (const BitSet64& other) const { return value == other.value; }

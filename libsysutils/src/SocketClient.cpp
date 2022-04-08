@@ -201,31 +201,50 @@ int SocketClient::sendDataLockedv(struct iovec *iov, int iovcnt) {
         return 0;
     }
 
+    int ret = 0;
+    int e = 0; // SLOGW and sigaction are not inert regarding errno
     int current = 0;
 
+    struct sigaction new_action, old_action;
+    memset(&new_action, 0, sizeof(new_action));
+    new_action.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &new_action, &old_action);
+
     for (;;) {
-        ssize_t rc = TEMP_FAILURE_RETRY(writev(mSocket, iov + current, iovcnt - current));
+        ssize_t rc = TEMP_FAILURE_RETRY(
+            writev(mSocket, iov + current, iovcnt - current));
+
+        if (rc > 0) {
+            size_t written = rc;
+            while ((current < iovcnt) && (written >= iov[current].iov_len)) {
+                written -= iov[current].iov_len;
+                current++;
+            }
+            if (current == iovcnt) {
+                break;
+            }
+            iov[current].iov_base = (char *)iov[current].iov_base + written;
+            iov[current].iov_len -= written;
+            continue;
+        }
 
         if (rc == 0) {
-            errno = EIO;
+            e = EIO;
             SLOGW("0 length write :(");
-            return -1;
-        } else if (rc < 0) {
-            SLOGW("write error (%s)", strerror(errno));
-            return -1;
+        } else {
+            e = errno;
+            SLOGW("write error (%s)", strerror(e));
         }
-
-        size_t written = rc;
-        while (current < iovcnt && written >= iov[current].iov_len) {
-            written -= iov[current].iov_len;
-            current++;
-        }
-        if (current == iovcnt) {
-            return 0;
-        }
-        iov[current].iov_base = (char*)iov[current].iov_base + written;
-        iov[current].iov_len -= written;
+        ret = -1;
+        break;
     }
+
+    sigaction(SIGPIPE, &old_action, &new_action);
+
+    if (e != 0) {
+        errno = e;
+    }
+    return ret;
 }
 
 void SocketClient::incRef() {

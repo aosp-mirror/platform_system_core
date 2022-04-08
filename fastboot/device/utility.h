@@ -75,11 +75,7 @@ std::string GetSuperSlotSuffix(FastbootDevice* device, const std::string& partit
 std::optional<std::string> FindPhysicalPartition(const std::string& name);
 bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
                             bool* is_zero_length = nullptr);
-
-// If read, partition is readonly. Else it is write only.
-bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
-                   bool read = false);
-
+bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle);
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);
 bool GetDeviceLockStatus();

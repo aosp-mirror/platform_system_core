@@ -17,7 +17,6 @@
 #include <functional>
 
 #include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <gtest/gtest.h>
 
@@ -269,17 +268,6 @@ service A something
     ASSERT_EQ(1u, parser.parse_error_count());
 }
 
-class TestCaseLogger : public ::testing::EmptyTestEventListener {
-    void OnTestStart(const ::testing::TestInfo& test_info) override {
-#ifdef __ANDROID__
-        LOG(INFO) << "===== " << test_info.test_suite_name() << "::" << test_info.name() << " ("
-                  << test_info.file() << ":" << test_info.line() << ")";
-#else
-        UNUSED(test_info);
-#endif
-    }
-};
-
 }  // namespace init
 }  // namespace android
 
@@ -296,6 +284,5 @@ int main(int argc, char** argv) {
     }
 
     testing::InitGoogleTest(&argc, argv);
-    testing::UnitTest::GetInstance()->listeners().Append(new android::init::TestCaseLogger());
     return RUN_ALL_TESTS();
 }

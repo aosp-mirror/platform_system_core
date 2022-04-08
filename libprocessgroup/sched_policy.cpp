@@ -124,8 +124,6 @@ int set_sched_policy(int tid, SchedPolicy policy) {
             return SetTaskProfiles(tid, {"SCHED_SP_FOREGROUND"}, true) ? 0 : -1;
         case SP_TOP_APP:
             return SetTaskProfiles(tid, {"SCHED_SP_TOP_APP"}, true) ? 0 : -1;
-        case SP_SYSTEM:
-            return SetTaskProfiles(tid, {"SCHED_SP_SYSTEM"}, true) ? 0 : -1;
         case SP_RT_APP:
             return SetTaskProfiles(tid, {"SCHED_SP_RT_APP"}, true) ? 0 : -1;
         default:
@@ -159,9 +157,10 @@ static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
 
     if (!controller.IsUsable()) return -1;
 
-    if (!controller.GetTaskGroup(tid, &subgroup))
+    if (!controller.GetTaskGroup(tid, &subgroup)) {
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return -1;
-
+    }
     return 0;
 }
 
@@ -173,16 +172,11 @@ int get_sched_policy(int tid, SchedPolicy* policy) {
     std::string group;
     if (schedboost_enabled()) {
         if ((getCGroupSubsys(tid, "schedtune", group) < 0) &&
-            (getCGroupSubsys(tid, "cpu", group) < 0)) {
-                LOG(ERROR) << "Failed to find cpu cgroup for tid " << tid;
-                return -1;
-        }
+            (getCGroupSubsys(tid, "cpu", group) < 0))
+		return -1;
     }
     if (group.empty() && cpusets_enabled()) {
-        if (getCGroupSubsys(tid, "cpuset", group) < 0) {
-            LOG(ERROR) << "Failed to find cpuset cgroup for tid " << tid;
-            return -1;
-        }
+        if (getCGroupSubsys(tid, "cpuset", group) < 0) return -1;
     }
 
     // TODO: replace hardcoded directories
@@ -264,7 +258,7 @@ const char* get_sched_policy_profile_name(SchedPolicy policy) {
      */
     static constexpr const char* kSchedProfiles[SP_CNT + 1] = {
             "SCHED_SP_DEFAULT", "SCHED_SP_BACKGROUND", "SCHED_SP_FOREGROUND",
-            "SCHED_SP_SYSTEM",  "SCHED_SP_FOREGROUND", "SCHED_SP_FOREGROUND",
+            "SCHED_SP_DEFAULT", "SCHED_SP_FOREGROUND", "SCHED_SP_FOREGROUND",
             "SCHED_SP_TOP_APP", "SCHED_SP_RT_APP",     "SCHED_SP_DEFAULT"};
     if (policy < SP_DEFAULT || policy >= SP_CNT) {
         return nullptr;

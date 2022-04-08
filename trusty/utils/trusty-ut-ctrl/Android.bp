@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
-cc_binary {
+cc_test {
     name: "trusty-ut-ctrl",
     vendor: true,
 
@@ -28,6 +24,7 @@ cc_binary {
     static_libs: [
         "libtrusty",
     ],
+    gtest: false,
     cflags: [
         "-Wall",
         "-Werror",

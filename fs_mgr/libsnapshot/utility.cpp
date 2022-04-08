@@ -22,7 +22,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
 
@@ -92,7 +91,7 @@ AutoDeleteSnapshot::~AutoDeleteSnapshot() {
     }
 }
 
-Return InitializeKernelCow(const std::string& device) {
+Return InitializeCow(const std::string& device) {
     // When the kernel creates a persistent dm-snapshot, it requires a CoW file
     // to store the modifications. The kernel interface does not specify how
     // the CoW is used, and there is no standard associated.
@@ -181,18 +180,6 @@ void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uin
     auto* new_extent = extents->Add();
     new_extent->set_start_block(start_block);
     new_extent->set_num_blocks(num_blocks);
-}
-
-bool IsCompressionEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
-}
-
-std::string GetOtherPartitionName(const std::string& name) {
-    auto suffix = android::fs_mgr::GetPartitionSlotSuffix(name);
-    CHECK(suffix == "_a" || suffix == "_b");
-
-    auto other_suffix = (suffix == "_a") ? "_b" : "_a";
-    return name.substr(0, name.size() - suffix.size()) + other_suffix;
 }
 
 }  // namespace snapshot

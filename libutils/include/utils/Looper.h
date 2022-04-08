@@ -26,8 +26,6 @@
 
 #include <android-base/unique_fd.h>
 
-#include <utility>
-
 namespace android {
 
 /*
@@ -440,8 +438,9 @@ private:
     struct MessageEnvelope {
         MessageEnvelope() : uptime(0) { }
 
-        MessageEnvelope(nsecs_t u, sp<MessageHandler> h, const Message& m)
-            : uptime(u), handler(std::move(h)), message(m) {}
+        MessageEnvelope(nsecs_t u, const sp<MessageHandler> h,
+                const Message& m) : uptime(u), handler(h), message(m) {
+        }
 
         nsecs_t uptime;
         sp<MessageHandler> handler;

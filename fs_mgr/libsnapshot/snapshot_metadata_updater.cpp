@@ -39,8 +39,6 @@ namespace snapshot {
 SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint32_t target_slot,
                                                  const DeltaArchiveManifest& manifest)
     : builder_(builder), target_suffix_(SlotSuffixForSlotNumber(target_slot)) {
-    partial_update_ = manifest.partial_update();
-
     if (!manifest.has_dynamic_partition_metadata()) {
         return;
     }
@@ -64,7 +62,6 @@ SnapshotMetadataUpdater::SnapshotMetadataUpdater(MetadataBuilder* builder, uint3
                                                std::string(it->second) + target_suffix_, &p});
         }
     }
-
 }
 
 bool SnapshotMetadataUpdater::ShrinkPartitions() const {
@@ -85,18 +82,6 @@ bool SnapshotMetadataUpdater::ShrinkPartitions() const {
 }
 
 bool SnapshotMetadataUpdater::DeletePartitions() const {
-    // For partial update, not all dynamic partitions are included in the payload.
-    // TODO(xunchang) delete the untouched partitions whose group is in the payload.
-    // e.g. Delete vendor in the following scenario
-    // On device:
-    //   Group A: system, vendor
-    // In payload:
-    //   Group A: system
-    if (partial_update_) {
-        LOG(INFO) << "Skip deleting partitions for partial update";
-        return true;
-    }
-
     std::vector<std::string> partitions_to_delete;
     // Don't delete partitions in groups where the group name doesn't have target_suffix,
     // e.g. default.
@@ -154,11 +139,6 @@ bool SnapshotMetadataUpdater::ShrinkGroups() const {
 }
 
 bool SnapshotMetadataUpdater::DeleteGroups() const {
-    if (partial_update_) {
-        LOG(INFO) << "Skip deleting groups for partial update";
-        return true;
-    }
-
     std::vector<std::string> existing_groups = builder_->ListGroups();
     for (const auto& existing_group_name : existing_groups) {
         // Don't delete groups without target suffix, e.g. default.
@@ -174,9 +154,9 @@ bool SnapshotMetadataUpdater::DeleteGroups() const {
         if (iter != groups_.end()) {
             continue;
         }
-        // Update package metadata doesn't have this group. Before deleting it, check that it
-        // doesn't have any partitions left. Update metadata shouldn't assign any partitions to
-        // this group, so all partitions that originally belong to this group should be moved by
+        // Update package metadata doesn't have this group. Before deleting it, sanity check that it
+        // doesn't have any partitions left. Update metadata shouldn't assign any partitions to this
+        // group, so all partitions that originally belong to this group should be moved by
         // MovePartitionsToDefault at this point.
         auto existing_partitions_in_group = builder_->ListPartitionsInGroup(existing_group_name);
         if (!existing_partitions_in_group.empty()) {

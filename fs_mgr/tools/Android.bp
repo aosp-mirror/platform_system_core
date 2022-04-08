@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_binary {
     name: "dmctl",
     srcs: ["dmctl.cpp"],
@@ -25,18 +21,6 @@ cc_binary {
     static_libs: [
         "libfs_mgr",
     ],
-
-    shared_libs: [
-        "libbase",
-        "liblog",
-    ],
-
-    cflags: ["-Werror"],
-}
-
-cc_binary {
-    name: "dmuserd",
-    srcs: ["dmuserd.cpp"],
 
     shared_libs: [
         "libbase",

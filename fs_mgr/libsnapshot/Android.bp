@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_defaults {
     name: "libsnapshot_defaults",
     defaults: ["fs_mgr_defaults"],
@@ -28,30 +24,21 @@ cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libchrome",
         "libcutils",
         "liblog",
     ],
     static_libs: [
-        "libbrotli",
         "libdm",
         "libfstab",
         "update_metadata-protos",
     ],
     whole_static_libs: [
-        "libbrotli",
-        "libcutils",
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
-        "libsnapshot_cow",
-        "libsnapshot_snapuserd",
-        "libz",
     ],
     header_libs: [
         "libfiemap_headers",
-        "libstorage_literals_headers",
-        "libupdate_engine_headers",
     ],
     export_static_lib_headers: [
         "update_metadata-protos",
@@ -84,11 +71,8 @@ filegroup {
         "android/snapshot/snapshot.proto",
         "device_info.cpp",
         "snapshot.cpp",
-        "snapshot_reader.cpp",
         "snapshot_stats.cpp",
-        "snapshot_stub.cpp",
         "snapshot_metadata_updater.cpp",
-        "snapshot_writer.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
@@ -115,13 +99,9 @@ cc_library_static {
 
 cc_library_static {
     name: "libsnapshot_init",
-    native_coverage : true,
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    cflags: [
-        "-DLIBSNAPSHOT_NO_COW_WRITE",
-    ],
     static_libs: [
         "libfs_mgr",
     ],
@@ -135,82 +115,9 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     recovery_available: true,
-    cflags: [
-        "-DLIBSNAPSHOT_NO_COW_WRITE",
-    ],
     static_libs: [
         "libfs_mgr",
     ],
-}
-
-cc_defaults {
-    name: "libsnapshot_cow_defaults",
-    defaults: [
-        "fs_mgr_defaults",
-    ],
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    export_include_dirs: ["include"],
-    srcs: [
-        "cow_decompress.cpp",
-        "cow_reader.cpp",
-        "cow_writer.cpp",
-        "cow_format.cpp",
-    ],
-}
-
-cc_library_static {
-    name: "libsnapshot_cow",
-    defaults: [
-        "libsnapshot_cow_defaults",
-    ],
-    host_supported: true,
-    recovery_available: true,
-    shared_libs: [
-        "libbase",
-        "liblog",
-    ],
-    static_libs: [
-        "libbrotli",
-        "libz",
-    ],
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
-}
-
-cc_defaults {
-    name: "libsnapshot_snapuserd_defaults",
-    defaults: [
-        "fs_mgr_defaults",
-    ],
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    export_include_dirs: ["include"],
-    srcs: [
-        "snapuserd_client.cpp",
-    ],
-}
-
-cc_library_static {
-    name: "libsnapshot_snapuserd",
-    defaults: [
-        "libsnapshot_snapuserd_defaults",
-    ],
-    recovery_available: true,
-    static_libs: [
-        "libcutils_sockets",
-    ],
-    shared_libs: [
-        "libbase",
-        "liblog",
-    ],
-    ramdisk_available: true,
 }
 
 cc_library_static {
@@ -249,9 +156,7 @@ cc_defaults {
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
-        "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
-        "snapshot_writer_test.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -264,14 +169,11 @@ cc_defaults {
     static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
-        "libbrotli",
-        "libc++fs",
-        "libfs_mgr_binder",
+        "libfs_mgr",
         "libgsi",
         "libgmock",
         "liblp",
         "libsnapshot",
-        "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libsparse",
     ],
@@ -292,19 +194,20 @@ cc_test {
     defaults: ["libsnapshot_test_defaults"],
 }
 
+// For VTS 10
+vts_config {
+    name: "VtsLibsnapshotTest",
+    test_config: "VtsLibsnapshotTest.xml"
+}
+
 cc_binary {
     name: "snapshotctl",
     srcs: [
         "snapshotctl.cpp",
     ],
     static_libs: [
-        "libbrotli",
-        "libc++fs",
         "libfstab",
         "libsnapshot",
-        "libsnapshot_cow",
-        "libz",
-        "update_metadata-protos",
     ],
     shared_libs: [
         "android.hardware.boot@1.0",
@@ -320,299 +223,5 @@ cc_binary {
         "libprotobuf-cpp-lite",
         "libstatslog",
         "libutils",
-    ],
-}
-
-cc_test {
-    name: "snapshot_power_test",
-    srcs: [
-        "power_test.cpp",
-    ],
-    static_libs: [
-        "libc++fs",
-        "libsnapshot",
-        "update_metadata-protos",
-    ],
-    shared_libs: [
-        "libbase",
-        "libfs_mgr_binder",
-        "liblog",
-    ],
-    gtest: false,
-}
-
-cc_defaults {
-    name: "libsnapshot_fuzzer_defaults",
-    native_coverage : true,
-    srcs: [
-        // Compile the protobuf definition again with type full.
-        "android/snapshot/snapshot_fuzz.proto",
-        "update_engine/update_metadata.proto",
-        "fuzz_utils.cpp",
-        "snapshot_fuzz.cpp",
-        "snapshot_fuzz_utils.cpp",
-
-        // Compile libsnapshot sources directly to avoid dependency
-        // to update_metadata-protos
-        ":libsnapshot_sources",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libc++fs",
-        "libchrome",
-        "libcrypto_static",
-        "libcutils",
-        "libext2_uuid",
-        "libext4_utils",
-        "libfstab",
-        "libfs_mgr",
-        "libgtest", // from libsnapshot_test_helpers
-        "libgmock", // from libsnapshot_test_helpers
-        "liblog",
-        "liblp",
-        "libsnapshot_cow",
-        "libsnapshot_test_helpers",
-        "libprotobuf-mutator",
-        "libz",
-    ],
-    header_libs: [
-        "libfiemap_headers",
-        "libstorage_literals_headers",
-        "libupdate_engine_headers",
-    ],
-    proto: {
-        type: "full",
-        canonical_path_from_root: false,
-        local_include_dirs: ["."],
-    },
-}
-
-cc_fuzz {
-    name: "libsnapshot_fuzzer",
-    defaults: ["libsnapshot_fuzzer_defaults"],
-    corpus: ["corpus/*"],
-    fuzz_config: {
-        cc: ["android-virtual-ab+bugs@google.com"],
-        componentid: 30545,
-        hotlists: ["1646452"],
-        fuzz_on_haiku_host: false,
-        fuzz_on_haiku_device: true,
-    },
-}
-
-cc_test {
-    name: "libsnapshot_fuzzer_test",
-    defaults: ["libsnapshot_fuzzer_defaults"],
-    data: ["corpus/*"],
-    test_suites: [
-        "device-tests",
-    ],
-    auto_gen_config: true,
-    require_root: true,
-}
-
-cc_defaults {
-    name: "snapuserd_defaults",
-    defaults: [
-        "fs_mgr_defaults",
-    ],
-    srcs: [
-        "snapuserd_server.cpp",
-        "snapuserd.cpp",
-        "snapuserd_daemon.cpp",
-        "snapuserd_worker.cpp",
-        "snapuserd_readahead.cpp",
-    ],
-
-    cflags: [
-        "-Wall",
-        "-Werror"
-    ],
-
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libcutils_sockets",
-        "libdm",
-        "libgflags",
-        "liblog",
-        "libsnapshot_cow",
-        "libz",
-    ],
-}
-
-cc_binary {
-    name: "snapuserd",
-    defaults: ["snapuserd_defaults"],
-    init_rc: [
-        "snapuserd.rc",
-    ],
-    static_executable: true,
-    system_shared_libs: [],
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
-    recovery_available: true,
-}
-
-cc_test {
-    name: "cow_api_test",
-    defaults: [
-        "fs_mgr_defaults",
-    ],
-    srcs: [
-        "cow_api_test.cpp",
-    ],
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    shared_libs: [
-        "libbase",
-        "libcrypto",
-        "liblog",
-        "libz",
-    ],
-    static_libs: [
-        "libbrotli",
-        "libgtest",
-        "libsnapshot_cow",
-    ],
-    test_suites: [
-        "device-tests"
-    ],
-    test_min_api_level: 30,
-    auto_gen_config: true,
-    require_root: false,
-    host_supported: true,
-}
-
-cc_binary {
-    name: "make_cow_from_ab_ota",
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbspatch",
-        "libbrotli",
-        "libbz",
-        "libchrome",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libprotobuf-cpp-lite",
-        "libpuffpatch",
-        "libsnapshot_cow",
-        "libsparse",
-        "libxz",
-        "libz",
-        "libziparchive",
-        "update_metadata-protos",
-    ],
-    srcs: [
-        "make_cow_from_ab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
-}
-
-cc_binary {
-    name: "estimate_cow_from_nonab_ota",
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libbz",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libsnapshot_cow",
-        "libsparse",
-        "libz",
-        "libziparchive",
-    ],
-    srcs: [
-        "estimate_cow_from_nonab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
-}
-
-cc_test {
-    name: "cow_snapuserd_test",
-    defaults: [
-        "fs_mgr_defaults",
-    ],
-    srcs: [
-        "cow_snapuserd_test.cpp",
-        "snapuserd.cpp",
-        "snapuserd_worker.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    shared_libs: [
-        "libbase",
-        "liblog",
-    ],
-    static_libs: [
-        "libbrotli",
-        "libgtest",
-        "libsnapshot_cow",
-        "libsnapshot_snapuserd",
-        "libcutils_sockets",
-        "libz",
-        "libfs_mgr",
-        "libdm",
-    ],
-    header_libs: [
-        "libstorage_literals_headers",
-        "libfiemap_headers",
-    ],
-    test_min_api_level: 30,
-    auto_gen_config: true,
-    require_root: false,
-}
-
-cc_binary {
-    name: "inspect_cow",
-    host_supported: true,
-    device_supported: true,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libcrypto_static",
-        "liblog",
-        "libsnapshot_cow",
-        "libz",
-    ],
-    shared_libs: [
-    ],
-    srcs: [
-        "inspect_cow.cpp",
     ],
 }

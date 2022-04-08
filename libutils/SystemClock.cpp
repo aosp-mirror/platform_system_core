@@ -39,15 +39,8 @@ namespace android {
  */
 int64_t uptimeMillis()
 {
-    return nanoseconds_to_milliseconds(uptimeNanos());
-}
-
-/*
- * public static native long uptimeNanos();
- */
-int64_t uptimeNanos()
-{
-    return systemTime(SYSTEM_TIME_MONOTONIC);
+    int64_t when = systemTime(SYSTEM_TIME_MONOTONIC);
+    return (int64_t) nanoseconds_to_milliseconds(when);
 }
 
 /*

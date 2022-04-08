@@ -60,7 +60,7 @@ unsigned llkCheckMilliseconds(void);
 #define LLK_IGNORELIST_UID_PROPERTY     "ro.llk.ignorelist.uid"
 #define LLK_IGNORELIST_UID_DEFAULT      ""
 #define LLK_IGNORELIST_STACK_PROPERTY   "ro.llk.ignorelist.process.stack"
-#define LLK_IGNORELIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,keystore2,ueventd,apexd"
+#define LLK_IGNORELIST_STACK_DEFAULT    "init,lmkd.llkd,llkd,keystore,ueventd,apexd"
 /* clang-format on */
 
 __END_DECLS

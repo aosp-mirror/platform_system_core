@@ -14,16 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    // See: http://go/android-license-faq
-    // A large-scale-change added 'default_applicable_licenses' to import
-    // all of the 'license_kinds' from "system_core_fs_mgr_license"
-    // to get the below license kinds:
-    //   SPDX-license-identifier-Apache-2.0
-    //   SPDX-license-identifier-MIT
-    default_applicable_licenses: ["system_core_fs_mgr_license"],
-}
-
 cc_library_static {
     name: "libfs_avb",
     defaults: ["fs_mgr_defaults"],
@@ -78,7 +68,6 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libchrome",
-        "libcrypto",
     ],
     target: {
         darwin: {
@@ -102,16 +91,11 @@ cc_test_host {
     name: "libfs_avb_test",
     defaults: ["libfs_avb_host_test_defaults"],
     test_suites: ["general-tests"],
-    test_options: {
-        unit_test: true,
-    },
     static_libs: [
         "libfs_avb_test_util",
     ],
-    compile_multilib: "first",
-    data: [
-        ":avbtool",
-        ":fec",
+    shared_libs: [
+        "libcrypto",
     ],
     srcs: [
         "tests/basic_test.cpp",
@@ -124,16 +108,8 @@ cc_test_host {
     name: "libfs_avb_internal_test",
     defaults: ["libfs_avb_host_test_defaults"],
     test_suites: ["general-tests"],
-    test_options: {
-        unit_test: true,
-    },
     static_libs: [
         "libfs_avb_test_util",
-    ],
-    compile_multilib: "first",
-    data: [
-        ":avbtool",
-        ":fec",
     ],
     srcs: [
         "avb_util.cpp",

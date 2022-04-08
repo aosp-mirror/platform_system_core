@@ -15,6 +15,11 @@
       "GID": "system"
     },
     {
+      "Controller": "cpuacct",
+      "Path": "/acct",
+      "Mode": "0555"
+    },
+    {
       "Controller": "cpuset",
       "Path": "/dev/cpuset",
       "Mode": "0755",
@@ -26,23 +31,27 @@
       "Path": "/dev/memcg",
       "Mode": "0700",
       "UID": "root",
-      "GID": "system",
-      "Optional": true
+      "GID": "system"
+    },
+    {
+      "Controller": "schedtune",
+      "Path": "/dev/stune",
+      "Mode": "0755",
+      "UID": "system",
+      "GID": "system"
+    },
+    {
+      "Controller": "freezer",
+      "Path": "/dev/freezer",
+      "Mode": "0755",
+      "UID": "system",
+      "GID": "system"
     }
   ],
   "Cgroups2": {
-    "Path": "/sys/fs/cgroup",
-    "Mode": "0755",
-    "UID": "system",
-    "GID": "system",
-    "Controllers": [
-      {
-        "Controller": "freezer",
-        "Path": ".",
-        "Mode": "0755",
-        "UID": "system",
-        "GID": "system"
-      }
-    ]
+    "Path": "/dev/cg2_bpf",
+    "Mode": "0600",
+    "UID": "root",
+    "GID": "root"
   }
 }

@@ -19,7 +19,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/perf_event.h>
-#include <selinux/selinux.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -35,6 +34,59 @@ using android::base::SetProperty;
 
 namespace android {
 namespace init {
+
+// Writes 512 bytes of output from Hardware RNG (/dev/hw_random, backed
+// by Linux kernel's hw_random framework) into Linux RNG's via /dev/urandom.
+// Does nothing if Hardware RNG is not present.
+//
+// Since we don't yet trust the quality of Hardware RNG, these bytes are not
+// mixed into the primary pool of Linux RNG and the entropy estimate is left
+// unmodified.
+//
+// If the HW RNG device /dev/hw_random is present, we require that at least
+// 512 bytes read from it are written into Linux RNG. QA is expected to catch
+// devices/configurations where these I/O operations are blocking for a long
+// time. We do not reboot or halt on failures, as this is a best-effort
+// attempt.
+Result<void> MixHwrngIntoLinuxRngAction(const BuiltinArguments&) {
+    unique_fd hwrandom_fd(
+        TEMP_FAILURE_RETRY(open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)));
+    if (hwrandom_fd == -1) {
+        if (errno == ENOENT) {
+            LOG(INFO) << "/dev/hw_random not found";
+            // It's not an error to not have a Hardware RNG.
+            return {};
+        }
+        return ErrnoError() << "Failed to open /dev/hw_random";
+    }
+
+    unique_fd urandom_fd(
+        TEMP_FAILURE_RETRY(open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC)));
+    if (urandom_fd == -1) {
+        return ErrnoError() << "Failed to open /dev/urandom";
+    }
+
+    char buf[512];
+    size_t total_bytes_written = 0;
+    while (total_bytes_written < sizeof(buf)) {
+        ssize_t chunk_size =
+            TEMP_FAILURE_RETRY(read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
+        if (chunk_size == -1) {
+            return ErrnoError() << "Failed to read from /dev/hw_random";
+        } else if (chunk_size == 0) {
+            return Error() << "Failed to read from /dev/hw_random: EOF";
+        }
+
+        chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
+        if (chunk_size == -1) {
+            return ErrnoError() << "Failed to write to /dev/urandom";
+        }
+        total_bytes_written += chunk_size;
+    }
+
+    LOG(INFO) << "Mixed " << total_bytes_written << " bytes from /dev/hw_random into /dev/urandom";
+    return {};
+}
 
 static bool SetHighestAvailableOptionValue(const std::string& path, int min, int max) {
     std::ifstream inf(path, std::fstream::in);
@@ -76,7 +128,8 @@ static bool SetHighestAvailableOptionValue(const std::string& path, int min, int
 #define MMAP_RND_PATH "/proc/sys/vm/mmap_rnd_bits"
 #define MMAP_RND_COMPAT_PATH "/proc/sys/vm/mmap_rnd_compat_bits"
 
-static bool SetMmapRndBitsMin(int start, int min, bool compat) {
+// __attribute__((unused)) due to lack of mips support: see mips block in SetMmapRndBitsAction
+static bool __attribute__((unused)) SetMmapRndBitsMin(int start, int min, bool compat) {
     std::string path;
     if (compat) {
         path = MMAP_RND_COMPAT_PATH;
@@ -121,6 +174,9 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     if (SetMmapRndBitsMin(16, 16, h64)) {
         return {};
     }
+#elif defined(__mips__) || defined(__mips64__)
+    // TODO: add mips support b/27788820
+    return {};
 #else
     LOG(ERROR) << "Unknown architecture";
 #endif
@@ -170,19 +226,6 @@ Result<void> SetKptrRestrictAction(const BuiltinArguments&) {
 // supporting kernels that precede the perf_event_open hooks (Android common
 // kernels 4.4 and 4.9).
 Result<void> TestPerfEventSelinuxAction(const BuiltinArguments&) {
-    // Special case: for *development devices* that boot with permissive
-    // SELinux, treat the LSM hooks as present for the effect of lowering the
-    // perf_event_paranoid sysctl. The sysprop is reused for pragmatic reasons,
-    // as there no existing way for init rules to check for permissive boot at
-    // the time of writing.
-    if (ALLOW_PERMISSIVE_SELINUX) {
-        if (!security_getenforce()) {
-            LOG(INFO) << "Permissive SELinux boot, forcing sys.init.perf_lsm_hooks to 1.";
-            SetProperty("sys.init.perf_lsm_hooks", "1");
-            return {};
-        }
-    }
-
     // Use a trivial event that will be configured, but not started.
     struct perf_event_attr pe = {
             .type = PERF_TYPE_SOFTWARE,

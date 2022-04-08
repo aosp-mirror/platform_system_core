@@ -30,11 +30,11 @@
 
 #include <string>
 
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
@@ -43,6 +43,7 @@
 
 using android::base::unique_fd;
 
+// Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
   if ((ltype == HEADER)
    || (ltype == REGISTERS)
@@ -125,57 +126,58 @@ void _VLOG(log_t* log, enum logtype ltype, const char* fmt, va_list ap) {
 
 #define MEMORY_BYTES_TO_DUMP 256
 #define MEMORY_BYTES_PER_LINE 16
-static_assert(MEMORY_BYTES_PER_LINE == kTagGranuleSize);
 
-ssize_t dump_memory(void* out, size_t len, uint8_t* tags, size_t tags_len, uint64_t* addr,
-                    unwindstack::Memory* memory) {
-  // Align the address to the number of bytes per line to avoid confusing memory tag output if
-  // memory is tagged and we start from a misaligned address. Start 32 bytes before the address.
-  *addr &= ~(MEMORY_BYTES_PER_LINE - 1);
-  if (*addr >= 4128) {
-    *addr -= 32;
+void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
+  // Align the address to sizeof(long) and start 32 bytes before the address.
+  addr &= ~(sizeof(long) - 1);
+  if (addr >= 4128) {
+    addr -= 32;
   }
 
-  // We don't want the address tag to appear in the addresses in the memory dump.
-  *addr = untag_address(*addr);
-
-  // Don't bother if the address would overflow, taking tag bits into account. Note that
-  // untag_address truncates to 32 bits on 32-bit platforms as a side effect of returning a
-  // uintptr_t, so this also checks for 32-bit overflow.
-  if (untag_address(*addr + MEMORY_BYTES_TO_DUMP - 1) < *addr) {
-    return -1;
+  // Don't bother if the address looks too low, or looks too high.
+  if (addr < 4096 ||
+#if defined(__LP64__)
+      addr > 0x4000000000000000UL - MEMORY_BYTES_TO_DUMP) {
+#else
+      addr > 0xffff0000 - MEMORY_BYTES_TO_DUMP) {
+#endif
+    return;
   }
 
-  memset(out, 0, len);
+  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
 
-  size_t bytes = memory->Read(*addr, reinterpret_cast<uint8_t*>(out), len);
+  // Dump 256 bytes
+  uintptr_t data[MEMORY_BYTES_TO_DUMP/sizeof(uintptr_t)];
+  memset(data, 0, MEMORY_BYTES_TO_DUMP);
+  size_t bytes = memory->Read(addr, reinterpret_cast<uint8_t*>(data), sizeof(data));
   if (bytes % sizeof(uintptr_t) != 0) {
     // This should never happen, but just in case.
     ALOGE("Bytes read %zu, is not a multiple of %zu", bytes, sizeof(uintptr_t));
     bytes &= ~(sizeof(uintptr_t) - 1);
   }
 
+  uint64_t start = 0;
   bool skip_2nd_read = false;
   if (bytes == 0) {
     // In this case, we might want to try another read at the beginning of
     // the next page only if it's within the amount of memory we would have
     // read.
     size_t page_size = sysconf(_SC_PAGE_SIZE);
-    uint64_t next_page = (*addr + (page_size - 1)) & ~(page_size - 1);
-    if (next_page == *addr || next_page >= *addr + len) {
+    start = ((addr + (page_size - 1)) & ~(page_size - 1)) - addr;
+    if (start == 0 || start >= MEMORY_BYTES_TO_DUMP) {
       skip_2nd_read = true;
     }
-    *addr = next_page;
   }
 
-  if (bytes < len && !skip_2nd_read) {
+  if (bytes < MEMORY_BYTES_TO_DUMP && !skip_2nd_read) {
     // Try to do one more read. This could happen if a read crosses a map,
     // but the maps do not have any break between them. Or it could happen
     // if reading from an unreadable map, but the read would cross back
     // into a readable map. Only requires one extra read because a map has
     // to contain at least one page, and the total number of bytes to dump
     // is smaller than a page.
-    size_t bytes2 = memory->Read(*addr + bytes, static_cast<uint8_t*>(out) + bytes, len - bytes);
+    size_t bytes2 = memory->Read(addr + start + bytes, reinterpret_cast<uint8_t*>(data) + bytes,
+                                 sizeof(data) - bytes - start);
     bytes += bytes2;
     if (bytes2 > 0 && bytes % sizeof(uintptr_t) != 0) {
       // This should never happen, but we'll try and continue any way.
@@ -184,36 +186,6 @@ ssize_t dump_memory(void* out, size_t len, uint8_t* tags, size_t tags_len, uint6
     }
   }
 
-  // If we were unable to read anything, it probably means that the register doesn't contain a
-  // valid pointer.
-  if (bytes == 0) {
-    return -1;
-  }
-
-  for (uint64_t tag_granule = 0; tag_granule < bytes / kTagGranuleSize; ++tag_granule) {
-    long tag = memory->ReadTag(*addr + kTagGranuleSize * tag_granule);
-    if (tag_granule < tags_len) {
-      tags[tag_granule] = tag >= 0 ? tag : 0;
-    } else {
-      ALOGE("Insufficient space for tags");
-    }
-  }
-
-  return bytes;
-}
-
-void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const std::string& label) {
-  // Dump 256 bytes
-  uintptr_t data[MEMORY_BYTES_TO_DUMP / sizeof(uintptr_t)];
-  uint8_t tags[MEMORY_BYTES_TO_DUMP / kTagGranuleSize];
-
-  ssize_t bytes = dump_memory(data, sizeof(data), tags, sizeof(tags), &addr, memory);
-  if (bytes == -1) {
-    return;
-  }
-
-  _LOG(log, logtype::MEMORY, "\n%s:\n", label.c_str());
-
   // Dump the code around memory as:
   //  addr             contents                           ascii
   //  0000000000008d34 ef000000e8bd0090 e1b00000512fff1e  ............../Q
@@ -221,30 +193,53 @@ void dump_memory(log_t* log, unwindstack::Memory* memory, uint64_t addr, const s
   // On 32-bit machines, there are still 16 bytes per line but addresses and
   // words are of course presented differently.
   uintptr_t* data_ptr = data;
-  uint8_t* tags_ptr = tags;
-  for (size_t line = 0; line < static_cast<size_t>(bytes) / MEMORY_BYTES_PER_LINE; line++) {
-    uint64_t tagged_addr = addr | static_cast<uint64_t>(*tags_ptr++) << 56;
+  size_t current = 0;
+  size_t total_bytes = start + bytes;
+  for (size_t line = 0; line < MEMORY_BYTES_TO_DUMP / MEMORY_BYTES_PER_LINE; line++) {
     std::string logline;
-    android::base::StringAppendF(&logline, "    %" PRIPTR, tagged_addr);
+    android::base::StringAppendF(&logline, "    %" PRIPTR, addr);
 
     addr += MEMORY_BYTES_PER_LINE;
     std::string ascii;
     for (size_t i = 0; i < MEMORY_BYTES_PER_LINE / sizeof(uintptr_t); i++) {
-      android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
+      if (current >= start && current + sizeof(uintptr_t) <= total_bytes) {
+        android::base::StringAppendF(&logline, " %" PRIPTR, static_cast<uint64_t>(*data_ptr));
 
-      // Fill out the ascii string from the data.
-      uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);
-      for (size_t val = 0; val < sizeof(uintptr_t); val++, ptr++) {
-        if (*ptr >= 0x20 && *ptr < 0x7f) {
-          ascii += *ptr;
-        } else {
-          ascii += '.';
+        // Fill out the ascii string from the data.
+        uint8_t* ptr = reinterpret_cast<uint8_t*>(data_ptr);
+        for (size_t val = 0; val < sizeof(uintptr_t); val++, ptr++) {
+          if (*ptr >= 0x20 && *ptr < 0x7f) {
+            ascii += *ptr;
+          } else {
+            ascii += '.';
+          }
         }
+        data_ptr++;
+      } else {
+        logline += ' ' + std::string(sizeof(uintptr_t) * 2, '-');
+        ascii += std::string(sizeof(uintptr_t), '.');
       }
-      data_ptr++;
+      current += sizeof(uintptr_t);
     }
     _LOG(log, logtype::MEMORY, "%s  %s\n", logline.c_str(), ascii.c_str());
   }
+}
+
+void read_with_default(const char* path, char* buf, size_t len, const char* default_value) {
+  unique_fd fd(open(path, O_RDONLY | O_CLOEXEC));
+  if (fd != -1) {
+    int rc = TEMP_FAILURE_RETRY(read(fd.get(), buf, len - 1));
+    if (rc != -1) {
+      buf[rc] = '\0';
+
+      // Trim trailing newlines.
+      if (rc > 0 && buf[rc - 1] == '\n') {
+        buf[rc - 1] = '\0';
+      }
+      return;
+    }
+  }
+  strcpy(buf, default_value);
 }
 
 void drop_capabilities() {
@@ -257,11 +252,11 @@ void drop_capabilities() {
   memset(&capdata, 0, sizeof(capdata));
 
   if (capset(&capheader, &capdata[0]) == -1) {
-    async_safe_fatal("failed to drop capabilities: %s", strerror(errno));
+    PLOG(FATAL) << "failed to drop capabilities";
   }
 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-    async_safe_fatal("failed to set PR_SET_NO_NEW_PRIVS: %s", strerror(errno));
+    PLOG(FATAL) << "failed to set PR_SET_NO_NEW_PRIVS";
   }
 }
 
@@ -379,20 +374,14 @@ const char* get_sigcode(const siginfo_t* si) {
           return "SEGV_ADIDERR";
         case SEGV_ADIPERR:
           return "SEGV_ADIPERR";
-        case SEGV_MTEAERR:
-          return "SEGV_MTEAERR";
-        case SEGV_MTESERR:
-          return "SEGV_MTESERR";
       }
-      static_assert(NSIGSEGV == SEGV_MTESERR, "missing SEGV_* si_code");
+      static_assert(NSIGSEGV == SEGV_ADIPERR, "missing SEGV_* si_code");
       break;
     case SIGSYS:
       switch (si->si_code) {
         case SYS_SECCOMP: return "SYS_SECCOMP";
-        case SYS_USER_DISPATCH:
-          return "SYS_USER_DISPATCH";
       }
-      static_assert(NSIGSYS == SYS_USER_DISPATCH, "missing SYS_* si_code");
+      static_assert(NSIGSYS == SYS_SECCOMP, "missing SYS_* si_code");
       break;
     case SIGTRAP:
       switch (si->si_code) {

@@ -1,0 +1,62 @@
+#
+# init scriptures for logcatd persistent logging.
+#
+# Make sure any property changes are only performed with /data mounted, after
+# post-fs-data state because otherwise behavior is undefined. The exceptions
+# are device adjustments for logcatd service properties (persist.* overrides
+# notwithstanding) for logd.logpersistd.size logd.logpersistd.rotate_kbytes and
+# logd.logpersistd.buffer.
+
+# persist to non-persistent trampolines to permit device properties can be
+# overridden when /data mounts, or during runtime.
+on property:persist.logd.logpersistd.count=*
+    # expect /init to report failure if property empty (default)
+    setprop persist.logd.logpersistd.size ${persist.logd.logpersistd.count}
+
+on property:persist.logd.logpersistd.size=*
+    setprop logd.logpersistd.size ${persist.logd.logpersistd.size}
+
+on property:persist.logd.logpersistd.rotate_kbytes=*
+    setprop logd.logpersistd.rotate_kbytes ${persist.logd.logpersistd.rotate_kbytes}
+
+on property:persist.logd.logpersistd.buffer=*
+    setprop logd.logpersistd.buffer ${persist.logd.logpersistd.buffer}
+
+on property:persist.logd.logpersistd=logcatd
+    setprop logd.logpersistd logcatd
+
+# enable, prep and start logcatd service
+on load_persist_props_action
+    setprop logd.logpersistd.enable true
+
+on property:logd.logpersistd.enable=true && property:logd.logpersistd=logcatd
+    # log group should be able to read persisted logs
+    mkdir /data/misc/logd 0750 logd log
+    start logcatd
+
+# stop logcatd service and clear data
+on property:logd.logpersistd.enable=true && property:logd.logpersistd=clear
+    setprop persist.logd.logpersistd ""
+    stop logcatd
+    # logd for clear of only our files in /data/misc/logd
+    exec - logd log -- /system/bin/logcat -c -f /data/misc/logd/logcat -n ${logd.logpersistd.size:-256}
+    setprop logd.logpersistd ""
+
+# stop logcatd service
+on property:logd.logpersistd=stop
+    setprop persist.logd.logpersistd ""
+    stop logcatd
+    setprop logd.logpersistd ""
+
+on property:logd.logpersistd.enable=false
+    stop logcatd
+
+# logcatd service
+service logcatd /system/bin/logcatd -L -b ${logd.logpersistd.buffer:-all} -v threadtime -v usec -v printable -D -f /data/misc/logd/logcat -r ${logd.logpersistd.rotate_kbytes:-2048} -n ${logd.logpersistd.size:-256} --id=${ro.build.id}
+    class late_start
+    disabled
+    # logd for write to /data/misc/logd, log group for read from log daemon
+    user logd
+    group log
+    writepid /dev/cpuset/system-background/tasks
+    oom_score_adjust -600

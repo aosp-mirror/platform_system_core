@@ -37,15 +37,7 @@ BlockDevInitializer::BlockDevInitializer() : uevent_listener_(16 * 1024 * 1024) 
 }
 
 bool BlockDevInitializer::InitDeviceMapper() {
-    return InitMiscDevice("device-mapper");
-}
-
-bool BlockDevInitializer::InitDmUser(const std::string& name) {
-    return InitMiscDevice("dm-user!" + name);
-}
-
-bool BlockDevInitializer::InitMiscDevice(const std::string& name) {
-    const std::string dm_path = "/devices/virtual/misc/" + name;
+    const std::string dm_path = "/devices/virtual/misc/device-mapper";
     bool found = false;
     auto dm_callback = [this, &dm_path, &found](const Uevent& uevent) {
         if (uevent.path == dm_path) {
@@ -57,13 +49,13 @@ bool BlockDevInitializer::InitMiscDevice(const std::string& name) {
     };
     uevent_listener_.RegenerateUeventsForPath("/sys" + dm_path, dm_callback);
     if (!found) {
-        LOG(INFO) << name << " device not found in /sys, waiting for its uevent";
+        LOG(INFO) << "device-mapper device not found in /sys, waiting for its uevent";
         Timer t;
         uevent_listener_.Poll(dm_callback, 10s);
-        LOG(INFO) << "Wait for " << name << " returned after " << t;
+        LOG(INFO) << "Wait for device-mapper returned after " << t;
     }
     if (!found) {
-        LOG(ERROR) << name << " device not found after polling timeout";
+        LOG(ERROR) << "device-mapper device not found after polling timeout";
         return false;
     }
     return true;

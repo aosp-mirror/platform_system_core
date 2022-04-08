@@ -18,9 +18,8 @@
 
 #include "libdebuggerd/backtrace.h"
 
-#include <dirent.h>
 #include <errno.h>
-#include <inttypes.h>
+#include <dirent.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -28,27 +27,30 @@
 #include <string.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <map>
 #include <memory>
 #include <string>
 
-#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <log/log.h>
 #include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/types.h"
 #include "libdebuggerd/utility.h"
-#include "util.h"
 
-static void dump_process_header(log_t* log, pid_t pid,
-                                const std::vector<std::string>& command_line) {
-  _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, get_timestamp().c_str());
+static void dump_process_header(log_t* log, pid_t pid, const char* process_name) {
+  time_t t = time(NULL);
+  struct tm tm;
+  localtime_r(&t, &tm);
+  char timestr[64];
+  strftime(timestr, sizeof(timestr), "%F %T", &tm);
+  _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, timestr);
 
-  if (!command_line.empty()) {
-    _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", android::base::Join(command_line, " ").c_str());
+  if (process_name) {
+    _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", process_name);
   }
   _LOG(log, logtype::BACKTRACE, "ABI: '%s'\n", ABI_STRING);
 }
@@ -68,11 +70,7 @@ void dump_backtrace_thread(int output_fd, unwindstack::Unwinder* unwinder,
   unwinder->SetRegs(thread.registers.get());
   unwinder->Unwind();
   if (unwinder->NumFrames() == 0) {
-    _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d\n", thread.tid);
-    if (unwinder->LastErrorCode() != unwindstack::ERROR_NONE) {
-      _LOG(&log, logtype::THREAD, "  Error code: %s\n", unwinder->LastErrorCodeString());
-      _LOG(&log, logtype::THREAD, "  Error address: 0x%" PRIx64 "\n", unwinder->LastErrorAddress());
-    }
+    _LOG(&log, logtype::THREAD, "Unwind failed: tid = %d", thread.tid);
     return;
   }
 
@@ -91,7 +89,7 @@ void dump_backtrace(android::base::unique_fd output_fd, unwindstack::Unwinder* u
     return;
   }
 
-  dump_process_header(&log, target->second.pid, target->second.command_line);
+  dump_process_header(&log, target->second.pid, target->second.process_name.c_str());
 
   dump_backtrace_thread(output_fd.get(), unwinder, target->second);
   for (const auto& [tid, info] : thread_info) {
@@ -108,8 +106,9 @@ void dump_backtrace_header(int output_fd) {
   log.tfd = output_fd;
   log.amfd_data = nullptr;
 
-  pid_t pid = getpid();
-  dump_process_header(&log, pid, get_command_line(pid));
+  char process_name[128];
+  read_with_default("/proc/self/cmdline", process_name, sizeof(process_name), "<unknown>");
+  dump_process_header(&log, getpid(), process_name);
 }
 
 void dump_backtrace_footer(int output_fd) {

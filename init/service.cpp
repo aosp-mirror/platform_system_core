@@ -45,14 +45,12 @@
 #include <android/api-level.h>
 
 #include "mount_namespace.h"
-#include "reboot_utils.h"
 #include "selinux.h"
 #else
 #include "host_init_stubs.h"
 #endif
 
 using android::base::boot_clock;
-using android::base::GetBoolProperty;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::make_scope_guard;
@@ -73,12 +71,12 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
     if (getcon(&raw_con) == -1) {
         return Error() << "Could not get security context";
     }
-    std::unique_ptr<char, decltype(&freecon)> mycon(raw_con, freecon);
+    std::unique_ptr<char> mycon(raw_con);
 
     if (getfilecon(service_path.c_str(), &raw_filecon) == -1) {
         return Error() << "Could not get file context";
     }
-    std::unique_ptr<char, decltype(&freecon)> filecon(raw_filecon, freecon);
+    std::unique_ptr<char> filecon(raw_filecon);
 
     char* new_con = nullptr;
     int rc = security_compute_create(mycon.get(), filecon.get(),
@@ -92,9 +90,7 @@ static Result<std::string> ComputeContextFromExecutable(const std::string& servi
                        << "\") has incorrect label or no domain transition from " << mycon.get()
                        << " to another SELinux domain defined. Have you configured your "
                           "service correctly? https://source.android.com/security/selinux/"
-                          "device-policy#label_new_services_and_address_denials. Note: this "
-                          "error shows up even in permissive mode in order to make auditing "
-                          "denials possible.";
+                          "device-policy#label_new_services_and_address_denials";
     }
     if (rc < 0) {
         return Error() << "Could not get process context";
@@ -125,6 +121,12 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
     return execv(c_strings[0], c_strings.data()) == 0;
 }
 
+static bool AreRuntimeApexesReady() {
+    struct stat buf;
+    return stat("/apex/com.android.art/", &buf) == 0 &&
+           stat("/apex/com.android.runtime/", &buf) == 0;
+}
+
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
 
@@ -149,7 +151,6 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  .priority = 0},
       namespaces_{.flags = namespace_flags},
       seclabel_(seclabel),
-      subcontext_(subcontext_for_restart_commands),
       onrestart_(false, subcontext_for_restart_commands, "<Service '" + name + "' onrestart>", 0,
                  "onrestart", {}),
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
@@ -307,28 +308,22 @@ void Service::Reap(const siginfo_t& siginfo) {
 #else
     static bool is_apex_updatable = false;
 #endif
-    const bool is_process_updatable = !use_bootstrap_ns_ && is_apex_updatable;
+    const bool is_process_updatable = !pre_apexd_ && is_apex_updatable;
 
-    // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
+    // If we crash > 4 times in 4 minutes or before boot_completed,
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
     if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART)) {
-        bool boot_completed = GetBoolProperty("sys.boot_completed", false);
-        if (now < time_crashed_ + fatal_crash_window_ || !boot_completed) {
+        bool boot_completed = android::base::GetBoolProperty("sys.boot_completed", false);
+        if (now < time_crashed_ + 4min || !boot_completed) {
             if (++crash_count_ > 4) {
-                auto exit_reason = boot_completed ?
-                    "in " + std::to_string(fatal_crash_window_.count()) + " minutes" :
-                    "before boot completed";
                 if (flags_ & SVC_CRITICAL) {
-                    if (!GetBoolProperty("init.svc_debug.no_fatal." + name_, false)) {
-                        // Aborts into `fatal_reboot_target_'.
-                        SetFatalRebootTarget(fatal_reboot_target_);
-                        LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
-                                   << exit_reason;
-                    }
+                    // Aborts into bootloader
+                    LOG(FATAL) << "critical process '" << name_ << "' exited 4 times "
+                               << (boot_completed ? "in 4 minutes" : "before boot completed");
                 } else {
-                    LOG(ERROR) << "process with updatable components '" << name_
-                               << "' exited 4 times " << exit_reason;
+                    LOG(ERROR) << "updatable process '" << name_ << "' exited 4 times "
+                               << (boot_completed ? "in 4 minutes" : "before boot completed");
                     // Notifies update_verifier and apexd
                     SetProperty("sys.init.updatable_crashing_process_name", name_);
                     SetProperty("sys.init.updatable_crashing", "1");
@@ -460,26 +455,12 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    // APEXd is always started in the "current" namespace because it is the process to set up
-    // the current namespace.
-    const bool is_apexd = args_[0] == "/system/bin/apexd";
-
-    if (!IsDefaultMountNamespaceReady() && !is_apexd) {
-        // If this service is started before APEXes and corresponding linker configuration
-        // get available, mark it as pre-apexd one. Note that this marking is
+    if (!AreRuntimeApexesReady() && !pre_apexd_) {
+        // If this service is started before the Runtime and ART APEXes get
+        // available, mark it as pre-apexd one. Note that this marking is
         // permanent. So for example, if the service is re-launched (e.g., due
         // to crash), it is still recognized as pre-apexd... for consistency.
-        use_bootstrap_ns_ = true;
-    }
-
-    // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
-    // Note: "ueventd" is supposed to be run in "default" mount namespace even if it's pre-apexd
-    // to support loading firmwares from APEXes.
-    std::optional<MountNamespace> override_mount_namespace;
-    if (name_ == "ueventd") {
-        override_mount_namespace = NS_DEFAULT;
-    } else if (use_bootstrap_ns_) {
-        override_mount_namespace = NS_BOOTSTRAP;
+        pre_apexd_ = true;
     }
 
     post_data_ = ServiceList::GetInstance().IsPostData();
@@ -513,8 +494,7 @@ Result<void> Service::Start() {
     if (pid == 0) {
         umask(077);
 
-        if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace);
-            !result.ok()) {
+        if (auto result = EnterNamespaces(namespaces_, name_, pre_apexd_); !result.ok()) {
             LOG(FATAL) << "Service '" << name_
                        << "' failed to set up namespaces: " << result.error();
         }

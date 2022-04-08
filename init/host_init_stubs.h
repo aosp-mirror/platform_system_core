@@ -20,7 +20,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <optional>
 #include <string>
 
 #include <android-base/properties.h>
@@ -42,7 +41,7 @@ inline bool CanReadProperty(const std::string&, const std::string&) {
 }
 
 // reboot_utils.h
-inline void SetFatalRebootTarget(const std::optional<std::string>& = std::nullopt) {}
+inline void SetFatalRebootTarget() {}
 inline void __attribute__((noreturn)) InitFatalReboot(int signal_number) {
     abort();
 }

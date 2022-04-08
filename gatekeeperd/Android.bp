@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_binary {
     name: "gatekeeperd",
     cflags: [
@@ -32,7 +28,6 @@ cc_binary {
 
     shared_libs: [
         "libbinder",
-        "libbinder_ndk",
         "libgatekeeper",
         "libgsi",
         "liblog",
@@ -40,11 +35,11 @@ cc_binary {
         "libbase",
         "libutils",
         "libcrypto",
+        "libkeystore_aidl",
+        "libkeystore_binder",
         "libhidlbase",
         "android.hardware.gatekeeper@1.0",
         "libgatekeeper_aidl",
-        "android.hardware.security.keymint-V1-ndk_platform",
-        "android.security.authorization-ndk_platform",
     ],
 
     static_libs: ["libscrypt_static"],

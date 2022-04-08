@@ -19,7 +19,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <limits>
 
 #include <android-base/unique_fd.h>
 
@@ -31,22 +30,6 @@
 namespace android {
 namespace fs_mgr {
 
-std::ostream& operator<<(std::ostream& os, const Extent& extent) {
-    switch (extent.GetExtentType()) {
-        case ExtentType::kZero: {
-            os << "type: Zero";
-            break;
-        }
-        case ExtentType::kLinear: {
-            auto linear_extent = static_cast<const LinearExtent*>(&extent);
-            os << "type: Linear, physical sectors: " << linear_extent->physical_sector()
-               << ", end sectors: " << linear_extent->end_sector();
-            break;
-        }
-    }
-    return os;
-}
-
 bool LinearExtent::AddTo(LpMetadata* out) const {
     if (device_index_ >= out->block_devices.size()) {
         LERROR << "Extent references unknown block device.";
@@ -55,17 +38,6 @@ bool LinearExtent::AddTo(LpMetadata* out) const {
     out->extents.emplace_back(
             LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_LINEAR, physical_sector_, device_index_});
     return true;
-}
-
-bool LinearExtent::operator==(const android::fs_mgr::Extent& other) const {
-    if (other.GetExtentType() != ExtentType::kLinear) {
-        return false;
-    }
-
-    auto other_ptr = static_cast<const LinearExtent*>(&other);
-    return num_sectors_ == other_ptr->num_sectors_ &&
-           physical_sector_ == other_ptr->physical_sector_ &&
-           device_index_ == other_ptr->device_index_;
 }
 
 bool LinearExtent::OverlapsWith(const LinearExtent& other) const {
@@ -89,10 +61,6 @@ Interval LinearExtent::AsInterval() const {
 bool ZeroExtent::AddTo(LpMetadata* out) const {
     out->extents.emplace_back(LpMetadataExtent{num_sectors_, LP_TARGET_TYPE_ZERO, 0, 0});
     return true;
-}
-
-bool ZeroExtent::operator==(const android::fs_mgr::Extent& other) const {
-    return other.GetExtentType() == ExtentType::kZero && num_sectors_ == other.num_sectors();
 }
 
 Partition::Partition(std::string_view name, std::string_view group_name, uint32_t attributes)
@@ -383,6 +351,11 @@ static bool VerifyDeviceProperties(const BlockDeviceInfo& device_info) {
                << " partition alignment is not sector-aligned.";
         return false;
     }
+    if (device_info.alignment_offset > device_info.alignment) {
+        LERROR << "Block device " << device_info.partition_name
+               << " partition alignment offset is greater than its alignment.";
+        return false;
+    }
     return true;
 }
 
@@ -403,10 +376,7 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
     }
 
     // Align the metadata size up to the nearest sector.
-    if (!AlignTo(metadata_max_size, LP_SECTOR_SIZE, &metadata_max_size)) {
-        LERROR << "Max metadata size " << metadata_max_size << " is too large.";
-        return false;
-    }
+    metadata_max_size = AlignTo(metadata_max_size, LP_SECTOR_SIZE);
 
     // Validate and build the block device list.
     uint32_t logical_block_size = 0;
@@ -438,15 +408,10 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
         // untouched to be compatible code that looks for an MBR. Thus we
         // start counting free sectors at sector 1, not 0.
         uint64_t free_area_start = LP_SECTOR_SIZE;
-        bool ok;
-        if (out.alignment) {
-            ok = AlignTo(free_area_start, out.alignment, &free_area_start);
+        if (out.alignment || out.alignment_offset) {
+            free_area_start = AlignTo(free_area_start, out.alignment, out.alignment_offset);
         } else {
-            ok = AlignTo(free_area_start, logical_block_size, &free_area_start);
-        }
-        if (!ok) {
-            LERROR << "Integer overflow computing free area start";
-            return false;
+            free_area_start = AlignTo(free_area_start, logical_block_size);
         }
         out.first_logical_sector = free_area_start / LP_SECTOR_SIZE;
 
@@ -483,15 +448,10 @@ bool MetadataBuilder::Init(const std::vector<BlockDeviceInfo>& block_devices,
 
     // Compute the first free sector, factoring in alignment.
     uint64_t free_area_start = total_reserved;
-    bool ok;
-    if (super.alignment) {
-        ok = AlignTo(free_area_start, super.alignment, &free_area_start);
+    if (super.alignment || super.alignment_offset) {
+        free_area_start = AlignTo(free_area_start, super.alignment, super.alignment_offset);
     } else {
-        ok = AlignTo(free_area_start, logical_block_size, &free_area_start);
-    }
-    if (!ok) {
-        LERROR << "Integer overflow computing free area start";
-        return false;
+        free_area_start = AlignTo(free_area_start, logical_block_size);
     }
     super.first_logical_sector = free_area_start / LP_SECTOR_SIZE;
 
@@ -544,7 +504,7 @@ Partition* MetadataBuilder::AddPartition(std::string_view name, std::string_view
     return partitions_.back().get();
 }
 
-Partition* MetadataBuilder::FindPartition(std::string_view name) const {
+Partition* MetadataBuilder::FindPartition(std::string_view name) {
     for (const auto& partition : partitions_) {
         if (partition->name() == name) {
             return partition.get();
@@ -553,7 +513,7 @@ Partition* MetadataBuilder::FindPartition(std::string_view name) const {
     return nullptr;
 }
 
-PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) const {
+PartitionGroup* MetadataBuilder::FindGroup(std::string_view group_name) {
     for (const auto& group : groups_) {
         if (group->name() == group_name) {
             return group.get();
@@ -591,11 +551,7 @@ void MetadataBuilder::ExtentsToFreeList(const std::vector<Interval>& extents,
         const Interval& current = extents[i];
         DCHECK(previous.device_index == current.device_index);
 
-        uint64_t aligned;
-        if (!AlignSector(block_devices_[current.device_index], previous.end, &aligned)) {
-            LERROR << "Sector " << previous.end << " caused integer overflow.";
-            continue;
-        }
+        uint64_t aligned = AlignSector(block_devices_[current.device_index], previous.end);
         if (aligned >= current.start) {
             // There is no gap between these two extents, try the next one.
             // Note that we check with >= instead of >, since alignment may
@@ -781,10 +737,7 @@ std::vector<Interval> MetadataBuilder::PrioritizeSecondHalfOfSuper(
     // Choose an aligned sector for the midpoint. This could lead to one half
     // being slightly larger than the other, but this will not restrict the
     // size of partitions (it might lead to one extra extent if "B" overflows).
-    if (!AlignSector(super, midpoint, &midpoint)) {
-        LERROR << "Unexpected integer overflow aligning midpoint " << midpoint;
-        return free_list;
-    }
+    midpoint = AlignSector(super, midpoint);
 
     std::vector<Interval> first_half;
     std::vector<Interval> second_half;
@@ -822,11 +775,7 @@ std::unique_ptr<LinearExtent> MetadataBuilder::ExtendFinalExtent(
     // If the sector ends where the next aligned chunk begins, then there's
     // no missing gap to try and allocate.
     const auto& block_device = block_devices_[extent->device_index()];
-    uint64_t next_aligned_sector;
-    if (!AlignSector(block_device, extent->end_sector(), &next_aligned_sector)) {
-        LERROR << "Integer overflow aligning sector " << extent->end_sector();
-        return nullptr;
-    }
+    uint64_t next_aligned_sector = AlignSector(block_device, extent->end_sector());
     if (extent->end_sector() == next_aligned_sector) {
         return nullptr;
     }
@@ -983,19 +932,13 @@ uint64_t MetadataBuilder::UsedSpace() const {
     return size;
 }
 
-bool MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device, uint64_t sector,
-                                  uint64_t* out) const {
+uint64_t MetadataBuilder::AlignSector(const LpMetadataBlockDevice& block_device,
+                                      uint64_t sector) const {
     // Note: when reading alignment info from the Kernel, we don't assume it
     // is aligned to the sector size, so we round up to the nearest sector.
     uint64_t lba = sector * LP_SECTOR_SIZE;
-    if (!AlignTo(lba, block_device.alignment, out)) {
-        return false;
-    }
-    if (!AlignTo(*out, LP_SECTOR_SIZE, out)) {
-        return false;
-    }
-    *out /= LP_SECTOR_SIZE;
-    return true;
+    uint64_t aligned = AlignTo(lba, block_device.alignment, block_device.alignment_offset);
+    return AlignTo(aligned, LP_SECTOR_SIZE) / LP_SECTOR_SIZE;
 }
 
 bool MetadataBuilder::FindBlockDeviceByName(const std::string& partition_name,
@@ -1069,12 +1012,7 @@ bool MetadataBuilder::UpdateBlockDeviceInfo(size_t index, const BlockDeviceInfo&
 bool MetadataBuilder::ResizePartition(Partition* partition, uint64_t requested_size,
                                       const std::vector<Interval>& free_region_hint) {
     // Align the space needed up to the nearest sector.
-    uint64_t aligned_size;
-    if (!AlignTo(requested_size, geometry_.logical_block_size, &aligned_size)) {
-        LERROR << "Cannot resize partition " << partition->name() << " to " << requested_size
-               << " bytes; integer overflow.";
-        return false;
-    }
+    uint64_t aligned_size = AlignTo(requested_size, geometry_.logical_block_size);
     uint64_t old_size = partition->size();
 
     if (!ValidatePartitionSizeChange(partition, old_size, aligned_size, false)) {
@@ -1294,51 +1232,6 @@ std::string MetadataBuilder::GetBlockDevicePartitionName(uint64_t index) const {
 
 uint64_t MetadataBuilder::logical_block_size() const {
     return geometry_.logical_block_size;
-}
-
-bool MetadataBuilder::VerifyExtentsAgainstSourceMetadata(
-        const MetadataBuilder& source_metadata, uint32_t source_slot_number,
-        const MetadataBuilder& target_metadata, uint32_t target_slot_number,
-        const std::vector<std::string>& partitions) {
-    for (const auto& base_name : partitions) {
-        // Find the partition in metadata with the slot suffix.
-        auto target_partition_name = base_name + SlotSuffixForSlotNumber(target_slot_number);
-        const auto target_partition = target_metadata.FindPartition(target_partition_name);
-        if (!target_partition) {
-            LERROR << "Failed to find partition " << target_partition_name << " in metadata slot "
-                   << target_slot_number;
-            return false;
-        }
-
-        auto source_partition_name = base_name + SlotSuffixForSlotNumber(source_slot_number);
-        const auto source_partition = source_metadata.FindPartition(source_partition_name);
-        if (!source_partition) {
-            LERROR << "Failed to find partition " << source_partition << " in metadata slot "
-                   << source_slot_number;
-            return false;
-        }
-
-        // We expect the partitions in the target metadata to have the identical extents as the
-        // one in the source metadata. Because they are copied in NewForUpdate.
-        if (target_partition->extents().size() != source_partition->extents().size()) {
-            LERROR << "Extents count mismatch for partition " << base_name << " target slot has "
-                   << target_partition->extents().size() << ", source slot has "
-                   << source_partition->extents().size();
-            return false;
-        }
-
-        for (size_t i = 0; i < target_partition->extents().size(); i++) {
-            const auto& src_extent = *source_partition->extents()[i];
-            const auto& tgt_extent = *target_partition->extents()[i];
-            if (tgt_extent != src_extent) {
-                LERROR << "Extents " << i << " is different for partition " << base_name;
-                LERROR << "tgt extent " << tgt_extent << "; src extent " << src_extent;
-                return false;
-            }
-        }
-    }
-
-    return true;
 }
 
 }  // namespace fs_mgr

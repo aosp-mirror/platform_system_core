@@ -22,7 +22,6 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <thread>
@@ -124,15 +123,8 @@ static bool FindDmDevice(const std::string& path, std::string* name, std::string
     return true;
 }
 
-Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid,
-                         bool no_fnm_pathname)
-    : name_(name),
-      perm_(perm),
-      uid_(uid),
-      gid_(gid),
-      prefix_(false),
-      wildcard_(false),
-      no_fnm_pathname_(no_fnm_pathname) {
+Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t gid)
+    : name_(name), perm_(perm), uid_(uid), gid_(gid), prefix_(false), wildcard_(false) {
     // Set 'prefix_' or 'wildcard_' based on the below cases:
     //
     // 1) No '*' in 'name' -> Neither are set and Match() checks a given path for strict
@@ -143,6 +135,7 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
     //
     // 3) '*' appears elsewhere -> 'wildcard_' is set to true and Match() uses fnmatch()
     //    with FNM_PATHNAME to compare 'name' to a given path.
+
     auto wildcard_position = name_.find('*');
     if (wildcard_position != std::string::npos) {
         if (wildcard_position == name_.length() - 1) {
@@ -156,8 +149,7 @@ Permissions::Permissions(const std::string& name, mode_t perm, uid_t uid, gid_t 
 
 bool Permissions::Match(const std::string& path) const {
     if (prefix_) return StartsWith(path, name_);
-    if (wildcard_)
-        return fnmatch(name_.c_str(), path.c_str(), no_fnm_pathname_ ? 0 : FNM_PATHNAME) == 0;
+    if (wildcard_) return fnmatch(name_.c_str(), path.c_str(), FNM_PATHNAME) == 0;
     return path == name_;
 }
 
@@ -201,8 +193,7 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     while (directory != "/" && directory != ".") {
         std::string subsystem_link_path;
         if (Realpath(directory + "/subsystem", &subsystem_link_path) &&
-            (subsystem_link_path == sysfs_mount_point_ + "/bus/platform" ||
-             subsystem_link_path == sysfs_mount_point_ + "/bus/amba")) {
+            subsystem_link_path == sysfs_mount_point_ + "/bus/platform") {
             // We need to remove the mount point that we added above before returning.
             directory.erase(0, sysfs_mount_point_.size());
             *platform_device_path = directory;
@@ -468,10 +459,9 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
 }
 
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
-  if (uevent.action == "add" || uevent.action == "change" ||
-      uevent.action == "bind" || uevent.action == "online") {
-    FixupSysPermissions(uevent.path, uevent.subsystem);
-  }
+    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
+        FixupSysPermissions(uevent.path, uevent.subsystem);
+    }
 
     // if it's not a /dev device, nothing to do
     if (uevent.major < 0 || uevent.minor < 0) return;
@@ -505,8 +495,6 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
     } else if (StartsWith(uevent.subsystem, "usb")) {
         // ignore other USB events
         return;
-    } else if (uevent.subsystem == "misc" && StartsWith(uevent.device_name, "dm-user/")) {
-        devpath = "/dev/dm-user/" + uevent.device_name.substr(8);
     } else {
         devpath = "/dev/" + Basename(uevent.path);
     }

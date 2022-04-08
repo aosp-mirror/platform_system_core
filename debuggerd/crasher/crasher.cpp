@@ -134,14 +134,10 @@ noinline int crash(int a) {
     return a*2;
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfree-nonheap-object"
-
 noinline void abuse_heap() {
     char buf[16];
     free(buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
 }
-#pragma clang diagnostic pop
 
 noinline void leak() {
     while (true) {
@@ -353,7 +349,7 @@ noinline int do_action(const char* arg) {
 int main(int argc, char** argv) {
 #if defined(STATIC_CRASHER)
     debuggerd_callbacks_t callbacks = {
-      .get_process_info = []() {
+      .get_abort_message = []() {
         static struct {
           size_t size;
           char msg[32];
@@ -361,9 +357,7 @@ int main(int argc, char** argv) {
 
         msg.size = strlen("dummy abort message");
         memcpy(msg.msg, "dummy abort message", strlen("dummy abort message"));
-        return debugger_process_info{
-            .abort_msg = reinterpret_cast<void*>(&msg),
-        };
+        return reinterpret_cast<abort_msg_t*>(&msg);
       },
       .post_dump = nullptr
     };

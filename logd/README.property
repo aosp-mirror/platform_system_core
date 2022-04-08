@@ -1,0 +1,76 @@
+The properties that logd and friends react to are:
+
+name                       type default  description
+ro.logd.auditd             bool   true   Enable selinux audit daemon
+ro.logd.auditd.dmesg       bool   true   selinux audit messages sent to dmesg.
+ro.logd.auditd.main        bool   true   selinux audit messages sent to main.
+ro.logd.auditd.events      bool   true   selinux audit messages sent to events.
+persist.logd.security      bool   false  Enable security buffer.
+ro.organization_owned      bool   false  Override persist.logd.security to false
+ro.logd.kernel             bool+ svelte+ Enable klogd daemon
+ro.logd.statistics         bool+ svelte+ Enable logcat -S statistics.
+ro.debuggable              number        if not "1", logd.statistics &
+                                         ro.logd.kernel default false.
+logd.logpersistd.enable    bool   auto   Safe to start logpersist daemon service
+logd.logpersistd          string persist Enable logpersist daemon, "logcatd"
+                                         turns on logcat -f in logd context.
+					 Responds to logcatd, clear and stop.
+logd.logpersistd.buffer          persist logpersistd buffers to collect
+logd.logpersistd.size            persist logpersistd size in MB
+logd.logpersistd.rotate_kbytes   	 persist logpersistd outout file size in KB.
+persist.logd.logpersistd   string        Enable logpersist daemon, "logcatd"
+                                         turns on logcat -f in logd context.
+persist.logd.logpersistd.buffer    all   logpersistd buffers to collect
+persist.logd.logpersistd.size      256   logpersistd size in MB
+persist.logd.logpersistd.count     256   sets max number of rotated logs to <count>.
+persist.logd.logpersistd.rotate_kbytes   1024  logpersistd output file size in KB
+persist.logd.size          number  ro    Global default size of the buffer for
+                                         all log ids at initial startup, at
+                                         runtime use: logcat -b all -G <value>
+ro.logd.size               number svelte default for persist.logd.size. Larger
+                                         platform default sizes than 256KB are
+                                         known to not scale well under log spam
+                                         pressure. Address the spam first,
+                                         resist increasing the log buffer.
+persist.logd.size.<buffer> number  ro    Size of the buffer for <buffer> log
+ro.logd.size.<buffer>      number svelte default for persist.logd.size.<buffer>
+ro.config.low_ram          bool   false  if true, logd.statistics,
+                                         ro.logd.kernel default false,
+                                         logd.size 64K instead of 256K.
+persist.logd.filter        string        Pruning filter to optimize content.
+                                         At runtime use: logcat -P "<string>"
+ro.logd.filter       string "~! ~1000/!" default for persist.logd.filter.
+                                         This default means to prune the
+                                         oldest entries of chattiest UID, and
+                                         the chattiest PID of system
+                                         (1000, or AID_SYSTEM).
+persist.logd.timestamp     string  ro    The recording timestamp source.
+                                         "m[onotonic]" is the only supported
+                                         key character, otherwise realtime.
+ro.logd.timestamp        string realtime default for persist.logd.timestamp
+log.tag                   string persist The global logging level, VERBOSE,
+                                         DEBUG, INFO, WARN, ERROR, ASSERT or
+                                         SILENT. Only the first character is
+                                         the key character.
+persist.log.tag            string build  default for log.tag
+log.tag.<tag>             string persist The <tag> specific logging level.
+persist.log.tag.<tag>      string build  default for log.tag.<tag>
+
+NB:
+- auto - managed by /init
+- bool+ - "true", "false" and comma separated list of "eng" (forced false if
+  ro.debuggable is not "1") or "svelte" (forced false if ro.config.low_ram is
+  true).
+- svelte - see ro.config.low_ram for details.
+- svelte+ - see ro.config.low_ram and ro.debuggable for details.
+- ro - <base property> temporary override, ro.<base property> platform default.
+- persist - <base property> override, persist.<base property> platform default.
+- build - VERBOSE for native, DEBUG for jvm isLoggable, or developer option.
+- number - support multipliers (K or M) for convenience. Range is limited
+  to between 64K and 256M for log buffer sizes. Individual log buffer ids
+  such as main, system, ... override global default.
+- Pruning filter is of form of a space-separated list of [~][UID][/PID]
+  references, where '~' prefix means to blacklist otherwise whitelist. For
+  blacklisting, UID or PID may be a '!' to instead reference the chattiest
+  client, with the restriction that the PID must be in the UID group 1000
+  (system or AID_SYSTEM).

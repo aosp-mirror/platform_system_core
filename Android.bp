@@ -1,0 +1,4 @@
+filegroup {
+    name: "android_filesystem_config_header",
+    srcs: ["include/private/android_filesystem_config.h"],
+}

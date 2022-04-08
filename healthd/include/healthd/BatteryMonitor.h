@@ -66,9 +66,6 @@ class BatteryMonitor {
     void logValues(void);
     bool isChargerOnline();
 
-    static void logValues(const android::hardware::health::V2_1::HealthInfo& health_info,
-                          const struct healthd_config& healthd_config);
-
   private:
     struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;

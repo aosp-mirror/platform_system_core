@@ -45,14 +45,14 @@ namespace fiemap {
 
 using namespace android::dm;
 
-// We cap the maximum number of extents as a robustness measure.
+// We cap the maximum number of extents as a sanity measure.
 static constexpr uint32_t kMaxExtents = 50000;
 
 // TODO: Fallback to using fibmap if FIEMAP_EXTENT_MERGED is set.
 static constexpr const uint32_t kUnsupportedExtentFlags =
         FIEMAP_EXTENT_UNKNOWN | FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_DELALLOC |
         FIEMAP_EXTENT_NOT_ALIGNED | FIEMAP_EXTENT_DATA_INLINE | FIEMAP_EXTENT_DATA_TAIL |
-        FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_SHARED;
+        FIEMAP_EXTENT_UNWRITTEN | FIEMAP_EXTENT_SHARED | FIEMAP_EXTENT_MERGED;
 
 // Large file support must be enabled.
 static_assert(sizeof(off_t) == sizeof(uint64_t));

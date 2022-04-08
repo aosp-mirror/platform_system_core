@@ -60,20 +60,8 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
-
-struct MountAllResult {
-    // One of the FS_MGR_MNTALL_* returned code defined above.
-    int code;
-    // Whether userdata was mounted as a result of |fs_mgr_mount_all| call.
-    bool userdata_mounted;
-};
-
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.
-// Returns a |MountAllResult|. The first element is one of the FS_MNG_MNTALL_* return codes
-// defined above, and the second element tells whether this call to fs_mgr_mount_all was responsible
-// for mounting userdata. Later is required for init to correctly enqueue fs-related events as part
-// of userdata remount during userspace reboot.
-MountAllResult fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
+int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
@@ -88,10 +76,6 @@ int fs_mgr_do_tmpfs_mount(const char *n_name);
 bool fs_mgr_load_verity_state(int* mode);
 // Returns true if verity is enabled on this particular FstabEntry.
 bool fs_mgr_is_verity_enabled(const android::fs_mgr::FstabEntry& entry);
-// Returns the hash algorithm used to build the hashtree of this particular FstabEntry. Returns an
-// empty string if the input isn't a dm-verity entry, or if there is an error.
-std::string fs_mgr_get_hashtree_algorithm(const android::fs_mgr::FstabEntry& entry);
-
 bool fs_mgr_swapon_all(const android::fs_mgr::Fstab& fstab);
 bool fs_mgr_update_logical_partition(android::fs_mgr::FstabEntry* entry);
 
@@ -131,12 +115,3 @@ int fs_mgr_remount_userdata_into_checkpointing(android::fs_mgr::Fstab* fstab);
 // Finds the dm_bow device on which this block device is stacked, or returns
 // empty string
 std::string fs_mgr_find_bow_device(const std::string& block_device);
-
-// Creates mount point if not already existed, and checks that mount point is a
-// canonical path that doesn't contain any symbolic link or /../.
-bool fs_mgr_create_canonical_mount_point(const std::string& mount_point);
-
-// Like fs_mgr_do_mount_one() but for overlayfs fstab entries.
-// Unlike fs_mgr_overlayfs, mount overlayfs without upperdir and workdir, so the
-// filesystem cannot be remount read-write.
-bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry);

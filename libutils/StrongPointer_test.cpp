@@ -21,8 +21,8 @@
 
 using namespace android;
 
-class SPFoo : virtual public RefBase {
-  public:
+class SPFoo : public LightRefBase<SPFoo> {
+public:
     explicit SPFoo(bool* deleted_check) : mDeleted(deleted_check) {
         *mDeleted = false;
     }
@@ -30,34 +30,19 @@ class SPFoo : virtual public RefBase {
     ~SPFoo() {
         *mDeleted = true;
     }
-
-  private:
+private:
     bool* mDeleted;
 };
 
-class SPLightFoo : virtual public VirtualLightRefBase {
-  public:
-    explicit SPLightFoo(bool* deleted_check) : mDeleted(deleted_check) { *mDeleted = false; }
-
-    ~SPLightFoo() { *mDeleted = true; }
-
-  private:
-    bool* mDeleted;
-};
-
-template <typename T>
-class StrongPointer : public ::testing::Test {};
-
-using RefBaseTypes = ::testing::Types<SPFoo, SPLightFoo>;
-TYPED_TEST_CASE(StrongPointer, RefBaseTypes);
-
-TYPED_TEST(StrongPointer, move) {
+TEST(StrongPointer, move) {
     bool isDeleted;
-    sp<TypeParam> sp1 = sp<TypeParam>::make(&isDeleted);
-    TypeParam* foo = sp1.get();
+    SPFoo* foo = new SPFoo(&isDeleted);
+    ASSERT_EQ(0, foo->getStrongCount());
+    ASSERT_FALSE(isDeleted) << "Already deleted...?";
+    sp<SPFoo> sp1(foo);
     ASSERT_EQ(1, foo->getStrongCount());
     {
-        sp<TypeParam> sp2 = std::move(sp1);
+        sp<SPFoo> sp2 = std::move(sp1);
         ASSERT_EQ(1, foo->getStrongCount()) << "std::move failed, incremented refcnt";
         ASSERT_EQ(nullptr, sp1.get()) << "std::move failed, sp1 is still valid";
         // The strong count isn't increasing, let's double check the old object
@@ -67,42 +52,22 @@ TYPED_TEST(StrongPointer, move) {
     ASSERT_FALSE(isDeleted) << "deleted too early! still has a reference!";
     {
         // Now let's double check it deletes on time
-        sp<TypeParam> sp2 = std::move(sp1);
+        sp<SPFoo> sp2 = std::move(sp1);
     }
     ASSERT_TRUE(isDeleted) << "foo was leaked!";
 }
 
-TYPED_TEST(StrongPointer, NullptrComparison) {
-    sp<TypeParam> foo;
+TEST(StrongPointer, NullptrComparison) {
+    sp<SPFoo> foo;
     ASSERT_EQ(foo, nullptr);
     ASSERT_EQ(nullptr, foo);
 }
 
-TYPED_TEST(StrongPointer, PointerComparison) {
+TEST(StrongPointer, PointerComparison) {
     bool isDeleted;
-    sp<TypeParam> foo = sp<TypeParam>::make(&isDeleted);
+    sp<SPFoo> foo = new SPFoo(&isDeleted);
     ASSERT_EQ(foo.get(), foo);
     ASSERT_EQ(foo, foo.get());
     ASSERT_NE(nullptr, foo);
     ASSERT_NE(foo, nullptr);
-}
-
-TYPED_TEST(StrongPointer, Deleted) {
-    bool isDeleted;
-    sp<TypeParam> foo = sp<TypeParam>::make(&isDeleted);
-
-    auto foo2 = sp<TypeParam>::fromExisting(foo.get());
-
-    EXPECT_FALSE(isDeleted);
-    foo = nullptr;
-    EXPECT_FALSE(isDeleted);
-    foo2 = nullptr;
-    EXPECT_TRUE(isDeleted);
-}
-
-TYPED_TEST(StrongPointer, AssertStrongRefExists) {
-    bool isDeleted;
-    TypeParam* foo = new TypeParam(&isDeleted);
-    EXPECT_DEATH(sp<TypeParam>::fromExisting(foo), "");
-    delete foo;
 }

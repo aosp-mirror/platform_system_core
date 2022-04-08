@@ -119,105 +119,10 @@ const std::vector<std::pair<std::string, std::string>> result_space = {
         {"terminator", "truncated"},
 };
 
-const std::string bootconfig =
-        "androidboot.bootdevice  = \" \"1d84000.ufshc\"\n"
-        "androidboot.boot_devices = \"dev1\", \"dev2,withcomma\", \"dev3\"\n"
-        "androidboot.baseband = \"sdy\"\n"
-        "androidboot.keymaster = \"1\"\n"
-        "androidboot.serialno = \"BLAHBLAHBLAH\"\n"
-        "androidboot.slot_suffix = \"_a\"\n"
-        "androidboot.hardware.platform = \"sdw813\"\n"
-        "androidboot.hardware = \"foo\"\n"
-        "androidboot.revision = \"EVT1.0\"\n"
-        "androidboot.bootloader = \"burp-0.1-7521\"\n"
-        "androidboot.hardware.sku = \"mary\"\n"
-        "androidboot.hardware.radio.subtype = \"0\"\n"
-        "androidboot.dtbo_idx = \"2\"\n"
-        "androidboot.mode = \"normal\"\n"
-        "androidboot.hardware.ddr = \"1GB,combuchi,LPDDR4X\"\n"
-        "androidboot.ddr_info = \"combuchiandroidboot.ddr_size=2GB\"\n"
-        "androidboot.hardware.ufs = \"2GB,combushi\"\n"
-        "androidboot.boottime = \"0BLE:58,1BLL:22,1BLE:571,2BLL:105,ODT:0,AVB:123\"\n"
-        "androidboot.ramdump = \"disabled\"\n"
-        "androidboot.vbmeta.device = \"PARTUUID=aa08f1a4-c7c9-402e-9a66-9707cafa9ceb\"\n"
-        "androidboot.vbmeta.avb_version = \"1.1\"\n"
-        "androidboot.vbmeta.device_state = \"unlocked\"\n"
-        "androidboot.vbmeta.hash_alg = \"sha256\"\n"
-        "androidboot.vbmeta.size = \"5248\"\n"
-        "androidboot.vbmeta.digest = \""
-        "ac13147e959861c20f2a6da97d25fe79e60e902c022a371c5c039d31e7c68860\"\n"
-        "androidboot.vbmeta.invalidate_on_error = \"yes\"\n"
-        "androidboot.veritymode = \"enforcing\"\n"
-        "androidboot.verifiedbootstate = \"orange\"\n"
-        "androidboot.space = \"sha256 5248 androidboot.nospace = nope\"\n";
-
-const std::vector<std::pair<std::string, std::string>> bootconfig_result_space = {
-        {"androidboot.bootdevice", "1d84000.ufshc"},
-        {"androidboot.boot_devices", "dev1, dev2,withcomma, dev3"},
-        {"androidboot.baseband", "sdy"},
-        {"androidboot.keymaster", "1"},
-        {"androidboot.serialno", "BLAHBLAHBLAH"},
-        {"androidboot.slot_suffix", "_a"},
-        {"androidboot.hardware.platform", "sdw813"},
-        {"androidboot.hardware", "foo"},
-        {"androidboot.revision", "EVT1.0"},
-        {"androidboot.bootloader", "burp-0.1-7521"},
-        {"androidboot.hardware.sku", "mary"},
-        {"androidboot.hardware.radio.subtype", "0"},
-        {"androidboot.dtbo_idx", "2"},
-        {"androidboot.mode", "normal"},
-        {"androidboot.hardware.ddr", "1GB,combuchi,LPDDR4X"},
-        {"androidboot.ddr_info", "combuchiandroidboot.ddr_size=2GB"},
-        {"androidboot.hardware.ufs", "2GB,combushi"},
-        {"androidboot.boottime", "0BLE:58,1BLL:22,1BLE:571,2BLL:105,ODT:0,AVB:123"},
-        {"androidboot.ramdump", "disabled"},
-        {"androidboot.vbmeta.device", "PARTUUID=aa08f1a4-c7c9-402e-9a66-9707cafa9ceb"},
-        {"androidboot.vbmeta.avb_version", "1.1"},
-        {"androidboot.vbmeta.device_state", "unlocked"},
-        {"androidboot.vbmeta.hash_alg", "sha256"},
-        {"androidboot.vbmeta.size", "5248"},
-        {"androidboot.vbmeta.digest",
-         "ac13147e959861c20f2a6da97d25fe79e60e902c022a371c5c039d31e7c68860"},
-        {"androidboot.vbmeta.invalidate_on_error", "yes"},
-        {"androidboot.veritymode", "enforcing"},
-        {"androidboot.verifiedbootstate", "orange"},
-        {"androidboot.space", "sha256 5248 androidboot.nospace = nope"},
-};
-
-bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
-    // clang-format off
-    return lhs.wait == rhs.wait &&
-           lhs.check == rhs.check &&
-           lhs.crypt == rhs.crypt &&
-           lhs.nonremovable == rhs.nonremovable &&
-           lhs.vold_managed == rhs.vold_managed &&
-           lhs.recovery_only == rhs.recovery_only &&
-           lhs.verify == rhs.verify &&
-           lhs.force_crypt == rhs.force_crypt &&
-           lhs.no_emulated_sd == rhs.no_emulated_sd &&
-           lhs.no_trim == rhs.no_trim &&
-           lhs.file_encryption == rhs.file_encryption &&
-           lhs.formattable == rhs.formattable &&
-           lhs.slot_select == rhs.slot_select &&
-           lhs.force_fde_or_fbe == rhs.force_fde_or_fbe &&
-           lhs.late_mount == rhs.late_mount &&
-           lhs.no_fail == rhs.no_fail &&
-           lhs.verify_at_boot == rhs.verify_at_boot &&
-           lhs.quota == rhs.quota &&
-           lhs.avb == rhs.avb &&
-           lhs.logical == rhs.logical &&
-           lhs.checkpoint_blk == rhs.checkpoint_blk &&
-           lhs.checkpoint_fs == rhs.checkpoint_fs &&
-           lhs.first_stage_mount == rhs.first_stage_mount &&
-           lhs.slot_select_other == rhs.slot_select_other &&
-           lhs.fs_verity == rhs.fs_verity;
-    // clang-format on
-}
-
 }  // namespace
 
-TEST(fs_mgr, fs_mgr_parse_cmdline) {
-    EXPECT_EQ(result_space, fs_mgr_parse_cmdline(cmdline));
+TEST(fs_mgr, fs_mgr_parse_boot_config) {
+    EXPECT_EQ(result_space, fs_mgr_parse_boot_config(cmdline));
 }
 
 TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
@@ -232,27 +137,6 @@ TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
     EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "vbmeta.avb_versio", &content));
     EXPECT_TRUE(content.empty()) << content;
     EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "nospace", &content));
-    EXPECT_TRUE(content.empty()) << content;
-}
-
-TEST(fs_mgr, fs_mgr_parse_bootconfig) {
-    EXPECT_EQ(bootconfig_result_space, fs_mgr_parse_proc_bootconfig(bootconfig));
-}
-
-TEST(fs_mgr, fs_mgr_get_boot_config_from_bootconfig) {
-    std::string content;
-    for (const auto& entry : bootconfig_result_space) {
-        static constexpr char androidboot[] = "androidboot.";
-        if (!android::base::StartsWith(entry.first, androidboot)) continue;
-        auto key = entry.first.substr(strlen(androidboot));
-        EXPECT_TRUE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, key, &content))
-                << " for " << key;
-        EXPECT_EQ(entry.second, content);
-    }
-
-    EXPECT_FALSE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, "vbmeta.avb_versio", &content));
-    EXPECT_TRUE(content.empty()) << content;
-    EXPECT_FALSE(fs_mgr_get_boot_config_from_bootconfig(bootconfig, "nospace", &content));
     EXPECT_TRUE(content.empty()) << content;
 }
 
@@ -321,18 +205,19 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
     EXPECT_EQ(i, fstab.size());
 }
 
-TEST(fs_mgr, ReadFstabFromFile_MountOptions) {
+// TODO(124837435): enable it later when it can pass TreeHugger.
+TEST(fs_mgr, DISABLED_ReadFstabFromFile_MountOptions) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
-source /            ext4    ro,barrier=1                    wait,avb
+source /            ext4    ro,barrier=1                    wait,slotselect,avb
 source /metadata    ext4    noatime,nosuid,nodev,discard    wait,formattable
 
 source /data        f2fs    noatime,nosuid,nodev,discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier    latemount,wait,check,fileencryption=ice,keydirectory=/metadata/vold/metadata_encryption,quota,formattable,sysfs_path=/sys/devices/platform/soc/1d84000.ufshc,reservedsize=128M
 
 source /misc        emmc    defaults                        defaults
 
-source /vendor/firmware_mnt    vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0    wait
+source /vendor/firmware_mnt    vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0    wait,slotselect
 
 source auto         vfat    defaults                        voldmanaged=usb:auto
 source none         swap    defaults                        zramsize=1073741824,max_comp_streams=8
@@ -345,75 +230,94 @@ source none5        swap    rw                              zramsize=1073741824,
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(11U, fstab.size());
+    ASSERT_EQ(11U, fstab.size());
 
-    FstabEntry* entry = GetEntryForMountPoint(&fstab, "/");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_RDONLY), entry->flags);
-    EXPECT_EQ("barrier=1", entry->fs_options);
+    EXPECT_EQ("/", fstab[0].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_RDONLY), fstab[0].flags);
+    EXPECT_EQ("barrier=1", fstab[0].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "/metadata");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_NOATIME | MS_NOSUID | MS_NODEV), entry->flags);
-    EXPECT_EQ("discard", entry->fs_options);
+    EXPECT_EQ("/metadata", fstab[1].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_NOATIME | MS_NOSUID | MS_NODEV), fstab[1].flags);
+    EXPECT_EQ("discard", fstab[1].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "/data");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_NOATIME | MS_NOSUID | MS_NODEV), entry->flags);
-    EXPECT_EQ("discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier", entry->fs_options);
+    EXPECT_EQ("/data", fstab[2].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_NOATIME | MS_NOSUID | MS_NODEV), fstab[2].flags);
+    EXPECT_EQ("discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier", fstab[2].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "/misc");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(0U, entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("/misc", fstab[3].mount_point);
+    EXPECT_EQ(0U, fstab[3].flags);
+    EXPECT_EQ("", fstab[3].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "/vendor/firmware_mnt");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_RDONLY), entry->flags);
+    EXPECT_EQ("/vendor/firmware_mnt", fstab[4].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_RDONLY), fstab[4].flags);
     EXPECT_EQ(
             "shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,"
             "context=u:object_r:firmware_file:s0",
-            entry->fs_options);
+            fstab[4].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "auto");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(0U, entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("auto", fstab[5].mount_point);
+    EXPECT_EQ(0U, fstab[5].flags);
+    EXPECT_EQ("", fstab[5].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "none");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(0U, entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("none", fstab[6].mount_point);
+    EXPECT_EQ(0U, fstab[6].flags);
+    EXPECT_EQ("", fstab[6].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "none2");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_NODIRATIME | MS_REMOUNT | MS_BIND), entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("none2", fstab[7].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_NODIRATIME | MS_REMOUNT | MS_BIND), fstab[7].flags);
+    EXPECT_EQ("", fstab[7].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "none3");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_UNBINDABLE | MS_PRIVATE | MS_SLAVE), entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("none3", fstab[8].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_UNBINDABLE | MS_PRIVATE | MS_SLAVE), fstab[8].flags);
+    EXPECT_EQ("", fstab[8].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "none4");
-    ASSERT_NE(nullptr, entry);
-    EXPECT_EQ(static_cast<unsigned long>(MS_NOEXEC | MS_SHARED | MS_REC), entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("none4", fstab[9].mount_point);
+    EXPECT_EQ(static_cast<unsigned long>(MS_NOEXEC | MS_SHARED | MS_REC), fstab[9].flags);
+    EXPECT_EQ("", fstab[9].fs_options);
 
-    entry = GetEntryForMountPoint(&fstab, "none5");
-    ASSERT_NE(nullptr, entry);
-    // rw is the default.
-    EXPECT_EQ(0U, entry->flags);
-    EXPECT_EQ("", entry->fs_options);
+    EXPECT_EQ("none5", fstab[10].mount_point);
+    EXPECT_EQ(0U, fstab[10].flags);  // rw is the same as defaults
+    EXPECT_EQ("", fstab[10].fs_options);
 }
 
-TEST(fs_mgr, ReadFstabFromFile_FsMgrFlags) {
+static bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
+    // clang-format off
+    return lhs.wait == rhs.wait &&
+           lhs.check == rhs.check &&
+           lhs.crypt == rhs.crypt &&
+           lhs.nonremovable == rhs.nonremovable &&
+           lhs.vold_managed == rhs.vold_managed &&
+           lhs.recovery_only == rhs.recovery_only &&
+           lhs.verify == rhs.verify &&
+           lhs.force_crypt == rhs.force_crypt &&
+           lhs.no_emulated_sd == rhs.no_emulated_sd &&
+           lhs.no_trim == rhs.no_trim &&
+           lhs.file_encryption == rhs.file_encryption &&
+           lhs.formattable == rhs.formattable &&
+           lhs.slot_select == rhs.slot_select &&
+           lhs.force_fde_or_fbe == rhs.force_fde_or_fbe &&
+           lhs.late_mount == rhs.late_mount &&
+           lhs.no_fail == rhs.no_fail &&
+           lhs.verify_at_boot == rhs.verify_at_boot &&
+           lhs.quota == rhs.quota &&
+           lhs.avb == rhs.avb &&
+           lhs.logical == rhs.logical &&
+           lhs.checkpoint_blk == rhs.checkpoint_blk &&
+           lhs.checkpoint_fs == rhs.checkpoint_fs &&
+           lhs.first_stage_mount == rhs.first_stage_mount &&
+           lhs.slot_select_other == rhs.slot_select_other &&
+           lhs.fs_verity == rhs.fs_verity;
+    // clang-format on
+}
+
+// TODO(124837435): enable it later when it can pass TreeHugger.
+TEST(fs_mgr, DISABLED_ReadFstabFromFile_FsMgrFlags) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
 source none0       swap   defaults      wait,check,nonremovable,recoveryonly,verifyatboot,verify
-source none1       swap   defaults      avb,noemulatedsd,notrim,formattable,nofail
-source none2       swap   defaults      first_stage_mount,latemount,quota,logical
+source none1       swap   defaults      avb,noemulatedsd,notrim,formattable,slotselect,nofail
+source none2       swap   defaults      first_stage_mount,latemount,quota,logical,slotselect_other
 source none3       swap   defaults      checkpoint=block
 source none4       swap   defaults      checkpoint=fs
 source none5       swap   defaults      defaults
@@ -422,10 +326,10 @@ source none5       swap   defaults      defaults
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(6U, fstab.size());
+    ASSERT_EQ(6U, fstab.size());
 
-    FstabEntry* entry = GetEntryForMountPoint(&fstab, "none0");
-    ASSERT_NE(nullptr, entry);
+    auto entry = fstab.begin();
+    EXPECT_EQ("none0", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.wait = true;
@@ -436,48 +340,50 @@ source none5       swap   defaults      defaults
         flags.verify = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
+    entry++;
 
-    entry = GetEntryForMountPoint(&fstab, "none1");
-    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ("none1", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.avb = true;
         flags.no_emulated_sd = true;
         flags.no_trim = true;
         flags.formattable = true;
+        flags.slot_select = true;
         flags.no_fail = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
+    entry++;
 
-    entry = GetEntryForMountPoint(&fstab, "none2");
-    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ("none2", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.first_stage_mount = true;
         flags.late_mount = true;
         flags.quota = true;
         flags.logical = true;
+        flags.slot_select_other = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
+    entry++;
 
-    entry = GetEntryForMountPoint(&fstab, "none3");
-    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ("none3", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.checkpoint_blk = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
+    entry++;
 
-    entry = GetEntryForMountPoint(&fstab, "none4");
-    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ("none4", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         flags.checkpoint_fs = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
+    entry++;
 
-    entry = GetEntryForMountPoint(&fstab, "none5");
-    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ("none5", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
@@ -499,7 +405,7 @@ source none2       swap   defaults      forcefdeorfbe=
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(3U, fstab.size());
+    ASSERT_EQ(3U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -569,7 +475,7 @@ source none0       swap   defaults      encryptable=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.crypt = true;
@@ -593,7 +499,7 @@ source none3       swap   defaults      voldmanaged=sdcard:auto
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(4U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.vold_managed = true;
@@ -634,7 +540,7 @@ source none1       swap   defaults      length=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(2U, fstab.size());
+    ASSERT_EQ(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -660,7 +566,7 @@ source none1       swap   defaults      swapprio=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(2U, fstab.size());
+    ASSERT_EQ(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -690,7 +596,7 @@ source none5       swap   defaults      zramsize=%
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(6U, fstab.size());
+    ASSERT_EQ(6U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -736,7 +642,7 @@ source none0       swap   defaults      forceencrypt=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -759,7 +665,7 @@ source none0       swap   defaults      forcefdeorfbe=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -783,7 +689,7 @@ source none0       swap   defaults      fileencryption=aes-256-xts:aes-256-cts:v
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
     flags.file_encryption = true;
@@ -805,7 +711,7 @@ source none1       swap   defaults      max_comp_streams=123456
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(2U, fstab.size());
+    ASSERT_EQ(2U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -833,7 +739,7 @@ source none3       swap   defaults      reservedsize=2m
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(4U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -871,7 +777,7 @@ source none3       swap   defaults      eraseblk=8192
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(4U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -909,7 +815,7 @@ source none3       swap   defaults      logicalblk=8192
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(4U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     FstabEntry::FsMgrFlags flags = {};
 
@@ -946,7 +852,7 @@ source none1       swap   defaults      avb_keys=/path/to/test.avbpubkey
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(2U, fstab.size());
+    ASSERT_EQ(2U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -975,7 +881,7 @@ source none0       swap   defaults      keydirectory=/dir/key
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -997,7 +903,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("adiantum", entry->metadata_encryption);
@@ -1014,7 +920,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
@@ -1035,7 +941,7 @@ source none0       swap   defaults      sysfs_path=/sys/device
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(1U, fstab.size());
+    ASSERT_EQ(1U, fstab.size());
 
     auto entry = fstab.begin();
     EXPECT_EQ("none0", entry->mount_point);
@@ -1061,7 +967,7 @@ source none4       swap   defaults      zram_backingdev_size=2m
 
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(4U, fstab.size());
+    ASSERT_EQ(4U, fstab.size());
 
     auto entry = fstab.begin();
 
@@ -1104,60 +1010,4 @@ TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
     ASSERT_TRUE(android::base::Realpath(mounted_entry->blk_device, &block_device));
     ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, block_device))
             << "/data wasn't mounted from default fstab";
-}
-
-TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Readahead_Size_KB) {
-    TemporaryFile tf;
-    ASSERT_TRUE(tf.fd != -1);
-    std::string fstab_contents = R"fs(
-source none0       swap   defaults      readahead_size_kb=blah
-source none1       swap   defaults      readahead_size_kb=128
-source none2       swap   defaults      readahead_size_kb=5%
-source none3       swap   defaults      readahead_size_kb=5kb
-source none4       swap   defaults      readahead_size_kb=16385
-source none5       swap   defaults      readahead_size_kb=-128
-source none6       swap   defaults      readahead_size_kb=0
-)fs";
-    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
-
-    Fstab fstab;
-    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
-    ASSERT_LE(7U, fstab.size());
-
-    FstabEntry::FsMgrFlags flags = {};
-
-    auto entry = fstab.begin();
-    EXPECT_EQ("none0", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(-1, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none1", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(128, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none2", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(-1, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none3", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(-1, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none4", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(-1, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none5", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(-1, entry->readahead_size_kb);
-    entry++;
-
-    EXPECT_EQ("none6", entry->mount_point);
-    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(0, entry->readahead_size_kb);
 }

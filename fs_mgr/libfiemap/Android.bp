@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_library_headers {
     name: "libfiemap_headers",
     recovery_available: true,
@@ -49,7 +45,6 @@ cc_defaults {
     whole_static_libs: [
         "gsi_aidl_interface-cpp",
         "libgsi",
-        "libgsid",
     ],
     shared_libs: [
         "libbinder",
@@ -95,7 +90,6 @@ cc_test {
 cc_test {
     name: "fiemap_image_test",
     static_libs: [
-        "libcrypto_utils",
         "libdm",
         "libext4_utils",
         "libfs_mgr",
@@ -104,6 +98,34 @@ cc_test {
     shared_libs: [
         "libbase",
         "libcrypto",
+        "libcrypto_utils",
+        "libcutils",
+        "liblog",
+    ],
+    srcs: [
+        "image_test.cpp",
+    ],
+    test_suites: ["device-tests"],
+    auto_gen_config: true,
+    require_root: true,
+}
+
+/* BUG(148874852) temporary test */
+cc_test {
+    name: "fiemap_image_test_presubmit",
+    cppflags: [
+        "-DSKIP_TEST_IN_PRESUBMIT",
+    ],
+    static_libs: [
+        "libdm",
+        "libext4_utils",
+        "libfs_mgr",
+        "liblp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcrypto",
+        "libcrypto_utils",
         "libcutils",
         "liblog",
     ],

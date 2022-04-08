@@ -1,0 +1,12 @@
+{
+  "postsubmit": [
+    {
+      "name": "libfs_avb_test",
+      "host": true
+    },
+    {
+      "name": "libfs_avb_internal_test",
+      "host": true
+    }
+  ]
+}

@@ -53,7 +53,11 @@ void WriteFromMultipleThreads(std::vector<std::pair<std::string, T>>& files_and_
     };
 
     std::vector<std::thread> threads;
-    for (const auto& [file, parameter] : files_and_parameters) {
+    // TODO(b/63712782): Structured bindings + templated containers are broken in clang :(
+    // for (const auto& [file, parameter] : files_and_parameters) {
+    for (const auto& pair : files_and_parameters) {
+        const auto& file = pair.first;
+        const auto& parameter = pair.second;
         threads.emplace_back(std::thread(make_thread_function(file, parameter)));
     }
 

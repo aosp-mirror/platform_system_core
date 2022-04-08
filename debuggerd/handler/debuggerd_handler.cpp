@@ -53,6 +53,7 @@
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
+#include <cutils/properties.h>
 
 #include <libdebuggerd/utility.h>
 
@@ -82,7 +83,7 @@ using unique_fd = android::base::unique_fd_impl<FdsanBypassCloser>;
 #define CRASH_DUMP_NAME "crash_dump32"
 #endif
 
-#define CRASH_DUMP_PATH "/apex/com.android.runtime/bin/" CRASH_DUMP_NAME
+#define CRASH_DUMP_PATH "/system/bin/" CRASH_DUMP_NAME
 
 // Wrappers that directly invoke the respective syscalls, in case the cached values are invalid.
 #pragma GCC poison getpid gettid
@@ -274,7 +275,7 @@ static void create_vm_process() {
 
     // There appears to be a bug in the kernel where our death causes SIGHUP to
     // be sent to our process group if we exit while it has stopped jobs (e.g.
-    // because of wait_for_debugger). Use setsid to create a new process group to
+    // because of wait_for_gdb). Use setsid to create a new process group to
     // avoid hitting this.
     setsid();
 
@@ -296,7 +297,10 @@ struct debugger_thread_info {
   pid_t pseudothread_tid;
   siginfo_t* siginfo;
   void* ucontext;
-  debugger_process_info process_info;
+  uintptr_t abort_msg;
+  uintptr_t fdsan_table;
+  uintptr_t gwp_asan_state;
+  uintptr_t gwp_asan_metadata;
 };
 
 // Logging and contacting debuggerd requires free file descriptors, which we might not have.
@@ -312,7 +316,7 @@ static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) 
     return kDebuggerdNativeBacktrace;
   }
 
-  return kDebuggerdTombstoneProto;
+  return kDebuggerdTombstone;
 }
 
 static int debuggerd_dispatch_pseudothread(void* arg) {
@@ -340,35 +344,24 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     fatal_errno("failed to create pipe");
   }
 
-  uint32_t version;
-  ssize_t expected;
-
   // ucontext_t is absurdly large on AArch64, so piece it together manually with writev.
-  struct iovec iovs[4] = {
-      {.iov_base = &version, .iov_len = sizeof(version)},
-      {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
-      {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
-  };
+  uint32_t version = 3;
+  constexpr size_t expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataV3);
 
-  if (thread_info->process_info.fdsan_table) {
-    // Dynamic executables always use version 4. There is no need to increment the version number if
-    // the format changes, because the sender (linker) and receiver (crash_dump) are version locked.
-    version = 4;
-    expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
-
-    iovs[3] = {.iov_base = &thread_info->process_info,
-               .iov_len = sizeof(thread_info->process_info)};
-  } else {
-    // Static executables always use version 1.
-    version = 1;
-    expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
-
-    iovs[3] = {.iov_base = &thread_info->process_info.abort_msg, .iov_len = sizeof(uintptr_t)};
-  }
   errno = 0;
   if (fcntl(output_write.get(), F_SETPIPE_SZ, expected) < static_cast<int>(expected)) {
     fatal_errno("failed to set pipe buffer size");
   }
+
+  struct iovec iovs[] = {
+      {.iov_base = &version, .iov_len = sizeof(version)},
+      {.iov_base = thread_info->siginfo, .iov_len = sizeof(siginfo_t)},
+      {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
+      {.iov_base = &thread_info->abort_msg, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->fdsan_table, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->gwp_asan_state, .iov_len = sizeof(uintptr_t)},
+      {.iov_base = &thread_info->gwp_asan_metadata, .iov_len = sizeof(uintptr_t)},
+  };
 
   ssize_t rc = TEMP_FAILURE_RETRY(writev(output_write.get(), iovs, arraysize(iovs)));
   if (rc == -1) {
@@ -415,28 +408,23 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   // us to fork off a process to read memory from.
   char buf[4];
   rc = TEMP_FAILURE_RETRY(read(input_read.get(), &buf, sizeof(buf)));
-
-  bool success = false;
-  if (rc == 1 && buf[0] == '\1') {
-    // crash_dump successfully started, and is ptracing us.
-    // Fork off a copy of our address space for it to use.
-    create_vm_process();
-    success = true;
-  } else {
-    // Something went wrong, log it.
-    if (rc == -1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s",
-                            strerror(errno));
-    } else if (rc == 0) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                            "crash_dump helper failed to exec, or was killed");
-    } else if (rc != 1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                            "read of IPC pipe returned unexpected value: %zd", rc);
-    } else if (buf[0] != '\1') {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
-    }
+  if (rc == -1) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s", strerror(errno));
+    return 1;
+  } else if (rc == 0) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper failed to exec");
+    return 1;
+  } else if (rc != 1) {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc",
+                          "read of IPC pipe returned unexpected value: %zd", rc);
+    return 1;
+  } else if (buf[0] != '\1') {
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
+    return 1;
   }
+
+  // crash_dump is ptracing us, fork off a copy of our address space for it to use.
+  create_vm_process();
 
   // Don't leave a zombie child.
   int status;
@@ -447,16 +435,14 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
   }
 
-  if (success) {
-    if (thread_info->siginfo->si_signo != BIONIC_SIGNAL_DEBUGGER) {
-      // For crashes, we don't need to minimize pause latency.
-      // Wait for the dump to complete before having the process exit, to avoid being murdered by
-      // ActivityManager or init.
-      TEMP_FAILURE_RETRY(read(input_read, &buf, sizeof(buf)));
-    }
+  if (thread_info->siginfo->si_signo != BIONIC_SIGNAL_DEBUGGER) {
+    // For crashes, we don't need to minimize pause latency.
+    // Wait for the dump to complete before having the process exit, to avoid being murdered by
+    // ActivityManager or init.
+    TEMP_FAILURE_RETRY(read(input_read, &buf, sizeof(buf)));
   }
 
-  return success ? 0 : 1;
+  return 0;
 }
 
 static void resend_signal(siginfo_t* info) {
@@ -482,8 +468,6 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   // making a syscall and checking errno.
   ErrnoRestorer restorer;
 
-  auto *ucontext = static_cast<ucontext_t*>(context);
-
   // It's possible somebody cleared the SA_SIGINFO flag, which would mean
   // our "info" arg holds an undefined value.
   if (!have_siginfo(signal_number)) {
@@ -505,19 +489,29 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // check to allow all si_code values in calls coming from inside the house.
   }
 
-  debugger_process_info process_info = {};
+  void* abort_message = nullptr;
+  const gwp_asan::AllocatorState* gwp_asan_state = nullptr;
+  const gwp_asan::AllocationMetadata* gwp_asan_metadata = nullptr;
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
   if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
       // Allow for the abort message to be explicitly specified via the sigqueue value.
       // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
       if (si_val != kDebuggerdFallbackSivalUintptrRequestDump) {
-        process_info.abort_msg = reinterpret_cast<void*>(si_val & ~1);
+        abort_message = reinterpret_cast<void*>(si_val & ~1);
         info->si_ptr = reinterpret_cast<void*>(si_val & 1);
       }
     }
-  } else if (g_callbacks.get_process_info) {
-    process_info = g_callbacks.get_process_info();
+  } else {
+    if (g_callbacks.get_abort_message) {
+      abort_message = g_callbacks.get_abort_message();
+    }
+    if (g_callbacks.get_gwp_asan_state) {
+      gwp_asan_state = g_callbacks.get_gwp_asan_state();
+    }
+    if (g_callbacks.get_gwp_asan_metadata) {
+      gwp_asan_metadata = g_callbacks.get_gwp_asan_metadata();
+    }
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
@@ -530,7 +524,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // This check might be racy if another thread sets NO_NEW_PRIVS, but this should be unlikely,
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
-    debuggerd_fallback_handler(info, ucontext, process_info.abort_msg);
+    debuggerd_fallback_handler(info, static_cast<ucontext_t*>(context), abort_message);
     resend_signal(info);
     return;
   }
@@ -549,7 +543,10 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
       .pseudothread_tid = -1,
       .siginfo = info,
       .ucontext = context,
-      .process_info = process_info,
+      .abort_msg = reinterpret_cast<uintptr_t>(abort_message),
+      .fdsan_table = reinterpret_cast<uintptr_t>(android_fdsan_get_fd_table()),
+      .gwp_asan_state = reinterpret_cast<uintptr_t>(gwp_asan_state),
+      .gwp_asan_metadata = reinterpret_cast<uintptr_t>(gwp_asan_metadata),
   };
 
   // Set PR_SET_DUMPABLE to 1, so that crash_dump can ptrace us.
@@ -600,7 +597,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
   } else {
-    // Resend the signal, so that either the debugger or the parent's waitpid sees it.
+    // Resend the signal, so that either gdb or the parent's waitpid sees it.
     resend_signal(info);
   }
 }
@@ -636,11 +633,5 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
 
   // Use the alternate signal stack if available so we can catch stack overflows.
   action.sa_flags |= SA_ONSTACK;
-
-#define SA_EXPOSE_TAGBITS 0x00000800
-  // Request that the kernel set tag bits in the fault address. This is necessary for diagnosing MTE
-  // faults.
-  action.sa_flags |= SA_EXPOSE_TAGBITS;
-
   debuggerd_register_handlers(&action);
 }

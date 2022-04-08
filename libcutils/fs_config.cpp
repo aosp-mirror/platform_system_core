@@ -35,9 +35,9 @@
 #include <string>
 
 #include <android-base/strings.h>
-#include <cutils/fs.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
+#include <utils/Compat.h>
 
 #include "fs_config.h"
 
@@ -80,18 +80,16 @@ static const struct fs_path_config android_dirs[] = {
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "product/bin" },
-    { 00751, AID_ROOT,         AID_SHELL,        0, "product/apex/*/bin" },
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/bin" },
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
+    { 00751, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/apex/*/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system_ext/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system_ext/apex/*/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
-    { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/apex/*/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
     { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
         // clang-format on
@@ -203,28 +201,20 @@ static const struct fs_path_config android_files[] = {
                                            CAP_MASK_LONG(CAP_SETGID),
                                               "system/bin/simpleperf_app_runner" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/e2fsck" },
-#ifdef __LP64__
-    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/linker64" },
-#else
-    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/linker" },
-#endif
-    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
-    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "odm/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "product/bin/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "product/apex/*bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/*/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system_ext/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system_ext/apex/*/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
-    { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/apex/*bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
         // clang-format on

@@ -7,19 +7,13 @@
       "name": "liblp_test"
     },
     {
-      "name": "fiemap_image_test"
+      "name": "fiemap_image_test_presubmit"
     },
     {
       "name": "fiemap_writer_test"
     },
     {
       "name": "vts_libsnapshot_test"
-    },
-    {
-      "name": "libsnapshot_fuzzer_test"
-    },
-    {
-      "name": "cow_api_test"
     }
   ]
 }

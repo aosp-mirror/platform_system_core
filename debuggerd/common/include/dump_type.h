@@ -24,8 +24,7 @@ enum DebuggerdDumpType : uint8_t {
   kDebuggerdNativeBacktrace,
   kDebuggerdTombstone,
   kDebuggerdJavaBacktrace,
-  kDebuggerdAnyIntercept,
-  kDebuggerdTombstoneProto,
+  kDebuggerdAnyIntercept
 };
 
 inline std::ostream& operator<<(std::ostream& stream, const DebuggerdDumpType& rhs) {
@@ -41,9 +40,6 @@ inline std::ostream& operator<<(std::ostream& stream, const DebuggerdDumpType& r
       break;
     case kDebuggerdAnyIntercept:
       stream << "kDebuggerdAnyIntercept";
-      break;
-    case kDebuggerdTombstoneProto:
-      stream << "kDebuggerdTombstoneProto";
       break;
     default:
       stream << "[unknown]";

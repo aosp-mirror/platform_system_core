@@ -18,7 +18,6 @@
 
 #include <android-base/logging.h>
 #include <android/snapshot/snapshot.pb.h>
-#include <storage_literals/storage_literals.h>
 
 #include "dm_snapshot_internals.h"
 #include "utility.h"
@@ -34,10 +33,6 @@ using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 
 namespace android {
 namespace snapshot {
-
-static constexpr uint64_t kBlockSize = 4096;
-
-using namespace android::storage_literals;
 
 // Intersect two linear extents. If no intersection, return an extent with length 0.
 static std::unique_ptr<Extent> Intersect(Extent* target_extent, Extent* existing_extent) {
@@ -142,23 +137,7 @@ void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Exte
     }
 }
 
-std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
-    if (compression_enabled) {
-        if (update == nullptr || !update->has_estimate_cow_size()) {
-            LOG(ERROR) << "Update manifest does not include a COW size";
-            return std::nullopt;
-        }
-
-        // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
-        // that might come up.
-        auto size = update->estimate_cow_size() + 2_MiB;
-
-        // Align to nearest block.
-        size += kBlockSize - 1;
-        size &= ~(kBlockSize - 1);
-        return size;
-    }
-
+uint64_t PartitionCowCreator::GetCowSize() {
     // WARNING: The origin partition should be READ-ONLY
     const uint64_t logical_block_size = current_metadata->logical_block_size();
     const unsigned int sectors_per_block = logical_block_size / kSectorSize;
@@ -170,9 +149,9 @@ std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
         WriteExtent(&sc, de, sectors_per_block);
     }
 
-    if (update == nullptr) return sc.cow_size_bytes();
+    if (operations == nullptr) return sc.cow_size_bytes();
 
-    for (const auto& iop : update->operations()) {
+    for (const auto& iop : *operations) {
         const InstallOperation* written_op = &iop;
         InstallOperation buf;
         // Do not allocate space for extents that are going to be skipped
@@ -201,10 +180,6 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     ret.snapshot_status.set_name(target_partition->name());
     ret.snapshot_status.set_device_size(target_partition->size());
     ret.snapshot_status.set_snapshot_size(target_partition->size());
-
-    if (update && update->has_estimate_cow_size()) {
-        ret.snapshot_status.set_estimated_cow_size(update->estimate_cow_size());
-    }
 
     if (ret.snapshot_status.snapshot_size() == 0) {
         LOG(INFO) << "Not creating snapshot for partition " << ret.snapshot_status.name();
@@ -238,12 +213,9 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
 
     LOG(INFO) << "Remaining free space for COW: " << free_region_length << " bytes";
     auto cow_size = GetCowSize();
-    if (!cow_size) {
-        return {};
-    }
 
     // Compute the COW partition size.
-    uint64_t cow_partition_size = std::min(cow_size.value(), free_region_length);
+    uint64_t cow_partition_size = std::min(cow_size, free_region_length);
     // Round it down to the nearest logical block. Logical partitions must be a multiple
     // of logical blocks.
     cow_partition_size &= ~(logical_block_size - 1);
@@ -251,7 +223,7 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
     // Assign cow_partition_usable_regions to indicate what regions should the COW partition uses.
     ret.cow_partition_usable_regions = std::move(free_regions);
 
-    auto cow_file_size = cow_size.value() - cow_partition_size;
+    auto cow_file_size = cow_size - cow_partition_size;
     // Round it up to the nearest sector.
     cow_file_size += kSectorSize - 1;
     cow_file_size &= ~(kSectorSize - 1);

@@ -75,7 +75,8 @@ void sparse_file_destroy(struct sparse_file *s);
  *
  * Returns 0 on success, negative errno on error.
  */
-int sparse_file_add_data(struct sparse_file* s, void* data, uint64_t len, unsigned int block);
+int sparse_file_add_data(struct sparse_file *s,
+		void *data, unsigned int len, unsigned int block);
 
 /**
  * sparse_file_add_fill - associate a fill chunk with a sparse file
@@ -92,8 +93,8 @@ int sparse_file_add_data(struct sparse_file* s, void* data, uint64_t len, unsign
  *
  * Returns 0 on success, negative errno on error.
  */
-int sparse_file_add_fill(struct sparse_file* s, uint32_t fill_val, uint64_t len,
-                         unsigned int block);
+int sparse_file_add_fill(struct sparse_file *s,
+		uint32_t fill_val, unsigned int len, unsigned int block);
 
 /**
  * sparse_file_add_file - associate a chunk of a file with a sparse file
@@ -115,8 +116,9 @@ int sparse_file_add_fill(struct sparse_file* s, uint32_t fill_val, uint64_t len,
  *
  * Returns 0 on success, negative errno on error.
  */
-int sparse_file_add_file(struct sparse_file* s, const char* filename, int64_t file_offset,
-                         uint64_t len, unsigned int block);
+int sparse_file_add_file(struct sparse_file *s,
+		const char *filename, int64_t file_offset, unsigned int len,
+		unsigned int block);
 
 /**
  * sparse_file_add_file - associate a chunk of a file with a sparse file
@@ -141,8 +143,8 @@ int sparse_file_add_file(struct sparse_file* s, const char* filename, int64_t fi
  *
  * Returns 0 on success, negative errno on error.
  */
-int sparse_file_add_fd(struct sparse_file* s, int fd, int64_t file_offset, uint64_t len,
-                       unsigned int block);
+int sparse_file_add_fd(struct sparse_file *s,
+		int fd, int64_t file_offset, unsigned int len, unsigned int block);
 
 /**
  * sparse_file_write - write a sparse file to a file

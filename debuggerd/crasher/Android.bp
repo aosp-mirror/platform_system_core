@@ -1,7 +1,3 @@
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_defaults {
     name: "crasher-defaults",
 
@@ -13,6 +9,7 @@ cc_defaults {
         "-Werror",
         "-O0",
         "-fstack-protector-all",
+        "-Wno-free-nonheap-object",
         "-Wno-date-time",
     ],
     srcs: ["crasher.cpp"],
@@ -26,6 +23,12 @@ cc_defaults {
         },
         arm64: {
             srcs: ["arm64/crashglue.S"],
+        },
+        mips: {
+            srcs: ["mips/crashglue.S"],
+        },
+        mips64: {
+            srcs: ["mips64/crashglue.S"],
         },
         x86: {
             srcs: ["x86/crashglue.S"],

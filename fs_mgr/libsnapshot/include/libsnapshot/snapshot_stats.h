@@ -23,26 +23,16 @@
 namespace android {
 namespace snapshot {
 
-class ISnapshotMergeStats {
+class SnapshotMergeStats {
   public:
-    virtual ~ISnapshotMergeStats() = default;
+    // Not thread safe.
+    static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
+
     // Called when merge starts or resumes.
-    virtual bool Start() = 0;
-    virtual void set_state(android::snapshot::UpdateState state, bool using_compression) = 0;
-    virtual void set_cow_file_size(uint64_t cow_file_size) = 0;
-    virtual void set_total_cow_size_bytes(uint64_t bytes) = 0;
-    virtual void set_estimated_cow_size_bytes(uint64_t bytes) = 0;
-    virtual void set_boot_complete_time_ms(uint32_t ms) = 0;
-    virtual void set_boot_complete_to_merge_start_time_ms(uint32_t ms) = 0;
-    virtual void set_merge_failure_code(MergeFailureCode code) = 0;
-    virtual void set_source_build_fingerprint(const std::string& fingerprint) = 0;
-    virtual uint64_t cow_file_size() = 0;
-    virtual uint64_t total_cow_size_bytes() = 0;
-    virtual uint64_t estimated_cow_size_bytes() = 0;
-    virtual uint32_t boot_complete_time_ms() = 0;
-    virtual uint32_t boot_complete_to_merge_start_time_ms() = 0;
-    virtual MergeFailureCode merge_failure_code() = 0;
-    virtual std::string source_build_fingerprint() = 0;
+    bool Start();
+    void set_state(android::snapshot::UpdateState state);
+    virtual void set_cow_file_size(uint64_t cow_file_size);
+    virtual uint64_t cow_file_size();
 
     // Called when merge ends. Properly clean up permanent storage.
     class Result {
@@ -52,41 +42,13 @@ class ISnapshotMergeStats {
         // Time between successful Start() / Resume() to Finish().
         virtual std::chrono::steady_clock::duration merge_time() const = 0;
     };
-    // Return nullptr if any failure.
-    virtual std::unique_ptr<Result> Finish() = 0;
-
-    // Write out the current state. This should be called when data might be lost that
-    // cannot be recovered (eg the COW sizes).
-    virtual bool WriteState() = 0;
-};
-
-class SnapshotMergeStats : public ISnapshotMergeStats {
-  public:
-    // Not thread safe.
-    static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
-
-    // ISnapshotMergeStats overrides
-    bool Start() override;
-    void set_state(android::snapshot::UpdateState state, bool using_compression) override;
-    void set_cow_file_size(uint64_t cow_file_size) override;
-    uint64_t cow_file_size() override;
-    void set_total_cow_size_bytes(uint64_t bytes) override;
-    void set_estimated_cow_size_bytes(uint64_t bytes) override;
-    uint64_t total_cow_size_bytes() override;
-    uint64_t estimated_cow_size_bytes() override;
-    void set_boot_complete_time_ms(uint32_t ms) override;
-    uint32_t boot_complete_time_ms() override;
-    void set_boot_complete_to_merge_start_time_ms(uint32_t ms) override;
-    uint32_t boot_complete_to_merge_start_time_ms() override;
-    void set_merge_failure_code(MergeFailureCode code) override;
-    MergeFailureCode merge_failure_code() override;
-    void set_source_build_fingerprint(const std::string& fingerprint) override;
-    std::string source_build_fingerprint() override;
-    std::unique_ptr<Result> Finish() override;
-    bool WriteState() override;
+    std::unique_ptr<Result> Finish();
 
   private:
+    virtual ~SnapshotMergeStats() {}
+
     bool ReadState();
+    bool WriteState();
     bool DeleteState();
     SnapshotMergeStats(const std::string& path);
 

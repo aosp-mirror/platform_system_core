@@ -26,9 +26,6 @@
 #include "types.h"
 #include "utility.h"
 
-class Cause;
-class Tombstone;
-
 class GwpAsanCrashData {
  public:
   GwpAsanCrashData() = delete;
@@ -41,8 +38,8 @@ class GwpAsanCrashData {
   // still be responsible, as it terminates when it detects an internal error
   // (double free, invalid free). In these cases, we will retrieve the fault
   // address from the GWP-ASan allocator's state.
-  GwpAsanCrashData(unwindstack::Memory* process_memory, const ProcessInfo& process_info,
-                   const ThreadInfo& thread_info);
+  GwpAsanCrashData(unwindstack::Memory* process_memory, uintptr_t gwp_asan_state_ptr,
+                   uintptr_t gwp_asan_metadata_ptr, const ThreadInfo& thread_info);
 
   // Is GWP-ASan responsible for this crash.
   bool CrashIsMine() const;
@@ -71,8 +68,6 @@ class GwpAsanCrashData {
   // Dump the GWP-ASan allocation trace for this crash. May only be called if
   // HasAllocationTrace() returns true.
   void DumpAllocationTrace(log_t* log, unwindstack::Unwinder* unwinder) const;
-
-  void AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const;
 
  protected:
   // Is GWP-ASan responsible for this crash.

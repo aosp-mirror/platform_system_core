@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_library {
     name: "libcrypto_utils",
     vendor_available: true,
@@ -27,7 +23,7 @@ cc_library {
     },
     host_supported: true,
     srcs: [
-        "android_pubkey.cpp",
+        "android_pubkey.c",
     ],
     cflags: [
         "-Wall",

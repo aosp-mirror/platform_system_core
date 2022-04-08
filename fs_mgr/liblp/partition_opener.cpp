@@ -38,9 +38,6 @@ using android::base::unique_fd;
 namespace {
 
 std::string GetPartitionAbsolutePath(const std::string& path) {
-#if !defined(__ANDROID__)
-    return path;
-#else
     if (android::base::StartsWith(path, "/")) {
         return path;
     }
@@ -52,14 +49,13 @@ std::string GetPartitionAbsolutePath(const std::string& path) {
         // Dynamic System Update is installed to an sdcard, which won't be in
         // the boot device list.
         //
-        // mmcblk* is allowed because most devices in /dev/block are not valid for
+        // We whitelist because most devices in /dev/block are not valid for
         // storing fiemaps.
         if (android::base::StartsWith(path, "mmcblk")) {
             return "/dev/block/" + path;
         }
     }
     return by_name;
-#endif
 }
 
 bool GetBlockDeviceInfo(const std::string& block_device, BlockDeviceInfo* device_info) {

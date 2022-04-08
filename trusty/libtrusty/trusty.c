@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,47 +27,35 @@
 
 #include <log/log.h>
 
-#include <trusty/ipc.h>
+#include "tipc_ioctl.h"
 
-int tipc_connect(const char* dev_name, const char* srv_name) {
-    int fd;
-    int rc;
+int tipc_connect(const char *dev_name, const char *srv_name)
+{
+	int fd;
+	int rc;
 
-    fd = TEMP_FAILURE_RETRY(open(dev_name, O_RDWR));
-    if (fd < 0) {
-        rc = -errno;
-        ALOGE("%s: cannot open tipc device \"%s\": %s\n", __func__, dev_name, strerror(errno));
-        return rc < 0 ? rc : -1;
-    }
+	fd = open(dev_name, O_RDWR);
+	if (fd < 0) {
+		rc = -errno;
+		ALOGE("%s: cannot open tipc device \"%s\": %s\n",
+		      __func__, dev_name, strerror(errno));
+		return rc < 0 ? rc : -1;
+	}
 
-    rc = TEMP_FAILURE_RETRY(ioctl(fd, TIPC_IOC_CONNECT, srv_name));
-    if (rc < 0) {
-        rc = -errno;
-        ALOGE("%s: can't connect to tipc service \"%s\" (err=%d)\n", __func__, srv_name, errno);
-        close(fd);
-        return rc < 0 ? rc : -1;
-    }
+	rc = ioctl(fd, TIPC_IOC_CONNECT, srv_name);
+	if (rc < 0) {
+		rc = -errno;
+		ALOGE("%s: can't connect to tipc service \"%s\" (err=%d)\n",
+		      __func__, srv_name, errno);
+		close(fd);
+		return rc < 0 ? rc : -1;
+	}
 
-    ALOGV("%s: connected to \"%s\" fd %d\n", __func__, srv_name, fd);
-    return fd;
+	ALOGV("%s: connected to \"%s\" fd %d\n", __func__, srv_name, fd);
+	return fd;
 }
 
-ssize_t tipc_send(int fd, const struct iovec* iov, int iovcnt, struct trusty_shm* shms,
-                  int shmcnt) {
-    struct tipc_send_msg_req req;
-    req.iov = (__u64)iov;
-    req.iov_cnt = (__u64)iovcnt;
-    req.shm = (__u64)shms;
-    req.shm_cnt = (__u64)shmcnt;
-
-    int rc = TEMP_FAILURE_RETRY(ioctl(fd, TIPC_IOC_SEND_MSG, &req));
-    if (rc < 0) {
-        ALOGE("%s: failed to send message (err=%d)\n", __func__, rc);
-    }
-
-    return rc;
-}
-
-void tipc_close(int fd) {
-    close(fd);
+void tipc_close(int fd)
+{
+	close(fd);
 }

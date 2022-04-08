@@ -20,10 +20,9 @@ namespace android {
 namespace fiemap {
 
 std::unique_ptr<IImageManager> IImageManager::Open(const std::string& dir_prefix,
-                                                   const std::chrono::milliseconds& timeout_ms,
-                                                   const DeviceInfo& device_info) {
+                                                   const std::chrono::milliseconds& timeout_ms) {
     (void)timeout_ms;
-    return ImageManager::Open(dir_prefix, device_info);
+    return ImageManager::Open(dir_prefix);
 }
 
 }  // namespace fiemap

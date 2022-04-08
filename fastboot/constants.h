@@ -35,7 +35,6 @@
 #define FB_CMD_OEM "oem"
 #define FB_CMD_GSI "gsi"
 #define FB_CMD_SNAPSHOT_UPDATE "snapshot-update"
-#define FB_CMD_FETCH "fetch"
 
 #define RESPONSE_OKAY "OKAY"
 #define RESPONSE_FAIL "FAIL"
@@ -78,4 +77,3 @@
 #define FB_VAR_FIRST_API_LEVEL "first-api-level"
 #define FB_VAR_SECURITY_PATCH_LEVEL "security-patch-level"
 #define FB_VAR_TREBLE_ENABLED "treble-enabled"
-#define FB_VAR_MAX_FETCH_SIZE "max-fetch-size"

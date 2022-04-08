@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#pragma once
+#ifndef ANDROID_UTILS_FLATTENABLE_H
+#define ANDROID_UTILS_FLATTENABLE_H
 
 // DO NOT USE: please use parcelable instead
 // This code is deprecated and will not be supported via AIDL code gen. For data
@@ -24,6 +25,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <utils/Errors.h>
+#include <utils/Debug.h>
 
 #include <type_traits>
 
@@ -215,3 +217,5 @@ public:
 };
 
 }  // namespace android
+
+#endif /* ANDROID_UTILS_FLATTENABLE_H */

@@ -283,7 +283,6 @@ static struct rpmb_dev_cmd rpmb_dev_cmd_table[] = {
                 {
                         .func = rpmb_dev_data_read,
                         .resp = RPMB_RESP_DATA_READ,
-                        .check_key_programmed = true,
                         .check_addr = true,
                         .multi_packet_res = true,
                         .res_mac = true,
@@ -592,7 +591,7 @@ int main(int argc, char** argv) {
         return EXIT_SUCCESS;
     }
 
-    open_flags = O_RDWR | O_SYNC;
+    open_flags = O_RDWR;
     if (init) {
         open_flags |= O_CREAT | O_TRUNC;
     }

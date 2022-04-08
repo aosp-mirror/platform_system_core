@@ -1,0 +1,178 @@
+#! /system/bin/sh
+# logpersist cat, start and stop handlers
+progname="${0##*/}"
+case `getprop ro.debuggable` in
+1) ;;
+*) echo "${progname} - Permission denied"
+   exit 1
+   ;;
+esac
+
+property=persist.logd.logpersistd
+
+case `getprop ${property#persist.}.enable` in
+true) ;;
+*) echo "${progname} - Disabled"
+   exit 1
+   ;;
+esac
+
+log_uid=logd
+log_tag_property=persist.log.tag
+data=/data/misc/logd/logcat
+service=logcatd
+size_default=256
+buffer_default=all
+args="${@}"
+
+size=${size_default}
+buffer=${buffer_default}
+clear=false
+while [ ${#} -gt 0 ]; do
+  case ${1} in
+    -c|--clear) clear=true ;;
+    --size=*) size="${1#--size=}" ;;
+    --rotate-count=*) size="${1#--rotate-count=}" ;;
+    -n|--size|--rotate-count) size="${2}" ; shift ;;
+    --buffer=*) buffer="${1#--buffer=}" ;;
+    -b|--buffer) buffer="${2}" ; shift ;;
+    -h|--help|*)
+      LEAD_SPACE_="`echo ${progname%.*} | tr '[ -~]' ' '`"
+      echo "${progname%.*}.cat             - dump current ${service} logs"
+      echo "${progname%.*}.start [--size=<size_in_kb>] [--buffer=<buffers>] [--clear]"
+      echo "${LEAD_SPACE_}                 - start ${service} service"
+      echo "${progname%.*}.stop [--clear]  - stop ${service} service"
+      case ${1} in
+        -h|--help) exit 0 ;;
+        *) echo ERROR: bad argument ${@} >&2 ; exit 1 ;;
+      esac
+      ;;
+  esac
+  shift
+done
+
+if [ -z "${size}" -o "${size_default}" = "${size}" ]; then
+  unset size
+fi
+if [ -n "${size}" ] &&
+  ! ( [ 0 -lt "${size}" ] && [ 2048 -ge "${size}" ] ) >/dev/null 2>&1; then
+  echo ERROR: Invalid --size ${size} >&2
+  exit 1
+fi
+if [ -z "${buffer}" -o "${buffer_default}" = "${buffer}" ]; then
+  unset buffer
+fi
+if [ -n "${buffer}" ] && ! logcat -b ${buffer} -g >/dev/null 2>&1; then
+  echo ERROR: Invalid --buffer ${buffer} >&2
+  exit 1
+fi
+
+log_tag="`getprop ${log_tag_property}`"
+logd_logpersistd="`getprop ${property}`"
+
+case ${progname} in
+*.cat)
+  if [ -n "${size}${buffer}" -o "true" = "${clear}" ]; then
+    echo WARNING: Can not use --clear, --size or --buffer with ${progname%.*}.cat >&2
+  fi
+  su ${log_uid} ls "${data%/*}" |
+  tr -d '\r' |
+  sort -ru |
+  sed "s#^#${data%/*}/#" |
+  grep "${data}[.]*[0-9]*\$" |
+  su ${log_uid} xargs cat
+  ;;
+*.start)
+  current_buffer="`getprop ${property#persist.}.buffer`"
+  current_size="`getprop ${property#persist.}.size`"
+  if [ "${service}" = "`getprop ${property#persist.}`" ]; then
+    if [ "true" = "${clear}" ]; then
+      setprop ${property#persist.} "clear"
+    elif [ "${buffer}|${size}" != "${current_buffer}|${current_size}" ]; then
+      echo   "ERROR: Changing existing collection parameters from" >&2
+      if [ "${buffer}" != "${current_buffer}" ]; then
+        a=${current_buffer}
+        b=${buffer}
+        if [ -z "${a}" ]; then a="${default_buffer}"; fi
+        if [ -z "${b}" ]; then b="${default_buffer}"; fi
+        echo "           --buffer ${a} to ${b}" >&2
+      fi
+      if [ "${size}" != "${current_size}" ]; then
+        a=${current_size}
+        b=${size}
+        if [ -z "${a}" ]; then a="${default_size}"; fi
+        if [ -z "${b}" ]; then b="${default_size}"; fi
+        echo "           --size ${a} to ${b}" >&2
+      fi
+      echo   "       Are you sure you want to do this?" >&2
+      echo   "       Suggest add --clear to erase data and restart with new settings." >&2
+      echo   "       To blindly override and retain data, ${progname%.*}.stop first." >&2
+      exit 1
+    fi
+  elif [ "true" = "${clear}" ]; then
+    setprop ${property#persist.} "clear"
+  fi
+  if [ -n "${buffer}${current_buffer}" ]; then
+    setprop ${property}.buffer "${buffer}"
+    if [ -z "${buffer}" ]; then
+      # deal with trampoline for empty properties
+      setprop ${property#persist.}.buffer ""
+    fi
+  fi
+  if [ -n "${size}${current_size}" ]; then
+    setprop ${property}.size "${size}"
+    if [ -z "${size}" ]; then
+      # deal with trampoline for empty properties
+      setprop ${property#persist.}.size ""
+    fi
+  fi
+  while [ "clear" = "`getprop ${property#persist.}`" ]; do
+    continue
+  done
+  # Tell Settings that we are back on again if we turned logging off
+  tag="${log_tag#Settings}"
+  if [ X"${log_tag}" != X"${tag}" ]; then
+    echo "WARNING: enabling logd service" >&2
+    setprop ${log_tag_property} "${tag#,}"
+  fi
+  # ${service}.rc does the heavy lifting with the following trigger
+  setprop ${property} ${service}
+  # 20ms done, to permit process feedback check
+  sleep 1
+  getprop ${property#persist.}
+  # also generate an error return code if not found running
+  pgrep -u ${log_uid} ${service%d}
+  ;;
+*.stop)
+  if [ -n "${size}${buffer}" ]; then
+    echo "WARNING: Can not use --size or --buffer with ${progname%.*}.stop" >&2
+  fi
+  if [ "true" = "${clear}" ]; then
+    setprop ${property#persist.} "clear"
+  else
+    setprop ${property#persist.} "stop"
+  fi
+  if [ -n "`getprop ${property#persist.}.buffer`" ]; then
+    setprop ${property}.buffer ""
+    # deal with trampoline for empty properties
+    setprop ${property#persist.}.buffer ""
+  fi
+  if [ -n "`getprop ${property#persist.}.size`" ]; then
+    setprop ${property}.size ""
+    # deal with trampoline for empty properties
+    setprop ${property#persist.}.size ""
+  fi
+  while [ "clear" = "`getprop ${property#persist.}`" ]; do
+    continue
+  done
+  ;;
+*)
+  echo "ERROR: Unexpected command ${0##*/} ${args}" >&2
+  exit 1
+esac
+
+if [ X"${log_tag}" != X"`getprop ${log_tag_property}`" ] ||
+   [ X"${logd_logpersistd}" != X"`getprop ${property}`" ]; then
+  echo "WARNING: killing Settings application to pull in new values" >&2
+  am force-stop com.android.settings
+fi

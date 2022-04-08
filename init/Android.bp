@@ -14,23 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["system_core_init_license"],
-}
-
-// Added automatically by a large-scale-change
-// See: http://go/android-license-faq
-license {
-    name: "system_core_init_license",
-    visibility: [":__subpackages__"],
-    license_kinds: [
-        "SPDX-license-identifier-Apache-2.0",
-    ],
-    license_text: [
-        "NOTICE",
-    ],
-}
-
 init_common_sources = [
     "action.cpp",
     "action_manager.cpp",
@@ -77,7 +60,6 @@ init_device_sources = [
     "selabel.cpp",
     "selinux.cpp",
     "sigchld_handler.cpp",
-    "snapuserd_transition.cpp",
     "switch_root.cpp",
     "uevent_listener.cpp",
     "ueventd.cpp",
@@ -91,6 +73,7 @@ init_host_sources = [
 
 cc_defaults {
     name: "init_defaults",
+    cpp_std: "experimental",
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
     },
@@ -143,15 +126,11 @@ cc_defaults {
         "libcgrouprc_format",
         "liblmkd_utils",
         "libmodprobe",
-        "libprocinfo",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsnapshot_cow",
         "libsnapshot_init",
-        "libxml2",
         "lib_apex_manifest_proto_lite",
-        "update_metadata-protos",
     ],
     shared_libs: [
         "libbacktrace",
@@ -184,9 +163,6 @@ cc_library_static {
         "selinux_policy_version",
     ],
     srcs: init_common_sources + init_device_sources,
-    generated_sources: [
-        "apex-info-list",
-    ],
     whole_static_libs: [
         "libcap",
         "com.android.sysprop.apex",
@@ -201,12 +177,6 @@ cc_library_static {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_static_libs: [
-                "libxml2",
-            ],
-            exclude_generated_sources: [
-                "apex-info-list",
-            ],
             exclude_shared_libs: [
                 "libbinder",
                 "libutils",
@@ -241,129 +211,11 @@ cc_binary {
     target: {
         recovery: {
             cflags: ["-DRECOVERY"],
-            exclude_static_libs: [
-                "libxml2",
-            ],
             exclude_shared_libs: [
                 "libbinder",
                 "libutils",
             ],
         },
-    },
-    visibility: ["//packages/modules/Virtualization/microdroid"],
-}
-
-// This currently is only for the VM usecase.
-// TODO(jiyong): replace init_first_stage in Android.mk with this
-cc_binary {
-    name: "init_first_stage_soong",
-    stem: "init_vendor",
-
-    srcs: [
-        "block_dev_initializer.cpp",
-        "devices.cpp",
-        "first_stage_console.cpp",
-        "first_stage_init.cpp",
-        "first_stage_main.cpp",
-        "first_stage_mount.cpp",
-        "reboot_utils.cpp",
-        "selabel.cpp",
-        "selinux.cpp",
-        "service_utils.cpp",
-        "snapuserd_transition.cpp",
-        "switch_root.cpp",
-        "uevent_listener.cpp",
-        "util.cpp",
-    ],
-
-    static_libs: [
-        "libc++fs",
-        "libfs_avb",
-        "libfs_mgr",
-        "libfec",
-        "libfec_rs",
-        "libsquashfs_utils",
-        "liblogwrap",
-        "libext4_utils",
-        "libcrypto_utils",
-        "libsparse",
-        "libavb",
-        "libkeyutils",
-        "liblp",
-        "libcutils",
-        "libbase",
-        "liblog",
-        "libcrypto_static",
-        "libdl",
-        "libz",
-        "libselinux",
-        "libcap",
-        "libgsi",
-        "libcom.android.sysprop.apex",
-        "liblzma",
-        "libunwindstack_no_dex",
-        "libbacktrace_no_dex",
-        "libmodprobe",
-        "libext2_uuid",
-        "libprotobuf-cpp-lite",
-        "libsnapshot_cow",
-        "libsnapshot_init",
-        "update_metadata-protos",
-        "libprocinfo",
-    ],
-
-    static_executable: true,
-
-    cflags: [
-        "-Wall",
-        "-Wextra",
-        "-Wno-unused-parameter",
-        "-Werror",
-        "-DALLOW_FIRST_STAGE_CONSOLE=0",
-        "-DALLOW_LOCAL_PROP_OVERRIDE=0",
-        "-DALLOW_PERMISSIVE_SELINUX=0",
-        "-DREBOOT_BOOTLOADER_ON_PANIC=0",
-        "-DWORLD_WRITABLE_KMSG=0",
-        "-DDUMP_ON_UMOUNT_FAILURE=0",
-        "-DSHUTDOWN_ZERO_TIMEOUT=0",
-        "-DLOG_UEVENTS=0",
-        "-DSEPOLICY_VERSION=30", // TODO(jiyong): externalize the version number
-    ],
-
-    product_variables: {
-        debuggable: {
-            cflags: [
-                "-UALLOW_FIRST_STAGE_CONSOLE",
-                "-DALLOW_FIRST_STAGE_CONSOLE=1",
-
-                "-UALLOW_LOCAL_PROP_OVERRIDE",
-                "-DALLOW_LOCAL_PROP_OVERRIDE=1",
-
-                "-UALLOW_PERMISSIVE_SELINUX",
-                "-DALLOW_PERMISSIVE_SELINUX=1",
-
-                "-UREBOOT_BOOTLOADER_ON_PANIC",
-                "-DREBOOT_BOOTLOADER_ON_PANIC=1",
-
-                "-UWORLD_WRITABLE_KMSG",
-                "-DWORLD_WRITABLE_KMSG=1",
-
-                "-UDUMP_ON_UMOUNT_FAILURE",
-                "-DDUMP_ON_UMOUNT_FAILURE=1",
-            ],
-        },
-
-        eng: {
-            cflags: [
-                "-USHUTDOWN_ZERO_TIMEOUT",
-                "-DSHUTDOWN_ZERO_TIMEOUT=1",
-            ],
-        },
-    },
-
-    sanitize: {
-        misc_undefined: ["signed-integer-overflow"],
-        hwaddress: false,
     },
 }
 
@@ -395,7 +247,6 @@ cc_test {
         "persistent_properties_test.cpp",
         "property_service_test.cpp",
         "property_type_test.cpp",
-        "reboot_test.cpp",
         "rlimit_parser_test.cpp",
         "service_test.cpp",
         "subcontext_test.cpp",
@@ -409,6 +260,7 @@ cc_test {
     test_suites: [
         "cts",
         "device-tests",
+        "vts10",
     ],
 }
 
@@ -469,6 +321,7 @@ genrule {
 cc_binary {
     name: "host_init_verifier",
     host_supported: true,
+    cpp_std: "experimental",
     cflags: [
         "-Wall",
         "-Wextra",

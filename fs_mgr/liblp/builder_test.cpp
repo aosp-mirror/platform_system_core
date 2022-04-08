@@ -174,12 +174,12 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 1536);
+    EXPECT_EQ(super_device->first_logical_sector, 1472);
 
-    // Alignment offset without alignment is ignored.
+    // Alignment offset without alignment doesn't mean anything.
     device_info.alignment = 0;
     builder = MetadataBuilder::New(device_info, 1024, 2);
-    ASSERT_NE(builder, nullptr);
+    ASSERT_EQ(builder, nullptr);
 
     // Test a small alignment with an alignment offset.
     device_info.alignment = 12 * 1024;
@@ -190,7 +190,7 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 168);
+    EXPECT_EQ(super_device->first_logical_sector, 174);
 
     // Test a small alignment with no alignment offset.
     device_info.alignment = 11 * 1024;
@@ -200,7 +200,7 @@ TEST_F(BuilderTest, InternalAlignment) {
     ASSERT_NE(exported, nullptr);
     super_device = GetMetadataSuperBlockDevice(*exported.get());
     ASSERT_NE(super_device, nullptr);
-    EXPECT_EQ(super_device->first_logical_sector, 154);
+    EXPECT_EQ(super_device->first_logical_sector, 160);
 }
 
 TEST_F(BuilderTest, InternalPartitionAlignment) {
@@ -228,14 +228,13 @@ TEST_F(BuilderTest, InternalPartitionAlignment) {
         ASSERT_EQ(extent.target_type, LP_TARGET_TYPE_LINEAR);
         EXPECT_EQ(extent.num_sectors, 80);
 
-        uint64_t aligned_lba;
         uint64_t lba = extent.target_data * LP_SECTOR_SIZE;
-        ASSERT_TRUE(AlignTo(lba, device_info.alignment, &aligned_lba));
+        uint64_t aligned_lba = AlignTo(lba, device_info.alignment, device_info.alignment_offset);
         EXPECT_EQ(lba, aligned_lba);
     }
 
-    // Check one extent.
-    EXPECT_EQ(exported->extents.back().target_data, 3072);
+    // Sanity check one extent.
+    EXPECT_EQ(exported->extents.back().target_data, 3008);
 }
 
 TEST_F(BuilderTest, UseAllDiskSpace) {
@@ -444,6 +443,11 @@ TEST_F(BuilderTest, MetadataTooLarge) {
     device_info.alignment = 131072;
     builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
     EXPECT_EQ(builder, nullptr);
+
+    device_info.alignment = 0;
+    device_info.alignment_offset = 32768 - LP_SECTOR_SIZE;
+    builder = MetadataBuilder::New(device_info, kMetadataSize, 1);
+    EXPECT_EQ(builder, nullptr);
 }
 
 TEST_F(BuilderTest, UpdateBlockDeviceInfo) {
@@ -648,7 +652,7 @@ TEST_F(BuilderTest, MultipleBlockDevices) {
     };
     unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(partitions, "system_a", 65536, 2);
     ASSERT_NE(builder, nullptr);
-    EXPECT_EQ(builder->AllocatableSpace(), 467402752);
+    EXPECT_EQ(builder->AllocatableSpace(), 467238912);
 
     // Create a partition that spans 3 devices.
     Partition* p = builder->AddPartition("system_a", 0);
@@ -671,17 +675,17 @@ TEST_F(BuilderTest, MultipleBlockDevices) {
     EXPECT_EQ(metadata->block_devices[2].alignment, 786432);
     EXPECT_EQ(metadata->block_devices[2].alignment_offset, 753664);
     ASSERT_EQ(metadata->extents.size(), 3);
-    EXPECT_EQ(metadata->extents[0].num_sectors, 522752);
+    EXPECT_EQ(metadata->extents[0].num_sectors, 522304);
     EXPECT_EQ(metadata->extents[0].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[0].target_data, 1536);
+    EXPECT_EQ(metadata->extents[0].target_data, 1984);
     EXPECT_EQ(metadata->extents[0].target_source, 0);
-    EXPECT_EQ(metadata->extents[1].num_sectors, 260608);
+    EXPECT_EQ(metadata->extents[1].num_sectors, 260672);
     EXPECT_EQ(metadata->extents[1].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[1].target_data, 1536);
+    EXPECT_EQ(metadata->extents[1].target_data, 1472);
     EXPECT_EQ(metadata->extents[1].target_source, 1);
-    EXPECT_EQ(metadata->extents[2].num_sectors, 128704);
+    EXPECT_EQ(metadata->extents[2].num_sectors, 129088);
     EXPECT_EQ(metadata->extents[2].target_type, LP_TARGET_TYPE_LINEAR);
-    EXPECT_EQ(metadata->extents[2].target_data, 1536);
+    EXPECT_EQ(metadata->extents[2].target_data, 1472);
     EXPECT_EQ(metadata->extents[2].target_source, 2);
 }
 
@@ -942,10 +946,9 @@ static Interval ToInterval(const std::unique_ptr<Extent>& extent) {
 }
 
 static void AddPartition(const std::unique_ptr<MetadataBuilder>& builder,
-                         const std::string& partition_name, const std::string& group_name,
-                         uint64_t num_sectors, uint64_t start_sector,
-                         std::vector<Interval>* intervals = nullptr) {
-    Partition* p = builder->AddPartition(partition_name, group_name, 0);
+                         const std::string& partition_name, uint64_t num_sectors,
+                         uint64_t start_sector, std::vector<Interval>* intervals) {
+    Partition* p = builder->AddPartition(partition_name, "group", 0);
     ASSERT_NE(p, nullptr);
     ASSERT_TRUE(builder->AddLinearExtent(p, "super", num_sectors, start_sector));
     ASSERT_EQ(p->extents().size(), 1);
@@ -973,17 +976,17 @@ TEST_F(BuilderTest, CollidedExtents) {
     ASSERT_TRUE(builder->AddGroup("group", 0));
 
     std::vector<Interval> old_intervals;
-    AddPartition(builder, "system", "group", 10229008, 2048, &old_intervals);
-    AddPartition(builder, "test_a", "group", 648, 12709888, &old_intervals);
-    AddPartition(builder, "test_b", "group", 625184, 12711936, &old_intervals);
-    AddPartition(builder, "test_c", "group", 130912, 13338624, &old_intervals);
-    AddPartition(builder, "test_d", "group", 888, 13469696, &old_intervals);
-    AddPartition(builder, "test_e", "group", 888, 13471744, &old_intervals);
-    AddPartition(builder, "test_f", "group", 888, 13475840, &old_intervals);
-    AddPartition(builder, "test_g", "group", 888, 13477888, &old_intervals);
+    AddPartition(builder, "system", 10229008, 2048, &old_intervals);
+    AddPartition(builder, "test_a", 648, 12709888, &old_intervals);
+    AddPartition(builder, "test_b", 625184, 12711936, &old_intervals);
+    AddPartition(builder, "test_c", 130912, 13338624, &old_intervals);
+    AddPartition(builder, "test_d", 888, 13469696, &old_intervals);
+    AddPartition(builder, "test_e", 888, 13471744, &old_intervals);
+    AddPartition(builder, "test_f", 888, 13475840, &old_intervals);
+    AddPartition(builder, "test_g", 888, 13477888, &old_intervals);
 
     // Don't track the first vendor interval, since it will get extended.
-    AddPartition(builder, "vendor", "group", 2477920, 10231808, nullptr);
+    AddPartition(builder, "vendor", 2477920, 10231808, nullptr);
 
     std::vector<Interval> new_intervals;
 
@@ -1015,77 +1018,4 @@ TEST_F(BuilderTest, LinearExtentOverlap) {
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{40, 1, 0}));
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 15}));
     EXPECT_FALSE(extent.OverlapsWith(LinearExtent{20, 1, 10}));
-}
-
-TEST_F(BuilderTest, AlignFreeRegion) {
-    BlockDeviceInfo super("super", 8_GiB, 786432, 0, 4096);
-    std::vector<BlockDeviceInfo> block_devices = {super};
-
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(block_devices, "super", 65536, 2);
-    ASSERT_NE(builder, nullptr);
-
-    Partition* p = builder->AddPartition("system", "default", 0);
-    ASSERT_NE(p, nullptr);
-    ASSERT_TRUE(builder->AddLinearExtent(p, "super", 64, (super.alignment + 4096) / 512));
-
-    p = builder->AddPartition("vendor", "default", 0);
-    ASSERT_NE(p, nullptr);
-    ASSERT_TRUE(builder->ResizePartition(p, 2_GiB));
-
-    const auto& extents = p->extents();
-    ASSERT_EQ(extents.size(), 2);
-
-    LinearExtent* e1 = extents[0]->AsLinearExtent();
-    ASSERT_NE(e1, nullptr);
-    LinearExtent* e2 = extents[1]->AsLinearExtent();
-    ASSERT_NE(e2, nullptr);
-
-    // The misaligned partition starting at sector 1544 should not cause any
-    // overlap with previous extents. We should see vendor punch a hole where
-    // "system" is, extending the hole up to the next aligned block.
-    EXPECT_EQ(e1->physical_sector(), 1536);
-    EXPECT_EQ(e1->end_sector(), 1544);
-    EXPECT_EQ(e2->physical_sector(), 3072);
-    EXPECT_EQ(e2->end_sector(), 4197368);
-}
-
-TEST_F(BuilderTest, ResizeOverflow) {
-    BlockDeviceInfo super("super", 8_GiB, 786432, 229376, 4096);
-    std::vector<BlockDeviceInfo> block_devices = {super};
-
-    unique_ptr<MetadataBuilder> builder = MetadataBuilder::New(block_devices, "super", 65536, 2);
-    ASSERT_NE(builder, nullptr);
-
-    ASSERT_TRUE(builder->AddGroup("group", 0));
-
-    Partition* p = builder->AddPartition("system", "default", 0);
-    ASSERT_NE(p, nullptr);
-    ASSERT_FALSE(builder->ResizePartition(p, 18446744073709551615ULL));
-}
-
-TEST_F(BuilderTest, VerifyExtent) {
-    auto source_builder = MetadataBuilder::New(4096 * 50, 40960, 2);
-    ASSERT_NE(source_builder, nullptr);
-    ASSERT_TRUE(source_builder->AddGroup("test_group_a", 40960));
-    ASSERT_TRUE(source_builder->AddGroup("test_group_b", 40960));
-    AddPartition(source_builder, "system_a", "test_group_a", 8192, 2048);
-    AddPartition(source_builder, "vendor_a", "test_group_a", 10240, 10240);
-    AddPartition(source_builder, "system_b", "test_group_b", 8192, 20480);
-
-    auto target_builder = MetadataBuilder::New(4096 * 50, 40960, 2);
-    ASSERT_NE(target_builder, nullptr);
-    ASSERT_TRUE(target_builder->AddGroup("test_group_b", 40960));
-    AddPartition(target_builder, "system_b", "test_group_b", 8192, 2048);
-    AddPartition(target_builder, "vendor_b", "test_group_b", 10240, 10240);
-
-    ASSERT_TRUE(MetadataBuilder::VerifyExtentsAgainstSourceMetadata(
-            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"system", "vendor"}));
-
-    target_builder->RemovePartition("vendor_b");
-    ASSERT_FALSE(target_builder->VerifyExtentsAgainstSourceMetadata(
-            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"vendor"}));
-
-    AddPartition(target_builder, "vendor_b", "test_group_b", 1000, 10240);
-    ASSERT_FALSE(target_builder->VerifyExtentsAgainstSourceMetadata(
-            *source_builder, 0, *target_builder, 1, std::vector<std::string>{"vendor"}));
 }

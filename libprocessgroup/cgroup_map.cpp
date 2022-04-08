@@ -71,7 +71,7 @@ bool CgroupController::IsUsable() {
     if (!HasValue()) return false;
 
     if (state_ == UNKNOWN) {
-        if (__builtin_available(android 30, *)) {
+        if (ACgroupController_getFlags != nullptr) {
             uint32_t flags = ACgroupController_getFlags(controller_);
             state_ = (flags & CGROUPRC_CONTROLLER_FLAG_MOUNTED) != 0 ? USABLE : MISSING;
         } else {
@@ -115,13 +115,7 @@ bool CgroupController::GetTaskGroup(int tid, std::string* group) const {
         return true;
     }
 
-    std::string cg_tag;
-
-    if (version() == 2) {
-        cg_tag = "0::";
-    } else {
-        cg_tag = StringPrintf(":%s:", name());
-    }
+    std::string cg_tag = StringPrintf(":%s:", name());
     size_t start_pos = content.find(cg_tag);
     if (start_pos == std::string::npos) {
         return false;
@@ -172,7 +166,7 @@ void CgroupMap::Print() const {
     auto controller_count = ACgroupFile_getControllerCount();
     for (uint32_t i = 0; i < controller_count; ++i) {
         const ACgroupController* controller = ACgroupFile_getController(i);
-        if (__builtin_available(android 30, *)) {
+        if (ACgroupController_getFlags != nullptr) {
             LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
                       << ACgroupController_getVersion(controller) << " path "
                       << ACgroupController_getPath(controller) << " flags "

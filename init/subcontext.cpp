@@ -18,8 +18,6 @@
 
 #include <fcntl.h>
 #include <poll.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
@@ -30,7 +28,6 @@
 
 #include "action.h"
 #include "builtins.h"
-#include "mount_namespace.h"
 #include "proto_utils.h"
 #include "util.h"
 
@@ -184,8 +181,6 @@ int SubcontextMain(int argc, char** argv, const BuiltinFunctionMap* function_map
     trigger_shutdown = [](const std::string& command) { shutdown_command = command; };
 
     auto subcontext_process = SubcontextProcess(function_map, context, init_fd);
-    // Restore prio before main loop
-    setpriority(PRIO_PROCESS, 0, 0);
     subcontext_process.MainLoop();
     return 0;
 }
@@ -218,13 +213,7 @@ void Subcontext::Fork() {
                 PLOG(FATAL) << "Could not set execcon for '" << context_ << "'";
             }
         }
-#if defined(__ANDROID__)
-        // subcontext init runs in "default" mount namespace
-        // so that it can access /apex/*
-        if (auto result = SwitchToMountNamespaceIfNeeded(NS_DEFAULT); !result.ok()) {
-            LOG(FATAL) << "Could not switch to \"default\" mount namespace: " << result.error();
-        }
-#endif
+
         auto init_path = GetExecutablePath();
         auto child_fd_string = std::to_string(child_fd);
         const char* args[] = {init_path.c_str(), "subcontext", context_.c_str(),
@@ -342,18 +331,12 @@ void InitializeSubcontext() {
                 new Subcontext(std::vector<std::string>{"/vendor", "/odm"}, kVendorContext));
     }
 }
-void InitializeHostSubcontext(std::vector<std::string> vendor_prefixes) {
-    subcontext.reset(new Subcontext(vendor_prefixes, kVendorContext, /*host=*/true));
-}
 
 Subcontext* GetSubcontext() {
     return subcontext.get();
 }
 
 bool SubcontextChildReap(pid_t pid) {
-    if (!subcontext) {
-        return false;
-    }
     if (subcontext->pid() == pid) {
         if (!subcontext_terminated_by_shutdown) {
             subcontext->Restart();

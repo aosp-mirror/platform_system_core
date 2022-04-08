@@ -1,0 +1,105 @@
+// Copyright (C) 2017 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This is what we want to do:
+//  event_logtags = $(shell
+//    sed -n
+//        "s/^\([0-9]*\)[ \t]*$1[ \t].*/-D`echo $1 | tr a-z A-Z`_LOG_TAG=\1/p"
+//        $(LOCAL_PATH)/$2/event.logtags)
+//  event_flag := $(call event_logtags,auditd)
+//  event_flag += $(call event_logtags,logd)
+//  event_flag += $(call event_logtags,tag_def)
+// so make sure we do not regret hard-coding it as follows:
+event_flag = [
+    "-DAUDITD_LOG_TAG=1003",
+    "-DCHATTY_LOG_TAG=1004",
+    "-DTAG_DEF_LOG_TAG=1005",
+    "-DLIBLOG_LOG_TAG=1006",
+]
+
+cc_library_static {
+    name: "liblogd",
+
+    srcs: [
+        "LogCommand.cpp",
+        "CommandListener.cpp",
+        "LogListener.cpp",
+        "LogReader.cpp",
+        "FlushCommand.cpp",
+        "LogBuffer.cpp",
+        "LogBufferElement.cpp",
+        "LogTimes.cpp",
+        "LogStatistics.cpp",
+        "LogWhiteBlackList.cpp",
+        "libaudit.c",
+        "LogAudit.cpp",
+        "LogKlog.cpp",
+        "LogTags.cpp",
+    ],
+    logtags: ["event.logtags"],
+
+    shared_libs: ["libbase"],
+
+    export_include_dirs: ["."],
+
+    cflags: ["-Werror"] + event_flag,
+}
+
+cc_binary {
+    name: "logd",
+    init_rc: ["logd.rc"],
+
+    srcs: ["main.cpp"],
+
+    static_libs: [
+        "liblog",
+        "liblogd",
+    ],
+
+    shared_libs: [
+        "libsysutils",
+        "libcutils",
+        "libbase",
+        "libpackagelistparser",
+        "libprocessgroup",
+        "libcap",
+    ],
+
+    cflags: ["-Werror"],
+}
+
+cc_binary {
+    name: "auditctl",
+
+    srcs: ["auditctl.cpp"],
+
+    static_libs: [
+        "liblogd",
+    ],
+
+    shared_libs: ["libbase"],
+
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wconversion"
+    ],
+}
+
+prebuilt_etc {
+    name: "logtagd.rc",
+    src: "logtagd.rc",
+    sub_dir: "init",
+}

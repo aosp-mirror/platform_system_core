@@ -139,7 +139,7 @@ TEST(propertyinfoserializer, GetPropertyInfo) {
 
   auto property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_trie.data());
 
-  // Smoke test
+  // Sanity check
   auto root_node = property_info_area->root_node();
   EXPECT_STREQ("root", root_node.name());
   EXPECT_STREQ("default", property_info_area->context(root_node.context_index()));

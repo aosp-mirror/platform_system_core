@@ -146,7 +146,7 @@ static struct SsFuncDesc ss_descriptors = {
                 },
 };
 
-#define STR_INTERFACE_ "fastbootd"
+#define STR_INTERFACE_ "fastboot"
 
 static const struct {
     struct usb_functionfs_strings_head header;
@@ -248,12 +248,7 @@ ClientUsbTransport::ClientUsbTransport()
 }
 
 ssize_t ClientUsbTransport::Read(void* data, size_t len) {
-    if (handle_ == nullptr) {
-        LOG(ERROR) << "ClientUsbTransport: no handle";
-        return -1;
-    }
-    if (len > SSIZE_MAX) {
-        LOG(ERROR) << "ClientUsbTransport: maximum length exceeds bounds";
+    if (handle_ == nullptr || len > SSIZE_MAX) {
         return -1;
     }
     char* char_data = static_cast<char*>(data);
@@ -263,7 +258,6 @@ ssize_t ClientUsbTransport::Read(void* data, size_t len) {
         auto bytes_read_now =
                 handle_->read(handle_.get(), char_data, bytes_to_read, true /* allow_partial */);
         if (bytes_read_now < 0) {
-            PLOG(ERROR) << "ClientUsbTransport: read failed";
             return bytes_read_total == 0 ? -1 : bytes_read_total;
         }
         bytes_read_total += bytes_read_now;
@@ -283,7 +277,7 @@ ssize_t ClientUsbTransport::Write(const void* data, size_t len) {
     size_t bytes_written_total = 0;
     while (bytes_written_total < len) {
         auto bytes_to_write = std::min(len - bytes_written_total, kFbFfsNumBufs * kFbFfsBufSize);
-        auto bytes_written_now = handle_->write(handle_.get(), char_data, bytes_to_write);
+        auto bytes_written_now = handle_->write(handle_.get(), data, bytes_to_write);
         if (bytes_written_now < 0) {
             return bytes_written_total == 0 ? -1 : bytes_written_total;
         }

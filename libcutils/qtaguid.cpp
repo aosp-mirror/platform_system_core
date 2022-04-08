@@ -38,24 +38,24 @@ class netdHandler {
     int (*netdDeleteTagData)(uint32_t, uid_t);
 };
 
-int stubTagSocket(int, uint32_t, uid_t) {
+int dummyTagSocket(int, uint32_t, uid_t) {
     return -EREMOTEIO;
 }
 
-int stubUntagSocket(int) {
+int dummyUntagSocket(int) {
     return -EREMOTEIO;
 }
 
-int stubSetCounterSet(uint32_t, uid_t) {
+int dummySetCounterSet(uint32_t, uid_t) {
     return -EREMOTEIO;
 }
 
-int stubDeleteTagData(uint32_t, uid_t) {
+int dummyDeleteTagData(uint32_t, uid_t) {
     return -EREMOTEIO;
 }
 
 netdHandler initHandler(void) {
-    netdHandler handler = {stubTagSocket, stubUntagSocket, stubSetCounterSet, stubDeleteTagData};
+    netdHandler handler = {dummyTagSocket, dummyUntagSocket, dummySetCounterSet, dummyDeleteTagData};
 
     void* netdClientHandle = dlopen("libnetd_client.so", RTLD_NOW);
     if (!netdClientHandle) {

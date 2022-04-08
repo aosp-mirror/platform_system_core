@@ -21,7 +21,6 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <set>
 #include <string>
 
@@ -38,17 +37,11 @@ class IImageManager {
 
     virtual ~IImageManager() {}
 
-    // Helper for dependency injection.
-    struct DeviceInfo {
-        std::optional<bool> is_recovery;
-    };
-
     // When linking to libfiemap_binder, the Open() call will use binder.
     // Otherwise, the Open() call will use the ImageManager implementation
-    // below. In binder mode, device_info is ignored.
+    // below.
     static std::unique_ptr<IImageManager> Open(const std::string& dir_prefix,
-                                               const std::chrono::milliseconds& timeout_ms,
-                                               const DeviceInfo& device_info = {});
+                                               const std::chrono::milliseconds& timeout_ms);
 
     // Flags for CreateBackingImage().
     static constexpr int CREATE_IMAGE_DEFAULT = 0x0;
@@ -138,13 +131,11 @@ class ImageManager final : public IImageManager {
     // Return an ImageManager for the given metadata and data directories. Both
     // directories must already exist.
     static std::unique_ptr<ImageManager> Open(const std::string& metadata_dir,
-                                              const std::string& data_dir,
-                                              const DeviceInfo& device_info = {});
+                                              const std::string& data_dir);
 
     // Helper function that derives the metadata and data dirs given a single
     // prefix.
-    static std::unique_ptr<ImageManager> Open(const std::string& dir_prefix,
-                                              const DeviceInfo& device_info = {});
+    static std::unique_ptr<ImageManager> Open(const std::string& dir_prefix);
 
     // Methods that must be implemented from IImageManager.
     FiemapStatus CreateBackingImage(const std::string& name, uint64_t size, int flags,
@@ -175,8 +166,7 @@ class ImageManager final : public IImageManager {
     FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes);
 
   private:
-    ImageManager(const std::string& metadata_dir, const std::string& data_dir,
-                 const DeviceInfo& device_info);
+    ImageManager(const std::string& metadata_dir, const std::string& data_dir);
     std::string GetImageHeaderPath(const std::string& name);
     std::string GetStatusFilePath(const std::string& image_name);
     bool MapWithLoopDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms,
@@ -186,8 +176,6 @@ class ImageManager final : public IImageManager {
     bool MapWithDmLinear(const IPartitionOpener& opener, const std::string& name,
                          const std::chrono::milliseconds& timeout_ms, std::string* path);
     bool UnmapImageDevice(const std::string& name, bool force);
-    bool IsUnreliablePinningAllowed() const;
-    bool MetadataDirIsTest() const;
 
     ImageManager(const ImageManager&) = delete;
     ImageManager& operator=(const ImageManager&) = delete;
@@ -197,7 +185,6 @@ class ImageManager final : public IImageManager {
     std::string metadata_dir_;
     std::string data_dir_;
     std::unique_ptr<IPartitionOpener> partition_opener_;
-    DeviceInfo device_info_;
 };
 
 // RAII helper class for mapping and opening devices with an ImageManager.
@@ -209,7 +196,7 @@ class MappedDevice final {
 
     ~MappedDevice();
 
-    int fd() const { return fd_.get(); }
+    int fd() const { return fd_; }
     const std::string& path() const { return path_; }
 
   protected:

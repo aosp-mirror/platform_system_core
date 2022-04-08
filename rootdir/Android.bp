@@ -12,37 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 prebuilt_etc {
     name: "init.rc",
     src: "init.rc",
     sub_dir: "init/hw",
-    required: [
-        "fsverity_init",
-        "platform-bootclasspath",
-    ],
+    required: ["fsverity_init"],
 }
 
 prebuilt_etc {
     name: "ueventd.rc",
     src: "ueventd.rc",
     recovery_available: true,
-}
-
-// TODO(b/147210213) Generate list of libraries during build and fill in at build time
-linker_config {
-    name: "system_linker_config",
-    src: "etc/linker.config.json",
-    installable: false,
-}
-
-// TODO(b/185211376) Scope the native APIs that microdroid will provide to the app payload
-prebuilt_etc {
-    name: "public.libraries.android.txt",
-    src: "etc/public.libraries.android.txt",
-    filename: "public.libraries.txt",
-    installable: false,
 }

@@ -1,8 +1,9 @@
 {
-  "Cgroups2": {
-    "Path": "/sys/fs/cgroup",
-    "Mode": "0755",
-    "UID": "root",
-    "GID": "root"
-  }
+  "Cgroups": [
+    {
+      "Controller": "cpuacct",
+      "Path": "/acct",
+      "Mode": "0555"
+    }
+  ]
 }

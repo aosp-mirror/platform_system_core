@@ -14,10 +14,6 @@
 // limitations under the License.
 //
 
-package {
-    default_applicable_licenses: ["Android-Apache-2.0"],
-}
-
 cc_binary {
     name: "storageproxyd",
     vendor: true,
@@ -29,10 +25,7 @@ cc_binary {
         "proxy.c",
     ],
 
-    shared_libs: [
-        "liblog",
-        "libhardware_legacy",
-    ],
+    shared_libs: ["liblog"],
     header_libs: ["libcutils_headers"],
 
     static_libs: [

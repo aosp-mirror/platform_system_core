@@ -221,7 +221,7 @@ TEST(device_handler, sanitize_onebad) {
 TEST(device_handler, DevPermissionsMatchNormal) {
     // Basic from ueventd.rc
     // /dev/null                 0666   root       root
-    Permissions permissions("/dev/null", 0666, 0, 0, false);
+    Permissions permissions("/dev/null", 0666, 0, 0);
     EXPECT_TRUE(permissions.Match("/dev/null"));
     EXPECT_FALSE(permissions.Match("/dev/nullsuffix"));
     EXPECT_FALSE(permissions.Match("/dev/nul"));
@@ -233,7 +233,7 @@ TEST(device_handler, DevPermissionsMatchNormal) {
 TEST(device_handler, DevPermissionsMatchPrefix) {
     // Prefix from ueventd.rc
     // /dev/dri/*                0666   root       graphics
-    Permissions permissions("/dev/dri/*", 0666, 0, 1000, false);
+    Permissions permissions("/dev/dri/*", 0666, 0, 1000);
     EXPECT_TRUE(permissions.Match("/dev/dri/some_dri_device"));
     EXPECT_TRUE(permissions.Match("/dev/dri/some_other_dri_device"));
     EXPECT_TRUE(permissions.Match("/dev/dri/"));
@@ -246,7 +246,7 @@ TEST(device_handler, DevPermissionsMatchPrefix) {
 TEST(device_handler, DevPermissionsMatchWildcard) {
     // Wildcard example
     // /dev/device*name                0666   root       graphics
-    Permissions permissions("/dev/device*name", 0666, 0, 1000, false);
+    Permissions permissions("/dev/device*name", 0666, 0, 1000);
     EXPECT_TRUE(permissions.Match("/dev/devicename"));
     EXPECT_TRUE(permissions.Match("/dev/device123name"));
     EXPECT_TRUE(permissions.Match("/dev/deviceabcname"));
@@ -260,31 +260,13 @@ TEST(device_handler, DevPermissionsMatchWildcard) {
 TEST(device_handler, DevPermissionsMatchWildcardPrefix) {
     // Wildcard+Prefix example
     // /dev/device*name*                0666   root       graphics
-    Permissions permissions("/dev/device*name*", 0666, 0, 1000, false);
+    Permissions permissions("/dev/device*name*", 0666, 0, 1000);
     EXPECT_TRUE(permissions.Match("/dev/devicename"));
     EXPECT_TRUE(permissions.Match("/dev/device123name"));
     EXPECT_TRUE(permissions.Match("/dev/deviceabcname"));
     EXPECT_TRUE(permissions.Match("/dev/device123namesomething"));
     // FNM_PATHNAME doesn't match '/' with *
     EXPECT_FALSE(permissions.Match("/dev/device123name/something"));
-    EXPECT_FALSE(permissions.Match("/dev/device/1/2/3name/something"));
-    EXPECT_FALSE(permissions.Match("/dev/deviceame"));
-    EXPECT_EQ(0666U, permissions.perm());
-    EXPECT_EQ(0U, permissions.uid());
-    EXPECT_EQ(1000U, permissions.gid());
-}
-
-TEST(device_handler, DevPermissionsMatchWildcardPrefix_NoFnmPathName) {
-    // Wildcard+Prefix example with no_fnm_pathname
-    // /dev/device*name*                0666   root       graphics
-    Permissions permissions("/dev/device*name*", 0666, 0, 1000, true);
-    EXPECT_TRUE(permissions.Match("/dev/devicename"));
-    EXPECT_TRUE(permissions.Match("/dev/device123name"));
-    EXPECT_TRUE(permissions.Match("/dev/deviceabcname"));
-    EXPECT_TRUE(permissions.Match("/dev/device123namesomething"));
-    // With NoFnmPathName, the below matches, unlike DevPermissionsMatchWildcardPrefix.
-    EXPECT_TRUE(permissions.Match("/dev/device123name/something"));
-    EXPECT_TRUE(permissions.Match("/dev/device/1/2/3name/something"));
     EXPECT_FALSE(permissions.Match("/dev/deviceame"));
     EXPECT_EQ(0666U, permissions.perm());
     EXPECT_EQ(0U, permissions.uid());
@@ -293,8 +275,7 @@ TEST(device_handler, DevPermissionsMatchWildcardPrefix_NoFnmPathName) {
 
 TEST(device_handler, SysfsPermissionsMatchWithSubsystemNormal) {
     // /sys/devices/virtual/input/input*   enable      0660  root   input
-    SysfsPermissions permissions("/sys/devices/virtual/input/input*", "enable", 0660, 0, 1001,
-                                 false);
+    SysfsPermissions permissions("/sys/devices/virtual/input/input*", "enable", 0660, 0, 1001);
     EXPECT_TRUE(permissions.MatchWithSubsystem("/sys/devices/virtual/input/input0", "input"));
     EXPECT_FALSE(permissions.MatchWithSubsystem("/sys/devices/virtual/input/not_input0", "input"));
     EXPECT_EQ(0660U, permissions.perm());
@@ -304,7 +285,7 @@ TEST(device_handler, SysfsPermissionsMatchWithSubsystemNormal) {
 
 TEST(device_handler, SysfsPermissionsMatchWithSubsystemClass) {
     // /sys/class/input/event*   enable      0660  root   input
-    SysfsPermissions permissions("/sys/class/input/event*", "enable", 0660, 0, 1001, false);
+    SysfsPermissions permissions("/sys/class/input/event*", "enable", 0660, 0, 1001);
     EXPECT_TRUE(permissions.MatchWithSubsystem(
         "/sys/devices/soc.0/f9924000.i2c/i2c-2/2-0020/input/input0/event0", "input"));
     EXPECT_FALSE(permissions.MatchWithSubsystem(
@@ -318,7 +299,7 @@ TEST(device_handler, SysfsPermissionsMatchWithSubsystemClass) {
 
 TEST(device_handler, SysfsPermissionsMatchWithSubsystemBus) {
     // /sys/bus/i2c/devices/i2c-*   enable      0660  root   input
-    SysfsPermissions permissions("/sys/bus/i2c/devices/i2c-*", "enable", 0660, 0, 1001, false);
+    SysfsPermissions permissions("/sys/bus/i2c/devices/i2c-*", "enable", 0660, 0, 1001);
     EXPECT_TRUE(permissions.MatchWithSubsystem("/sys/devices/soc.0/f9967000.i2c/i2c-5", "i2c"));
     EXPECT_FALSE(permissions.MatchWithSubsystem("/sys/devices/soc.0/f9967000.i2c/not-i2c", "i2c"));
     EXPECT_FALSE(

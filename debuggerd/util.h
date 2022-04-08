@@ -17,13 +17,9 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
-std::vector<std::string> get_command_line(pid_t pid);
 std::string get_process_name(pid_t pid);
 std::string get_thread_name(pid_t tid);
-
-std::string get_timestamp();

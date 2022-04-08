@@ -79,7 +79,6 @@ class SnapshotMetadataUpdater {
     const std::string target_suffix_;
     std::vector<Group> groups_;
     std::vector<Partition> partitions_;
-    bool partial_update_{false};
 };
 
 }  // namespace snapshot

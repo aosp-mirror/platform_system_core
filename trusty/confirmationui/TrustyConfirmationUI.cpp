@@ -50,7 +50,7 @@ namespace implementation {
 
 using namespace secure_input;
 
-using ::android::trusty::confirmationui::TrustyAppError;
+using ::android::trusty::TrustyAppError;
 
 using ::teeui::AbortMsg;
 using ::teeui::DeliverTestCommandMessage;
@@ -71,7 +71,7 @@ using ::std::tie;
 using TeeuiRc = ::teeui::ResponseCode;
 
 constexpr const char kTrustyDeviceName[] = "/dev/trusty-ipc-dev0";
-constexpr const char kConfirmationuiAppName[] = CONFIRMATIONUI_PORT;
+constexpr const char kConfirmationuiAppName[] = "com.android.trusty.confirmationui";
 
 namespace {
 

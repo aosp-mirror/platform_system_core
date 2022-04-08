@@ -90,6 +90,19 @@ String16::String16()
 {
 }
 
+String16::String16(StaticLinkage)
+    : mString(nullptr)
+{
+    // this constructor is used when we can't rely on the static-initializers
+    // having run. In this case we always allocate an empty string. It's less
+    // efficient than using getEmptyString(), but we assume it's uncommon.
+
+    SharedBuffer* buf = static_cast<SharedBuffer*>(alloc(sizeof(char16_t)));
+    char16_t* data = static_cast<char16_t*>(buf->data());
+    data[0] = 0;
+    mString = data;
+}
+
 String16::String16(const String16& o)
     : mString(o.mString)
 {
@@ -186,59 +199,99 @@ status_t String16::setTo(const char16_t* other, size_t len)
     return NO_MEMORY;
 }
 
-status_t String16::append(const String16& other) {
-    return append(other.string(), other.size());
-}
-
-status_t String16::append(const char16_t* chrs, size_t otherLen) {
+status_t String16::append(const String16& other)
+{
     const size_t myLen = size();
+    const size_t otherLen = other.size();
+    if (myLen == 0) {
+        setTo(other);
+        return OK;
+    } else if (otherLen == 0) {
+        return OK;
+    }
 
-    if (myLen == 0) return setTo(chrs, otherLen);
+    if (myLen >= SIZE_MAX / sizeof(char16_t) - otherLen) {
+        android_errorWriteLog(0x534e4554, "73826242");
+        abort();
+    }
 
-    if (otherLen == 0) return OK;
-
-    size_t size = myLen;
-    if (__builtin_add_overflow(size, otherLen, &size) ||
-        __builtin_add_overflow(size, 1, &size) ||
-        __builtin_mul_overflow(size, sizeof(char16_t), &size)) return NO_MEMORY;
-
-    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize(size));
-    if (!buf) return NO_MEMORY;
-
-    char16_t* str = static_cast<char16_t*>(buf->data());
-    memcpy(str + myLen, chrs, otherLen * sizeof(char16_t));
-    str[myLen + otherLen] = 0;
-    mString = str;
-    return OK;
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
+    if (buf) {
+        char16_t* str = (char16_t*)buf->data();
+        memcpy(str+myLen, other, (otherLen+1)*sizeof(char16_t));
+        mString = str;
+        return OK;
+    }
+    return NO_MEMORY;
 }
 
-status_t String16::insert(size_t pos, const char16_t* chrs) {
+status_t String16::append(const char16_t* chrs, size_t otherLen)
+{
+    const size_t myLen = size();
+    if (myLen == 0) {
+        setTo(chrs, otherLen);
+        return OK;
+    } else if (otherLen == 0) {
+        return OK;
+    }
+
+    if (myLen >= SIZE_MAX / sizeof(char16_t) - otherLen) {
+        android_errorWriteLog(0x534e4554, "73826242");
+        abort();
+    }
+
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + otherLen + 1) * sizeof(char16_t)));
+    if (buf) {
+        char16_t* str = (char16_t*)buf->data();
+        memcpy(str+myLen, chrs, otherLen*sizeof(char16_t));
+        str[myLen+otherLen] = 0;
+        mString = str;
+        return OK;
+    }
+    return NO_MEMORY;
+}
+
+status_t String16::insert(size_t pos, const char16_t* chrs)
+{
     return insert(pos, chrs, strlen16(chrs));
 }
 
-status_t String16::insert(size_t pos, const char16_t* chrs, size_t otherLen) {
+status_t String16::insert(size_t pos, const char16_t* chrs, size_t len)
+{
     const size_t myLen = size();
-
-    if (myLen == 0) return setTo(chrs, otherLen);
-
-    if (otherLen == 0) return OK;
+    if (myLen == 0) {
+        return setTo(chrs, len);
+        return OK;
+    } else if (len == 0) {
+        return OK;
+    }
 
     if (pos > myLen) pos = myLen;
 
-    size_t size = myLen;
-    if (__builtin_add_overflow(size, otherLen, &size) ||
-        __builtin_add_overflow(size, 1, &size) ||
-        __builtin_mul_overflow(size, sizeof(char16_t), &size)) return NO_MEMORY;
+    #if 0
+    printf("Insert in to %s: pos=%d, len=%d, myLen=%d, chrs=%s\n",
+           String8(*this).string(), pos,
+           len, myLen, String8(chrs, len).string());
+    #endif
 
-    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize(size));
-    if (!buf) return NO_MEMORY;
-
-    char16_t* str = static_cast<char16_t*>(buf->data());
-    if (pos < myLen) memmove(str + pos + otherLen, str + pos, (myLen - pos) * sizeof(char16_t));
-    memcpy(str + pos, chrs, otherLen * sizeof(char16_t));
-    str[myLen + otherLen] = 0;
-    mString = str;
-    return OK;
+    SharedBuffer* buf =
+            static_cast<SharedBuffer*>(editResize((myLen + len + 1) * sizeof(char16_t)));
+    if (buf) {
+        char16_t* str = (char16_t*)buf->data();
+        if (pos < myLen) {
+            memmove(str+pos+len, str+pos, (myLen-pos)*sizeof(char16_t));
+        }
+        memcpy(str+pos, chrs, len*sizeof(char16_t));
+        str[myLen+len] = 0;
+        mString = str;
+        #if 0
+        printf("Result (%d chrs): %s\n", size(), String8(*this).string());
+        #endif
+        return OK;
+    }
+    return NO_MEMORY;
 }
 
 ssize_t String16::findFirst(char16_t c) const
@@ -350,6 +403,28 @@ size_t String16::staticStringSize() const {
     return static_cast<size_t>(*(p - 1));
 }
 
+status_t String16::makeLower()
+{
+    const size_t N = size();
+    const char16_t* str = string();
+    char16_t* edited = nullptr;
+    for (size_t i=0; i<N; i++) {
+        const char16_t v = str[i];
+        if (v >= 'A' && v <= 'Z') {
+            if (!edited) {
+                SharedBuffer* buf = static_cast<SharedBuffer*>(edit());
+                if (!buf) {
+                    return NO_MEMORY;
+                }
+                edited = (char16_t*)buf->data();
+                mString = str = edited;
+            }
+            edited[i] = tolower((char)v);
+        }
+    }
+    return OK;
+}
+
 status_t String16::replaceAll(char16_t replaceThis, char16_t withThis)
 {
     const size_t N = size();
@@ -369,6 +444,38 @@ status_t String16::replaceAll(char16_t replaceThis, char16_t withThis)
         }
     }
     return OK;
+}
+
+status_t String16::remove(size_t len, size_t begin)
+{
+    const size_t N = size();
+    if (begin >= N) {
+        release();
+        mString = getEmptyString();
+        return OK;
+    }
+    if (len > N || len > N - begin) len = N - begin;
+    if (begin == 0 && len == N) {
+        return OK;
+    }
+
+    if (begin > 0) {
+        SharedBuffer* buf = static_cast<SharedBuffer*>(editResize((N + 1) * sizeof(char16_t)));
+        if (!buf) {
+            return NO_MEMORY;
+        }
+        char16_t* str = (char16_t*)buf->data();
+        memmove(str, str+begin, (N-begin+1)*sizeof(char16_t));
+        mString = str;
+    }
+    SharedBuffer* buf = static_cast<SharedBuffer*>(editResize((len + 1) * sizeof(char16_t)));
+    if (buf) {
+        char16_t* str = (char16_t*)buf->data();
+        str[len] = 0;
+        mString = str;
+        return OK;
+    }
+    return NO_MEMORY;
 }
 
 }; // namespace android

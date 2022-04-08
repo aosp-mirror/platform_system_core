@@ -23,10 +23,6 @@
 #include "dump_type.h"
 
 bool tombstoned_connect(pid_t pid, android::base::unique_fd* tombstoned_socket,
-                        android::base::unique_fd* text_output_fd,
-                        android::base::unique_fd* proto_output_fd, DebuggerdDumpType dump_type);
-
-bool tombstoned_connect(pid_t pid, android::base::unique_fd* tombstoned_socket,
-                        android::base::unique_fd* text_output_fd, DebuggerdDumpType dump_type);
+                        android::base::unique_fd* output_fd, DebuggerdDumpType dump_type);
 
 bool tombstoned_notify_completion(int tombstoned_socket);

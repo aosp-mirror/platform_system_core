@@ -1,0 +1,148 @@
+# unzip tests.
+
+# Note: since "master key", Android uses libziparchive for all zip file
+# handling, and that scans the whole central directory immediately. Not only
+# lookups by name but also iteration is implemented using the resulting hash
+# table, meaning that any test that makes assumptions about iteration order
+# will fail on Android.
+
+name: unzip -l
+command: unzip -l $FILES/example.zip d1/d2/x.txt
+after: [ ! -f d1/d2/x.txt ]
+expected-stdout:
+	Archive:  $FILES/example.zip
+	  Length      Date    Time    Name
+	---------  ---------- -----   ----
+	     1024  2017-06-04 08:45   d1/d2/x.txt
+	---------                     -------
+	     1024                     1 file
+---
+
+name: unzip -lq
+command: unzip -lq $FILES/example.zip d1/d2/x.txt
+after: [ ! -f d1/d2/x.txt ]
+expected-stdout:
+	  Length      Date    Time    Name
+	---------  ---------- -----   ----
+	     1024  2017-06-04 08:45   d1/d2/x.txt
+	---------                     -------
+	     1024                     1 file
+---
+
+name: unzip -lv
+command: unzip -lv $FILES/example.zip d1/d2/x.txt
+after: [ ! -f d1/d2/file ]
+expected-stdout:
+	Archive:  $FILES/example.zip
+	 Length   Method    Size  Cmpr    Date    Time   CRC-32   Name
+	--------  ------  ------- ---- ---------- ----- --------  ----
+	    1024  Defl:N       11  99% 2017-06-04 08:45 48d7f063  d1/d2/x.txt
+	--------          -------  ---                            -------
+	    1024               11  99%                            1 file
+---
+
+name: unzip -v
+command: unzip -v $FILES/example.zip d1/d2/x.txt
+after: [ ! -f d1/d2/file ]
+expected-stdout:
+	Archive:  $FILES/example.zip
+	 Length   Method    Size  Cmpr    Date    Time   CRC-32   Name
+	--------  ------  ------- ---- ---------- ----- --------  ----
+	    1024  Defl:N       11  99% 2017-06-04 08:45 48d7f063  d1/d2/x.txt
+	--------          -------  ---                            -------
+	    1024               11  99%                            1 file
+---
+
+name: unzip one file
+command: unzip -q $FILES/example.zip d1/d2/a.txt && cat d1/d2/a.txt
+after: [ ! -f d1/d2/b.txt ]
+expected-stdout:
+	a
+---
+
+name: unzip all files
+command: unzip -q $FILES/example.zip
+after: [ -f d1/d2/a.txt ]
+after: [ -f d1/d2/b.txt ]
+after: [ -f d1/d2/c.txt ]
+after: [ -f d1/d2/empty.txt ]
+after: [ -f d1/d2/x.txt ]
+after: [ -d d1/d2/dir ]
+expected-stdout:
+---
+
+name: unzip -o
+before: mkdir -p d1/d2
+before: echo b > d1/d2/a.txt
+command: unzip -q -o $FILES/example.zip d1/d2/a.txt && cat d1/d2/a.txt
+expected-stdout:
+	a
+---
+
+name: unzip -n
+before: mkdir -p d1/d2
+before: echo b > d1/d2/a.txt
+command: unzip -q -n $FILES/example.zip d1/d2/a.txt && cat d1/d2/a.txt
+expected-stdout:
+	b
+---
+
+# The reference implementation will create *one* level of missing directories,
+# so this succeeds.
+name: unzip -d shallow non-existent
+command: unzip -q -d will-be-created $FILES/example.zip d1/d2/a.txt
+after: [ -d will-be-created ]
+after: [ -f will-be-created/d1/d2/a.txt ]
+---
+
+# The reference implementation will *only* create one level of missing
+# directories, so this fails.
+name: unzip -d deep non-existent
+command: unzip -q -d oh-no/will-not-be-created $FILES/example.zip d1/d2/a.txt 2> stderr ; echo $? > status
+after: [ ! -d oh-no ]
+after: [ ! -d oh-no/will-not-be-created ]
+after: [ ! -f oh-no/will-not-be-created/d1/d2/a.txt ]
+after: grep -q "oh-no/will-not-be-created" stderr
+after: grep -q "No such file or directory" stderr
+# The reference implementation has *lots* of non-zero exit values, but we stick to 0 and 1.
+after: [ $(cat status) -gt 0 ]
+---
+
+name: unzip -d exists
+before: mkdir dir
+command: unzip -q -d dir $FILES/example.zip d1/d2/a.txt && cat dir/d1/d2/a.txt
+after: [ ! -f d1/d2/a.txt ]
+expected-stdout:
+	a
+---
+
+name: unzip -p
+command: unzip -p $FILES/example.zip d1/d2/a.txt
+after: [ ! -f d1/d2/a.txt ]
+expected-stdout:
+	a
+---
+
+name: unzip -x FILE...
+# Note: the RI ignores -x DIR for some reason, but it's not obvious we should.
+command: unzip -q $FILES/example.zip -x d1/d2/a.txt d1/d2/b.txt d1/d2/empty.txt d1/d2/x.txt && cat d1/d2/c.txt
+after: [ ! -f d1/d2/a.txt ]
+after: [ ! -f d1/d2/b.txt ]
+after: [ ! -f d1/d2/empty.txt ]
+after: [ ! -f d1/d2/x.txt ]
+after: [ -d d1/d2/dir ]
+expected-stdout:
+	ccc
+---
+
+name: unzip FILE -x FILE...
+command: unzip -q $FILES/example.zip d1/d2/a.txt d1/d2/b.txt -x d1/d2/a.txt && cat d1/d2/b.txt
+after: [ ! -f d1/d2/a.txt ]
+after: [ -f d1/d2/b.txt ]
+after: [ ! -f d1/d2/c.txt ]
+after: [ ! -f d1/d2/empty.txt ]
+after: [ ! -f d1/d2/x.txt ]
+after: [ ! -d d1/d2/dir ]
+expected-stdout:
+	bb
+---

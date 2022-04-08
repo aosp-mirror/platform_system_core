@@ -85,25 +85,26 @@ struct __attribute__((__packed__)) CrashInfoHeader {
   uint32_t version;
 };
 
-struct __attribute__((__packed__)) CrashInfoDataStatic {
+struct __attribute__((__packed__)) CrashInfoDataV1 {
   siginfo_t siginfo;
   ucontext_t ucontext;
   uintptr_t abort_msg_address;
 };
 
-struct __attribute__((__packed__)) CrashInfoDataDynamic : public CrashInfoDataStatic {
+struct __attribute__((__packed__)) CrashInfoDataV2 : public CrashInfoDataV1 {
   uintptr_t fdsan_table_address;
+};
+
+struct __attribute__((__packed__)) CrashInfoDataV3 : public CrashInfoDataV2 {
   uintptr_t gwp_asan_state;
   uintptr_t gwp_asan_metadata;
-  uintptr_t scudo_stack_depot;
-  uintptr_t scudo_region_info;
-  uintptr_t scudo_ring_buffer;
 };
 
 struct __attribute__((__packed__)) CrashInfo {
   CrashInfoHeader header;
   union {
-    CrashInfoDataStatic s;
-    CrashInfoDataDynamic d;
+    CrashInfoDataV1 v1;
+    CrashInfoDataV2 v2;
+    CrashInfoDataV3 v3;
   } data;
 };
