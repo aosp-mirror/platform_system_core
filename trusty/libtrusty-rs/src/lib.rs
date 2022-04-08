@@ -128,15 +128,15 @@ impl TipcChannel {
     /// Receives a message from the connected service.
     ///
     /// Returns the number of bytes in the received message, or any error that
-    /// occurred when reading the message. A return value of 0 indicates that
-    /// there were no incoming messages to receive.
+    /// occurred when reading the message. Blocks until there is a message to
+    /// receive if none is already ready to read.
     ///
     /// # Errors
     ///
-    /// Returns an error with native error code 90 (`EMSGSIZE`) if `buf` isn't
-    /// large enough to contain the incoming message. Use
-    /// [`raw_os_error`][std::io::Error::raw_os_error] to check the error code
-    /// to determine if you need to increase the size of `buf`.
+    /// Returns an error with native error code 90 (`EMSGSIZE`) if `buf` isn't large
+    /// enough to contain the incoming message. Use
+    /// [`raw_os_error`][std::io::Error::raw_os_error] to check the error code to
+    /// determine if you need to increase the size of `buf`.
     pub fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
     }
