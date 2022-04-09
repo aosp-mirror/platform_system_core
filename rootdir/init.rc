@@ -824,7 +824,10 @@ on post-fs-data
     # directory used for on-device refresh metrics file.
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
-    mkdir /data/misc/odsign 0700 root root
+    mkdir /data/misc/odsign 0710 root system
+    # directory used for odsign metrics
+    mkdir /data/misc/odsign/metrics 0770 root system
+
     # Directory for VirtualizationService temporary image files.
     mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
 
