@@ -207,7 +207,7 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     }
 
     if (!WriteStringToFile(value_, path)) {
-        if (errno == ENOENT) {
+        if (access(path.c_str(), F_OK) < 0) {
             if (optional_) {
                 return true;
             } else {
@@ -215,6 +215,9 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
                 return false;
             }
         }
+        // The PLOG() statement below uses the error code stored in `errno` by
+        // WriteStringToFile() because access() only overwrites `errno` if it fails
+        // and because this code is only reached if the access() function returns 0.
         PLOG(ERROR) << "Failed to write '" << value_ << "' to " << path;
         return false;
     }
