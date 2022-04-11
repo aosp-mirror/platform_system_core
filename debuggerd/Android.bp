@@ -24,6 +24,10 @@ cc_library_headers {
     export_include_dirs: ["common/include"],
     recovery_available: true,
     vendor_ramdisk_available: true,
+    apex_available: [
+        "com.android.virt",
+        "//apex_available:platform",
+   ],
 }
 
 cc_library_shared {
@@ -43,6 +47,10 @@ cc_library_shared {
     shared_libs: [
         "libbase",
         "libcutils",
+    ],
+    apex_available: [
+        "com.android.virt",
+        "//apex_available:platform",
     ],
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
