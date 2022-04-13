@@ -1306,3 +1306,15 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Multi-Gen LRU Experiment
+on property:persist.device_config.mglru_native.lru_gen_config=none
+  write /sys/kernel/mm/lru_gen/enabled 0
+on property:persist.device_config.mglru_native.lru_gen_config=core
+  write /sys/kernel/mm/lru_gen/enabled 1
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
+  write /sys/kernel/mm/lru_gen/enabled 3
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
+  write /sys/kernel/mm/lru_gen/enabled 5
+on property:persist.device_config.mglru_native.lru_gen_config=all
+  write /sys/kernel/mm/lru_gen/enabled 7
