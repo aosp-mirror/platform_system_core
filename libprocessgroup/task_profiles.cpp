@@ -806,6 +806,7 @@ const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) con
 
 bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
                                       const std::vector<std::string>& profiles, bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -814,16 +815,19 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
             }
             if (!profile->ExecuteForProcess(uid, pid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " process profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "process profile";
+            PLOG(WARNING) << "Failed to find " << name << " process profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
 
 bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& profiles,
                                    bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -832,10 +836,12 @@ bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& prof
             }
             if (!profile->ExecuteForTask(tid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " task profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "task profile";
+            PLOG(WARNING) << "Failed to find " << name << " task profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
