@@ -189,6 +189,7 @@ cc_library {
     defaults: ["libutils_defaults"],
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
+    min_sdk_version: "29",
 
     srcs: [
         "CallStack.cpp",
