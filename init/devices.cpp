@@ -307,8 +307,8 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
         PLOG(ERROR) << "setegid(" << gid << ") for " << path << " device failed";
         goto out;
     }
-    /* If the node already exists update its SELinux label to handle cases when
-     * it was created with the wrong context during coldboot procedure. */
+    /* If the node already exists update its SELinux label and the file mode to handle cases when
+     * it was created with the wrong context and file mode during coldboot procedure. */
     if (mknod(path.c_str(), mode, dev) && (errno == EEXIST) && !secontext.empty()) {
         char* fcon = nullptr;
         int rc = lgetfilecon(path.c_str(), &fcon);
@@ -330,6 +330,11 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             if (gid != s.st_gid) {
                 new_group = gid;
             }
+        if (mode != s.st_mode) {
+            if (chmod(path.c_str(), mode) != 0) {
+                PLOG(ERROR) << "Cannot chmod " << path << " to " << mode;
+            }
+        }
         } else {
             PLOG(ERROR) << "Cannot stat " << path;
         }
