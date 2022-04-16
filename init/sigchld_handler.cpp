@@ -95,10 +95,7 @@ static pid_t ReapOneProcess() {
         LOG(INFO) << name << " received signal " << siginfo.si_status << wait_string;
     }
 
-    if (!service) {
-        LOG(INFO) << name << " did not have an associated service entry and will not be reaped";
-        return pid;
-    }
+    if (!service) return pid;
 
     service->Reap(siginfo);
 
