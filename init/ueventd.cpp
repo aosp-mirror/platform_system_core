@@ -269,7 +269,7 @@ void ColdBoot::Run() {
 
 static UeventdConfiguration GetConfiguration() {
     // TODO: Remove these legacy paths once Android S is no longer supported.
-    if (android::base::GetIntProperty("ro.product.first_api_level", 10000) <= __ANDROID_API_S__) {
+    if (android::base::GetIntProperty("ro.product.first_api_level", 10000) < 33) {
         auto hardware = android::base::GetProperty("ro.hardware", "");
         return ParseConfig({"/system/etc/ueventd.rc", "/vendor/ueventd.rc", "/odm/ueventd.rc",
                             "/ueventd." + hardware + ".rc"});
