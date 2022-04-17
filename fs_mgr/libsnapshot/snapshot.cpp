@@ -218,7 +218,10 @@ bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
     if (!file) return false;
 
     UpdateState state = ReadUpdateState(file.get());
-    if (state == UpdateState::None) return true;
+    if (state == UpdateState::None) {
+        RemoveInvalidSnapshots(file.get());
+        return true;
+    }
 
     if (state == UpdateState::Initiated) {
         LOG(INFO) << "Update has been initiated, now canceling";
@@ -1901,6 +1904,33 @@ bool SnapshotManager::GetSnapshotFlashingStatus(LockedFile* lock,
         }
     }
     return true;
+}
+
+void SnapshotManager::RemoveInvalidSnapshots(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+
+    // Remove the stale snapshot metadata
+    //
+    // We make sure that all the three cases
+    // are valid before removing the snapshot metadata:
+    //
+    // 1: dm state is active
+    // 2: Root fs is not mounted off as a snapshot device
+    // 3: Snapshot slot suffix should match current device slot
+    if (!ListSnapshots(lock, &snapshots, device_->GetSlotSuffix()) || snapshots.empty()) {
+        return;
+    }
+
+    // We indeed have some invalid snapshots
+    for (const auto& name : snapshots) {
+        if (dm_.GetState(name) == DmDeviceState::ACTIVE && !IsSnapshotDevice(name)) {
+            if (!DeleteSnapshot(lock, name)) {
+                LOG(ERROR) << "Failed to delete invalid snapshot: " << name;
+            } else {
+                LOG(INFO) << "Invalid snapshot: " << name << " deleted";
+            }
+        }
+    }
 }
 
 bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
