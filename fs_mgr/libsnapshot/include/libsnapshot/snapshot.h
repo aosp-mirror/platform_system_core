@@ -538,6 +538,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Unmap a COW and remove it from a MetadataBuilder.
     void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata);
 
+    // Remove invalid snapshots if any
+    void RemoveInvalidSnapshots(LockedFile* lock);
+
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
 
