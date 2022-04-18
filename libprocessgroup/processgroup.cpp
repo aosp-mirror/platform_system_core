@@ -159,6 +159,20 @@ bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
 }
 
+// C wrapper for SetProcessProfiles.
+// No need to have this in the header file because this function is specifically for crosvm. Crosvm
+// which is written in Rust has its own declaration of this foreign function and doesn't rely on the
+// header. See
+// https://chromium-review.googlesource.com/c/chromiumos/platform/crosvm/+/3574427/5/src/linux/android.rs#12
+extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_profiles,
+                                             const char* profiles[]) {
+    std::vector<std::string> profiles_(num_profiles);
+    for (size_t i = 0; i < num_profiles; i++) {
+        profiles_.emplace_back(profiles[i]);
+    }
+    return SetProcessProfiles(uid, pid, profiles_);
+}
+
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
     return StringPrintf("%s/uid_%d", cgroup, uid);
 }
