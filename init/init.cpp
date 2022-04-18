@@ -661,8 +661,7 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         PLOG(FATAL) << "failed to create signalfd";
     }
 
-    constexpr int flags = EPOLLIN | EPOLLPRI;
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd, flags); !result.ok()) {
+    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
@@ -796,6 +795,10 @@ int SecondStageMain(int argc, char** argv) {
         InstallRebootSignalHandlers();
     }
 
+    // No threads should be spin up until signalfd
+    // is registered. If the threads are indeed required,
+    // each of these threads _should_ make sure SIGCHLD signal
+    // is blocked. See b/223076262
     boot_clock::time_point start_time = boot_clock::now();
 
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
