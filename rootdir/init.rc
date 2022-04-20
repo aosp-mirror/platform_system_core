@@ -824,9 +824,12 @@ on post-fs-data
     # directory used for on-device refresh metrics file.
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
-    mkdir /data/misc/odsign 0700 root root
+    mkdir /data/misc/odsign 0710 root system
+    # directory used for odsign metrics
+    mkdir /data/misc/odsign/metrics 0770 root system
+
     # Directory for VirtualizationService temporary image files.
-    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
+    mkdir /data/misc/virtualizationservice 0700 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -1303,3 +1306,15 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Multi-Gen LRU Experiment
+on property:persist.device_config.mglru_native.lru_gen_config=none
+  write /sys/kernel/mm/lru_gen/enabled 0
+on property:persist.device_config.mglru_native.lru_gen_config=core
+  write /sys/kernel/mm/lru_gen/enabled 1
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
+  write /sys/kernel/mm/lru_gen/enabled 3
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
+  write /sys/kernel/mm/lru_gen/enabled 5
+on property:persist.device_config.mglru_native.lru_gen_config=all
+  write /sys/kernel/mm/lru_gen/enabled 7
