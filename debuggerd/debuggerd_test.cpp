@@ -113,8 +113,14 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 // Enable GWP-ASan at the start of this process. GWP-ASan is enabled using
 // process sampling, so we need to ensure we force GWP-ASan on.
 __attribute__((constructor)) static void enable_gwp_asan() {
-  bool force = true;
-  android_mallopt(M_INITIALIZE_GWP_ASAN, &force, sizeof(force));
+  android_mallopt_gwp_asan_options_t opts;
+  // No, we're not an app, but let's turn ourselves on without sampling.
+  // Technically, if someone's using the *.default_app sysprops, they'll adjust
+  // our settings, but I don't think this will be common on a device that's
+  // running debuggerd_tests.
+  opts.desire = android_mallopt_gwp_asan_options_t::Action::TURN_ON_FOR_APP;
+  opts.program_name = "";
+  android_mallopt(M_INITIALIZE_GWP_ASAN, &opts, sizeof(android_mallopt_gwp_asan_options_t));
 }
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
