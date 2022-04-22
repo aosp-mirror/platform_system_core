@@ -19,6 +19,7 @@ package {
 rust_library {
     name: "libtrusty-rs",
     crate_name: "trusty",
+    vendor_available: true,
     srcs: [
         "src/lib.rs"
     ],
