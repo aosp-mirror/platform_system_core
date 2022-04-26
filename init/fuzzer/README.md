@@ -2,6 +2,7 @@
 
 ## Table of contents
 + [init_parser_fuzzer](#InitParser)
++ [init_property_fuzzer](#InitProperty)
 
 # <a name="InitParser"></a> Fuzzer for InitParser
 
@@ -23,4 +24,24 @@ InitParser supports the following parameters:
 ```
   $ adb sync data
   $ adb shell /data/fuzz/arm64/init_parser_fuzzer/init_parser_fuzzer
+```
+
+# <a name="InitProperty"></a> Fuzzer for InitProperty
+
+InitProperty supports the following parameters:
+  PropertyType (parameter name: "PropertyType")
+
+| Parameter| Valid Values |Configured Value|
+|-------------|----------|----- |
+|`PropertyType`| 0.`STRING`,<br/> 1.`BOOL`,<br/> 2.`INT`,<br/> 3.`UINT`,<br/> 4.`DOUBLE`,<br/> 5.`SIZE`,<br/>6.`ENUM`,<br/>7.`RANDOM`|Value obtained from FuzzedDataProvider|
+
+#### Steps to run
+1. Build the fuzzer
+```
+  $ mm -j$(nproc) init_property_fuzzer
+```
+2. Run on device
+```
+  $ adb sync data
+  $ adb shell /data/fuzz/arm64/init_property_fuzzer/init_property_fuzzer
 ```

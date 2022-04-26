@@ -52,3 +52,11 @@ cc_fuzz {
         "libinit_defaults",
     ],
 }
+
+cc_fuzz {
+    name: "init_property_fuzzer",
+    srcs: [
+        "init_property_fuzzer.cpp",
+    ],
+    defaults: ["libinit_defaults"],
+}
