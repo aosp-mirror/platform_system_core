@@ -142,11 +142,21 @@ on init
     chown system system /dev/stune/background/tasks
     chown system system /dev/stune/top-app/tasks
     chown system system /dev/stune/rt/tasks
+    chown system system /dev/stune/cgroup.procs
+    chown system system /dev/stune/foreground/cgroup.procs
+    chown system system /dev/stune/background/cgroup.procs
+    chown system system /dev/stune/top-app/cgroup.procs
+    chown system system /dev/stune/rt/cgroup.procs
     chmod 0664 /dev/stune/tasks
     chmod 0664 /dev/stune/foreground/tasks
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+    chmod 0664 /dev/stune/cgroup.procs
+    chmod 0664 /dev/stune/foreground/cgroup.procs
+    chmod 0664 /dev/stune/background/cgroup.procs
+    chmod 0664 /dev/stune/top-app/cgroup.procs
+    chmod 0664 /dev/stune/rt/cgroup.procs
 
     # cpuctl hierarchy for devices using utilclamp
     mkdir /dev/cpuctl/foreground
@@ -172,6 +182,14 @@ on init
     chown system system /dev/cpuctl/system/tasks
     chown system system /dev/cpuctl/system-background/tasks
     chown system system /dev/cpuctl/dex2oat/tasks
+    chown system system /dev/cpuctl/cgroup.procs
+    chown system system /dev/cpuctl/foreground/cgroup.procs
+    chown system system /dev/cpuctl/background/cgroup.procs
+    chown system system /dev/cpuctl/top-app/cgroup.procs
+    chown system system /dev/cpuctl/rt/cgroup.procs
+    chown system system /dev/cpuctl/system/cgroup.procs
+    chown system system /dev/cpuctl/system-background/cgroup.procs
+    chown system system /dev/cpuctl/dex2oat/cgroup.procs
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
     chmod 0664 /dev/cpuctl/background/tasks
@@ -180,12 +198,22 @@ on init
     chmod 0664 /dev/cpuctl/system/tasks
     chmod 0664 /dev/cpuctl/system-background/tasks
     chmod 0664 /dev/cpuctl/dex2oat/tasks
+    chmod 0664 /dev/cpuctl/cgroup.procs
+    chmod 0664 /dev/cpuctl/foreground/cgroup.procs
+    chmod 0664 /dev/cpuctl/background/cgroup.procs
+    chmod 0664 /dev/cpuctl/top-app/cgroup.procs
+    chmod 0664 /dev/cpuctl/rt/cgroup.procs
+    chmod 0664 /dev/cpuctl/system/cgroup.procs
+    chmod 0664 /dev/cpuctl/system-background/cgroup.procs
+    chmod 0664 /dev/cpuctl/dex2oat/cgroup.procs
 
     # Create a cpu group for NNAPI HAL processes
     mkdir /dev/cpuctl/nnapi-hal
     chown system system /dev/cpuctl/nnapi-hal
     chown system system /dev/cpuctl/nnapi-hal/tasks
+    chown system system /dev/cpuctl/nnapi-hal/cgroup.procs
     chmod 0664 /dev/cpuctl/nnapi-hal/tasks
+    chmod 0664 /dev/cpuctl/nnapi-hal/cgroup.procs
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
 
@@ -193,19 +221,25 @@ on init
     mkdir /dev/cpuctl/camera-daemon
     chown system system /dev/cpuctl/camera-daemon
     chown system system /dev/cpuctl/camera-daemon/tasks
+    chown system system /dev/cpuctl/camera-daemon/cgroup.procs
     chmod 0664 /dev/cpuctl/camera-daemon/tasks
+    chmod 0664 /dev/cpuctl/camera-daemon/cgroup.procs
 
     # Create an stune group for camera-specific processes
     mkdir /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon/tasks
+    chown system system /dev/stune/camera-daemon/cgroup.procs
     chmod 0664 /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/cgroup.procs
 
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal/tasks
+    chown system system /dev/stune/nnapi-hal/cgroup.procs
     chmod 0664 /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/cgroup.procs
     write /dev/stune/nnapi-hal/schedtune.boost 1
     write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
@@ -217,8 +251,12 @@ on init
     chown system system /dev/blkio/background
     chown system system /dev/blkio/tasks
     chown system system /dev/blkio/background/tasks
+    chown system system /dev/blkio/cgroup.procs
+    chown system system /dev/blkio/background/cgroup.procs
     chmod 0664 /dev/blkio/tasks
     chmod 0664 /dev/blkio/background/tasks
+    chmod 0664 /dev/blkio/cgroup.procs
+    chmod 0664 /dev/blkio/background/cgroup.procs
     write /dev/blkio/blkio.weight 1000
     write /dev/blkio/background/blkio.weight 200
     write /dev/blkio/background/blkio.bfq.weight 10
@@ -367,6 +405,13 @@ on init
     chown system system /dev/cpuset/top-app/tasks
     chown system system /dev/cpuset/restricted/tasks
     chown system system /dev/cpuset/camera-daemon/tasks
+    chown system system /dev/cpuset/cgroup.procs
+    chown system system /dev/cpuset/foreground/cgroup.procs
+    chown system system /dev/cpuset/background/cgroup.procs
+    chown system system /dev/cpuset/system-background/cgroup.procs
+    chown system system /dev/cpuset/top-app/cgroup.procs
+    chown system system /dev/cpuset/restricted/cgroup.procs
+    chown system system /dev/cpuset/camera-daemon/cgroup.procs
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -378,6 +423,13 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
     chmod 0664 /dev/cpuset/camera-daemon/tasks
+    chmod 0664 /dev/cpuset/foreground/cgroup.procs
+    chmod 0664 /dev/cpuset/background/cgroup.procs
+    chmod 0664 /dev/cpuset/system-background/cgroup.procs
+    chmod 0664 /dev/cpuset/top-app/cgroup.procs
+    chmod 0664 /dev/cpuset/restricted/cgroup.procs
+    chmod 0664 /dev/cpuset/cgroup.procs
+    chmod 0664 /dev/cpuset/camera-daemon/cgroup.procs
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
