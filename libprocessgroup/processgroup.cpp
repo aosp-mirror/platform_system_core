@@ -166,7 +166,8 @@ bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use
 // https://chromium-review.googlesource.com/c/chromiumos/platform/crosvm/+/3574427/5/src/linux/android.rs#12
 extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_profiles,
                                              const char* profiles[]) {
-    std::vector<std::string> profiles_(num_profiles);
+    std::vector<std::string> profiles_;
+    profiles_.reserve(num_profiles);
     for (size_t i = 0; i < num_profiles; i++) {
         profiles_.emplace_back(profiles[i]);
     }
