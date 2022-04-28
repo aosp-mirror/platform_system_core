@@ -215,6 +215,9 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
                 return false;
             }
         }
+        // The PLOG() statement below uses the error code stored in `errno` by
+        // WriteStringToFile() because access() only overwrites `errno` if it fails
+        // and because this code is only reached if the access() function returns 0.
         PLOG(ERROR) << "Failed to write '" << value_ << "' to " << path;
         return false;
     }
@@ -803,6 +806,7 @@ const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) con
 
 bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
                                       const std::vector<std::string>& profiles, bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -811,16 +815,19 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
             }
             if (!profile->ExecuteForProcess(uid, pid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " process profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "process profile";
+            PLOG(WARNING) << "Failed to find " << name << " process profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
 
 bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& profiles,
                                    bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -829,10 +836,12 @@ bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& prof
             }
             if (!profile->ExecuteForTask(tid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " task profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "task profile";
+            PLOG(WARNING) << "Failed to find " << name << " task profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
