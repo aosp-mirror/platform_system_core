@@ -54,6 +54,8 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     if (ret != 0) {
         if (errno == EEXIST) {
             // Module already loaded
+            std::lock_guard guard(module_loaded_lock_);
+            module_loaded_paths_.emplace(path_name);
             module_loaded_.emplace(canonical_name);
             return true;
         }
@@ -62,6 +64,8 @@ bool Modprobe::Insmod(const std::string& path_name, const std::string& parameter
     }
 
     LOG(INFO) << "Loaded kernel module " << path_name;
+    std::lock_guard guard(module_loaded_lock_);
+    module_loaded_paths_.emplace(path_name);
     module_loaded_.emplace(canonical_name);
     module_count_++;
     return true;
@@ -74,6 +78,7 @@ bool Modprobe::Rmmod(const std::string& module_name) {
         PLOG(ERROR) << "Failed to remove module '" << module_name << "'";
         return false;
     }
+    std::lock_guard guard(module_loaded_lock_);
     module_loaded_.erase(canonical_name);
     return true;
 }

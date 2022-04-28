@@ -133,6 +133,10 @@
 #define AID_THREAD_NETWORK 1084   /* Thread Network subsystem */
 #define AID_DICED 1085            /* Android's DICE daemon */
 #define AID_DMESGD 1086           /* dmesg parsing daemon for kernel report collection */
+#define AID_JC_WEAVER 1087        /* Javacard Weaver HAL - to manage omapi ARA rules */
+#define AID_JC_STRONGBOX 1088     /* Javacard Strongbox HAL - to manage omapi ARA rules */
+#define AID_JC_IDENTITYCRED 1089  /* Javacard Identity Cred HAL - to manage omapi ARA rules */
+#define AID_SDK_SANDBOX 1090      /* SDK sandbox virtual UID */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
@@ -209,6 +213,10 @@
  * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/highuid.h?h=v4.4#n40
  */
 #define AID_OVERFLOWUID 65534 /* unmapped user in the user namespace */
+
+/* use the ranges below to determine whether a process is sdk sandbox */
+#define AID_SDK_SANDBOX_PROCESS_START 20000 /* start of uids allocated to sdk sandbox processes */
+#define AID_SDK_SANDBOX_PROCESS_END 29999   /* end of uids allocated to sdk sandbox processes */
 
 /* use the ranges below to determine whether a process is isolated */
 #define AID_ISOLATED_START 90000 /* start of uids for fully isolated sandboxed processes */
