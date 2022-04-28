@@ -43,10 +43,13 @@ static bool retrieve_gwp_asan_state(unwindstack::Memory* process_memory, uintptr
 static const gwp_asan::AllocationMetadata* retrieve_gwp_asan_metadata(
     unwindstack::Memory* process_memory, const gwp_asan::AllocatorState& state,
     uintptr_t metadata_addr) {
-  if (state.MaxSimultaneousAllocations > 1024) {
+  // 1 million GWP-ASan slots would take 4.1GiB of space. Thankfully, copying
+  // the metadata for that amount of slots is only 532MiB, and this really will
+  // only be used with some ridiculous torture-tests.
+  if (state.MaxSimultaneousAllocations > 1000000) {
     ALOGE(
         "Error when retrieving GWP-ASan metadata, MSA from state (%zu) "
-        "exceeds maximum allowed (1024).",
+        "exceeds maximum allowed (1,000,000).",
         state.MaxSimultaneousAllocations);
     return nullptr;
   }
