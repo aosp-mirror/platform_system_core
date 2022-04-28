@@ -550,6 +550,9 @@ class CowOpIter final : public ICowOpIter {
     const CowOperation& Get() override;
     void Next() override;
 
+    void Prev() override;
+    bool RDone() override;
+
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
     std::vector<CowOperation>::iterator op_iter_;
@@ -558,6 +561,15 @@ class CowOpIter final : public ICowOpIter {
 CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops) {
     ops_ = ops;
     op_iter_ = ops_->begin();
+}
+
+bool CowOpIter::RDone() {
+    return op_iter_ == ops_->begin();
+}
+
+void CowOpIter::Prev() {
+    CHECK(!RDone());
+    op_iter_--;
 }
 
 bool CowOpIter::Done() {
@@ -585,6 +597,9 @@ class CowRevMergeOpIter final : public ICowOpIter {
     const CowOperation& Get() override;
     void Next() override;
 
+    void Prev() override;
+    bool RDone() override;
+
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
@@ -602,6 +617,9 @@ class CowMergeOpIter final : public ICowOpIter {
     bool Done() override;
     const CowOperation& Get() override;
     void Next() override;
+
+    void Prev() override;
+    bool RDone() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -621,6 +639,15 @@ CowMergeOpIter::CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
     start_ = start;
 
     block_iter_ = merge_op_blocks->begin() + start;
+}
+
+bool CowMergeOpIter::RDone() {
+    return block_iter_ == merge_op_blocks_->begin();
+}
+
+void CowMergeOpIter::Prev() {
+    CHECK(!RDone());
+    block_iter_--;
 }
 
 bool CowMergeOpIter::Done() {
@@ -647,6 +674,15 @@ CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> 
     start_ = start;
 
     block_riter_ = merge_op_blocks->rbegin();
+}
+
+bool CowRevMergeOpIter::RDone() {
+    return block_riter_ == merge_op_blocks_->rbegin();
+}
+
+void CowRevMergeOpIter::Prev() {
+    CHECK(!RDone());
+    block_riter_--;
 }
 
 bool CowRevMergeOpIter::Done() {
