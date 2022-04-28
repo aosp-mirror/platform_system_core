@@ -762,6 +762,7 @@ void SelinuxAvcLog(char* buf, size_t buf_len) {
 void SelinuxRestoreContext() {
     LOG(INFO) << "Running restorecon...";
     selinux_android_restorecon("/dev", 0);
+    selinux_android_restorecon("/dev/console", 0);
     selinux_android_restorecon("/dev/kmsg", 0);
     if constexpr (WORLD_WRITABLE_KMSG) {
         selinux_android_restorecon("/dev/kmsg_debug", 0);
