@@ -153,7 +153,7 @@ void storaged_t::init_health_service() {
 
     mUidm.init(is_charger_on(status));
     // register listener after init uid_monitor
-    aidl_health_callback = std::make_shared<HealthInfoCallback>(&mUidm);
+    aidl_health_callback = ndk::SharedRefBase::make<HealthInfoCallback>(&mUidm);
     ret = health->registerCallback(aidl_health_callback);
     if (!ret.isOk()) {
         LOG(WARNING) << "health: failed to register callback: " << ret.getDescription();

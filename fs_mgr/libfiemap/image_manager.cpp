@@ -79,7 +79,7 @@ ImageManager::ImageManager(const std::string& metadata_dir, const std::string& d
     partition_opener_ = std::make_unique<android::fs_mgr::PartitionOpener>();
 
     // Allow overriding whether ImageManager thinks it's in recovery, for testing.
-#ifdef __ANDROID_RECOVERY__
+#ifdef __ANDROID_RAMDISK__
     device_info_.is_recovery = {true};
 #else
     if (!device_info_.is_recovery.has_value()) {
@@ -523,7 +523,7 @@ bool ImageManager::MapImageDevice(const std::string& name,
 
     auto image_header = GetImageHeaderPath(name);
 
-#if !defined __ANDROID_RECOVERY__
+#ifndef __ANDROID_RAMDISK__
     // If there is a device-mapper node wrapping the block device, then we're
     // able to create another node around it; the dm layer does not carry the
     // exclusion lock down the stack when a mount occurs.
@@ -852,6 +852,24 @@ bool ImageManager::ValidateImageMaps() {
     }
 
     return true;
+}
+
+bool ImageManager::IsImageDisabled(const std::string& name) {
+    if (!MetadataExists(metadata_dir_)) {
+        return true;
+    }
+
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        return false;
+    }
+
+    auto partition = FindPartition(*metadata.get(), name);
+    if (!partition) {
+        return false;
+    }
+
+    return !!(partition->attributes & LP_PARTITION_ATTR_DISABLED);
 }
 
 std::unique_ptr<MappedDevice> MappedDevice::Open(IImageManager* manager,

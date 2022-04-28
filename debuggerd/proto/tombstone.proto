@@ -123,12 +123,13 @@ message Thread {
   string name = 2;
   repeated Register registers = 3;
   repeated string backtrace_note = 7;
+  repeated string unreadable_elf_files = 9;
   repeated BacktraceFrame current_backtrace = 4;
   repeated MemoryDump memory_dump = 5;
   int64 tagged_addr_ctrl = 6;
   int64 pac_enabled_keys = 8;
 
-  reserved 9 to 999;
+  reserved 10 to 999;
 }
 
 message BacktraceFrame {
