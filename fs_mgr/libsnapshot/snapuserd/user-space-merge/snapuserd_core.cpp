@@ -492,22 +492,17 @@ void SnapshotHandler::ReadBlocks(const std::string partition_name,
         return;
     }
 
-    if (IsIouringSupported()) {
-        std::async(std::launch::async, &SnapshotHandler::ReadBlocksAsync, this, dm_block_device,
-                   partition_name, dev_sz);
-    } else {
-        int num_threads = 2;
-        size_t num_blocks = dev_sz >> BLOCK_SHIFT;
-        size_t num_blocks_per_thread = num_blocks / num_threads;
-        size_t read_sz_per_thread = num_blocks_per_thread << BLOCK_SHIFT;
-        off_t offset = 0;
+    int num_threads = 2;
+    size_t num_blocks = dev_sz >> BLOCK_SHIFT;
+    size_t num_blocks_per_thread = num_blocks / num_threads;
+    size_t read_sz_per_thread = num_blocks_per_thread << BLOCK_SHIFT;
+    off_t offset = 0;
 
-        for (int i = 0; i < num_threads; i++) {
-            std::async(std::launch::async, &SnapshotHandler::ReadBlocksToCache, this,
-                       dm_block_device, partition_name, offset, read_sz_per_thread);
+    for (int i = 0; i < num_threads; i++) {
+        std::async(std::launch::async, &SnapshotHandler::ReadBlocksToCache, this, dm_block_device,
+                   partition_name, offset, read_sz_per_thread);
 
-            offset += read_sz_per_thread;
-        }
+        offset += read_sz_per_thread;
     }
 }
 
@@ -694,10 +689,8 @@ bool SnapshotHandler::IsIouringSupported() {
     // During selinux init transition, libsnapshot will propagate the
     // status of io_uring enablement. As properties are not initialized,
     // we cannot query system property.
-    //
-    // TODO: b/219642530: Intermittent I/O failures observed
     if (is_io_uring_enabled_) {
-        return false;
+        return true;
     }
 
     // Finally check the system property

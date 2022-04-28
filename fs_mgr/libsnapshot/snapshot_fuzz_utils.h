@@ -199,6 +199,7 @@ class SnapshotFuzzImageManager : public android::fiemap::IImageManager {
     bool UnmapImageIfExists(const std::string& name) override {
         return impl_->UnmapImageIfExists(name);
     }
+    bool IsImageDisabled(const std::string& name) override { return impl_->IsImageDisabled(name); }
 
   private:
     std::unique_ptr<android::fiemap::IImageManager> impl_;
