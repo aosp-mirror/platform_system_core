@@ -113,8 +113,14 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 // Enable GWP-ASan at the start of this process. GWP-ASan is enabled using
 // process sampling, so we need to ensure we force GWP-ASan on.
 __attribute__((constructor)) static void enable_gwp_asan() {
-  bool force = true;
-  android_mallopt(M_INITIALIZE_GWP_ASAN, &force, sizeof(force));
+  android_mallopt_gwp_asan_options_t opts;
+  // No, we're not an app, but let's turn ourselves on without sampling.
+  // Technically, if someone's using the *.default_app sysprops, they'll adjust
+  // our settings, but I don't think this will be common on a device that's
+  // running debuggerd_tests.
+  opts.desire = android_mallopt_gwp_asan_options_t::Action::TURN_ON_FOR_APP;
+  opts.program_name = "";
+  android_mallopt(M_INITIALIZE_GWP_ASAN, &opts, sizeof(android_mallopt_gwp_asan_options_t));
 }
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
@@ -377,6 +383,8 @@ TEST_F(CrasherTest, tagged_fault_addr) {
 #if !defined(__aarch64__)
   GTEST_SKIP() << "Requires aarch64";
 #endif
+  // HWASan crashes with SIGABRT on tag mismatch.
+  SKIP_WITH_HWASAN;
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
@@ -408,6 +416,10 @@ TEST_F(CrasherTest, heap_addr_in_register) {
 #if defined(__i386__)
   GTEST_SKIP() << "architecture does not pass arguments in registers";
 #endif
+  // The memory dump in HWASan crashes sadly shows the memory near the registers
+  // in the HWASan dump function, rather the faulting context. This is a known
+  // issue.
+  SKIP_WITH_HWASAN;
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
@@ -486,6 +498,8 @@ TEST_P(GwpAsanCrasherTest, gwp_asan_uaf) {
     // instead of GWP-ASan.
     GTEST_SKIP() << "Skipped on MTE.";
   }
+  // Skip this test on HWASan, which will reliably catch test errors as well.
+  SKIP_WITH_HWASAN;
 
   GwpAsanTestParameters params = GetParam();
   LogcatCollector logcat_collector;
@@ -2021,6 +2035,9 @@ TEST_F(CrasherTest, fault_address_before_first_map) {
 
 // Verify that a fault address after the last map is properly handled.
 TEST_F(CrasherTest, fault_address_after_last_map) {
+  // This makes assumptions about the memory layout that are not true in HWASan
+  // processes.
+  SKIP_WITH_HWASAN;
   uintptr_t crash_uptr = untag_address(UINTPTR_MAX - 15);
   StartProcess([crash_uptr]() {
     ASSERT_EQ(0, crash_call(crash_uptr));
