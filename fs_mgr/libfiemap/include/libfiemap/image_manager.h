@@ -131,6 +131,9 @@ class IImageManager {
     virtual bool RemoveAllImages() = 0;
 
     virtual bool UnmapImageIfExists(const std::string& name);
+
+    // Returns whether DisableImage() was called.
+    virtual bool IsImageDisabled(const std::string& name) = 0;
 };
 
 class ImageManager final : public IImageManager {
@@ -162,6 +165,7 @@ class ImageManager final : public IImageManager {
     bool RemoveDisabledImages() override;
     bool GetMappedImageDevice(const std::string& name, std::string* device) override;
     bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
+    bool IsImageDisabled(const std::string& name) override;
 
     std::vector<std::string> GetAllBackingImages();
 
