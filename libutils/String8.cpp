@@ -313,7 +313,7 @@ status_t String8::appendFormatV(const char* fmt, va_list args)
 
     if (n > 0) {
         size_t oldLength = length();
-        if (n > std::numeric_limits<size_t>::max() - 1 ||
+        if (static_cast<size_t>(n) > std::numeric_limits<size_t>::max() - 1 ||
             oldLength > std::numeric_limits<size_t>::max() - n - 1) {
             return NO_MEMORY;
         }
