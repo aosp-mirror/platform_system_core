@@ -287,11 +287,16 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->fs_mgr_flags.avb = true;
             entry->vbmeta_partition = arg;
         } else if (StartsWith(flag, "keydirectory=")) {
-            // The metadata flag is followed by an = and the directory for the keys.
+            // The keydirectory flag enables metadata encryption.  It is
+            // followed by an = and the directory containing the metadata
+            // encryption key.
             entry->metadata_key_dir = arg;
         } else if (StartsWith(flag, "metadata_encryption=")) {
-            // Specify the cipher and flags to use for metadata encryption
-            entry->metadata_encryption = arg;
+            // The metadata_encryption flag specifies the cipher and flags to
+            // use for metadata encryption, if the defaults aren't sufficient.
+            // It doesn't actually enable metadata encryption; that is done by
+            // "keydirectory".
+            entry->metadata_encryption_options = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
@@ -648,6 +653,7 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                 entry->blk_device = partition;
                 // AVB keys for DSU should always be under kDsuKeysDir.
                 entry->avb_keys = kDsuKeysDir;
+                entry->fs_mgr_flags.logical = true;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
@@ -657,7 +663,12 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
             if (partition_ext4 == fstab->end()) {
                 auto new_entry = *GetEntryForMountPoint(fstab, mount_point);
                 new_entry.fs_type = "ext4";
-                fstab->emplace_back(new_entry);
+                auto it = std::find_if(fstab->rbegin(), fstab->rend(),
+                                       [&mount_point](const auto& entry) {
+                                           return entry.mount_point == mount_point;
+                                       });
+                auto end_of_mount_point_group = fstab->begin() + std::distance(it, fstab->rend());
+                fstab->insert(end_of_mount_point_group, new_entry);
             }
         }
     }

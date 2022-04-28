@@ -25,6 +25,7 @@
 // [1] build/soong/cc/config/global.go#commonGlobalIncludes
 #include <android-base/errors.h>
 #include <android-base/result.h>
+#include <log/log_main.h>
 
 #include <assert.h>
 
@@ -44,13 +45,58 @@ struct StatusT {
     status_t val_;
 };
 
+
 namespace base {
+// TODO(b/221235365) StatusT fulfill ResultError contract and cleanup.
+
+// Unlike typical ResultError types, the underlying code should be a status_t
+// instead of a StatusT. We also special-case message generation.
+template<>
+struct ResultError<StatusT, false> {
+    ResultError(status_t s) : val_(s) {
+        LOG_FATAL_IF(s == OK, "Result error should not hold success");
+    }
+
+    template <typename T>
+    operator expected<T, ResultError<StatusT, false>>() const {
+        return unexpected(*this);
+    }
+
+    std::string message() const { return statusToString(val_); }
+    status_t code() const { return val_; }
+
+ private:
+    const status_t val_;
+};
+
+template<>
+struct ResultError<StatusT, true> {
+    template <typename T>
+    ResultError(T&& message, status_t s) : val_(s), message_(std::forward<T>(message)) {
+        LOG_FATAL_IF(s == OK, "Result error should not hold success");
+    }
+
+    ResultError(status_t s) : val_(s) {}
+
+    template <typename T>
+    operator expected<T, ResultError<StatusT, true>>() const {
+        return unexpected(*this);
+    }
+
+    status_t code() const { return val_; }
+
+    std::string message() const { return statusToString(val_) + message_; }
+ private:
+    const status_t val_;
+    std::string message_;
+};
 
 // Specialization of android::base::OkOrFail<V> for V = status_t. This is used to use the OR_RETURN
 // and OR_FATAL macros with statements that yields a value of status_t. See android-base/errors.h
 // for the detailed contract.
 template <>
 struct OkOrFail<status_t> {
+    static_assert(std::is_same_v<status_t, int>);
     // Tests if status_t is a success value of not.
     static bool IsOk(const status_t& s) { return s == OK; }
 
@@ -71,16 +117,70 @@ struct OkOrFail<status_t> {
 
     // Or converts into Result<T, StatusT>. This is used when OR_RETURN is used in a function whose
     // return type is Result<T, StatusT>.
-    template <typename T, typename = std::enable_if_t<!std::is_same_v<T, status_t>>>
+
+    template <typename T>
     operator Result<T, StatusT>() && {
-        return Error<StatusT>(std::move(val_));
+        return ResultError<StatusT>(std::move(val_));
     }
 
-    operator Result<int, StatusT>() && { return Error<StatusT>(std::move(val_)); }
+    template<typename T>
+    operator Result<T, StatusT, false>() && {
+        return ResultError<StatusT, false>(std::move(val_));
+    }
 
+    // Since user defined conversion can be followed by numeric conversion,
+    // we have to specialize all conversions to results holding numeric types to
+    // avoid conversion ambiguities with the constructor of expected.
+#pragma push_macro("SPECIALIZED_CONVERSION")
+#define SPECIALIZED_CONVERSION(type)\
+  operator Result<type, StatusT>() && { return ResultError<StatusT>(std::move(val_)); }\
+  operator Result<type, StatusT, false>() && { return ResultError<StatusT, false>(std::move(val_));}
+
+    SPECIALIZED_CONVERSION(int)
+    SPECIALIZED_CONVERSION(short int)
+    SPECIALIZED_CONVERSION(unsigned short int)
+    SPECIALIZED_CONVERSION(unsigned int)
+    SPECIALIZED_CONVERSION(long int)
+    SPECIALIZED_CONVERSION(unsigned long int)
+    SPECIALIZED_CONVERSION(long long int)
+    SPECIALIZED_CONVERSION(unsigned long long int)
+    SPECIALIZED_CONVERSION(bool)
+    SPECIALIZED_CONVERSION(char)
+    SPECIALIZED_CONVERSION(unsigned char)
+    SPECIALIZED_CONVERSION(signed char)
+    SPECIALIZED_CONVERSION(wchar_t)
+    SPECIALIZED_CONVERSION(char16_t)
+    SPECIALIZED_CONVERSION(char32_t)
+    SPECIALIZED_CONVERSION(float)
+    SPECIALIZED_CONVERSION(double)
+    SPECIALIZED_CONVERSION(long double)
+#undef SPECIALIZED_CONVERSION
+#pragma pop_macro("SPECIALIZED_CONVERSION")
     // String representation of the error value.
     static std::string ErrorMessage(const status_t& s) { return statusToString(s); }
 };
-
 }  // namespace base
+
+
+// These conversions make StatusT directly comparable to status_t in order to
+// avoid calling code whenever comparisons are desired.
+
+template <bool include_message>
+bool operator==(const base::ResultError<StatusT, include_message>& l, const status_t& r) {
+    return (l.code() == r);
+}
+template <bool include_message>
+bool operator==(const status_t& l, const base::ResultError<StatusT, include_message>& r) {
+    return (l == r.code());
+}
+
+template <bool include_message>
+bool operator!=(const base::ResultError<StatusT, include_message>& l, const status_t& r) {
+    return (l.code() != r);
+}
+template <bool include_message>
+bool operator!=(const status_t& l, const base::ResultError<StatusT, include_message>& r) {
+    return (l != r.code());
+}
+
 }  // namespace android

@@ -218,7 +218,10 @@ bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
     if (!file) return false;
 
     UpdateState state = ReadUpdateState(file.get());
-    if (state == UpdateState::None) return true;
+    if (state == UpdateState::None) {
+        RemoveInvalidSnapshots(file.get());
+        return true;
+    }
 
     if (state == UpdateState::Initiated) {
         LOG(INFO) << "Update has been initiated, now canceling";
@@ -1685,6 +1688,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
 
     if (UpdateUsesUserSnapshots(lock.get()) && transition == InitTransition::SELINUX_DETACH) {
         snapuserd_argv->emplace_back("-user_snapshot");
+        if (UpdateUsesIouring(lock.get())) {
+            snapuserd_argv->emplace_back("-io_uring");
+        }
     }
 
     size_t num_cows = 0;
@@ -1900,6 +1906,33 @@ bool SnapshotManager::GetSnapshotFlashingStatus(LockedFile* lock,
     return true;
 }
 
+void SnapshotManager::RemoveInvalidSnapshots(LockedFile* lock) {
+    std::vector<std::string> snapshots;
+
+    // Remove the stale snapshot metadata
+    //
+    // We make sure that all the three cases
+    // are valid before removing the snapshot metadata:
+    //
+    // 1: dm state is active
+    // 2: Root fs is not mounted off as a snapshot device
+    // 3: Snapshot slot suffix should match current device slot
+    if (!ListSnapshots(lock, &snapshots, device_->GetSlotSuffix()) || snapshots.empty()) {
+        return;
+    }
+
+    // We indeed have some invalid snapshots
+    for (const auto& name : snapshots) {
+        if (dm_.GetState(name) == DmDeviceState::ACTIVE && !IsSnapshotDevice(name)) {
+            if (!DeleteSnapshot(lock, name)) {
+                LOG(ERROR) << "Failed to delete invalid snapshot: " << name;
+            } else {
+                LOG(INFO) << "Invalid snapshot: " << name << " deleted";
+            }
+        }
+    }
+}
+
 bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
@@ -2060,6 +2093,11 @@ bool SnapshotManager::UpdateUsesCompression() {
 bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
     return update_status.compression_enabled();
+}
+
+bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.io_uring_enabled();
 }
 
 bool SnapshotManager::UpdateUsesUserSnapshots() {
@@ -2877,6 +2915,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_source_build_fingerprint(old_status.source_build_fingerprint());
         status.set_merge_phase(old_status.merge_phase());
         status.set_userspace_snapshots(old_status.userspace_snapshots());
+        status.set_io_uring_enabled(old_status.io_uring_enabled());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3196,14 +3235,27 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     status.set_compression_enabled(cow_creator.compression_enabled);
     if (cow_creator.compression_enabled) {
         if (!device()->IsTestDevice()) {
+            bool userSnapshotsEnabled = IsUserspaceSnapshotsEnabled();
+            const std::string UNKNOWN = "unknown";
+            const std::string vendor_release = android::base::GetProperty(
+                    "ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+            // No user-space snapshots if vendor partition is on Android 12
+            if (vendor_release.find("12") != std::string::npos) {
+                LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
+                          << vendor_release;
+                userSnapshotsEnabled = false;
+            }
+
             // Userspace snapshots is enabled only if compression is enabled
-            status.set_userspace_snapshots(IsUserspaceSnapshotsEnabled());
-            if (IsUserspaceSnapshotsEnabled()) {
+            status.set_userspace_snapshots(userSnapshotsEnabled);
+            if (userSnapshotsEnabled) {
                 is_snapshot_userspace_ = true;
-                LOG(INFO) << "User-space snapshots enabled";
+                status.set_io_uring_enabled(IsIouringEnabled());
+                LOG(INFO) << "Userspace snapshots enabled";
             } else {
                 is_snapshot_userspace_ = false;
-                LOG(INFO) << "User-space snapshots disabled";
+                LOG(INFO) << "Userspace snapshots disabled";
             }
 
             // Terminate stale daemon if any

@@ -162,12 +162,15 @@ libinit_cc_defaults {
         "libavb",
         "libc++fs",
         "libcgrouprc_format",
+        "libfsverity_init",
         "liblmkd_utils",
+        "libmini_keyctl_static",
         "libmodprobe",
         "libprocinfo",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
+        "libsigningutils",
         "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
@@ -178,6 +181,7 @@ libinit_cc_defaults {
         "libbacktrace",
         "libbase",
         "libbootloader_message",
+        "libcrypto",
         "libcutils",
         "libdl",
         "libext4_utils",
@@ -192,6 +196,7 @@ libinit_cc_defaults {
         "libprocessgroup_setup",
         "libselinux",
         "libutils",
+        "libziparchive",
     ],
     bootstrap: true,
     visibility: [":__subpackages__"],
@@ -527,8 +532,8 @@ genrule {
     cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location check_builtins.cpp) > $(out)",
 }
 
-cc_binary {
-    name: "host_init_verifier",
+cc_defaults {
+    name: "init_host_defaults",
     host_supported: true,
     cflags: [
         "-Wall",
@@ -551,7 +556,6 @@ cc_binary {
         "libprocessgroup",
         "libprotobuf-cpp-lite",
     ],
-    srcs: init_common_sources + init_host_sources,
     proto: {
         type: "lite",
     },
@@ -567,6 +571,26 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+cc_binary {
+    name: "host_init_verifier",
+    defaults: ["init_host_defaults"],
+    srcs: init_common_sources + init_host_sources,
+}
+
+cc_library_host_static {
+    name: "libinit_host",
+    defaults: ["init_host_defaults"],
+    srcs: init_common_sources,
+    export_include_dirs: ["."],
+    proto: {
+        export_proto_headers: true,
+    },
+    visibility: [
+        // host_apex_verifier performs a subset of init.rc validation
+        "//system/apex/tools",
+    ],
 }
 
 sh_binary {

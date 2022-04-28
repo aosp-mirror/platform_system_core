@@ -538,6 +538,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Unmap a COW and remove it from a MetadataBuilder.
     void UnmapAndDeleteCowPartition(MetadataBuilder* current_metadata);
 
+    // Remove invalid snapshots if any
+    void RemoveInvalidSnapshots(LockedFile* lock);
+
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
 
@@ -808,6 +811,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Locked and unlocked functions to test whether the current update uses
     // userspace snapshots.
     bool UpdateUsesUserSnapshots(LockedFile* lock);
+
+    // Check if io_uring API's need to be used
+    bool UpdateUsesIouring(LockedFile* lock);
 
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,

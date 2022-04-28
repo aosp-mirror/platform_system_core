@@ -18,6 +18,7 @@
 
 #include <time.h>
 
+#include <functional>
 #include <string>
 #include <utility>
 
@@ -73,4 +74,25 @@ std::string get_timestamp() {
   n = snprintf(s, sz, ":%02d.%09ld", tm.tm_sec, ts.tv_nsec), s += n, sz -= n;
   n = strftime(s, sz, "%z", &tm), s += n, sz -= n;
   return buf;
+}
+
+bool iterate_tids(pid_t pid, std::function<void(pid_t)> callback) {
+  char buf[BUFSIZ];
+  snprintf(buf, sizeof(buf), "/proc/%d/task", pid);
+  std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(buf), closedir);
+  if (dir == nullptr) {
+    return false;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir.get())) != nullptr) {
+    pid_t tid = atoi(entry->d_name);
+    if (tid == 0) {
+      continue;
+    }
+    if (pid != tid) {
+      callback(tid);
+    }
+  }
+  return true;
 }
