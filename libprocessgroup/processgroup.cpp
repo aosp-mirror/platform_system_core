@@ -69,6 +69,23 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     return true;
 }
 
+static bool CgroupGetMemcgAppsPath(std::string* path) {
+    CgroupController controller = CgroupMap::GetInstance().FindController("memory");
+
+    if (!controller.HasValue()) {
+        return false;
+    }
+
+    if (path) {
+        *path = controller.path();
+        if (controller.version() == 1) {
+            *path += "/apps";
+        }
+    }
+
+    return true;
+}
+
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name) {
     auto controller = CgroupMap::GetInstance().FindControllerByPath(path);
 
@@ -142,6 +159,21 @@ bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
 }
 
+// C wrapper for SetProcessProfiles.
+// No need to have this in the header file because this function is specifically for crosvm. Crosvm
+// which is written in Rust has its own declaration of this foreign function and doesn't rely on the
+// header. See
+// https://chromium-review.googlesource.com/c/chromiumos/platform/crosvm/+/3574427/5/src/linux/android.rs#12
+extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_profiles,
+                                             const char* profiles[]) {
+    std::vector<std::string> profiles_;
+    profiles_.reserve(num_profiles);
+    for (size_t i = 0; i < num_profiles; i++) {
+        profiles_.emplace_back(profiles[i]);
+    }
+    return SetProcessProfiles(uid, pid, profiles_);
+}
+
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
     return StringPrintf("%s/uid_%d", cgroup, uid);
 }
@@ -199,13 +231,13 @@ void removeAllProcessGroups() {
     LOG(VERBOSE) << "removeAllProcessGroups()";
 
     std::vector<std::string> cgroups;
-    std::string path;
+    std::string path, memcg_apps_path;
 
     if (CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &path)) {
         cgroups.push_back(path);
     }
-    if (CgroupGetControllerPath("memory", &path)) {
-        cgroups.push_back(path + "/apps");
+    if (CgroupGetMemcgAppsPath(&memcg_apps_path) && memcg_apps_path != path) {
+        cgroups.push_back(memcg_apps_path);
     }
 
     for (std::string cgroup_root_path : cgroups) {
@@ -411,10 +443,11 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
         int err = RemoveProcessGroup(cgroup, uid, initialPid, retries);
 
         if (isMemoryCgroupSupported() && UsePerAppMemcg()) {
-            std::string memory_path;
-            CgroupGetControllerPath("memory", &memory_path);
-            memory_path += "/apps";
-            if (RemoveProcessGroup(memory_path.c_str(), uid, initialPid, retries)) return -1;
+            std::string memcg_apps_path;
+            if (CgroupGetMemcgAppsPath(&memcg_apps_path) &&
+                RemoveProcessGroup(memcg_apps_path.c_str(), uid, initialPid, retries) < 0) {
+                return -1;
+            }
         }
 
         return err;
@@ -442,11 +475,11 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
-    gid_t cgroup_uid = AID_SYSTEM;
-    uid_t cgroup_gid = AID_SYSTEM;
+    uid_t cgroup_uid = AID_SYSTEM;
+    gid_t cgroup_gid = AID_SYSTEM;
     int ret = 0;
 
-    if (stat(cgroup.c_str(), &cgroup_stat) == 1) {
+    if (stat(cgroup.c_str(), &cgroup_stat) < 0) {
         PLOG(ERROR) << "Failed to get stats for " << cgroup;
     } else {
         cgroup_mode = cgroup_stat.st_mode;
@@ -491,10 +524,12 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
         return -EINVAL;
     }
 
-    if (isMemoryCgroupSupported() && UsePerAppMemcg()) {
-        CgroupGetControllerPath("memory", &cgroup);
-        cgroup += "/apps";
-        int ret = createProcessGroupInternal(uid, initialPid, cgroup, false);
+    if (std::string memcg_apps_path;
+        isMemoryCgroupSupported() && UsePerAppMemcg() && CgroupGetMemcgAppsPath(&memcg_apps_path)) {
+        // Note by bvanassche: passing 'false' as fourth argument below implies that the v1
+        // hierarchy is used. It is not clear to me whether the above conditions guarantee that the
+        // v1 hierarchy is used.
+        int ret = createProcessGroupInternal(uid, initialPid, memcg_apps_path, false);
         if (ret != 0) {
             return ret;
         }
