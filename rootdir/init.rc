@@ -86,6 +86,10 @@ on early-init
     mkdir /dev/sys/fs 0755 system system
     mkdir /dev/sys/block 0755 system system
 
+    # Create location for fs_mgr to store abbreviated output from filesystem
+    # checker programs.
+    mkdir /dev/fscklogs 0770 root system
+
 # Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
 on early-init && property:ro.product.cpu.abilist32=*
     exec_start boringssl_self_test32
@@ -446,10 +450,6 @@ on init
     chmod 0644 /dev/xt_qtaguid
 
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
-
-    # Create location for fs_mgr to store abbreviated output from filesystem
-    # checker programs.
-    mkdir /dev/fscklogs 0770 root system
 
     # pstore/ramoops previous console log
     mount pstore pstore /sys/fs/pstore nodev noexec nosuid
