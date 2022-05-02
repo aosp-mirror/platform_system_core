@@ -23,5 +23,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (!file) {
       return 0;
   }
-  return sparse_file_callback(file, false, false, WriteCallback, nullptr);
+  int32_t result = sparse_file_callback(file, false, false, WriteCallback, nullptr);
+  sparse_file_destroy(file);
+  return result;
 }
