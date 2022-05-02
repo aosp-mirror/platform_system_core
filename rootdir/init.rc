@@ -828,11 +828,11 @@ on post-fs-data
     # directory used for odsign metrics
     mkdir /data/misc/odsign/metrics 0770 root system
 
-    # Directory for VirtualizationService temporary image files. Always create
-    # a fresh new empty directory to remove any stale files from the previous
-    # boot.
-    rmdir /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0700 system system
+    # Directory for VirtualizationService temporary image files.
+    # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
+    chmod 0770 /data/misc/virtualizationservice
+    exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0770 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
