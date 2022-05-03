@@ -130,12 +130,10 @@ cc_defaults {
         "-Werror",
         "-Wvla",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+        "-Wthread-safety",
     ],
     rtti: true,
 
-    clang_cflags: [
-        "-Wthread-safety",
-    ],
 }
 
 cc_binary {
@@ -215,7 +213,7 @@ cc_defaults {
         "-Werror",
         "-Wunreachable-code",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
-        "-D_FILE_OFFSET_BITS=64"
+        "-D_FILE_OFFSET_BITS=64",
     ],
 
     target: {
@@ -411,7 +409,7 @@ cc_test_host {
         ":fastboot_test_vendor_ramdisk_replace",
         ":fastboot_test_vendor_boot_v3",
         ":fastboot_test_vendor_boot_v4_without_frag",
-        ":fastboot_test_vendor_boot_v4_with_frag"
+        ":fastboot_test_vendor_boot_v4_with_frag",
     ],
 }
 
