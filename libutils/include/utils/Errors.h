@@ -34,15 +34,13 @@ typedef int32_t status_t;
  * All error codes are negative values.
  */
 
-// Win32 #defines NO_ERROR as well.  It has the same value, so there's no
-// real conflict, though it's a bit awkward.
-#ifdef _WIN32
-# undef NO_ERROR
-#endif
-
 enum {
     OK                = 0,    // Preferred constant for checking success.
+#ifndef NO_ERROR
+    // Win32 #defines NO_ERROR as well.  It has the same value, so there's no
+    // real conflict, though it's a bit awkward.
     NO_ERROR          = OK,   // Deprecated synonym for `OK`. Prefer `OK` because it doesn't conflict with Windows.
+#endif
 
     UNKNOWN_ERROR       = (-2147483647-1), // INT32_MIN value
 
@@ -75,11 +73,5 @@ enum {
 
 // Human readable name of error
 std::string statusToString(status_t status);
-
-// Restore define; enumeration is in "android" namespace, so the value defined
-// there won't work for Win32 code in a different namespace.
-#ifdef _WIN32
-# define NO_ERROR 0L
-#endif
 
 }  // namespace android
