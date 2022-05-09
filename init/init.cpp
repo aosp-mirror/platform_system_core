@@ -293,13 +293,15 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
-// parser that only accepts new services
-Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex) {
+// Returns a Parser that accepts scripts from APEX modules. It supports `service` and `on`.
+Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
 
     parser.AddSectionParser(
             "service", std::make_unique<ServiceParser>(&service_list, GetSubcontext(), std::nullopt,
-                                                       from_apex));
+                                                       /*from_apex=*/true));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, GetSubcontext()));
+
     return parser;
 }
 
