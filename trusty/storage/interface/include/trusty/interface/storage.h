@@ -112,26 +112,30 @@ enum storage_file_open_flag {
 
 /**
  * enum storage_msg_flag - protocol-level flags in struct storage_msg
- * @STORAGE_MSG_FLAG_BATCH:             if set, command belongs to a batch transaction.
- *                                      No response will be sent by the server until
- *                                      it receives a command with this flag unset, at
- *                                      which point a cummulative result for all messages
- *                                      sent with STORAGE_MSG_FLAG_BATCH will be sent.
- *                                      This is only supported by the non-secure disk proxy
- *                                      server.
- * @STORAGE_MSG_FLAG_PRE_COMMIT:        if set, indicates that server need to commit
- *                                      pending changes before processing this message.
- * @STORAGE_MSG_FLAG_POST_COMMIT:       if set, indicates that server need to commit
- *                                      pending changes after processing this message.
- * @STORAGE_MSG_FLAG_TRANSACT_COMPLETE: if set, indicates that server need to commit
- *                                      current transaction after processing this message.
- *                                      It is an alias for STORAGE_MSG_FLAG_POST_COMMIT.
+ * @STORAGE_MSG_FLAG_BATCH:                 if set, command belongs to a batch transaction.
+ *                                          No response will be sent by the server until
+ *                                          it receives a command with this flag unset, at
+ *                                          which point a cumulative result for all messages
+ *                                          sent with STORAGE_MSG_FLAG_BATCH will be sent.
+ *                                          This is only supported by the non-secure disk proxy
+ *                                          server.
+ * @STORAGE_MSG_FLAG_PRE_COMMIT:            if set, indicates that server need to commit
+ *                                          pending changes before processing this message.
+ * @STORAGE_MSG_FLAG_POST_COMMIT:           if set, indicates that server need to commit
+ *                                          pending changes after processing this message.
+ * @STORAGE_MSG_FLAG_TRANSACT_COMPLETE:     if set, indicates that server need to commit
+ *                                          current transaction after processing this message.
+ *                                          It is an alias for STORAGE_MSG_FLAG_POST_COMMIT.
+ * @STORAGE_MSG_FLAG_PRE_COMMIT_CHECKPOINT: if set, indicates that server needs to ensure
+ *                                          that there is not a pending checkpoint for
+ *                                          userdata before processing this message.
  */
 enum storage_msg_flag {
-	STORAGE_MSG_FLAG_BATCH = 0x1,
-	STORAGE_MSG_FLAG_PRE_COMMIT = 0x2,
-	STORAGE_MSG_FLAG_POST_COMMIT = 0x4,
-	STORAGE_MSG_FLAG_TRANSACT_COMPLETE = STORAGE_MSG_FLAG_POST_COMMIT,
+    STORAGE_MSG_FLAG_BATCH = 0x1,
+    STORAGE_MSG_FLAG_PRE_COMMIT = 0x2,
+    STORAGE_MSG_FLAG_POST_COMMIT = 0x4,
+    STORAGE_MSG_FLAG_TRANSACT_COMPLETE = STORAGE_MSG_FLAG_POST_COMMIT,
+    STORAGE_MSG_FLAG_PRE_COMMIT_CHECKPOINT = 0x8,
 };
 
 /*
