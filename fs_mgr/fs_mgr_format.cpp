@@ -156,11 +156,10 @@ int fs_mgr_do_format(const FstabEntry& entry) {
     LERROR << __FUNCTION__ << ": Format " << entry.blk_device << " as '" << entry.fs_type << "'";
 
     bool needs_casefold = false;
-    bool needs_projid = false;
+    bool needs_projid = true;
 
     if (entry.mount_point == "/data") {
         needs_casefold = android::base::GetBoolProperty("external_storage.casefold.enabled", false);
-        needs_projid = android::base::GetBoolProperty("external_storage.projid.enabled", false);
     }
 
     if (entry.fs_type == "f2fs") {

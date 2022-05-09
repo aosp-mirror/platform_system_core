@@ -96,7 +96,7 @@ cc_test {
         "device-tests",
     ],
     test_options: {
-        min_shipping_api_level: 33,
+        min_shipping_api_level: 29,
     },
     require_root: true,
     auto_gen_config: true,
@@ -109,9 +109,9 @@ cc_test {
     ],
     shared_libs: [
         "libbase",
-        "libfs_mgr",
     ],
     static_libs: [
+        "libfs_mgr",
         "libfstab",
         "libgmock",
         "libgtest",

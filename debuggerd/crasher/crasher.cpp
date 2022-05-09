@@ -39,6 +39,8 @@
 #include "debuggerd/handler.h"
 #endif
 
+extern "C" void android_set_abort_message(const char* msg);
+
 #if defined(__arm__)
 // See https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt for details.
 #define __kuser_helper_version (*(int32_t*) 0xffff0ffc)
@@ -182,6 +184,8 @@ static int usage() {
     fprintf(stderr, "  leak                  leak memory until we get OOM-killed\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  abort                 call abort()\n");
+    fprintf(stderr, "  abort_with_msg        call abort() setting an abort message\n");
+    fprintf(stderr, "  abort_with_null_msg   call abort() setting a null abort message\n");
     fprintf(stderr, "  assert                call assert() without a function\n");
     fprintf(stderr, "  assert2               call assert() with a function\n");
     fprintf(stderr, "  exit                  call exit(1)\n");
@@ -258,6 +262,12 @@ noinline int do_action(const char* arg) {
     } else if (!strcasecmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
       return crash(42);
     } else if (!strcasecmp(arg, "abort")) {
+      maybe_abort();
+    } else if (!strcasecmp(arg, "abort_with_msg")) {
+      android_set_abort_message("Aborting due to crasher");
+      maybe_abort();
+    } else if (!strcasecmp(arg, "abort_with_null")) {
+      android_set_abort_message(nullptr);
       maybe_abort();
     } else if (!strcasecmp(arg, "assert")) {
       __assert("some_file.c", 123, "false");
