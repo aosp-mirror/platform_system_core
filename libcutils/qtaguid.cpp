@@ -34,8 +34,6 @@ class netdHandler {
   public:
     int (*netdTagSocket)(int, uint32_t, uid_t);
     int (*netdUntagSocket)(int);
-    int (*netdSetCounterSet)(uint32_t, uid_t);
-    int (*netdDeleteTagData)(uint32_t, uid_t);
 };
 
 int stubTagSocket(int, uint32_t, uid_t) {
@@ -46,16 +44,8 @@ int stubUntagSocket(int) {
     return -EREMOTEIO;
 }
 
-int stubSetCounterSet(uint32_t, uid_t) {
-    return -EREMOTEIO;
-}
-
-int stubDeleteTagData(uint32_t, uid_t) {
-    return -EREMOTEIO;
-}
-
 netdHandler initHandler(void) {
-    netdHandler handler = {stubTagSocket, stubUntagSocket, stubSetCounterSet, stubDeleteTagData};
+    netdHandler handler = {stubTagSocket, stubUntagSocket};
 
     void* netdClientHandle = dlopen("libnetd_client.so", RTLD_NOW);
     if (!netdClientHandle) {
@@ -73,15 +63,6 @@ netdHandler initHandler(void) {
         ALOGE("load netdUntagSocket handler failed: %s", dlerror());
     }
 
-    handler.netdSetCounterSet = (int (*)(uint32_t, uid_t))dlsym(netdClientHandle, "setCounterSet");
-    if (!handler.netdSetCounterSet) {
-        ALOGE("load netdSetCounterSet handler failed: %s", dlerror());
-    }
-
-    handler.netdDeleteTagData = (int (*)(uint32_t, uid_t))dlsym(netdClientHandle, "deleteTagData");
-    if (!handler.netdDeleteTagData) {
-        ALOGE("load netdDeleteTagData handler failed: %s", dlerror());
-    }
     return handler;
 }
 
@@ -113,14 +94,4 @@ int qtaguid_untagSocket(int sockfd) {
 
     ALOGV("Untagging socket %d", sockfd);
     return getHandler().netdUntagSocket(sockfd);
-}
-
-int qtaguid_setCounterSet(int counterSetNum, uid_t uid) {
-    ALOGV("Setting counters to set %d for uid %d", counterSetNum, uid);
-    return getHandler().netdSetCounterSet(counterSetNum, uid);
-}
-
-int qtaguid_deleteTagData(int tag, uid_t uid) {
-    ALOGV("Deleting tag data with tag %u for uid %d", tag, uid);
-    return getHandler().netdDeleteTagData(tag, uid);
 }

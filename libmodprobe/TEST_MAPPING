@@ -3,5 +3,10 @@
     {
       "name": "libmodprobe_tests"
     }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "libmodprobe_tests"
+    }
   ]
 }
