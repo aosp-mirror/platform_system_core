@@ -828,11 +828,11 @@ on post-fs-data
     # directory used for odsign metrics
     mkdir /data/misc/odsign/metrics 0770 root system
 
-    # Directory for VirtualizationService temporary image files. Always create
-    # a fresh new empty directory to remove any stale files from the previous
-    # boot.
-    rmdir /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0700 system system
+    # Directory for VirtualizationService temporary image files.
+    # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
+    chmod 0770 /data/misc/virtualizationservice
+    exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0770 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -1098,6 +1098,9 @@ on boot
     write /dev/sys/fs/by-name/userdata/cp_interval 200
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
+
+    # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
+    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 16
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
