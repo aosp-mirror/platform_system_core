@@ -289,6 +289,10 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
+    if (name_ == "zygote" || name_ == "zygote64") {
+        removeAllEmptyProcessGroups();
+    }
+
     if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
