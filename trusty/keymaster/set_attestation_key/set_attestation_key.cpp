@@ -342,6 +342,19 @@ static int parse_xml_file(const char* filename) {
     return 0;
 }
 
+static int provision_ids(void) {
+    keymaster::SetAttestationIdsRequest req(4 /* ver */);
+    keymaster::EmptyKeymasterResponse rsp(4 /* ver */);
+
+    req.brand.Reinitialize("trusty", 6);
+    req.device.Reinitialize("trusty", 6);
+    req.product.Reinitialize("trusty", 6);
+    req.manufacturer.Reinitialize("trusty", 6);
+    req.model.Reinitialize("trusty", 6);
+
+    return trusty_keymaster_send(KM_SET_ATTESTATION_IDS, req, &rsp);
+}
+
 int main(int argc, char** argv) {
     int ret = 0;
 
@@ -353,10 +366,22 @@ int main(int argc, char** argv) {
     ret = trusty_keymaster_connect();
     if (ret) {
         fprintf(stderr, "trusty_keymaster_connect failed %d\n", ret);
-    } else {
-        ret = parse_xml_file(argv[optind]);
-        trusty_keymaster_disconnect();
+        return EXIT_FAILURE;
     }
 
-    return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    ret = parse_xml_file(argv[optind]);
+    if (ret) {
+        fprintf(stderr, "parse_xml_file failed %d\n", ret);
+        trusty_keymaster_disconnect();
+        return EXIT_FAILURE;
+    }
+
+    ret = provision_ids();
+    if (ret) {
+        fprintf(stderr, "provision_ids failed %d\n", ret);
+        trusty_keymaster_disconnect();
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

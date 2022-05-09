@@ -824,9 +824,15 @@ on post-fs-data
     # directory used for on-device refresh metrics file.
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
-    mkdir /data/misc/odsign 0700 root root
+    mkdir /data/misc/odsign 0710 root system
+    # directory used for odsign metrics
+    mkdir /data/misc/odsign/metrics 0770 root system
+
     # Directory for VirtualizationService temporary image files.
-    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
+    # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
+    chmod 0770 /data/misc/virtualizationservice
+    exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0770 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -1008,12 +1014,6 @@ on post-fs-data
     # module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.tzdata/etc/tz /data/misc/zoneinfo
 
-    # If there is no post-fs-data action in the init.<device>.rc file, you
-    # must uncomment this line, otherwise encrypted filesystems
-    # won't work.
-    # Set indication (checked by vold) that we have finished this action
-    #setprop vold.post_fs_data_done 1
-
     # sys.memfd_use set to false by default, which keeps it disabled
     # until it is confirmed that apps and vendor processes don't make
     # IOCTLs on ashmem fds any more.
@@ -1085,9 +1085,11 @@ on boot
     mkdir /dev/sys/fs/by-name 0755 system system
     symlink /sys/fs/f2fs/${dev.mnt.dev.data} /dev/sys/fs/by-name/userdata
 
-    # to access dm-<num> sysfs
+    # dev.mnt.dev.data=dm-N, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0, or
+    # dev.mnt.dev.data=sdaN/mmcblk0pN, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0
     mkdir /dev/sys/block/by-name 0755 system system
-    symlink /sys/devices/virtual/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.rootdisk.data} /dev/sys/block/by-name/rootdisk
 
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
@@ -1097,10 +1099,14 @@ on boot
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
+    # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
+    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 16
+
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
-    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    # this requires enabling selinux entry for sda/mmcblk0 in vendor side
     write /dev/sys/block/by-name/userdata/queue/discard_max_bytes 134217728
+    write /dev/sys/block/by-name/rootdisk/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
@@ -1306,3 +1312,15 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Multi-Gen LRU Experiment
+on property:persist.device_config.mglru_native.lru_gen_config=none
+  write /sys/kernel/mm/lru_gen/enabled 0
+on property:persist.device_config.mglru_native.lru_gen_config=core
+  write /sys/kernel/mm/lru_gen/enabled 1
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
+  write /sys/kernel/mm/lru_gen/enabled 3
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
+  write /sys/kernel/mm/lru_gen/enabled 5
+on property:persist.device_config.mglru_native.lru_gen_config=all
+  write /sys/kernel/mm/lru_gen/enabled 7
