@@ -27,12 +27,8 @@ cc_library {
         darwin: {
             enabled: false,
         },
-        linux_glibc: {
+        host_linux: {
             cflags: [
-                "-O2",
-                "-g",
-                "-W",
-                "-Wall",
                 "-D_LARGEFILE64_SOURCE",
             ],
         },

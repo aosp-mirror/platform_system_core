@@ -1,6 +1,7 @@
 <manifest version="1.0" type="device">
     <hal format="aidl">
         <name>android.hardware.security.keymint</name>
+        <version>2</version>
         <fqname>IKeyMintDevice/default</fqname>
     </hal>
     <hal format="aidl">
@@ -13,6 +14,7 @@
     </hal>
     <hal format="aidl">
         <name>android.hardware.security.keymint</name>
+        <version>2</version>
         <fqname>IRemotelyProvisionedComponent/default</fqname>
     </hal>
 </manifest>
