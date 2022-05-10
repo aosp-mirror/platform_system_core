@@ -131,6 +131,9 @@ class IImageManager {
     virtual bool RemoveAllImages() = 0;
 
     virtual bool UnmapImageIfExists(const std::string& name);
+
+    // Returns whether DisableImage() was called.
+    virtual bool IsImageDisabled(const std::string& name) = 0;
 };
 
 class ImageManager final : public IImageManager {
@@ -162,6 +165,7 @@ class ImageManager final : public IImageManager {
     bool RemoveDisabledImages() override;
     bool GetMappedImageDevice(const std::string& name, std::string* device) override;
     bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
+    bool IsImageDisabled(const std::string& name) override;
 
     std::vector<std::string> GetAllBackingImages();
 
@@ -173,6 +177,9 @@ class ImageManager final : public IImageManager {
 
     // Writes |bytes| zeros at the beginning of the passed image
     FiemapStatus ZeroFillNewImage(const std::string& name, uint64_t bytes);
+
+    // Validate that all images still have the same block map.
+    bool ValidateImageMaps();
 
   private:
     ImageManager(const std::string& metadata_dir, const std::string& data_dir,

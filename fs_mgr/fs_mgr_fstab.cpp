@@ -130,13 +130,15 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
             if (auto equal_sign = flag.find('='); equal_sign != std::string::npos) {
                 const auto arg = flag.substr(equal_sign + 1);
                 if (entry->fs_type == "f2fs" && StartsWith(flag, "reserve_root=")) {
-                    if (!ParseInt(arg, &entry->reserved_size)) {
+                    off64_t size_in_4k_blocks;
+                    if (!ParseInt(arg, &size_in_4k_blocks, static_cast<off64_t>(0),
+                                  std::numeric_limits<off64_t>::max() >> 12)) {
                         LWARNING << "Warning: reserve_root= flag malformed: " << arg;
                     } else {
-                        entry->reserved_size <<= 12;
+                        entry->reserved_size = size_in_4k_blocks << 12;
                     }
                 } else if (StartsWith(flag, "lowerdir=")) {
-                    entry->lowerdir = std::move(arg);
+                    entry->lowerdir = arg;
                 }
             }
         }
@@ -144,7 +146,7 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
     entry->fs_options = std::move(fs_options);
 }
 
-void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
+bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     for (const auto& flag : Split(flags, ",")) {
         if (flag.empty() || flag == "defaults") continue;
         std::string arg;
@@ -165,12 +167,10 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("recoveryonly", recovery_only);
         CheckFlag("noemulatedsd", no_emulated_sd);
         CheckFlag("notrim", no_trim);
-        CheckFlag("verify", verify);
         CheckFlag("formattable", formattable);
         CheckFlag("slotselect", slot_select);
         CheckFlag("latemount", late_mount);
         CheckFlag("nofail", no_fail);
-        CheckFlag("verifyatboot", verify_at_boot);
         CheckFlag("quota", quota);
         CheckFlag("avb", avb);
         CheckFlag("logical", logical);
@@ -181,14 +181,24 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
         CheckFlag("fsverity", fs_verity);
         CheckFlag("metadata_csum", ext_meta_csum);
         CheckFlag("fscompress", fs_compress);
+        CheckFlag("overlayfs_remove_missing_lowerdir", overlayfs_remove_missing_lowerdir);
 
 #undef CheckFlag
 
         // Then handle flags that take an argument.
         if (StartsWith(flag, "encryptable=")) {
-            // The encryptable flag is followed by an = and the  location of the keys.
+            // The "encryptable" flag identifies adoptable storage volumes.  The
+            // argument to this flag is ignored, but it should be "userdata".
+            //
+            // Historical note: this flag was originally meant just for /data,
+            // to indicate that FDE (full disk encryption) can be enabled.
+            // Unfortunately, it was also overloaded to identify adoptable
+            // storage volumes.  Today, FDE is no longer supported, leaving only
+            // the adoptable storage volume meaning for this flag.
             entry->fs_mgr_flags.crypt = true;
-            entry->key_loc = arg;
+        } else if (StartsWith(flag, "forceencrypt=") || StartsWith(flag, "forcefdeorfbe=")) {
+            LERROR << "flag no longer supported: " << flag;
+            return false;
         } else if (StartsWith(flag, "voldmanaged=")) {
             // The voldmanaged flag is followed by an = and the label, a colon and the partition
             // number or the word "auto", e.g. voldmanaged=sdcard:3
@@ -232,18 +242,8 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
                 }
             }
-        } else if (StartsWith(flag, "forceencrypt=")) {
-            // The forceencrypt flag is followed by an = and the location of the keys.
-            entry->fs_mgr_flags.force_crypt = true;
-            entry->key_loc = arg;
         } else if (StartsWith(flag, "fileencryption=")) {
             ParseFileEncryption(arg, entry);
-        } else if (StartsWith(flag, "forcefdeorfbe=")) {
-            // The forcefdeorfbe flag is followed by an = and the location of the keys.  Get it and
-            // return it.
-            entry->fs_mgr_flags.force_fde_or_fbe = true;
-            entry->key_loc = arg;
-            entry->encryption_options = "aes-256-xts:aes-256-cts";
         } else if (StartsWith(flag, "max_comp_streams=")) {
             if (!ParseInt(arg, &entry->max_comp_streams)) {
                 LWARNING << "Warning: max_comp_streams= flag malformed: " << arg;
@@ -287,11 +287,16 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             entry->fs_mgr_flags.avb = true;
             entry->vbmeta_partition = arg;
         } else if (StartsWith(flag, "keydirectory=")) {
-            // The metadata flag is followed by an = and the directory for the keys.
+            // The keydirectory flag enables metadata encryption.  It is
+            // followed by an = and the directory containing the metadata
+            // encryption key.
             entry->metadata_key_dir = arg;
         } else if (StartsWith(flag, "metadata_encryption=")) {
-            // Specify the cipher and flags to use for metadata encryption
-            entry->metadata_encryption = arg;
+            // The metadata_encryption flag specifies the cipher and flags to
+            // use for metadata encryption, if the defaults aren't sufficient.
+            // It doesn't actually enable metadata encryption; that is done by
+            // "keydirectory".
+            entry->metadata_encryption_options = arg;
         } else if (StartsWith(flag, "sysfs_path=")) {
             // The path to trigger device gc by idle-maint of vold.
             entry->sysfs_path = arg;
@@ -303,6 +308,19 @@ void ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             LWARNING << "Warning: unknown flag: " << flag;
         }
     }
+
+    // FDE is no longer supported, so reject "encryptable" when used without
+    // "vold_managed".  For now skip this check when in recovery mode, since
+    // some recovery fstabs still contain the FDE options since they didn't do
+    // anything in recovery mode anyway (except possibly to cause the
+    // reservation of a crypto footer) and thus never got removed.
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed &&
+        access("/system/bin/recovery", F_OK) != 0) {
+        LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
+                  "storage";
+        return false;
+    }
+    return true;
 }
 
 std::string InitAndroidDtDir() {
@@ -413,17 +431,24 @@ std::string ReadFstabFromDt() {
     return fstab_result;
 }
 
-// Identify path to fstab file. Lookup is based on pattern
-// fstab.<fstab_suffix>, fstab.<hardware>, fstab.<hardware.platform> in
-// folders /odm/etc, vendor/etc, or /.
+// Return the path to the fstab file.  There may be multiple fstab files; the
+// one that is returned will be the first that exists of fstab.<fstab_suffix>,
+// fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
+// in /odm/etc/ and /vendor/etc/, as well as in the locations where it may be in
+// the first stage ramdisk during early boot.  Previously, the first stage
+// ramdisk's copy of the fstab had to be located in the root directory, but now
+// the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;
 
         if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
 
-        for (const char* prefix :
-             {"/odm/etc/fstab.", "/vendor/etc/fstab.", "/fstab.", "/first_stage_ramdisk/fstab."}) {
+        for (const char* prefix : {// late-boot/post-boot locations
+                                   "/odm/etc/fstab.", "/vendor/etc/fstab.",
+                                   // early boot locations
+                                   "/system/etc/fstab.", "/first_stage_ramdisk/system/etc/fstab.",
+                                   "/fstab.", "/first_stage_ramdisk/fstab."}) {
             std::string fstab_path = prefix + suffix;
             if (access(fstab_path.c_str(), F_OK) == 0) {
                 return fstab_path;
@@ -432,92 +457,6 @@ std::string GetFstabPath() {
     }
 
     return "";
-}
-
-bool ReadFstabFile(FILE* fstab_file, bool proc_mounts, Fstab* fstab_out) {
-    ssize_t len;
-    size_t alloc_len = 0;
-    char *line = NULL;
-    const char *delim = " \t";
-    char *save_ptr, *p;
-    Fstab fstab;
-
-    while ((len = getline(&line, &alloc_len, fstab_file)) != -1) {
-        /* if the last character is a newline, shorten the string by 1 byte */
-        if (line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
-
-        /* Skip any leading whitespace */
-        p = line;
-        while (isspace(*p)) {
-            p++;
-        }
-        /* ignore comments or empty lines */
-        if (*p == '#' || *p == '\0')
-            continue;
-
-        FstabEntry entry;
-
-        if (!(p = strtok_r(line, delim, &save_ptr))) {
-            LERROR << "Error parsing mount source";
-            goto err;
-        }
-        entry.blk_device = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing mount_point";
-            goto err;
-        }
-        entry.mount_point = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing fs_type";
-            goto err;
-        }
-        entry.fs_type = p;
-
-        if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing mount_flags";
-            goto err;
-        }
-
-        ParseMountFlags(p, &entry);
-
-        // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
-        if (proc_mounts) {
-            p += strlen(p);
-        } else if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            LERROR << "Error parsing fs_mgr_options";
-            goto err;
-        }
-
-        ParseFsMgrFlags(p, &entry);
-
-        if (entry.fs_mgr_flags.logical) {
-            entry.logical_partition_name = entry.blk_device;
-        }
-
-        fstab.emplace_back(std::move(entry));
-    }
-
-    if (fstab.empty()) {
-        LERROR << "No entries found in fstab";
-        goto err;
-    }
-
-    /* If an A/B partition, modify block device to be the real block device */
-    if (!fs_mgr_update_for_slotselect(&fstab)) {
-        LERROR << "Error updating for slotselect";
-        goto err;
-    }
-    free(line);
-    *fstab_out = std::move(fstab);
-    return true;
-
-err:
-    free(line);
-    return false;
 }
 
 /* Extracts <device>s from the by-name symlinks specified in a fstab:
@@ -594,6 +533,61 @@ bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
 
 }  // namespace
 
+bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out) {
+    const int expected_fields = proc_mounts ? 4 : 5;
+
+    Fstab fstab;
+
+    for (const auto& line : android::base::Split(fstab_str, "\n")) {
+        auto fields = android::base::Tokenize(line, " \t");
+
+        // Ignore empty lines and comments.
+        if (fields.empty() || android::base::StartsWith(fields.front(), '#')) {
+            continue;
+        }
+
+        if (fields.size() < expected_fields) {
+            LERROR << "Error parsing fstab: expected " << expected_fields << " fields, got "
+                   << fields.size();
+            return false;
+        }
+
+        FstabEntry entry;
+        auto it = fields.begin();
+
+        entry.blk_device = std::move(*it++);
+        entry.mount_point = std::move(*it++);
+        entry.fs_type = std::move(*it++);
+        ParseMountFlags(std::move(*it++), &entry);
+
+        // For /proc/mounts, ignore everything after mnt_freq and mnt_passno
+        if (!proc_mounts && !ParseFsMgrFlags(std::move(*it++), &entry)) {
+            LERROR << "Error parsing fs_mgr_flags";
+            return false;
+        }
+
+        if (entry.fs_mgr_flags.logical) {
+            entry.logical_partition_name = entry.blk_device;
+        }
+
+        fstab.emplace_back(std::move(entry));
+    }
+
+    if (fstab.empty()) {
+        LERROR << "No entries found in fstab";
+        return false;
+    }
+
+    /* If an A/B partition, modify block device to be the real block device */
+    if (!fs_mgr_update_for_slotselect(&fstab)) {
+        LERROR << "Error updating for slotselect";
+        return false;
+    }
+
+    *fstab_out = std::move(fstab);
+    return true;
+}
+
 void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                           const std::vector<std::string>& dsu_partitions) {
     static constexpr char kDsuKeysDir[] = "/avb";
@@ -659,6 +653,7 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                 entry->blk_device = partition;
                 // AVB keys for DSU should always be under kDsuKeysDir.
                 entry->avb_keys = kDsuKeysDir;
+                entry->fs_mgr_flags.logical = true;
             }
             // Make sure the ext4 is included to support GSI.
             auto partition_ext4 =
@@ -668,16 +663,23 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
             if (partition_ext4 == fstab->end()) {
                 auto new_entry = *GetEntryForMountPoint(fstab, mount_point);
                 new_entry.fs_type = "ext4";
-                fstab->emplace_back(new_entry);
+                auto it = std::find_if(fstab->rbegin(), fstab->rend(),
+                                       [&mount_point](const auto& entry) {
+                                           return entry.mount_point == mount_point;
+                                       });
+                auto end_of_mount_point_group = fstab->begin() + std::distance(it, fstab->rend());
+                fstab->insert(end_of_mount_point_group, new_entry);
             }
         }
     }
 }
 
 void EnableMandatoryFlags(Fstab* fstab) {
-    // Devices launched in R and after should enable fs_verity on userdata. The flag causes tune2fs
-    // to enable the feature. A better alternative would be to enable on mkfs at the beginning.
+    // Devices launched in R and after must support fs_verity. Set flag to cause tune2fs
+    // to enable the feature on userdata and metadata partitions.
     if (android::base::GetIntProperty("ro.product.first_api_level", 0) >= 30) {
+        // Devices launched in R and after should enable fs_verity on userdata.
+        // A better alternative would be to enable on mkfs at the beginning.
         std::vector<FstabEntry*> data_entries = GetEntriesForMountPoint(fstab, "/data");
         for (auto&& entry : data_entries) {
             // Besides ext4, f2fs is also supported. But the image is already created with verity
@@ -686,20 +688,26 @@ void EnableMandatoryFlags(Fstab* fstab) {
                 entry->fs_mgr_flags.fs_verity = true;
             }
         }
+        // Devices shipping with S and earlier likely do not already have fs_verity enabled via
+        // mkfs, so enable it here.
+        std::vector<FstabEntry*> metadata_entries = GetEntriesForMountPoint(fstab, "/metadata");
+        for (auto&& entry : metadata_entries) {
+            entry->fs_mgr_flags.fs_verity = true;
+        }
     }
 }
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
-    auto fstab_file = std::unique_ptr<FILE, decltype(&fclose)>{fopen(path.c_str(), "re"), fclose};
-    if (!fstab_file) {
-        PERROR << __FUNCTION__ << "(): cannot open file: '" << path << "'";
+    const bool is_proc_mounts = (path == "/proc/mounts");
+
+    std::string fstab_str;
+    if (!android::base::ReadFileToString(path, &fstab_str, /* follow_symlinks = */ true)) {
+        PERROR << __FUNCTION__ << "(): failed to read file: '" << path << "'";
         return false;
     }
 
-    bool is_proc_mounts = path == "/proc/mounts";
-
     Fstab fstab;
-    if (!ReadFstabFile(fstab_file.get(), is_proc_mounts, &fstab)) {
+    if (!ParseFstabFromString(fstab_str, is_proc_mounts, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
@@ -746,15 +754,7 @@ bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
         return false;
     }
 
-    std::unique_ptr<FILE, decltype(&fclose)> fstab_file(
-        fmemopen(static_cast<void*>(const_cast<char*>(fstab_buf.c_str())),
-                 fstab_buf.length(), "r"), fclose);
-    if (!fstab_file) {
-        if (verbose) PERROR << __FUNCTION__ << "(): failed to create a file stream for fstab dt";
-        return false;
-    }
-
-    if (!ReadFstabFile(fstab_file.get(), false, fstab)) {
+    if (!ParseFstabFromString(fstab_buf, /* proc_mounts = */ false, fstab)) {
         if (verbose) {
             LERROR << __FUNCTION__ << "(): failed to load fstab from kernel:" << std::endl
                    << fstab_buf;

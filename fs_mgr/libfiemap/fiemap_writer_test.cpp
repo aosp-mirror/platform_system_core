@@ -16,6 +16,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <linux/limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -257,6 +258,13 @@ TEST_F(FiemapWriterTest, FibmapBlockAddressing) {
     EXPECT_EQ(memcmp(actual.data(), data.data(), data.size()), 0);
 }
 
+TEST_F(FiemapWriterTest, CheckEmptyFile) {
+    // Can't get any fiemap_extent out of a zero-sized file.
+    FiemapUniquePtr fptr = FiemapWriter::Open(testfile, 0);
+    EXPECT_EQ(fptr, nullptr);
+    EXPECT_EQ(access(testfile.c_str(), F_OK), -1);
+}
+
 TEST_F(SplitFiemapTest, Create) {
     auto ptr = SplitFiemap::Create(testfile, 1024 * 768, 1024 * 32);
     ASSERT_NE(ptr, nullptr);
@@ -297,6 +305,27 @@ TEST_F(SplitFiemapTest, DeleteOnFail) {
     ASSERT_EQ(errno, ENOENT);
     ASSERT_NE(access(testfile.c_str(), F_OK), 0);
     ASSERT_EQ(errno, ENOENT);
+}
+
+TEST_F(SplitFiemapTest, CorruptSplit) {
+    unique_fd fd(open(testfile.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0700));
+    ASSERT_GE(fd, 0);
+
+    // Make a giant random string.
+    std::vector<char> data;
+    for (size_t i = 0x1; i < 0x7f; i++) {
+        for (size_t j = 0; j < 100; j++) {
+            data.emplace_back(i);
+        }
+    }
+    ASSERT_GT(data.size(), PATH_MAX);
+
+    data.emplace_back('\n');
+
+    ASSERT_TRUE(android::base::WriteFully(fd, data.data(), data.size()));
+    fd = {};
+
+    ASSERT_TRUE(SplitFiemap::RemoveSplitFiles(testfile));
 }
 
 static string ReadSplitFiles(const std::string& base_path, size_t num_files) {

@@ -221,7 +221,7 @@ class PartialSink : public MemoryByteSink {
 
   private:
     size_t ignore_start_;
-    char discard_[4096];
+    char discard_[BLOCK_SZ];
 };
 
 ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, size_t start_offset,
@@ -276,6 +276,29 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, siz
             LOG(ERROR) << "CompressedSnapshotReader failed to read replace op";
             errno = EIO;
             return -1;
+        }
+    } else if (op->type == kCowXorOp) {
+        borrowed_fd fd = GetSourceFd();
+        if (fd < 0) {
+            // GetSourceFd sets errno.
+            return -1;
+        }
+
+        off64_t offset = op->source + start_offset;
+        char data[BLOCK_SZ];
+        if (!android::base::ReadFullyAtOffset(fd, &data, bytes_to_read, offset)) {
+            PLOG(ERROR) << "read " << *source_device_;
+            // ReadFullyAtOffset sets errno.
+            return -1;
+        }
+        PartialSink partial_sink(buffer, bytes_to_read, start_offset);
+        if (!cow_->ReadData(*op, &partial_sink)) {
+            LOG(ERROR) << "CompressedSnapshotReader failed to read xor op";
+            errno = EIO;
+            return -1;
+        }
+        for (size_t i = 0; i < bytes_to_read; i++) {
+            ((char*)buffer)[i] ^= data[i];
         }
     } else {
         LOG(ERROR) << "CompressedSnapshotReader unknown op type: " << uint32_t(op->type);
