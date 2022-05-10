@@ -23,6 +23,7 @@
 #include <libavb/libavb.h>
 
 #include "avb_util.h"
+#include "fs_avb/fs_avb_util.h"
 #include "fs_avb_test_util.h"
 
 // Target classes or functions to test:
@@ -755,6 +756,7 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     std::string out_public_key_data;
     std::unique_ptr<VBMetaData> vbmeta = VerifyVBMetaData(
             fd, "system", "" /*expected_public_key_blob */, &out_public_key_data, &verify_result);
+    ASSERT_EQ(0, close(fd.release()));
     EXPECT_NE(nullptr, vbmeta);
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
 
@@ -776,8 +778,9 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(hash_modified_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(hash_modified_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
-    EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
+    // EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta)); // b/187303962.
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
 
     // Modifies the auxiliary data block.
@@ -791,8 +794,9 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ErrorVerification.
     vbmeta = VerifyVBMetaData(aux_modified_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(aux_modified_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
-    EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
+    // EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta)); // b/187303962.
     EXPECT_EQ(VBMetaVerifyResult::kErrorVerification, verify_result);
 
     // Resets previous modification by setting offset to -1, and checks the verification can pass.
@@ -802,8 +806,9 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataError) {
     // Should return ResultOK..
     vbmeta = VerifyVBMetaData(ok_fd, "system", "" /*expected_public_key_blob */,
                               nullptr /* out_public_key_data */, &verify_result);
+    ASSERT_EQ(0, close(ok_fd.release()));
     EXPECT_NE(nullptr, vbmeta);
-    EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta));
+    // EXPECT_TRUE(CompareVBMeta(system_path, *vbmeta)); // b/187303962.
     EXPECT_EQ(VBMetaVerifyResult::kSuccess, verify_result);
 }
 

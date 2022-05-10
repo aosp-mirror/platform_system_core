@@ -91,10 +91,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                 },
                 [](FuzzedDataProvider* dataProvider, android::String8* str1,
                    android::String8*) -> void {
-                    str1->setPathName(dataProvider->ConsumeBytesWithTerminator<char>(5).data());
-                },
-                [](FuzzedDataProvider* dataProvider, android::String8* str1,
-                   android::String8*) -> void {
                     str1->appendPath(dataProvider->ConsumeBytesWithTerminator<char>(5).data());
                 },
 };

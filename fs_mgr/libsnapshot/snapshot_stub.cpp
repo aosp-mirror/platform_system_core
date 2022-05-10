@@ -121,6 +121,11 @@ bool SnapshotManagerStub::UpdateUsesCompression() {
     return false;
 }
 
+bool SnapshotManagerStub::UpdateUsesUserSnapshots() {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
+    return false;
+}
+
 class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     bool Start() override { return false; }
     void set_state(android::snapshot::UpdateState, bool) override {}
