@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 static constexpr auto ERR_GID = static_cast<gid_t>(-1);
+static constexpr auto ERR_UID = static_cast<uid_t>(-1);
 
 TEST(MultiuserTest, TestMerge) {
     EXPECT_EQ(0U, multiuser_get_uid(0, 0));
@@ -28,6 +29,40 @@ TEST(MultiuserTest, TestMerge) {
     EXPECT_EQ(1001000U, multiuser_get_uid(10, 1000));
     EXPECT_EQ(1010000U, multiuser_get_uid(10, 10000));
     EXPECT_EQ(1050000U, multiuser_get_uid(10, 50000));
+}
+
+TEST(MultiuserTest, TestSdkSandboxUid) {
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 0));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 1000));
+    EXPECT_EQ(20000U, multiuser_get_sdk_sandbox_uid(0, 10000));
+    EXPECT_EQ(25000U, multiuser_get_sdk_sandbox_uid(0, 15000));
+    EXPECT_EQ(29999U, multiuser_get_sdk_sandbox_uid(0, 19999));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(0, 50000));
+
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 0));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 1000));
+    EXPECT_EQ(1020000U, multiuser_get_sdk_sandbox_uid(10, 10000));
+    EXPECT_EQ(1025000U, multiuser_get_sdk_sandbox_uid(10, 15000));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 20000));
+    EXPECT_EQ(ERR_UID, multiuser_get_sdk_sandbox_uid(10, 50000));
+}
+
+TEST(MultiuserTest, TestSdkSandboxUidConvertation) {
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(0));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(1000));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(10000));
+    EXPECT_EQ(10000U, multiuser_convert_sdk_sandbox_to_app_uid(20000));
+    EXPECT_EQ(15000U, multiuser_convert_sdk_sandbox_to_app_uid(25000));
+    EXPECT_EQ(19999U, multiuser_convert_sdk_sandbox_to_app_uid(29999));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(50000));
+
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(1000000));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(1001000));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(1010000));
+    EXPECT_EQ(1010000U, multiuser_convert_sdk_sandbox_to_app_uid(1020000));
+    EXPECT_EQ(1015000U, multiuser_convert_sdk_sandbox_to_app_uid(1025000));
+    EXPECT_EQ(1019999U, multiuser_convert_sdk_sandbox_to_app_uid(1029999));
+    EXPECT_EQ(ERR_UID, multiuser_convert_sdk_sandbox_to_app_uid(1050000));
 }
 
 TEST(MultiuserTest, TestSplitUser) {
