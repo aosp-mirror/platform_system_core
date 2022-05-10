@@ -31,6 +31,7 @@ struct UeventdConfiguration {
     std::vector<Permissions> dev_permissions;
     std::vector<std::string> firmware_directories;
     std::vector<ExternalFirmwareHandler> external_firmware_handlers;
+    std::vector<std::string> parallel_restorecon_dirs;
     bool enable_modalias_handling = false;
     size_t uevent_socket_rcvbuf_size = 0;
     bool enable_parallel_restorecon = false;
