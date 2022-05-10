@@ -18,7 +18,11 @@ cc_library_static {
         "-Werror",
     ],
     stl: "none",
-    system_shared_libs: [],
-    header_libs: ["libc_headers"],
+    target: {
+        bionic: {
+            system_shared_libs: [],
+            header_libs: ["libc_headers"],
+        },
+    },
     export_include_dirs: ["include"],
 }

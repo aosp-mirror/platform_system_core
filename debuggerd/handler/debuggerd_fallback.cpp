@@ -1,29 +1,17 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
- * All rights reserved.
+ * Copyright 2017 The Android Open Source Project
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <dirent.h>
@@ -85,14 +73,13 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
     thread.registers.reset(
         unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
-    // TODO: Create this once and store it in a global?
-    unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid());
     // Do not use the thread cache here because it will call pthread_key_create
     // which doesn't work in linker code. See b/189803009.
     // Use a normal cached object because the process is stopped, and there
     // is no chance of data changing between reads.
     auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
-    unwinder.SetProcessMemory(process_memory);
+    // TODO: Create this once and store it in a global?
+    unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid(), process_memory);
     dump_backtrace_thread(output_fd, &unwinder, thread);
   }
   __linker_disable_fallback_allocator();
@@ -108,32 +95,6 @@ static void debuggerd_fallback_tombstone(int output_fd, int proto_fd, ucontext_t
   engrave_tombstone_ucontext(output_fd, proto_fd, reinterpret_cast<uintptr_t>(abort_message),
                              siginfo, ucontext);
   __linker_disable_fallback_allocator();
-}
-
-static void iterate_siblings(bool (*callback)(pid_t, int), int output_fd) {
-  pid_t current_tid = gettid();
-  char buf[BUFSIZ];
-  snprintf(buf, sizeof(buf), "/proc/%d/task", current_tid);
-  DIR* dir = opendir(buf);
-
-  if (!dir) {
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to open %s: %s", buf, strerror(errno));
-    return;
-  }
-
-  struct dirent* ent;
-  while ((ent = readdir(dir))) {
-    char* end;
-    long tid = strtol(ent->d_name, &end, 10);
-    if (end == ent->d_name || *end != '\0') {
-      continue;
-    }
-
-    if (tid != current_tid) {
-      callback(tid, output_fd);
-    }
-  }
-  closedir(dir);
 }
 
 static bool forward_output(int src_fd, int dst_fd, pid_t expected_tid) {
@@ -228,13 +189,13 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
   }
 
   // Only allow one thread to perform a trace at a time.
-  static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
-  int ret = pthread_mutex_trylock(&trace_mutex);
-  if (ret != 0) {
-    async_safe_format_log(ANDROID_LOG_INFO, "libc", "pthread_mutex_try_lock failed: %s",
-                          strerror(ret));
+  static std::mutex trace_mutex;
+  if (!trace_mutex.try_lock()) {
+    async_safe_format_log(ANDROID_LOG_INFO, "libc", "trace lock failed");
     return;
   }
+
+  std::lock_guard<std::mutex> scoped_lock(trace_mutex, std::adopt_lock);
 
   // Fetch output fd from tombstoned.
   unique_fd tombstone_socket, output_fd;
@@ -242,7 +203,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
                           kDebuggerdNativeBacktrace)) {
     async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                           "missing crash_dump_fallback() in selinux policy?");
-    goto exit;
+    return;
   }
 
   dump_backtrace_header(output_fd.get());
@@ -251,15 +212,15 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
   debuggerd_fallback_trace(output_fd.get(), ucontext);
 
   // Send a signal to all of our siblings, asking them to dump their stack.
-  iterate_siblings(
-      [](pid_t tid, int output_fd) {
+  pid_t current_tid = gettid();
+  if (!iterate_tids(current_tid, [&output_fd](pid_t tid) {
         // Use a pipe, to be able to detect situations where the thread gracefully exits before
         // receiving our signal.
         unique_fd pipe_read, pipe_write;
         if (!Pipe(&pipe_read, &pipe_write)) {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to create pipe: %s",
                                 strerror(errno));
-          return false;
+          return;
         }
 
         uint64_t expected = pack_thread_fd(-1, -1);
@@ -269,7 +230,7 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                                 "thread %d is already outputting to fd %d?", tid, fd);
           close(sent_fd);
-          return false;
+          return;
         }
 
         siginfo_t siginfo = {};
@@ -281,10 +242,10 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
         if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, BIONIC_SIGNAL_DEBUGGER, &siginfo) != 0) {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to send trace signal to %d: %s",
                                 tid, strerror(errno));
-          return false;
+          return;
         }
 
-        bool success = forward_output(pipe_read.get(), output_fd, tid);
+        bool success = forward_output(pipe_read.get(), output_fd.get(), tid);
         if (!success) {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                                 "timeout expired while waiting for thread %d to dump", tid);
@@ -300,15 +261,14 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
           }
         }
 
-        return true;
-      },
-      output_fd.get());
+        return;
+      })) {
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to open /proc/%d/task: %s",
+                          current_tid, strerror(errno));
+  }
 
   dump_backtrace_footer(output_fd.get());
   tombstoned_notify_completion(tombstone_socket.get());
-
-exit:
-  pthread_mutex_unlock(&trace_mutex);
 }
 
 static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_message) {
