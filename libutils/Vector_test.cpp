@@ -136,4 +136,13 @@ TEST_F(VectorTest, editArray_Shared) {
   }
 }
 
+TEST_F(VectorTest, removeItemsAt_overflow) {
+    android::Vector<int> v;
+    for (int i = 0; i < 666; i++) v.add(i);
+
+    ASSERT_DEATH(v.removeItemsAt(SIZE_MAX, 666), "overflow");
+    ASSERT_DEATH(v.removeItemsAt(666, SIZE_MAX), "overflow");
+    ASSERT_DEATH(v.removeItemsAt(SIZE_MAX, SIZE_MAX), "overflow");
+}
+
 } // namespace android

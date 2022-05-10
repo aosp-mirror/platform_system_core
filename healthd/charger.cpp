@@ -15,9 +15,9 @@
  */
 
 #include <android-base/logging.h>
+#include <charger.sysprop.h>
 
-#include "charger.sysprop.h"
-#include "healthd_mode_charger.h"
+#include "healthd_mode_charger_hidl.h"
 #include "healthd_mode_charger_nops.h"
 
 #ifndef CHARGER_FORCE_NO_UI

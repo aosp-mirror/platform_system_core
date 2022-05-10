@@ -109,6 +109,10 @@ void DmTargetVerity::IgnoreZeroBlocks() {
     optional_args_.emplace_back("ignore_zero_blocks");
 }
 
+void DmTargetVerity::CheckAtMostOnce() {
+    optional_args_.emplace_back("check_at_most_once");
+}
+
 std::string DmTargetVerity::GetParameterString() const {
     std::string base = android::base::Join(base_args_, " ");
     if (optional_args_.empty()) {
