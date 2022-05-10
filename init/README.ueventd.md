@@ -123,7 +123,10 @@ not present.
 The exact firmware file to be served can be customized by running an external program by a
 `external_firmware_handler` line in a ueventd.rc file. This line takes the format of
 
-    external_firmware_handler <devpath> <user name to run as> <path to external program>
+    external_firmware_handler <devpath> <user [group]> <path to external program>
+
+The handler will be run as the given user, or if a group is provided, as the given user and group.
+
 For example
 
     external_firmware_handler /devices/leds/red/firmware/coeffs.bin system /vendor/bin/led_coeffs.bin
@@ -144,6 +147,12 @@ directories. If stdout cannot be read, or the program returns with any exit code
 Ueventd will additionally log all messages sent to stderr from the external program to the serial
 console after the external program has exited.
 
+If the kernel command-line argument `firmware_class.path` is set, this path
+will be used first by the kernel to search for the firmware files. If found,
+ueventd will not be called at all. See the
+[kernel documentation](https://www.kernel.org/doc/html/v5.10/driver-api/firmware/fw_search_path.html)
+for more details on this feature.
+
 ## Coldboot
 --------
 Ueventd must create devices in `/dev` for all devices that have already sent their uevents before
@@ -160,3 +169,13 @@ recommended that devices use genfscon for labeling sysfs nodes. However, some de
 from enabling the parallelization option:
 
     parallel_restorecon enabled
+
+Do parallel restorecon to speed up boot process, subdirectories under `/sys`
+can be sliced by ueventd.rc, and run on multiple process.
+    parallel_restorecon_dir <directory>
+
+For example
+    parallel_restorecon_dir /sys
+    parallel_restorecon_dir /sys/devices
+    parallel_restorecon_dir /sys/devices/platform
+    parallel_restorecon_dir /sys/devices/platform/soc

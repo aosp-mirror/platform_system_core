@@ -220,6 +220,12 @@ static ssize_t read_response(int tipc_fd) {
         case APPLOADER_ERR_INTERNAL:
             LOG(ERROR) << "Error: internal apploader error";
             break;
+        case APPLOADER_ERR_INVALID_VERSION:
+            LOG(ERROR) << "Error: invalid application version";
+            break;
+        case APPLOADER_ERR_POLICY_VIOLATION:
+            LOG(ERROR) << "Error: loading denied by policy engine";
+            break;
         default:
             LOG(ERROR) << "Unrecognized error: " << resp.error;
             break;
@@ -242,6 +248,8 @@ static ssize_t send_app_package(const char* package_file_name) {
     tipc_fd = tipc_connect(dev_name, APPLOADER_PORT);
     if (tipc_fd < 0) {
         LOG(ERROR) << "Failed to connect to Trusty app loader: " << strerror(-tipc_fd);
+        // print this to stderr too to avoid silently exiting when run as non-root
+        fprintf(stderr, "Failed to connect to Trusty app loader: %s\n", strerror(-tipc_fd));
         rc = tipc_fd;
         goto err_tipc_connect;
     }

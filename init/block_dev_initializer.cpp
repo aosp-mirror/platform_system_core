@@ -87,7 +87,13 @@ ListenerAction BlockDevInitializer::HandleUevent(const Uevent& uevent,
 
     auto iter = devices->find(name);
     if (iter == devices->end()) {
-        return ListenerAction::kContinue;
+        auto partition_name = DeviceHandler::GetPartitionNameForDevice(uevent.device_name);
+        if (!partition_name.empty()) {
+            iter = devices->find(partition_name);
+        }
+        if (iter == devices->end()) {
+            return ListenerAction::kContinue;
+        }
     }
 
     LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << name;
