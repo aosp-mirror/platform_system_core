@@ -33,7 +33,10 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -578,13 +581,30 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     HandlePowerctlMessage("shutdown,container");
 }
 
-static void HandleSignalFd() {
+static constexpr std::chrono::milliseconds kDiagnosticTimeout = 10s;
+
+static void HandleSignalFd(bool one_off) {
     signalfd_siginfo siginfo;
-    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
-    if (bytes_read != sizeof(siginfo)) {
-        PLOG(ERROR) << "Failed to read siginfo from signal_fd";
-        return;
-    }
+    auto started = std::chrono::steady_clock::now();
+    do {
+        ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
+        if (bytes_read < 0 && errno == EAGAIN) {
+            auto now = std::chrono::steady_clock::now();
+            std::chrono::duration<double> waited = now - started;
+            if (waited >= kDiagnosticTimeout) {
+                LOG(ERROR) << "epoll() woke us up, but we waited with no SIGCHLD!";
+                started = now;
+            }
+
+            std::this_thread::sleep_for(100ms);
+            continue;
+        }
+        if (bytes_read != sizeof(siginfo)) {
+            PLOG(ERROR) << "Failed to read siginfo from signal_fd";
+            return;
+        }
+        break;
+    } while (!one_off);
 
     switch (siginfo.ssi_signo) {
         case SIGCHLD:
@@ -639,12 +659,14 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
+    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC | SFD_NONBLOCK);
     if (signal_fd == -1) {
         PLOG(FATAL) << "failed to create signalfd";
     }
 
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd); !result.ok()) {
+    constexpr int flags = EPOLLIN | EPOLLPRI;
+    auto handler = std::bind(HandleSignalFd, false);
+    if (auto result = epoll->RegisterHandler(signal_fd, handler, flags); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
@@ -739,11 +761,75 @@ void SendLoadPersistentPropertiesMessage() {
     }
 }
 
+static Result<void> ConnectEarlyStageSnapuserdAction(const BuiltinArguments& args) {
+    auto pid = GetSnapuserdFirstStagePid();
+    if (!pid) {
+        return {};
+    }
+
+    auto info = GetSnapuserdFirstStageInfo();
+    if (auto iter = std::find(info.begin(), info.end(), "socket"s); iter == info.end()) {
+        // snapuserd does not support socket handoff, so exit early.
+        return {};
+    }
+
+    // Socket handoff is supported.
+    auto svc = ServiceList::GetInstance().FindService("snapuserd");
+    if (!svc) {
+        LOG(FATAL) << "Failed to find snapuserd service entry";
+    }
+
+    svc->SetShutdownCritical();
+    svc->SetStartedInFirstStage(*pid);
+
+    svc = ServiceList::GetInstance().FindService("snapuserd_proxy");
+    if (!svc) {
+        LOG(FATAL) << "Failed find snapuserd_proxy service entry, merge will never initiate";
+    }
+    if (!svc->MarkSocketPersistent("snapuserd")) {
+        LOG(FATAL) << "Could not find snapuserd socket in snapuserd_proxy service entry";
+    }
+    if (auto result = svc->Start(); !result.ok()) {
+        LOG(FATAL) << "Could not start snapuserd_proxy: " << result.error();
+    }
+    return {};
+}
+
+static void DumpPidFds(const std::string& prefix, pid_t pid) {
+    std::error_code ec;
+    std::string proc_dir = "/proc/" + std::to_string(pid) + "/fd";
+    for (const auto& entry : std::filesystem::directory_iterator(proc_dir)) {
+        std::string target;
+        if (android::base::Readlink(entry.path(), &target)) {
+            LOG(ERROR) << prefix << target;
+        } else {
+            LOG(ERROR) << prefix << entry.path();
+        }
+    }
+}
+
+static void DumpFile(const std::string& prefix, const std::string& file) {
+    std::ifstream fp(file);
+    if (!fp) {
+        LOG(ERROR) << "Could not open " << file;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(fp, line)) {
+        LOG(ERROR) << prefix << line;
+    }
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
 
+    // No threads should be spin up until signalfd
+    // is registered. If the threads are indeed required,
+    // each of these threads _should_ make sure SIGCHLD signal
+    // is blocked. See b/223076262
     boot_clock::time_point start_time = boot_clock::now();
 
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
@@ -867,6 +953,7 @@ int SecondStageMain(int argc, char** argv) {
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
+    am.QueueBuiltinAction(ConnectEarlyStageSnapuserdAction, "ConnectEarlyStageSnapuserd");
     am.QueueEventTrigger("early-init");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
@@ -902,7 +989,7 @@ int SecondStageMain(int argc, char** argv) {
     setpriority(PRIO_PROCESS, 0, 0);
     while (true) {
         // By default, sleep until something happens.
-        auto epoll_timeout = std::optional<std::chrono::milliseconds>{};
+        auto epoll_timeout = std::optional<std::chrono::milliseconds>{kDiagnosticTimeout};
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
@@ -941,6 +1028,25 @@ int SecondStageMain(int argc, char** argv) {
             ReapAnyOutstandingChildren();
             for (const auto& function : *pending_functions) {
                 (*function)();
+            }
+        } else if (Service::is_exec_service_running()) {
+            static bool dumped_diagnostics = false;
+            std::chrono::duration<double> waited =
+                    std::chrono::steady_clock::now() - Service::exec_service_started();
+            if (waited >= kDiagnosticTimeout) {
+                LOG(ERROR) << "Exec service is hung? Waited " << waited.count()
+                           << " without SIGCHLD";
+                if (!dumped_diagnostics) {
+                    DumpPidFds("exec service opened: ", Service::exec_service_pid());
+
+                    std::string status_file =
+                            "/proc/" + std::to_string(Service::exec_service_pid()) + "/status";
+                    DumpFile("exec service: ", status_file);
+                    dumped_diagnostics = true;
+
+                    LOG(INFO) << "Attempting to handle any stuck SIGCHLDs...";
+                    HandleSignalFd(true);
+                }
             }
         }
         if (!IsShuttingDown()) {
