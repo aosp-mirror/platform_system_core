@@ -124,8 +124,8 @@ enum FsStatFlags {
     FS_STAT_RO_MOUNT_FAILED = 0x0040,
     FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
-    FS_STAT_E2FSCK_FAILED = 0x0200,
-    FS_STAT_E2FSCK_FS_FIXED = 0x0400,
+    FS_STAT_FSCK_FAILED = 0x0200,
+    FS_STAT_FSCK_FS_FIXED = 0x0400,
     FS_STAT_INVALID_MAGIC = 0x0800,
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
@@ -136,7 +136,6 @@ enum FsStatFlags {
 };
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
-    if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
     std::string msg =
             android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device.c_str(), fs_stat);
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(FSCK_LOG_FILE, O_WRONLY | O_CLOEXEC |
@@ -166,7 +165,7 @@ static bool should_force_check(int fs_stat) {
     return fs_stat &
            (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
             FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED | FS_STAT_FULL_MOUNT_FAILED |
-            FS_STAT_E2FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
+            FS_STAT_FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
@@ -255,10 +254,10 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << E2FSCK_BIN;
-                *fs_stat |= FS_STAT_E2FSCK_FAILED;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
             } else if (status != 0) {
                 LINFO << "e2fsck returned status 0x" << std::hex << status;
-                *fs_stat |= FS_STAT_E2FSCK_FS_FIXED;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
             }
         }
     } else if (is_f2fs(fs_type)) {
@@ -271,16 +270,20 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, nullptr);
+                                      &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         } else {
             LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
                   << realpath(blk_device);
             ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, nullptr);
+                                      LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
         }
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
             LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+            *fs_stat |= FS_STAT_FSCK_FAILED;
+        } else if (status != 0) {
+            LINFO << F2FS_FSCK_BIN << " returned status 0x" << std::hex << status;
+            *fs_stat |= FS_STAT_FSCK_FS_FIXED;
         }
     }
     android::base::SetProperty("ro.boottime.init.fsck." + Basename(target),
@@ -1911,6 +1914,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         while (retry_count-- > 0) {
             if (!__mount(n_blk_device, mount_point, fstab_entry)) {
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
+                log_fs_stat(fstab_entry.blk_device, fs_stat);
                 return FS_MGR_DOMNT_SUCCESS;
             } else {
                 if (retry_count <= 0) break;  // run check_fs only once
