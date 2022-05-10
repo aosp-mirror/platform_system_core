@@ -16,6 +16,7 @@
 #include "flashing.h"
 
 #include <fcntl.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -75,11 +76,30 @@ void WipeOverlayfsForPartition(FastbootDevice* device, const std::string& partit
 
 }  // namespace
 
-int FlashRawDataChunk(int fd, const char* data, size_t len) {
+int FlashRawDataChunk(PartitionHandle* handle, const char* data, size_t len) {
     size_t ret = 0;
+    const size_t max_write_size = 1048576;
+    void* aligned_buffer;
+
+    if (posix_memalign(&aligned_buffer, 4096, max_write_size)) {
+        PLOG(ERROR) << "Failed to allocate write buffer";
+        return -ENOMEM;
+    }
+
+    auto aligned_buffer_unique_ptr = std::unique_ptr<void, decltype(&free)>{aligned_buffer, free};
+
     while (ret < len) {
-        int this_len = std::min(static_cast<size_t>(1048576UL * 8), len - ret);
-        int this_ret = write(fd, data, this_len);
+        int this_len = std::min(max_write_size, len - ret);
+        memcpy(aligned_buffer_unique_ptr.get(), data, this_len);
+        // In case of non 4KB aligned writes, reopen without O_DIRECT flag
+        if (this_len & 0xFFF) {
+            if (handle->Reset(O_WRONLY) != true) {
+                PLOG(ERROR) << "Failed to reset file descriptor";
+                return -1;
+            }
+        }
+
+        int this_ret = write(handle->fd(), aligned_buffer_unique_ptr.get(), this_len);
         if (this_ret < 0) {
             PLOG(ERROR) << "Failed to flash data of len " << len;
             return -1;
@@ -90,8 +110,8 @@ int FlashRawDataChunk(int fd, const char* data, size_t len) {
     return 0;
 }
 
-int FlashRawData(int fd, const std::vector<char>& downloaded_data) {
-    int ret = FlashRawDataChunk(fd, downloaded_data.data(), downloaded_data.size());
+int FlashRawData(PartitionHandle* handle, const std::vector<char>& downloaded_data) {
+    int ret = FlashRawDataChunk(handle, downloaded_data.data(), downloaded_data.size());
     if (ret < 0) {
         return -errno;
     }
@@ -99,28 +119,30 @@ int FlashRawData(int fd, const std::vector<char>& downloaded_data) {
 }
 
 int WriteCallback(void* priv, const void* data, size_t len) {
-    int fd = reinterpret_cast<long long>(priv);
+    PartitionHandle* handle = reinterpret_cast<PartitionHandle*>(priv);
     if (!data) {
-        return lseek64(fd, len, SEEK_CUR) >= 0 ? 0 : -errno;
+        return lseek64(handle->fd(), len, SEEK_CUR) >= 0 ? 0 : -errno;
     }
-    return FlashRawDataChunk(fd, reinterpret_cast<const char*>(data), len);
+    return FlashRawDataChunk(handle, reinterpret_cast<const char*>(data), len);
 }
 
-int FlashSparseData(int fd, std::vector<char>& downloaded_data) {
-    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(), true, false);
+int FlashSparseData(PartitionHandle* handle, std::vector<char>& downloaded_data) {
+    struct sparse_file* file = sparse_file_import_buf(downloaded_data.data(),
+                                                      downloaded_data.size(), true, false);
     if (!file) {
-        return -ENOENT;
+        // Invalid sparse format
+        return -EINVAL;
     }
-    return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(fd));
+    return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(handle));
 }
 
-int FlashBlockDevice(int fd, std::vector<char>& downloaded_data) {
-    lseek64(fd, 0, SEEK_SET);
+int FlashBlockDevice(PartitionHandle* handle, std::vector<char>& downloaded_data) {
+    lseek64(handle->fd(), 0, SEEK_SET);
     if (downloaded_data.size() >= sizeof(SPARSE_HEADER_MAGIC) &&
         *reinterpret_cast<uint32_t*>(downloaded_data.data()) == SPARSE_HEADER_MAGIC) {
-        return FlashSparseData(fd, downloaded_data);
+        return FlashSparseData(handle, downloaded_data);
     } else {
-        return FlashRawData(fd, downloaded_data);
+        return FlashRawData(handle, downloaded_data);
     }
 }
 
@@ -147,7 +169,7 @@ static void CopyAVBFooter(std::vector<char>* data, const uint64_t block_device_s
 
 int Flash(FastbootDevice* device, const std::string& partition_name) {
     PartitionHandle handle;
-    if (!OpenPartition(device, partition_name, &handle)) {
+    if (!OpenPartition(device, partition_name, &handle, O_WRONLY | O_DIRECT)) {
         return -ENOENT;
     }
 
@@ -160,15 +182,21 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
         return -EOVERFLOW;
     } else if (data.size() < block_device_size &&
                (partition_name == "boot" || partition_name == "boot_a" ||
-                partition_name == "boot_b")) {
+                partition_name == "boot_b" || partition_name == "init_boot" ||
+                partition_name == "init_boot_a" || partition_name == "init_boot_b")) {
         CopyAVBFooter(&data, block_device_size);
     }
     if (android::base::GetProperty("ro.system.build.type", "") != "user") {
         WipeOverlayfsForPartition(device, partition_name);
     }
-    int result = FlashBlockDevice(handle.fd(), data);
+    int result = FlashBlockDevice(&handle, data);
     sync();
     return result;
+}
+
+static void RemoveScratchPartition() {
+    AutoMountMetadata mount_metadata;
+    android::fs_mgr::TeardownAllOverlayForMountPoint();
 }
 
 bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wipe) {
@@ -187,27 +215,37 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
                                  ", build may be missing broken or missing boot_devices");
     }
 
+    std::string slot_suffix = device->GetCurrentSlot();
+    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
+
+    std::string other_slot_suffix;
+    if (!slot_suffix.empty()) {
+        other_slot_suffix = (slot_suffix == "_a") ? "_b" : "_a";
+    }
+
     // If we are unable to read the existing metadata, then the super partition
     // is corrupt. In this case we reflash the whole thing using the provided
     // image.
-    std::string slot_suffix = device->GetCurrentSlot();
-    uint32_t slot_number = SlotNumberForSlotSuffix(slot_suffix);
     std::unique_ptr<LpMetadata> old_metadata = ReadMetadata(super_name, slot_number);
     if (wipe || !old_metadata) {
         if (!FlashPartitionTable(super_name, *new_metadata.get())) {
             return device->WriteFail("Unable to flash new partition table");
         }
-        android::fs_mgr::TeardownAllOverlayForMountPoint();
+        RemoveScratchPartition();
         sync();
         return device->WriteOkay("Successfully flashed partition table");
     }
 
     std::set<std::string> partitions_to_keep;
+    bool virtual_ab = android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
     for (const auto& partition : old_metadata->partitions) {
         // Preserve partitions in the other slot, but not the current slot.
         std::string partition_name = GetPartitionName(partition);
-        if (!slot_suffix.empty() && GetPartitionSlotSuffix(partition_name) == slot_suffix) {
-            continue;
+        if (!slot_suffix.empty()) {
+            auto part_suffix = GetPartitionSlotSuffix(partition_name);
+            if (part_suffix == slot_suffix || (part_suffix == other_slot_suffix && virtual_ab)) {
+                continue;
+            }
         }
         std::string group_name = GetPartitionGroupName(old_metadata->groups[partition.group_index]);
         // Skip partitions in the COW group
@@ -237,7 +275,7 @@ bool UpdateSuper(FastbootDevice* device, const std::string& super_name, bool wip
     if (!UpdateAllPartitionMetadata(device, super_name, *new_metadata.get())) {
         return device->WriteFail("Unable to write new partition table");
     }
-    android::fs_mgr::TeardownAllOverlayForMountPoint();
+    RemoveScratchPartition();
     sync();
     return device->WriteOkay("Successfully updated partition table");
 }

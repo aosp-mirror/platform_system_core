@@ -103,5 +103,7 @@ bool IsRecoveryMode();
 
 bool IsDefaultMountNamespaceReady();
 void SetDefaultMountNamespaceReady();
+
+bool IsMicrodroid();
 }  // namespace init
 }  // namespace android

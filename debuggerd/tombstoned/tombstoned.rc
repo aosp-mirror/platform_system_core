@@ -5,4 +5,4 @@ service tombstoned /system/bin/tombstoned
     socket tombstoned_crash seqpacket 0666 system system
     socket tombstoned_intercept seqpacket 0666 system system
     socket tombstoned_java_trace seqpacket 0666 system system
-    writepid /dev/cpuset/system-background/tasks
+    task_profiles ServiceCapacityLow
