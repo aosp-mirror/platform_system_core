@@ -136,6 +136,7 @@ FiemapStatus SplitFiemap::Create(const std::string& file_path, uint64_t file_siz
             return FiemapStatus::FromErrno(errno);
         }
     }
+    fsync(fd.get());
 
     // Unset this bit, so we don't unlink on destruction.
     out->creating_ = false;
@@ -192,6 +193,9 @@ bool SplitFiemap::RemoveSplitFiles(const std::string& file_path, std::string* me
     std::vector<std::string> files;
     if (GetSplitFileList(file_path, &files)) {
         for (const auto& file : files) {
+            if (access(file.c_str(), F_OK) != 0 && (errno == ENOENT || errno == ENAMETOOLONG)) {
+                continue;
+            }
             ok &= android::base::RemoveFileIfExists(file, message);
         }
     }

@@ -27,6 +27,7 @@ namespace aidl::android::hardware::security::keymint::trusty {
 using ::keymaster::TrustyKeymaster;
 using ::ndk::ScopedAStatus;
 using secureclock::TimeStampToken;
+using ::std::array;
 using ::std::optional;
 using ::std::shared_ptr;
 using ::std::vector;
@@ -77,8 +78,13 @@ class TrustyKeyMintDevice : public BnKeyMintDevice {
                                const optional<TimeStampToken>& timestampToken) override;
     ScopedAStatus earlyBootEnded() override;
 
-    ScopedAStatus convertStorageKeyToEphemeral(const std::vector<uint8_t>& storageKeyBlob,
-                                               std::vector<uint8_t>* ephemeralKeyBlob) override;
+    ScopedAStatus convertStorageKeyToEphemeral(const vector<uint8_t>& storageKeyBlob,
+                                               vector<uint8_t>* ephemeralKeyBlob) override;
+
+    ScopedAStatus getRootOfTrustChallenge(array<uint8_t, 16>* challenge) override;
+    ScopedAStatus getRootOfTrust(const array<uint8_t, 16>& challenge,
+                                 vector<uint8_t>* rootOfTrust) override;
+    ScopedAStatus sendRootOfTrust(const vector<uint8_t>& rootOfTrust) override;
 
   protected:
     std::shared_ptr<TrustyKeymaster> impl_;
