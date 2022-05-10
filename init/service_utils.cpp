@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <grp.h>
+#include <map>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
@@ -190,8 +191,6 @@ Result<Descriptor> FileDescriptor::Create() const {
     // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
     fcntl(fd, F_SETFL, flags);
 
-    LOG(INFO) << "Opened file '" << name << "', flags " << flags;
-
     return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
 
@@ -307,6 +306,16 @@ Result<void> WritePidToFiles(std::vector<std::string>* files) {
     } else {
         LOG(ERROR) << "cpuset cgroup controller is not mounted!";
     }
+
+    // Issue a warning whenever writepid is being used with a cgroup. This can't be done during
+    // command parsing because cgroups might not be configured at the time or parsing.
+    for (const auto& file : *files) {
+        if (CgroupGetControllerFromPath(file, nullptr)) {
+            LOG(WARNING) << "writepid usage with cgroups path '" << file
+                         << "' is obsolete, please use task_profiles!";
+        }
+    }
+
     std::string pid_str = std::to_string(getpid());
     for (const auto& file : *files) {
         if (!WriteStringToFile(pid_str, file)) {

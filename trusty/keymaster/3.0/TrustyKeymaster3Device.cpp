@@ -17,9 +17,10 @@
 
 #define LOG_TAG "android.hardware.keymaster@3.0-impl.trusty"
 
-#include <authorization_set.h>
 #include <cutils/log.h>
 #include <keymaster/android_keymaster_messages.h>
+#include <keymaster/authorization_set.h>
+#include <keymaster_tags.h>
 #include <trusty_keymaster/TrustyKeymaster3Device.h>
 #include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 

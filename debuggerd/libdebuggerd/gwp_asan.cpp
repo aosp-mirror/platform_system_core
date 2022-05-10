@@ -43,10 +43,13 @@ static bool retrieve_gwp_asan_state(unwindstack::Memory* process_memory, uintptr
 static const gwp_asan::AllocationMetadata* retrieve_gwp_asan_metadata(
     unwindstack::Memory* process_memory, const gwp_asan::AllocatorState& state,
     uintptr_t metadata_addr) {
-  if (state.MaxSimultaneousAllocations > 1024) {
+  // 1 million GWP-ASan slots would take 4.1GiB of space. Thankfully, copying
+  // the metadata for that amount of slots is only 532MiB, and this really will
+  // only be used with some ridiculous torture-tests.
+  if (state.MaxSimultaneousAllocations > 1000000) {
     ALOGE(
         "Error when retrieving GWP-ASan metadata, MSA from state (%zu) "
-        "exceeds maximum allowed (1024).",
+        "exceeds maximum allowed (1,000,000).",
         state.MaxSimultaneousAllocations);
     return nullptr;
   }
@@ -147,7 +150,7 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
   for (size_t i = 0; i != num_frames; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     BacktraceFrame* f = heap_object->add_allocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   heap_object->set_deallocation_tid(__gwp_asan_get_deallocation_thread_id(responsible_allocation_));
@@ -156,117 +159,8 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
   for (size_t i = 0; i != num_frames; ++i) {
     unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
     BacktraceFrame* f = heap_object->add_deallocation_backtrace();
-    fill_in_backtrace_frame(f, frame_data, unwinder->GetMaps());
+    fill_in_backtrace_frame(f, frame_data);
   }
 
   set_human_readable_cause(cause, crash_address_);
-}
-
-void GwpAsanCrashData::DumpCause(log_t* log) const {
-  if (!CrashIsMine()) {
-    ALOGE("Internal Error: DumpCause() on a non-GWP-ASan crash.");
-    return;
-  }
-
-  if (error_ == gwp_asan::Error::UNKNOWN) {
-    _LOG(log, logtype::HEADER, "Cause: [GWP-ASan]: Unknown error occurred at 0x%" PRIxPTR ".\n",
-         crash_address_);
-    return;
-  }
-
-  if (!responsible_allocation_) {
-    _LOG(log, logtype::HEADER, "Cause: [GWP-ASan]: %s at 0x%" PRIxPTR ".\n", error_string_,
-         crash_address_);
-    return;
-  }
-
-  uintptr_t alloc_address = __gwp_asan_get_allocation_address(responsible_allocation_);
-  size_t alloc_size = __gwp_asan_get_allocation_size(responsible_allocation_);
-
-  uintptr_t diff;
-  const char* location_str;
-
-  if (crash_address_ < alloc_address) {
-    // Buffer Underflow, 6 bytes left of a 41-byte allocation at 0xdeadbeef.
-    location_str = "left of";
-    diff = alloc_address - crash_address_;
-  } else if (crash_address_ - alloc_address < alloc_size) {
-    // Use After Free, 40 bytes into a 41-byte allocation at 0xdeadbeef.
-    location_str = "into";
-    diff = crash_address_ - alloc_address;
-  } else {
-    // Buffer Overflow, 6 bytes right of a 41-byte allocation at 0xdeadbeef, or
-    // Invalid Free, 47 bytes right of a 41-byte allocation at 0xdeadbeef.
-    location_str = "right of";
-    diff = crash_address_ - alloc_address;
-    if (error_ == gwp_asan::Error::BUFFER_OVERFLOW) {
-      diff -= alloc_size;
-    }
-  }
-
-  // Suffix of 'bytes', i.e. 4 bytes' vs. '1 byte'.
-  const char* byte_suffix = "s";
-  if (diff == 1) {
-    byte_suffix = "";
-  }
-  _LOG(log, logtype::HEADER,
-       "Cause: [GWP-ASan]: %s, %" PRIuPTR " byte%s %s a %zu-byte allocation at 0x%" PRIxPTR "\n",
-       error_string_, diff, byte_suffix, location_str, alloc_size, alloc_address);
-}
-
-bool GwpAsanCrashData::HasDeallocationTrace() const {
-  assert(CrashIsMine() && "HasDeallocationTrace(): Crash is not mine!");
-  if (!responsible_allocation_ || !__gwp_asan_is_deallocated(responsible_allocation_)) {
-    return false;
-  }
-  return true;
-}
-
-void GwpAsanCrashData::DumpDeallocationTrace(log_t* log, unwindstack::Unwinder* unwinder) const {
-  assert(HasDeallocationTrace() && "DumpDeallocationTrace(): No dealloc trace!");
-  uint64_t thread_id = __gwp_asan_get_deallocation_thread_id(responsible_allocation_);
-
-  std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
-  size_t num_frames =
-      __gwp_asan_get_deallocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
-
-  if (thread_id == gwp_asan::kInvalidThreadID) {
-    _LOG(log, logtype::BACKTRACE, "\ndeallocated by thread <unknown>:\n");
-  } else {
-    _LOG(log, logtype::BACKTRACE, "\ndeallocated by thread %" PRIu64 ":\n", thread_id);
-  }
-
-  unwinder->SetDisplayBuildID(true);
-  for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
-    frame_data.num = i;
-    _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
-  }
-}
-
-bool GwpAsanCrashData::HasAllocationTrace() const {
-  assert(CrashIsMine() && "HasAllocationTrace(): Crash is not mine!");
-  return responsible_allocation_ != nullptr;
-}
-
-void GwpAsanCrashData::DumpAllocationTrace(log_t* log, unwindstack::Unwinder* unwinder) const {
-  assert(HasAllocationTrace() && "DumpAllocationTrace(): No dealloc trace!");
-  uint64_t thread_id = __gwp_asan_get_allocation_thread_id(responsible_allocation_);
-
-  std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
-  size_t num_frames =
-      __gwp_asan_get_allocation_trace(responsible_allocation_, frames.get(), kMaxTraceLength);
-
-  if (thread_id == gwp_asan::kInvalidThreadID) {
-    _LOG(log, logtype::BACKTRACE, "\nallocated by thread <unknown>:\n");
-  } else {
-    _LOG(log, logtype::BACKTRACE, "\nallocated by thread %" PRIu64 ":\n", thread_id);
-  }
-
-  unwinder->SetDisplayBuildID(true);
-  for (size_t i = 0; i < num_frames; ++i) {
-    unwindstack::FrameData frame_data = unwinder->BuildFrameFromPcOnly(frames[i]);
-    frame_data.num = i;
-    _LOG(log, logtype::BACKTRACE, "    %s\n", unwinder->FormatFrame(frame_data).c_str());
-  }
 }
