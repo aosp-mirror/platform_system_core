@@ -20,6 +20,7 @@
 #include <string>
 
 #include <libfiemap/split_fiemap_writer.h>
+#include <liblp/builder.h>
 #include <liblp/liblp.h>
 
 namespace android {
@@ -33,6 +34,10 @@ bool AddAttributes(const std::string& metadata_dir, const std::string& partition
                    uint32_t attributes);
 bool RemoveImageMetadata(const std::string& metadata_dir, const std::string& partition_name);
 bool RemoveAllMetadata(const std::string& dir);
+
+bool FillPartitionExtents(android::fs_mgr::MetadataBuilder* builder,
+                          android::fs_mgr::Partition* partition, android::fiemap::SplitFiemap* file,
+                          uint64_t partition_size);
 
 }  // namespace fiemap
 }  // namespace android

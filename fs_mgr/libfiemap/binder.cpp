@@ -66,6 +66,7 @@ class ImageManagerBinder final : public IImageManager {
     bool RemoveDisabledImages() override;
     bool GetMappedImageDevice(const std::string& name, std::string* device) override;
     bool MapAllImages(const std::function<bool(std::set<std::string>)>& init) override;
+    bool IsImageDisabled(const std::string& name) override;
 
     std::vector<std::string> GetAllBackingImages() override;
 
@@ -217,6 +218,17 @@ bool ImageManagerBinder::GetMappedImageDevice(const std::string& name, std::stri
         return false;
     }
     return !device->empty();
+}
+
+bool ImageManagerBinder::IsImageDisabled(const std::string& name) {
+    bool retval;
+    auto status = manager_->isImageDisabled(name, &retval);
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return retval;
 }
 
 bool ImageManagerBinder::MapAllImages(const std::function<bool(std::set<std::string>)>&) {

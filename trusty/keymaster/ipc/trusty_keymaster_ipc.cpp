@@ -19,6 +19,7 @@
 // TODO: make this generic in libtrusty
 
 #include <errno.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
@@ -33,10 +34,14 @@
 
 #include <trusty_keymaster/ipc/keymaster_ipc.h>
 #include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
+#include <utils/Timers.h>
 
 #define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
 
 static int handle_ = -1;
+
+static const int timeout_ms = 10 * 1000;
+static const int max_timeout_ms = 60 * 1000;
 
 int trusty_keymaster_connect() {
     int rc = tipc_connect(TRUSTY_DEVICE_NAME, KEYMASTER_PORT);
@@ -84,7 +89,38 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
     msg->cmd = cmd;
     memcpy(msg->payload, in, in_size);
 
+    nsecs_t start_time_ns = systemTime(SYSTEM_TIME_MONOTONIC);
+    bool timed_out = false;
+    int poll_timeout_ms = timeout_ms;
+    while (true) {
+        struct pollfd pfd;
+        pfd.fd = handle_;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+
+        int p = poll(&pfd, 1, poll_timeout_ms);
+        if (p == 0) {
+            ALOGW("write for cmd %d is taking more than %lld nsecs", cmd,
+                  (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
+            timed_out = true;
+            poll_timeout_ms *= 2;
+            if (poll_timeout_ms > max_timeout_ms) {
+                poll_timeout_ms = max_timeout_ms;
+            }
+            continue;
+        } else if (p < 0) {
+            ALOGE("write poll error: %d", errno);
+        } else if (pfd.revents != POLLOUT) {
+            ALOGW("unexpected poll() result: %d", pfd.revents);
+        }
+        break;
+    }
+
     ssize_t rc = write(handle_, msg, msg_size);
+    if (timed_out) {
+        ALOGW("write for cmd %d finished after %lld nsecs", cmd,
+              (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
+    }
     free(msg);
 
     if (rc < 0) {
@@ -122,8 +158,37 @@ std::variant<int, std::vector<uint8_t>> trusty_keymaster_call_2(uint32_t cmd, vo
             return -EOVERFLOW;
         }
         iov[1] = {.iov_base = write_pos, .iov_len = buffer_size};
+        start_time_ns = systemTime(SYSTEM_TIME_MONOTONIC);
+        timed_out = false;
+        poll_timeout_ms = timeout_ms;
+        while (true) {
+            struct pollfd pfd;
+            pfd.fd = handle_;
+            pfd.events = POLLIN;
+            pfd.revents = 0;
 
+            int p = poll(&pfd, 1, poll_timeout_ms);
+            if (p == 0) {
+                ALOGW("readv for cmd %d is taking more than %lld nsecs", cmd,
+                      (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
+                timed_out = true;
+                poll_timeout_ms *= 2;
+                if (poll_timeout_ms > max_timeout_ms) {
+                    poll_timeout_ms = max_timeout_ms;
+                }
+                continue;
+            } else if (p < 0) {
+                ALOGE("read poll error: %d", errno);
+            } else if (pfd.revents != POLLIN) {
+                ALOGW("unexpected poll() result: %d", pfd.revents);
+            }
+            break;
+        }
         rc = readv(handle_, iov, 2);
+        if (timed_out) {
+            ALOGW("readv for cmd %d finished after %lld nsecs", cmd,
+                  (long long)(systemTime(SYSTEM_TIME_MONOTONIC) - start_time_ns));
+        }
         if (rc < 0) {
             ALOGE("failed to retrieve response for cmd (%d) to %s: %s\n", cmd, KEYMASTER_PORT,
                   strerror(errno));

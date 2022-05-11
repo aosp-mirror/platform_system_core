@@ -78,8 +78,8 @@ on early-init
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
 
-    # Mount tracefs
-    mount tracefs tracefs /sys/kernel/tracing
+    # Mount tracefs (with GID=AID_READTRACEFS)
+    mount tracefs tracefs /sys/kernel/tracing gid=3012
 
     # create sys dirctory
     mkdir /dev/sys 0755 system system
@@ -142,11 +142,21 @@ on init
     chown system system /dev/stune/background/tasks
     chown system system /dev/stune/top-app/tasks
     chown system system /dev/stune/rt/tasks
+    chown system system /dev/stune/cgroup.procs
+    chown system system /dev/stune/foreground/cgroup.procs
+    chown system system /dev/stune/background/cgroup.procs
+    chown system system /dev/stune/top-app/cgroup.procs
+    chown system system /dev/stune/rt/cgroup.procs
     chmod 0664 /dev/stune/tasks
     chmod 0664 /dev/stune/foreground/tasks
     chmod 0664 /dev/stune/background/tasks
     chmod 0664 /dev/stune/top-app/tasks
     chmod 0664 /dev/stune/rt/tasks
+    chmod 0664 /dev/stune/cgroup.procs
+    chmod 0664 /dev/stune/foreground/cgroup.procs
+    chmod 0664 /dev/stune/background/cgroup.procs
+    chmod 0664 /dev/stune/top-app/cgroup.procs
+    chmod 0664 /dev/stune/rt/cgroup.procs
 
     # cpuctl hierarchy for devices using utilclamp
     mkdir /dev/cpuctl/foreground
@@ -155,6 +165,7 @@ on init
     mkdir /dev/cpuctl/rt
     mkdir /dev/cpuctl/system
     mkdir /dev/cpuctl/system-background
+    mkdir /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/foreground
     chown system system /dev/cpuctl/background
@@ -162,6 +173,7 @@ on init
     chown system system /dev/cpuctl/rt
     chown system system /dev/cpuctl/system
     chown system system /dev/cpuctl/system-background
+    chown system system /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl/tasks
     chown system system /dev/cpuctl/foreground/tasks
     chown system system /dev/cpuctl/background/tasks
@@ -169,6 +181,15 @@ on init
     chown system system /dev/cpuctl/rt/tasks
     chown system system /dev/cpuctl/system/tasks
     chown system system /dev/cpuctl/system-background/tasks
+    chown system system /dev/cpuctl/dex2oat/tasks
+    chown system system /dev/cpuctl/cgroup.procs
+    chown system system /dev/cpuctl/foreground/cgroup.procs
+    chown system system /dev/cpuctl/background/cgroup.procs
+    chown system system /dev/cpuctl/top-app/cgroup.procs
+    chown system system /dev/cpuctl/rt/cgroup.procs
+    chown system system /dev/cpuctl/system/cgroup.procs
+    chown system system /dev/cpuctl/system-background/cgroup.procs
+    chown system system /dev/cpuctl/dex2oat/cgroup.procs
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
     chmod 0664 /dev/cpuctl/background/tasks
@@ -176,12 +197,23 @@ on init
     chmod 0664 /dev/cpuctl/rt/tasks
     chmod 0664 /dev/cpuctl/system/tasks
     chmod 0664 /dev/cpuctl/system-background/tasks
+    chmod 0664 /dev/cpuctl/dex2oat/tasks
+    chmod 0664 /dev/cpuctl/cgroup.procs
+    chmod 0664 /dev/cpuctl/foreground/cgroup.procs
+    chmod 0664 /dev/cpuctl/background/cgroup.procs
+    chmod 0664 /dev/cpuctl/top-app/cgroup.procs
+    chmod 0664 /dev/cpuctl/rt/cgroup.procs
+    chmod 0664 /dev/cpuctl/system/cgroup.procs
+    chmod 0664 /dev/cpuctl/system-background/cgroup.procs
+    chmod 0664 /dev/cpuctl/dex2oat/cgroup.procs
 
     # Create a cpu group for NNAPI HAL processes
     mkdir /dev/cpuctl/nnapi-hal
     chown system system /dev/cpuctl/nnapi-hal
     chown system system /dev/cpuctl/nnapi-hal/tasks
+    chown system system /dev/cpuctl/nnapi-hal/cgroup.procs
     chmod 0664 /dev/cpuctl/nnapi-hal/tasks
+    chmod 0664 /dev/cpuctl/nnapi-hal/cgroup.procs
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.min 1
     write /dev/cpuctl/nnapi-hal/cpu.uclamp.latency_sensitive 1
 
@@ -189,19 +221,25 @@ on init
     mkdir /dev/cpuctl/camera-daemon
     chown system system /dev/cpuctl/camera-daemon
     chown system system /dev/cpuctl/camera-daemon/tasks
+    chown system system /dev/cpuctl/camera-daemon/cgroup.procs
     chmod 0664 /dev/cpuctl/camera-daemon/tasks
+    chmod 0664 /dev/cpuctl/camera-daemon/cgroup.procs
 
     # Create an stune group for camera-specific processes
     mkdir /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon
     chown system system /dev/stune/camera-daemon/tasks
+    chown system system /dev/stune/camera-daemon/cgroup.procs
     chmod 0664 /dev/stune/camera-daemon/tasks
+    chmod 0664 /dev/stune/camera-daemon/cgroup.procs
 
     # Create an stune group for NNAPI HAL processes
     mkdir /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal
     chown system system /dev/stune/nnapi-hal/tasks
+    chown system system /dev/stune/nnapi-hal/cgroup.procs
     chmod 0664 /dev/stune/nnapi-hal/tasks
+    chmod 0664 /dev/stune/nnapi-hal/cgroup.procs
     write /dev/stune/nnapi-hal/schedtune.boost 1
     write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
@@ -213,8 +251,12 @@ on init
     chown system system /dev/blkio/background
     chown system system /dev/blkio/tasks
     chown system system /dev/blkio/background/tasks
+    chown system system /dev/blkio/cgroup.procs
+    chown system system /dev/blkio/background/cgroup.procs
     chmod 0664 /dev/blkio/tasks
     chmod 0664 /dev/blkio/background/tasks
+    chmod 0664 /dev/blkio/cgroup.procs
+    chmod 0664 /dev/blkio/background/cgroup.procs
     write /dev/blkio/blkio.weight 1000
     write /dev/blkio/background/blkio.weight 200
     write /dev/blkio/background/blkio.bfq.weight 10
@@ -363,6 +405,13 @@ on init
     chown system system /dev/cpuset/top-app/tasks
     chown system system /dev/cpuset/restricted/tasks
     chown system system /dev/cpuset/camera-daemon/tasks
+    chown system system /dev/cpuset/cgroup.procs
+    chown system system /dev/cpuset/foreground/cgroup.procs
+    chown system system /dev/cpuset/background/cgroup.procs
+    chown system system /dev/cpuset/system-background/cgroup.procs
+    chown system system /dev/cpuset/top-app/cgroup.procs
+    chown system system /dev/cpuset/restricted/cgroup.procs
+    chown system system /dev/cpuset/camera-daemon/cgroup.procs
 
     # set system-background to 0775 so SurfaceFlinger can touch it
     chmod 0775 /dev/cpuset/system-background
@@ -374,6 +423,13 @@ on init
     chmod 0664 /dev/cpuset/restricted/tasks
     chmod 0664 /dev/cpuset/tasks
     chmod 0664 /dev/cpuset/camera-daemon/tasks
+    chmod 0664 /dev/cpuset/foreground/cgroup.procs
+    chmod 0664 /dev/cpuset/background/cgroup.procs
+    chmod 0664 /dev/cpuset/system-background/cgroup.procs
+    chmod 0664 /dev/cpuset/top-app/cgroup.procs
+    chmod 0664 /dev/cpuset/restricted/cgroup.procs
+    chmod 0664 /dev/cpuset/cgroup.procs
+    chmod 0664 /dev/cpuset/camera-daemon/cgroup.procs
 
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
@@ -438,6 +494,7 @@ on init
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
     # Start lmkd before any other services run so that it can register them
+    write /proc/sys/vm/watermark_boost_factor 0
     chown root system /sys/module/lowmemorykiller/parameters/adj
     chmod 0664 /sys/module/lowmemorykiller/parameters/adj
     chown root system /sys/module/lowmemorykiller/parameters/minfree
@@ -454,11 +511,6 @@ on init
 on property:sys.boot_from_charger_mode=1
     class_stop charger
     trigger late-init
-
-on load_persist_props_action
-    load_persist_props
-    start logd
-    start logd-reinit
 
 # Indicate to fw loaders that the relevant mounts are up.
 on firmware_mounts_complete
@@ -485,9 +537,6 @@ on late-init
     # Now we can mount /data. File encryption requires keymaster to decrypt
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
-
-    # Load persist properties and override properties (if enabled) from /data.
-    trigger load_persist_props_action
 
     # Should be before netd, but after apex, properties and logging is available.
     trigger load_bpf_programs
@@ -578,6 +627,7 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
+    mkdir /metadata/sepolicy 0700 root root
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -671,6 +721,18 @@ on post-fs-data
     # use of MAX_BOOT_LEVEL keys.
     exec - system system -- /system/bin/vdc keymaster earlyBootEnded
 
+    # Multi-installed APEXes are selected using persist props.
+    # Load persist properties and override properties (if enabled) from /data,
+    # before starting apexd.
+    load_persist_props
+    start logd
+    start logd-reinit
+    # Some existing vendor rc files use 'on load_persist_props_action' to know
+    # when persist props are ready. These are difficult to change due to GRF,
+    # so continue triggering this action here even though props are already loaded
+    # by the 'load_persist_props' call above.
+    trigger load_persist_props_action
+
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     #
     # To handle userspace reboots as well as devices that use FDE, make sure
@@ -762,7 +824,15 @@ on post-fs-data
     # directory used for on-device refresh metrics file.
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
-    mkdir /data/misc/odsign 0700 root root
+    mkdir /data/misc/odsign 0710 root system
+    # directory used for odsign metrics
+    mkdir /data/misc/odsign/metrics 0770 root system
+
+    # Directory for VirtualizationService temporary image files.
+    # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
+    chmod 0770 /data/misc/virtualizationservice
+    exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0770 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -786,11 +856,13 @@ on post-fs-data
     # Create directories to push tests to for each linker namespace.
     # Create the subdirectories in case the first test is run as root
     # so it doesn't end up owned by root.
-    mkdir /data/local/tests 0700 shell shell
-    mkdir /data/local/tests/product 0700 shell shell
-    mkdir /data/local/tests/system 0700 shell shell
-    mkdir /data/local/tests/unrestricted 0700 shell shell
-    mkdir /data/local/tests/vendor 0700 shell shell
+    # Set directories to be executable by any process so that debuggerd,
+    # aka crash_dump, can read any executables/shared libraries.
+    mkdir /data/local/tests 0701 shell shell
+    mkdir /data/local/tests/product 0701 shell shell
+    mkdir /data/local/tests/system 0701 shell shell
+    mkdir /data/local/tests/unrestricted 0701 shell shell
+    mkdir /data/local/tests/vendor 0701 shell shell
 
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 root root encryption=Require
@@ -900,6 +972,9 @@ on post-fs-data
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
+    # Create directories for boot animation.
+    mkdir /data/bootanim 0755 system system encryption=None
+
     exec_start derive_sdk
 
     init_user0
@@ -938,12 +1013,6 @@ on post-fs-data
     # Check any timezone data in /data is newer than the copy in the time zone data
     # module, delete if not.
     exec - system system -- /system/bin/tzdatacheck /apex/com.android.tzdata/etc/tz /data/misc/zoneinfo
-
-    # If there is no post-fs-data action in the init.<device>.rc file, you
-    # must uncomment this line, otherwise encrypted filesystems
-    # won't work.
-    # Set indication (checked by vold) that we have finished this action
-    #setprop vold.post_fs_data_done 1
 
     # sys.memfd_use set to false by default, which keeps it disabled
     # until it is confirmed that apps and vendor processes don't make
@@ -1014,11 +1083,13 @@ on boot
 
     # to access F2FS sysfs on dm-<num> directly
     mkdir /dev/sys/fs/by-name 0755 system system
-    symlink /sys/fs/f2fs/${dev.mnt.blk.data} /dev/sys/fs/by-name/userdata
+    symlink /sys/fs/f2fs/${dev.mnt.dev.data} /dev/sys/fs/by-name/userdata
 
-    # to access dm-<num> sysfs
+    # dev.mnt.dev.data=dm-N, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0, or
+    # dev.mnt.dev.data=sdaN/mmcblk0pN, dev.mnt.blk.data=sdaN/mmcblk0pN, dev.mnt.rootdisk.data=sda/mmcblk0
     mkdir /dev/sys/block/by-name 0755 system system
-    symlink /sys/devices/virtual/block/${dev.mnt.blk.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
+    symlink /sys/class/block/${dev.mnt.rootdisk.data} /dev/sys/block/by-name/rootdisk
 
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
@@ -1028,10 +1099,14 @@ on boot
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
+    # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
+    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 16
+
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
-    # Note that, if dm-<num> is used, sda/mmcblk0 should be tuned in vendor/init.rc
+    # this requires enabling selinux entry for sda/mmcblk0 in vendor side
     write /dev/sys/block/by-name/userdata/queue/discard_max_bytes 134217728
+    write /dev/sys/block/by-name/rootdisk/queue/discard_max_bytes 134217728
 
     # Permissions for System Server and daemons.
     chown system system /sys/power/autosleep
@@ -1092,6 +1167,9 @@ on boot
     # Define default initial receive window size in segments.
     setprop net.tcp_def_init_rwnd 60
 
+    # Update dm-verity state and set partition.*.verified properties.
+    verity_update_state
+
     # Start standard binderized HAL daemons
     class_start hal
 
@@ -1107,37 +1185,6 @@ on property:sys.init_log_level=*
 on charger
     class_start charger
 
-on property:vold.decrypt=trigger_load_persist_props
-    load_persist_props
-    start logd
-    start logd-reinit
-
-on property:vold.decrypt=trigger_post_fs_data
-    trigger post-fs-data
-    trigger zygote-start
-
-on property:vold.decrypt=trigger_restart_min_framework
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier
-    class_start main
-
-on property:vold.decrypt=trigger_restart_framework
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier
-    class_start_post_data hal
-    class_start_post_data core
-    class_start main
-    class_start late_start
-    setprop service.bootanim.exit 0
-    setprop service.bootanim.progress 0
-    start bootanim
-
-on property:vold.decrypt=trigger_shutdown_framework
-    class_reset late_start
-    class_reset main
-    class_reset_post_data core
-    class_reset_post_data hal
-
 on property:sys.boot_completed=1
     bootchart stop
     # Setup per_boot directory so other .rc could start to use it on boot_completed
@@ -1148,7 +1195,7 @@ on property:sys.boot_completed=1
 # and chown/chmod does not work for /proc/sys/ entries.
 # So proxy writes through init.
 on property:sys.sysctl.extra_free_kbytes=*
-    write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
+    exec -- /system/bin/extra_free_kbytes.sh ${sys.sysctl.extra_free_kbytes}
 
 # Allow users to drop caches
 on property:perf.drop_caches=3
@@ -1265,3 +1312,15 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Multi-Gen LRU Experiment
+on property:persist.device_config.mglru_native.lru_gen_config=none
+  write /sys/kernel/mm/lru_gen/enabled 0
+on property:persist.device_config.mglru_native.lru_gen_config=core
+  write /sys/kernel/mm/lru_gen/enabled 1
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
+  write /sys/kernel/mm/lru_gen/enabled 3
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
+  write /sys/kernel/mm/lru_gen/enabled 5
+on property:persist.device_config.mglru_native.lru_gen_config=all
+  write /sys/kernel/mm/lru_gen/enabled 7
