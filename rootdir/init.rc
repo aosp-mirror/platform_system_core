@@ -1135,9 +1135,11 @@ on boot
     chown system system /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
 
-    # Assume SMP uses shared cpufreq policy for all CPUs
+    # Assume SMP uses shared cpufreq policy for all CPUs in the same cluster.
+    # Here is for initial cluster (cpu0...) which is not hot-plugged in most cases.
+    # The rest of hot-plugged clusters are covered by ueventd.rc.
     chown system system /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-    chmod 0660 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+    chmod 0664 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
 
     chown system system /sys/class/leds/vibrator/trigger
     chown system system /sys/class/leds/vibrator/activate
