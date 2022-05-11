@@ -143,6 +143,13 @@ static int generate_ext4_image(const char* fileName, long long partSize,
         mke2fs_args.push_back("512");
     }
 
+    if (fsOptions & (1 << FS_OPT_CASEFOLD)) {
+        mke2fs_args.push_back("-O");
+        mke2fs_args.push_back("casefold");
+        mke2fs_args.push_back("-E");
+        mke2fs_args.push_back("encoding=utf8");
+    }
+
     mke2fs_args.push_back(fileName);
 
     std::string size_str = std::to_string(partSize / block_size);

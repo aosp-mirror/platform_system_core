@@ -1,0 +1,15 @@
+{
+  "presubmit": [
+    {
+      "name": "debuggerd_test"
+    },
+    {
+      "name": "libtombstoned_client_rust_test"
+    }
+  ],
+  "hwasan-presubmit": [
+    {
+      "name": "debuggerd_test"
+    }
+  ]
+}
