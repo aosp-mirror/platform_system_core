@@ -188,10 +188,11 @@ TEST(libmodprobe, Test) {
 
     EXPECT_TRUE(modules_loaded == expected_after_remove);
 
-    m = Modprobe({dir.path});
-    EXPECT_FALSE(m.LoadWithAliases("test4", true));
-    while (modules_loaded.size() > 0) EXPECT_TRUE(m.Remove(modules_loaded.front()));
-    EXPECT_TRUE(m.LoadListedModules());
+    Modprobe m2({dir.path});
+
+    EXPECT_FALSE(m2.LoadWithAliases("test4", true));
+    while (modules_loaded.size() > 0) EXPECT_TRUE(m2.Remove(modules_loaded.front()));
+    EXPECT_TRUE(m2.LoadListedModules());
 
     GTEST_LOG_(INFO) << "Expected modules loaded after enabling blocklist (in order):";
     for (auto i = expected_modules_blocklist_enabled.begin();
