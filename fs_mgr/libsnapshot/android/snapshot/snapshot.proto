@@ -158,6 +158,13 @@ enum MergeFailureCode {
     ExpectedMergeTarget = 11;
     UnmergedSectorsAfterCompletion = 12;
     UnexpectedMergeState = 13;
+    GetCowPathConsistencyCheck = 14;
+    OpenCowConsistencyCheck = 15;
+    ParseCowConsistencyCheck = 16;
+    OpenCowDirectConsistencyCheck = 17;
+    MemAlignConsistencyCheck = 18;
+    DirectReadConsistencyCheck = 19;
+    WrongMergeCountConsistencyCheck = 20;
 };
 
 // Next: 8
@@ -184,6 +191,15 @@ message SnapshotUpdateStatus {
 
     // Merge failure code, filled if state == MergeFailed.
     MergeFailureCode merge_failure_code = 7;
+
+    // Source build fingerprint.
+    string source_build_fingerprint = 8;
+
+    // user-space snapshots
+    bool userspace_snapshots = 9;
+
+    // io_uring support
+    bool io_uring_enabled = 10;
 }
 
 // Next: 10
@@ -213,6 +229,10 @@ message SnapshotMergeReport {
     // Time from sys.boot_completed to merge start, in milliseconds.
     uint32 boot_complete_to_merge_start_time_ms = 8;
 
-    // Merge failure code, filled if state == MergeFailed.
+    // Merge failure code, filled if the merge failed at any time (regardless
+    // of whether it succeeded at a later time).
     MergeFailureCode merge_failure_code = 9;
+
+    // The source fingerprint at the time the OTA was downloaded.
+    string source_build_fingerprint = 10;
 }

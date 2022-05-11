@@ -35,6 +35,7 @@ class MockSnapshotManager : public ISnapshotManager {
                 (override));
     MOCK_METHOD(UpdateState, GetUpdateState, (double* progress), (override));
     MOCK_METHOD(bool, UpdateUsesCompression, (), (override));
+    MOCK_METHOD(bool, UpdateUsesUserSnapshots, (), (override));
     MOCK_METHOD(Return, CreateUpdateSnapshots,
                 (const chromeos_update_engine::DeltaArchiveManifest& manifest), (override));
     MOCK_METHOD(bool, MapUpdateSnapshot,
@@ -60,6 +61,7 @@ class MockSnapshotManager : public ISnapshotManager {
     MOCK_METHOD(bool, Dump, (std::ostream & os), (override));
     MOCK_METHOD(std::unique_ptr<AutoDevice>, EnsureMetadataMounted, (), (override));
     MOCK_METHOD(ISnapshotMergeStats*, GetSnapshotMergeStatsInstance, (), (override));
+    MOCK_METHOD(std::string, ReadSourceBuildFingerprint, (), (override));
 };
 
 }  // namespace android::snapshot

@@ -35,6 +35,7 @@ class SnapshotManagerStub : public ISnapshotManager {
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
     bool UpdateUsesCompression() override;
+    bool UpdateUsesUserSnapshots() override;
     Return CreateUpdateSnapshots(
             const chromeos_update_engine::DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
@@ -57,6 +58,7 @@ class SnapshotManagerStub : public ISnapshotManager {
     ISnapshotMergeStats* GetSnapshotMergeStatsInstance() override;
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms) override;
     bool UnmapAllSnapshots() override;
+    std::string ReadSourceBuildFingerprint() override;
 };
 
 }  // namespace android::snapshot

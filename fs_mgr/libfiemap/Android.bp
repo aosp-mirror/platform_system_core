@@ -20,6 +20,8 @@ package {
 
 cc_library_headers {
     name: "libfiemap_headers",
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
 }
@@ -88,7 +90,9 @@ cc_test {
 
     test_suites: ["vts", "device-tests"],
     auto_gen_config: true,
-    test_min_api_level: 29,
+    test_options: {
+        min_shipping_api_level: 29,
+    },
     require_root: true,
 }
 

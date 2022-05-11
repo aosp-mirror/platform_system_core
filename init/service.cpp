@@ -127,6 +127,8 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
+pid_t Service::exec_service_pid_ = -1;
+std::chrono::time_point<std::chrono::steady_clock> Service::exec_service_started_;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::vector<std::string>& args, bool from_apex)
@@ -194,8 +196,6 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
                   << ") process group...";
         int max_processes = 0;
         int r;
-
-        flags_ |= SVC_STOPPING;
         if (signal == SIGTERM) {
             r = killProcessGroupOnce(proc_attr_.uid, pid_, signal, &max_processes);
         } else {
@@ -271,6 +271,9 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     // Remove any socket resources we may have created.
     for (const auto& socket : sockets_) {
+        if (socket.persist) {
+            continue;
+        }
         auto path = ANDROID_SOCKET_DIR "/" + socket.name;
         unlink(path.c_str());
     }
@@ -279,18 +282,21 @@ void Service::Reap(const siginfo_t& siginfo) {
         f(siginfo);
     }
 
-    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_ &&
-        !(flags_ & SVC_STOPPING)) {
+    if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
         LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
         trigger_shutdown(*on_failure_reboot_target_);
     }
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
+    if (name_ == "zygote" || name_ == "zygote64") {
+        removeAllEmptyProcessGroups();
+    }
+
     if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
-    flags_ &= ~(SVC_RUNNING | SVC_STOPPING);
+    flags_ &= (~SVC_RUNNING);
     start_order_ = 0;
 
     // Oneshot processes go into the disabled state on exit,
@@ -388,6 +394,8 @@ Result<void> Service::ExecStart() {
 
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
+    exec_service_pid_ = pid_;
+    exec_service_started_ = std::chrono::steady_clock::now();
 
     LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
               << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
@@ -395,6 +403,122 @@ Result<void> Service::ExecStart() {
 
     reboot_on_failure.Disable();
     return {};
+}
+
+static void ClosePipe(const std::array<int, 2>* pipe) {
+    for (const auto fd : *pipe) {
+        if (fd >= 0) {
+            close(fd);
+        }
+    }
+}
+
+Result<void> Service::CheckConsole() {
+    if (!(flags_ & SVC_CONSOLE)) {
+        return {};
+    }
+
+    if (proc_attr_.console.empty()) {
+        proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
+    }
+
+    // Make sure that open call succeeds to ensure a console driver is
+    // properly registered for the device node
+    int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
+    if (console_fd < 0) {
+        flags_ |= SVC_DISABLED;
+        return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
+    }
+    close(console_fd);
+    return {};
+}
+
+// Configures the memory cgroup properties for the service.
+void Service::ConfigureMemcg() {
+    if (swappiness_ != -1) {
+        if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
+            PLOG(ERROR) << "setProcessGroupSwappiness failed";
+        }
+    }
+
+    if (soft_limit_in_bytes_ != -1) {
+        if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
+            PLOG(ERROR) << "setProcessGroupSoftLimit failed";
+        }
+    }
+
+    size_t computed_limit_in_bytes = limit_in_bytes_;
+    if (limit_percent_ != -1) {
+        long page_size = sysconf(_SC_PAGESIZE);
+        long num_pages = sysconf(_SC_PHYS_PAGES);
+        if (page_size > 0 && num_pages > 0) {
+            size_t max_mem = SIZE_MAX;
+            if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
+                max_mem = size_t(num_pages) * size_t(page_size);
+            }
+            computed_limit_in_bytes =
+                    std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
+        }
+    }
+
+    if (!limit_property_.empty()) {
+        // This ends up overwriting computed_limit_in_bytes but only if the
+        // property is defined.
+        computed_limit_in_bytes =
+                android::base::GetUintProperty(limit_property_, computed_limit_in_bytes, SIZE_MAX);
+    }
+
+    if (computed_limit_in_bytes != size_t(-1)) {
+        if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
+            PLOG(ERROR) << "setProcessGroupLimit failed";
+        }
+    }
+}
+
+// Enters namespaces, sets environment variables, writes PID files and runs the service executable.
+void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
+                         const std::vector<Descriptor>& descriptors,
+                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
+    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+        LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
+    }
+
+    for (const auto& [key, value] : environment_vars_) {
+        setenv(key.c_str(), value.c_str(), 1);
+    }
+
+    for (const auto& descriptor : descriptors) {
+        descriptor.Publish();
+    }
+
+    if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
+        LOG(ERROR) << "failed to write pid to files: " << result.error();
+    }
+
+    // Wait until the cgroups have been created and until the cgroup controllers have been
+    // activated.
+    char byte = 0;
+    if (read((*pipefd)[0], &byte, 1) < 0) {
+        PLOG(ERROR) << "failed to read from notification channel";
+    }
+    pipefd.reset();
+    if (!byte) {
+        LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
+        _exit(EXIT_FAILURE);
+    }
+
+    if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
+        LOG(ERROR) << "failed to set task profiles";
+    }
+
+    // As requested, set our gid, supplemental gids, uid, context, and
+    // priority. Aborts on failure.
+    SetProcessAttributesAndCaps();
+
+    if (!ExpandArgsAndExecv(args_, sigstop_)) {
+        PLOG(ERROR) << "cannot execv('" << args_[0]
+                    << "'). See the 'Debugging init' section of init's README.md for tips";
+    }
 }
 
 Result<void> Service::Start() {
@@ -412,10 +536,7 @@ Result<void> Service::Start() {
     }
 
     bool disabled = (flags_ & (SVC_DISABLED | SVC_RESET));
-    // Starting a service removes it from the disabled or reset state and
-    // immediately takes it out of the restarting state if it was in there.
-    flags_ &= (~(SVC_DISABLED | SVC_RESTARTING | SVC_RESET | SVC_RESTART | SVC_DISABLED_START |
-                 SVC_STOPPING));
+    ResetFlagsForStart();
 
     // Running processes require no additional work --- if they're in the
     // process of exiting, we've ensured that they will immediately restart
@@ -431,20 +552,14 @@ Result<void> Service::Start() {
         return {};
     }
 
-    bool needs_console = (flags_ & SVC_CONSOLE);
-    if (needs_console) {
-        if (proc_attr_.console.empty()) {
-            proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
-        }
+    std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd(new std::array<int, 2>{-1, -1},
+                                                                     ClosePipe);
+    if (pipe(pipefd->data()) < 0) {
+        return ErrnoError() << "pipe()";
+    }
 
-        // Make sure that open call succeeds to ensure a console driver is
-        // properly registered for the device node
-        int console_fd = open(proc_attr_.console.c_str(), O_RDWR | O_CLOEXEC);
-        if (console_fd < 0) {
-            flags_ |= SVC_DISABLED;
-            return ErrnoError() << "Couldn't open console '" << proc_attr_.console << "'";
-        }
-        close(console_fd);
+    if (Result<void> result = CheckConsole(); !result.ok()) {
+        return result;
     }
 
     struct stat sb;
@@ -516,38 +631,7 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-
-        if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace);
-            !result.ok()) {
-            LOG(FATAL) << "Service '" << name_
-                       << "' failed to set up namespaces: " << result.error();
-        }
-
-        for (const auto& [key, value] : environment_vars_) {
-            setenv(key.c_str(), value.c_str(), 1);
-        }
-
-        for (const auto& descriptor : descriptors) {
-            descriptor.Publish();
-        }
-
-        if (auto result = WritePidToFiles(&writepid_files_); !result.ok()) {
-            LOG(ERROR) << "failed to write pid to files: " << result.error();
-        }
-
-        if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
-            LOG(ERROR) << "failed to set task profiles";
-        }
-
-        // As requested, set our gid, supplemental gids, uid, context, and
-        // priority. Aborts on failure.
-        SetProcessAttributesAndCaps();
-
-        if (!ExpandArgsAndExecv(args_, sigstop_)) {
-            PLOG(ERROR) << "cannot execv('" << args_[0]
-                        << "'). See the 'Debugging init' section of init's README.md for tips";
-        }
-
+        RunService(override_mount_namespace, descriptors, std::move(pipefd));
         _exit(127);
     }
 
@@ -574,56 +658,45 @@ Result<void> Service::Start() {
                       limit_percent_ != -1 || !limit_property_.empty();
     errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
     if (errno != 0) {
-        PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                    << ") failed for service '" << name_ << "'";
-    } else if (use_memcg) {
-        if (swappiness_ != -1) {
-            if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
-                PLOG(ERROR) << "setProcessGroupSwappiness failed";
-            }
+        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
+            return ErrnoError() << "sending notification failed";
         }
+        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                       << ") failed for service '" << name_ << "'";
+    }
 
-        if (soft_limit_in_bytes_ != -1) {
-            if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
-                PLOG(ERROR) << "setProcessGroupSoftLimit failed";
-            }
-        }
-
-        size_t computed_limit_in_bytes = limit_in_bytes_;
-        if (limit_percent_ != -1) {
-            long page_size = sysconf(_SC_PAGESIZE);
-            long num_pages = sysconf(_SC_PHYS_PAGES);
-            if (page_size > 0 && num_pages > 0) {
-                size_t max_mem = SIZE_MAX;
-                if (size_t(num_pages) < SIZE_MAX / size_t(page_size)) {
-                    max_mem = size_t(num_pages) * size_t(page_size);
-                }
-                computed_limit_in_bytes =
-                        std::min(computed_limit_in_bytes, max_mem / 100 * limit_percent_);
-            }
-        }
-
-        if (!limit_property_.empty()) {
-            // This ends up overwriting computed_limit_in_bytes but only if the
-            // property is defined.
-            computed_limit_in_bytes = android::base::GetUintProperty(
-                    limit_property_, computed_limit_in_bytes, SIZE_MAX);
-        }
-
-        if (computed_limit_in_bytes != size_t(-1)) {
-            if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
-                PLOG(ERROR) << "setProcessGroupLimit failed";
-            }
-        }
+    if (use_memcg) {
+        ConfigureMemcg();
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
+    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
+        return ErrnoError() << "sending notification failed";
+    }
+
     NotifyStateChange("running");
     reboot_on_failure.Disable();
     return {};
+}
+
+void Service::SetStartedInFirstStage(pid_t pid) {
+    LOG(INFO) << "adding first-stage service '" << name_ << "'...";
+
+    time_started_ = boot_clock::now();  // not accurate, but doesn't matter here
+    pid_ = pid;
+    flags_ |= SVC_RUNNING;
+    start_order_ = next_start_order_++;
+
+    NotifyStateChange("running");
+}
+
+void Service::ResetFlagsForStart() {
+    // Starting a service removes it from the disabled or reset state and
+    // immediately takes it out of the restarting state if it was in there.
+    flags_ &= ~(SVC_DISABLED | SVC_RESTARTING | SVC_RESET | SVC_RESTART | SVC_DISABLED_START);
 }
 
 Result<void> Service::StartIfNotDisabled() {
@@ -645,25 +718,6 @@ Result<void> Service::Enable() {
 
 void Service::Reset() {
     StopOrReset(SVC_RESET);
-}
-
-void Service::ResetIfPostData() {
-    if (post_data_) {
-        if (flags_ & SVC_RUNNING) {
-            running_at_post_data_reset_ = true;
-        }
-        StopOrReset(SVC_RESET);
-    }
-}
-
-Result<void> Service::StartIfPostData() {
-    // Start the service, but only if it was started after /data was mounted,
-    // and it was still running when we reset the post-data services.
-    if (running_at_post_data_reset_) {
-        return Start();
-    }
-
-    return {};
 }
 
 void Service::Stop() {
@@ -794,6 +848,19 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
                                      nullptr, str_args, false);
+}
+
+// This is used for snapuserd_proxy, which hands off a socket to snapuserd. It's
+// a special case to support the daemon launched in first-stage init. The persist
+// feature is not part of the init language and is only used here.
+bool Service::MarkSocketPersistent(const std::string& socket_name) {
+    for (auto& socket : sockets_) {
+        if (socket.name == socket_name) {
+            socket.persist = true;
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace init

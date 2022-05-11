@@ -23,16 +23,25 @@ cc_binary {
     vendor: true,
 
     srcs: [
+        "checkpoint_handling.cpp",
         "ipc.c",
         "rpmb.c",
         "storage.c",
         "proxy.c",
     ],
 
-    shared_libs: ["liblog"],
-    header_libs: ["libcutils_headers"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libhardware_legacy",
+    ],
+    header_libs: [
+        "libcutils_headers",
+        "libgsi_headers",
+    ],
 
     static_libs: [
+        "libfstab",
         "libtrustystorageinterface",
         "libtrusty",
     ],
