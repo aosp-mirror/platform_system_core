@@ -37,7 +37,7 @@ using android::trusty::fuzz::TrustyApp;
 #define CONFIRMATIONUI_MODULE_NAME "confirmationui.syms.elf"
 
 /* A request to render to screen may take a while. */
-const size_t kTimeoutSeconds = 30;
+const size_t kTimeoutSeconds = 60;
 
 /* ConfirmationUI TA's UUID is 7dee2364-c036-425b-b086-df0f6c233c1b */
 static struct uuid confirmationui_uuid = {

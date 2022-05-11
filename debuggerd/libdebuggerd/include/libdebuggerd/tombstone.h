@@ -37,7 +37,6 @@ class Tombstone;
 
 namespace unwindstack {
 struct FrameData;
-class Maps;
 class Unwinder;
 }
 
@@ -68,8 +67,7 @@ bool tombstone_proto_to_text(
     const Tombstone& tombstone,
     std::function<void(const std::string& line, bool should_log)> callback);
 
-void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame,
-                             unwindstack::Maps* maps);
+void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame);
 void set_human_readable_cause(Cause* cause, uint64_t fault_addr);
 
 #endif  // _DEBUGGERD_TOMBSTONE_H

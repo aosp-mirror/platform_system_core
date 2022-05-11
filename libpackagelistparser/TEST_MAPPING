@@ -1,0 +1,12 @@
+{
+  "presubmit": [
+    {
+      "name": "libpackagelistparser_test"
+    }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "libpackagelistparser_test"
+    }
+  ]
+}
