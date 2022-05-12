@@ -178,7 +178,6 @@ libinit_cc_defaults {
         "update_metadata-protos",
     ],
     shared_libs: [
-        "libbacktrace",
         "libbase",
         "libbootloader_message",
         "libcrypto",
@@ -195,6 +194,7 @@ libinit_cc_defaults {
         "libprocessgroup",
         "libprocessgroup_setup",
         "libselinux",
+        "libunwindstack",
         "libutils",
         "libziparchive",
     ],
@@ -352,7 +352,6 @@ cc_binary {
         "libgsi",
         "liblzma",
         "libunwindstack_no_dex",
-        "libbacktrace_no_dex",
         "libmodprobe",
         "libext2_uuid",
         "libprotobuf-cpp-lite",
