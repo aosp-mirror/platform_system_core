@@ -465,12 +465,6 @@ static FscryptAction FscryptInferAction(const std::string& dir) {
         return FscryptAction::kNone;
     }
 
-    // Special-case /data/media/obb per b/64566063
-    if (dir == "/data/media/obb") {
-        // Try to set policy on this directory, but if it is non-empty this may fail.
-        return FscryptAction::kAttempt;
-    }
-
     // Only set policy on first level /data directories
     // To make this less restrictive, consider using a policy file.
     // However this is overkill for as long as the policy is simply
