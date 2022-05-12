@@ -44,14 +44,6 @@ cc_library_headers {
     export_include_dirs: ["include"],
 
     target: {
-        android: {
-            header_libs: ["libbacktrace_headers"],
-            export_header_lib_headers: ["libbacktrace_headers"],
-        },
-        host_linux: {
-            header_libs: ["libbacktrace_headers"],
-            export_header_lib_headers: ["libbacktrace_headers"],
-        },
         linux_bionic: {
             enabled: true,
         },
@@ -196,7 +188,7 @@ cc_library {
 
     shared_libs: [
         "libutils",
-        "libbacktrace",
+        "libunwindstack",
     ],
 
     target: {

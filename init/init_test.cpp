@@ -156,6 +156,7 @@ execute_third
 
     ServiceList service_list;
     TestInitText(init_script, test_function_map, commands, &service_list);
+    EXPECT_EQ(3, num_executed);
 }
 
 TEST(init, OverrideService) {

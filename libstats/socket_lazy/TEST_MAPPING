@@ -4,7 +4,7 @@
       "name" : "libstatssocket_lazy_test"
     }
   ],
-  "hwasan-postsubmit" : [
+  "hwasan-presubmit" : [
     {
       "name" : "libstatssocket_lazy_test"
     }

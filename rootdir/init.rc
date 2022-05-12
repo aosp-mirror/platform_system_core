@@ -101,22 +101,18 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
     exec_start boringssl_self_test_apex64
 
 service boringssl_self_test32 /system/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
@@ -1134,10 +1130,6 @@ on boot
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/boostpulse_duration
     chown system system /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
-
-    # Assume SMP uses shared cpufreq policy for all CPUs
-    chown system system /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-    chmod 0660 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
 
     chown system system /sys/class/leds/vibrator/trigger
     chown system system /sys/class/leds/vibrator/activate
