@@ -836,7 +836,6 @@ on post-fs-data
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/local/traces 0777 shell shell
-    mkdir /data/data 0771 system system encryption=None
     mkdir /data/app-private 0771 system system encryption=Require
     mkdir /data/app-ephemeral 0771 system system encryption=Require
     mkdir /data/app-asec 0700 root root encryption=Require
@@ -911,13 +910,6 @@ on post-fs-data
     mkdir /data/user 0711 system system encryption=None
     mkdir /data/user_de 0711 system system encryption=None
 
-    # Unlink /data/user/0 if we previously symlink it to /data/data
-    rm /data/user/0
-
-    # Bind mount /data/user/0 to /data/data
-    mkdir /data/user/0 0700 system system encryption=None
-    mount none /data/data /data/user/0 bind rec
-
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
     mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
@@ -929,8 +921,10 @@ on post-fs-data
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
 
-    # Bind mount CE and DE data directory to mirror's default volume directory
-    mount none /data/user /data_mirror/data_ce/null bind rec
+    # Bind mount CE and DE data directory to mirror's default volume directory.
+    # The 'slave' option (MS_SLAVE) is needed to cause the later bind mount of
+    # /data/data onto /data/user/0 to propagate to /data_mirror/data_ce/null/0.
+    mount none /data/user /data_mirror/data_ce/null bind rec slave
     mount none /data/user_de /data_mirror/data_de/null bind rec
 
     # Create mirror directory for jit profiles
@@ -963,10 +957,8 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # Special-case /data/media/obb per b/64566063
     mkdir /data/media 0770 media_rw media_rw encryption=None
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
-    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     # Create directories for boot animation.
     mkdir /data/bootanim 0755 system system encryption=None
