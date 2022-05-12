@@ -20,7 +20,7 @@
 #include <utils/Errors.h>
 #include <utils/Log.h>
 
-#include <backtrace/Backtrace.h>
+#include <unwindstack/AndroidUnwinder.h>
 
 #define CALLSTACK_WEAK  // Don't generate weak definitions.
 #include <utils/CallStack.h>
@@ -39,14 +39,25 @@ CallStack::~CallStack() {
 }
 
 void CallStack::update(int32_t ignoreDepth, pid_t tid) {
+    if (ignoreDepth < 0) {
+        ignoreDepth = 0;
+    }
+
     mFrameLines.clear();
 
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, tid));
-    if (!backtrace->Unwind(ignoreDepth)) {
-        ALOGW("%s: Failed to unwind callstack.", __FUNCTION__);
+    unwindstack::AndroidLocalUnwinder unwinder;
+    unwindstack::AndroidUnwinderData data;
+    std::optional<pid_t> tid_val;
+    if (tid != -1) {
+        *tid_val = tid;
     }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-      mFrameLines.push_back(String8(backtrace->FormatFrameData(i).c_str()));
+    if (!unwinder.Unwind(tid_val, data)) {
+        ALOGW("%s: Failed to unwind callstack: %s", __FUNCTION__, data.GetErrorString().c_str());
+    }
+    for (size_t i = ignoreDepth; i < data.frames.size(); i++) {
+        auto& frame = data.frames[i];
+        frame.num -= ignoreDepth;
+        mFrameLines.push_back(String8(unwinder.FormatFrame(frame).c_str()));
     }
 }
 
