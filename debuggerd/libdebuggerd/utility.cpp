@@ -39,6 +39,7 @@
 #include <bionic/reserved_signals.h>
 #include <debuggerd/handler.h>
 #include <log/log.h>
+#include <unwindstack/AndroidUnwinder.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Unwinder.h>
 
@@ -483,10 +484,10 @@ std::string describe_pac_enabled_keys(long value) {
   return describe_end(value, desc);
 }
 
-void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix) {
+void log_backtrace(log_t* log, unwindstack::AndroidUnwinder* unwinder,
+                   unwindstack::AndroidUnwinderData& data, const char* prefix) {
   std::set<std::string> unreadable_elf_files;
-  unwinder->SetDisplayBuildID(true);
-  for (const auto& frame : unwinder->frames()) {
+  for (const auto& frame : data.frames) {
     if (frame.map_info != nullptr && frame.map_info->ElfFileNotReadable()) {
       unreadable_elf_files.emplace(frame.map_info->name());
     }
@@ -509,7 +510,7 @@ void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* pref
     }
   }
 
-  for (const auto& frame : unwinder->frames()) {
+  for (const auto& frame : data.frames) {
     _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(frame).c_str());
   }
 }
