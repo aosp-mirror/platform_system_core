@@ -458,6 +458,24 @@ Result<void> IsLegalPropertyValue(const std::string& name, const std::string& va
     return {};
 }
 
+// Remove unnecessary slashes so that any later checks (e.g., the check for
+// whether the path is a top-level directory in /data) don't get confused.
+std::string CleanDirPath(const std::string& path) {
+    std::string result;
+    result.reserve(path.length());
+    // Collapse duplicate slashes, e.g. //data//foo// => /data/foo/
+    for (char c : path) {
+        if (c != '/' || result.empty() || result.back() != '/') {
+            result += c;
+        }
+    }
+    // Remove trailing slash, e.g. /data/foo/ => /data/foo
+    if (result.length() > 1 && result.back() == '/') {
+        result.pop_back();
+    }
+    return result;
+}
+
 static FscryptAction FscryptInferAction(const std::string& dir) {
     const std::string prefix = "/data/";
 
@@ -499,10 +517,11 @@ static FscryptAction FscryptInferAction(const std::string& dir) {
 }
 
 Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
+    std::string path = CleanDirPath(args[1]);
     mode_t mode = 0755;
     Result<uid_t> uid = -1;
     Result<gid_t> gid = -1;
-    FscryptAction fscrypt_inferred_action = FscryptInferAction(args[1]);
+    FscryptAction fscrypt_inferred_action = FscryptInferAction(path);
     FscryptAction fscrypt_action = fscrypt_inferred_action;
     std::string ref_option = "ref";
     bool set_option_encryption = false;
@@ -569,14 +588,13 @@ Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
         return Error() << "Key option set but encryption action is none";
     }
     const std::string prefix = "/data/";
-    if (StartsWith(args[1], prefix) &&
-        args[1].find_first_of('/', prefix.size()) == std::string::npos) {
+    if (StartsWith(path, prefix) && path.find_first_of('/', prefix.size()) == std::string::npos) {
         if (!set_option_encryption) {
-            LOG(WARNING) << "Top-level directory needs encryption action, eg mkdir " << args[1]
+            LOG(WARNING) << "Top-level directory needs encryption action, eg mkdir " << path
                          << " <mode> <uid> <gid> encryption=Require";
         }
         if (fscrypt_action == FscryptAction::kNone) {
-            LOG(INFO) << "Not setting encryption policy on: " << args[1];
+            LOG(INFO) << "Not setting encryption policy on: " << path;
         }
     }
     if (fscrypt_action != fscrypt_inferred_action) {
@@ -585,7 +603,7 @@ Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
                      << static_cast<int>(fscrypt_action);
     }
 
-    return MkdirOptions{args[1], mode, *uid, *gid, fscrypt_action, ref_option};
+    return MkdirOptions{path, mode, *uid, *gid, fscrypt_action, ref_option};
 }
 
 Result<MountAllOptions> ParseMountAll(const std::vector<std::string>& args) {
