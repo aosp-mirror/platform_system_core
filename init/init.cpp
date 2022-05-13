@@ -88,6 +88,10 @@
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
 
+#ifndef RECOVERY
+#include "com_android_apex.h"
+#endif  // RECOVERY
+
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
@@ -296,14 +300,58 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
+#ifndef RECOVERY
+template <typename T>
+struct LibXmlErrorHandler {
+    T handler_;
+    template <typename Handler>
+    LibXmlErrorHandler(Handler&& handler) : handler_(std::move(handler)) {
+        xmlSetGenericErrorFunc(nullptr, &ErrorHandler);
+    }
+    ~LibXmlErrorHandler() { xmlSetGenericErrorFunc(nullptr, nullptr); }
+    static void ErrorHandler(void*, const char* msg, ...) {
+        va_list args;
+        va_start(args, msg);
+        char* formatted;
+        if (vasprintf(&formatted, msg, args) >= 0) {
+            LOG(ERROR) << formatted;
+        }
+        free(formatted);
+        va_end(args);
+    }
+};
+
+template <typename Handler>
+LibXmlErrorHandler(Handler&&) -> LibXmlErrorHandler<Handler>;
+#endif  // RECOVERY
+
 // Returns a Parser that accepts scripts from APEX modules. It supports `service` and `on`.
 Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list) {
     Parser parser;
-
-    parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&service_list, GetSubcontext(), std::nullopt,
-                                                       /*from_apex=*/true));
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, GetSubcontext()));
+    auto subcontext = GetSubcontext();
+#ifndef RECOVERY
+    if (subcontext) {
+        const auto apex_info_list_file = "/apex/apex-info-list.xml";
+        auto error_handler = LibXmlErrorHandler([&](const auto& error_message) {
+            LOG(ERROR) << "Failed to read " << apex_info_list_file << ":" << error_message;
+        });
+        const auto apex_info_list = com::android::apex::readApexInfoList(apex_info_list_file);
+        if (apex_info_list.has_value()) {
+            std::vector<std::string> subcontext_apexes;
+            for (const auto& info : apex_info_list->getApexInfo()) {
+                if (info.hasPreinstalledModulePath() &&
+                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                    subcontext_apexes.push_back(info.getModuleName());
+                }
+            }
+            subcontext->SetApexList(std::move(subcontext_apexes));
+        }
+    }
+#endif  // RECOVERY
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, subcontext, std::nullopt,
+                                                            /*from_apex=*/true));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontext));
 
     return parser;
 }
