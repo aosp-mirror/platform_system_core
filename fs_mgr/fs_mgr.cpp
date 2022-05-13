@@ -266,24 +266,30 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         const char* f2fs_fsck_forced_argv[] = {
                 F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
-        if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+        if (access(F2FS_FSCK_BIN, X_OK)) {
+            LINFO << "Not running " << F2FS_FSCK_BIN << " on " << realpath(blk_device)
+                  << " (executable not in system image)";
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
-        }
-        if (ret < 0) {
-            /* No need to check for error in fork, we can't really handle it now */
-            LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
-            *fs_stat |= FS_STAT_FSCK_FAILED;
-        } else if (status != 0) {
-            LINFO << F2FS_FSCK_BIN << " returned status 0x" << std::hex << status;
-            *fs_stat |= FS_STAT_FSCK_FS_FIXED;
+            if (should_force_check(*fs_stat)) {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
+                                          &status, false, LOG_KLOG | LOG_FILE, false,
+                                          FSCK_LOG_FILE);
+            } else {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status,
+                                          false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+            }
+            if (ret < 0) {
+                /* No need to check for error in fork, we can't really handle it now */
+                LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
+            } else if (status != 0) {
+                LINFO << F2FS_FSCK_BIN << " returned status 0x" << std::hex << status;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
+            }
         }
     }
     android::base::SetProperty("ro.boottime.init.fsck." + Basename(target),
