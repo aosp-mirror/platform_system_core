@@ -26,8 +26,14 @@
 #include "types.h"
 #include "utility.h"
 
+// Forward delcarations
 class Cause;
 class Tombstone;
+
+namespace unwindstack {
+class AndroidUnwinder;
+class Memory;
+}  // namespace unwindstack
 
 class GwpAsanCrashData {
  public:
@@ -52,7 +58,7 @@ class GwpAsanCrashData {
   // allocator crash state.
   uintptr_t GetFaultAddress() const;
 
-  void AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const;
+  void AddCauseProtos(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder) const;
 
  protected:
   // Is GWP-ASan responsible for this crash.
