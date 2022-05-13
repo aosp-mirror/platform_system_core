@@ -42,34 +42,34 @@ namespace init {
 using ActionManagerCommand = std::function<void(ActionManager&)>;
 
 void TestInit(const std::string& init_script_file, const BuiltinFunctionMap& test_function_map,
-              const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
-    ActionManager am;
-
+              const std::vector<ActionManagerCommand>& commands, ActionManager* action_manager,
+              ServiceList* service_list) {
     Action::set_function_map(&test_function_map);
 
     Parser parser;
     parser.AddSectionParser("service",
                             std::make_unique<ServiceParser>(service_list, nullptr, std::nullopt));
-    parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, nullptr));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(action_manager, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
     ASSERT_TRUE(parser.ParseConfig(init_script_file));
 
     for (const auto& command : commands) {
-        command(am);
+        command(*action_manager);
     }
 
-    while (am.HasMoreCommands()) {
-        am.ExecuteOneCommand();
+    while (action_manager->HasMoreCommands()) {
+        action_manager->ExecuteOneCommand();
     }
 }
 
 void TestInitText(const std::string& init_script, const BuiltinFunctionMap& test_function_map,
-                  const std::vector<ActionManagerCommand>& commands, ServiceList* service_list) {
+                  const std::vector<ActionManagerCommand>& commands, ActionManager* action_manager,
+                  ServiceList* service_list) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     ASSERT_TRUE(android::base::WriteStringToFd(init_script, tf.fd));
-    TestInit(tf.path, test_function_map, commands, service_list);
+    TestInit(tf.path, test_function_map, commands, action_manager, service_list);
 }
 
 TEST(init, SimpleEventTrigger) {
@@ -91,8 +91,9 @@ pass_test
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
+    ActionManager action_manager;
     ServiceList service_list;
-    TestInitText(init_script, test_function_map, commands, &service_list);
+    TestInitText(init_script, test_function_map, commands, &action_manager, &service_list);
 
     EXPECT_TRUE(expect_true);
 }
@@ -154,8 +155,9 @@ execute_third
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
+    ActionManager action_manager;
     ServiceList service_list;
-    TestInitText(init_script, test_function_map, commands, &service_list);
+    TestInitText(init_script, test_function_map, commands, &action_manager, &service_list);
     EXPECT_EQ(3, num_executed);
 }
 
@@ -170,8 +172,9 @@ service A something
 
 )init";
 
+    ActionManager action_manager;
     ServiceList service_list;
-    TestInitText(init_script, BuiltinFunctionMap(), {}, &service_list);
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
     ASSERT_EQ(1, std::distance(service_list.begin(), service_list.end()));
 
     auto service = service_list.begin()->get();
@@ -237,11 +240,98 @@ TEST(init, EventTriggerOrderMultipleFiles) {
     ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
     std::vector<ActionManagerCommand> commands{trigger_boot};
 
+    ActionManager action_manager;
     ServiceList service_list;
-
-    TestInit(start.path, test_function_map, commands, &service_list);
+    TestInit(start.path, test_function_map, commands, &action_manager, &service_list);
 
     EXPECT_EQ(6, num_executed);
+}
+
+BuiltinFunctionMap GetTestFunctionMapForLazyLoad(int& num_executed, ActionManager& action_manager) {
+    auto execute_command = [&num_executed](const BuiltinArguments& args) {
+        EXPECT_EQ(2U, args.size());
+        EXPECT_EQ(++num_executed, std::stoi(args[1]));
+        return Result<void>{};
+    };
+    auto load_command = [&action_manager](const BuiltinArguments& args) -> Result<void> {
+        EXPECT_EQ(2U, args.size());
+        Parser parser;
+        parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, nullptr));
+        if (!parser.ParseConfig(args[1])) {
+            return Error() << "Failed to load";
+        }
+        return Result<void>{};
+    };
+    auto trigger_command = [&action_manager](const BuiltinArguments& args) {
+        EXPECT_EQ(2U, args.size());
+        LOG(INFO) << "Queue event trigger: " << args[1];
+        action_manager.QueueEventTrigger(args[1]);
+        return Result<void>{};
+    };
+    BuiltinFunctionMap test_function_map = {
+            {"execute", {1, 1, {false, execute_command}}},
+            {"load", {1, 1, {false, load_command}}},
+            {"trigger", {1, 1, {false, trigger_command}}},
+    };
+    return test_function_map;
+}
+
+TEST(init, LazilyLoadedActionsCantBeTriggeredByTheSameTrigger) {
+    // "start" script loads "lazy" script. Even though "lazy" scripts
+    // defines "on boot" action, it's not executed by the current "boot"
+    // event because it's already processed.
+    TemporaryFile lazy;
+    ASSERT_TRUE(lazy.fd != -1);
+    ASSERT_TRUE(android::base::WriteStringToFd("on boot\nexecute 2", lazy.fd));
+
+    TemporaryFile start;
+    // clang-format off
+    std::string start_script = "on boot\n"
+                               "load " + std::string(lazy.path) + "\n"
+                               "execute 1";
+    // clang-format on
+    ASSERT_TRUE(android::base::WriteStringToFd(start_script, start.fd));
+
+    int num_executed = 0;
+    ActionManager action_manager;
+    ServiceList service_list;
+    BuiltinFunctionMap test_function_map =
+            GetTestFunctionMapForLazyLoad(num_executed, action_manager);
+
+    ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
+    std::vector<ActionManagerCommand> commands{trigger_boot};
+    TestInit(start.path, test_function_map, commands, &action_manager, &service_list);
+
+    EXPECT_EQ(1, num_executed);
+}
+
+TEST(init, LazilyLoadedActionsCanBeTriggeredByTheNextTrigger) {
+    // "start" script loads "lazy" script and then triggers "next" event
+    // which executes "on next" action loaded by the previous command.
+    TemporaryFile lazy;
+    ASSERT_TRUE(lazy.fd != -1);
+    ASSERT_TRUE(android::base::WriteStringToFd("on next\nexecute 2", lazy.fd));
+
+    TemporaryFile start;
+    // clang-format off
+    std::string start_script = "on boot\n"
+                               "load " + std::string(lazy.path) + "\n"
+                               "execute 1\n"
+                               "trigger next";
+    // clang-format on
+    ASSERT_TRUE(android::base::WriteStringToFd(start_script, start.fd));
+
+    int num_executed = 0;
+    ActionManager action_manager;
+    ServiceList service_list;
+    BuiltinFunctionMap test_function_map =
+            GetTestFunctionMapForLazyLoad(num_executed, action_manager);
+
+    ActionManagerCommand trigger_boot = [](ActionManager& am) { am.QueueEventTrigger("boot"); };
+    std::vector<ActionManagerCommand> commands{trigger_boot};
+    TestInit(start.path, test_function_map, commands, &action_manager, &service_list);
+
+    EXPECT_EQ(2, num_executed);
 }
 
 TEST(init, RejectsCriticalAndOneshotService) {
