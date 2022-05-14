@@ -688,8 +688,6 @@ on post-fs-data
     copy /data/system/entropy.dat /dev/urandom
 
     mkdir /data/vendor 0771 root root encryption=Require
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
     mkdir /data/vendor/hardware 0771 root root
 
     # Start tombstoned early to be able to store tombstones.
@@ -738,6 +736,13 @@ on post-fs-data
     # To handle userspace reboots as well as devices that use FDE, make sure
     # that apexd is started cleanly here (set apexd.status="") and that it is
     # restarted if it's already running.
+    #
+    # /data/apex uses encryption=None because direct I/O support is needed on
+    # APEX files, but some devices don't support direct I/O on encrypted files.
+    # Also, APEXes are public information, similar to the system image.
+    # /data/apex/decompressed and /data/apex/ota_reserved override this setting;
+    # they are encrypted so that files in them can be hard-linked into
+    # /data/rollback which is encrypted.
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
@@ -834,6 +839,8 @@ on post-fs-data
     exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
     mkdir /data/misc/virtualizationservice 0770 system system
 
+    # /data/preloads uses encryption=None because it only contains preloaded
+    # files that are public information, similar to the system image.
     mkdir /data/preloads 0775 system system encryption=None
 
     # For security reasons, /data/local/tmp should always be empty.
@@ -877,7 +884,10 @@ on post-fs-data
     chown system system /data/resource-cache
     chmod 0771 /data/resource-cache
 
-    # create the lost+found directories, so as to enforce our permissions
+    # Ensure that lost+found exists and has the correct permissions.  Linux
+    # filesystems expect this directory to exist; it's where the fsck tool puts
+    # any recovered files that weren't present in any directory.  It must be
+    # unencrypted, as fsck must be able to write to it.
     mkdir /data/lost+found 0770 root root encryption=None
 
     # create directory for DRM plug-ins - give drm the read/write access to
@@ -905,14 +915,22 @@ on post-fs-data
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
 
-    mkdir /data/system_de 0770 system system encryption=None
-    mkdir /data/system_ce 0770 system system encryption=None
-
-    mkdir /data/misc_de 01771 system misc encryption=None
+    # Create the parent directories of the user CE and DE storage directories.
+    # These parent directories must use encryption=None, since each of their
+    # subdirectories uses a different encryption policy (a per-user one), and
+    # encryption policies apply recursively.  These directories should never
+    # contain any subdirectories other than the per-user ones.  /data/media/obb
+    # is an exception that exists for legacy reasons.
+    mkdir /data/media 0770 media_rw media_rw encryption=None
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
     mkdir /data/misc_ce 01771 system misc encryption=None
-
+    mkdir /data/misc_de 01771 system misc encryption=None
+    mkdir /data/system_ce 0770 system system encryption=None
+    mkdir /data/system_de 0770 system system encryption=None
     mkdir /data/user 0711 system system encryption=None
     mkdir /data/user_de 0711 system system encryption=None
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
 
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
@@ -960,9 +978,6 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
-
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
 
     # Create directories for boot animation.
     mkdir /data/bootanim 0755 system system encryption=DeleteIfNecessary
