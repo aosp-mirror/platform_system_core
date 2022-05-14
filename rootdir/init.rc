@@ -97,22 +97,18 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
     exec_start boringssl_self_test_apex64
 
 service boringssl_self_test32 /system/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
@@ -973,7 +969,7 @@ on post-fs-data
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     # Create directories for boot animation.
-    mkdir /data/bootanim 0755 system system encryption=None
+    mkdir /data/bootanim 0755 system system encryption=DeleteIfNecessary
 
     exec_start derive_sdk
 
