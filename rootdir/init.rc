@@ -922,7 +922,6 @@ on post-fs-data
     # contain any subdirectories other than the per-user ones.  /data/media/obb
     # is an exception that exists for legacy reasons.
     mkdir /data/media 0770 media_rw media_rw encryption=None
-    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
     mkdir /data/misc_ce 01771 system misc encryption=None
     mkdir /data/misc_de 01771 system misc encryption=None
     mkdir /data/system_ce 0770 system system encryption=None
@@ -931,6 +930,11 @@ on post-fs-data
     mkdir /data/user_de 0711 system system encryption=None
     mkdir /data/vendor_ce 0771 root root encryption=None
     mkdir /data/vendor_de 0771 root root encryption=None
+
+    # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
+    # needed first to relabel the directory from media_rw_data_file.
+    restorecon /data/media
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
 
     # A tmpfs directory, which will contain all apps CE DE data directory that
     # bind mount from the original source.
