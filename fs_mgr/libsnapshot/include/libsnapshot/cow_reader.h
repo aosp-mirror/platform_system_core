@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
@@ -27,7 +28,6 @@ namespace android {
 namespace snapshot {
 
 class ICowOpIter;
-class ICowOpReverseIter;
 
 // A ByteSink object handles requests for a buffer of a specific size. It
 // always owns the underlying buffer. It's designed to minimize potential
@@ -68,6 +68,7 @@ class ICowReader {
 
     // Return the file footer.
     virtual bool GetFooter(CowFooter* footer) = 0;
+    virtual bool VerifyMergeOps() = 0;
 
     // Return the last valid label
     virtual bool GetLastLabel(uint64_t* label) = 0;
@@ -75,8 +76,11 @@ class ICowReader {
     // Return an iterator for retrieving CowOperation entries.
     virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
 
-    // Return an reverse iterator for retrieving CowOperation entries.
-    virtual std::unique_ptr<ICowOpReverseIter> GetRevOpIter() = 0;
+    // Return an iterator for retrieving CowOperation entries in reverse merge order
+    virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress) = 0;
+
+    // Return an iterator for retrieving CowOperation entries in merge order
+    virtual std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress) = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
@@ -88,7 +92,7 @@ class ICowOpIter {
   public:
     virtual ~ICowOpIter() {}
 
-    // True if there are more items to read, false otherwise.
+    // True if there are no more items to read forward, false otherwise.
     virtual bool Done() = 0;
 
     // Read the current operation.
@@ -96,26 +100,22 @@ class ICowOpIter {
 
     // Advance to the next item.
     virtual void Next() = 0;
+
+    // Advance to the previous item.
+    virtual void Prev() = 0;
+
+    // True if there are no more items to read backwards, false otherwise
+    virtual bool RDone() = 0;
 };
 
-// Reverse Iterate over a sequence of COW operations.
-class ICowOpReverseIter {
+class CowReader final : public ICowReader {
   public:
-    virtual ~ICowOpReverseIter() {}
+    enum class ReaderFlags {
+        DEFAULT = 0,
+        USERSPACE_MERGE = 1,
+    };
 
-    // True if there are more items to read, false otherwise.
-    virtual bool Done() = 0;
-
-    // Read the current operation.
-    virtual const CowOperation& Get() = 0;
-
-    // Advance to the next item.
-    virtual void Next() = 0;
-};
-
-class CowReader : public ICowReader {
-  public:
-    CowReader();
+    CowReader(ReaderFlags reader_flag = ReaderFlags::DEFAULT);
     ~CowReader() { owned_fd_ = {}; }
 
     // Parse the COW, optionally, up to the given label. If no label is
@@ -124,6 +124,7 @@ class CowReader : public ICowReader {
     bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool InitForMerge(android::base::unique_fd&& fd);
+    bool VerifyMergeOps() override;
 
     bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
@@ -135,25 +136,31 @@ class CowReader : public ICowReader {
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
     std::unique_ptr<ICowOpIter> GetOpIter() override;
-    std::unique_ptr<ICowOpReverseIter> GetRevOpIter() override;
+    std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
+    std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
-    void InitializeMerge();
+    // Returns the total number of data ops that should be merged. This is the
+    // count of the merge sequence before removing already-merged operations.
+    // It may be different than the actual data op count, for example, if there
+    // are duplicate ops in the stream.
+    uint64_t get_num_total_data_ops() { return num_total_data_ops_; }
 
-    // Number of copy, replace, and zero ops. Set if InitializeMerge is called.
-    void set_total_data_ops(uint64_t size) { total_data_ops_ = size; }
-    uint64_t total_data_ops() { return total_data_ops_; }
-    // Number of copy ops. Set if InitializeMerge is called.
-    void set_copy_ops(uint64_t size) { copy_ops_ = size; }
-    uint64_t total_copy_ops() { return copy_ops_; }
+    uint64_t get_num_ordered_ops_to_merge() { return num_ordered_ops_to_merge_; }
 
     void CloseCowFd() { owned_fd_ = {}; }
 
+    // Creates a clone of the current CowReader without the file handlers
+    std::unique_ptr<CowReader> CloneCowReader();
+
+    void UpdateMergeOpsCompleted(int num_merge_ops) { header_.num_merge_ops += num_merge_ops; }
+
   private:
     bool ParseOps(std::optional<uint64_t> label);
+    bool PrepMergeOps();
     uint64_t FindNumCopyops();
 
     android::base::unique_fd owned_fd_;
@@ -163,8 +170,14 @@ class CowReader : public ICowReader {
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
-    uint64_t total_data_ops_;
-    uint64_t copy_ops_;
+    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
+    uint64_t merge_op_start_;
+    std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
+    uint64_t num_total_data_ops_;
+    uint64_t num_ordered_ops_to_merge_;
+    bool has_seq_ops_;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
+    ReaderFlags reader_flag_;
 };
 
 }  // namespace snapshot
