@@ -31,12 +31,9 @@
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
-#include <unwindstack/DexFiles.h>
-#include <unwindstack/JitDebug.h>
-#include <unwindstack/Maps.h>
+#include <unwindstack/AndroidUnwinder.h>
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
-#include <unwindstack/Unwinder.h>
 
 #include "debuggerd/handler.h"
 #include "handler/fallback.h"
@@ -75,11 +72,11 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
 
     // Do not use the thread cache here because it will call pthread_key_create
     // which doesn't work in linker code. See b/189803009.
-    // Use a normal cached object because the process is stopped, and there
+    // Use a normal cached object because the thread is stopped, and there
     // is no chance of data changing between reads.
     auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
     // TODO: Create this once and store it in a global?
-    unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid(), process_memory);
+    unwindstack::AndroidLocalUnwinder unwinder(process_memory);
     dump_backtrace_thread(output_fd, &unwinder, thread);
   }
   __linker_disable_fallback_allocator();
