@@ -170,5 +170,18 @@ TEST(util, mkdir_recursive_extra_slashes) {
     EXPECT_TRUE(is_dir(path1.c_str()));
 }
 
+TEST(util, CleanDirPath) {
+    EXPECT_EQ("", CleanDirPath(""));
+    EXPECT_EQ("/", CleanDirPath("/"));
+    EXPECT_EQ("/", CleanDirPath("//"));
+    EXPECT_EQ("/foo", CleanDirPath("/foo"));
+    EXPECT_EQ("/foo", CleanDirPath("//foo"));
+    EXPECT_EQ("/foo", CleanDirPath("/foo/"));
+    EXPECT_EQ("/foo/bar", CleanDirPath("/foo/bar"));
+    EXPECT_EQ("/foo/bar", CleanDirPath("/foo/bar/"));
+    EXPECT_EQ("/foo/bar", CleanDirPath("/foo/bar////"));
+    EXPECT_EQ("/foo/bar", CleanDirPath("//foo//bar"));
+}
+
 }  // namespace init
 }  // namespace android
