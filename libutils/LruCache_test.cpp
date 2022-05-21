@@ -298,8 +298,8 @@ TEST_F(LruCacheTest, ClearReuseOk) {
 }
 
 TEST_F(LruCacheTest, Callback) {
-    LruCache<SimpleKey, StringValue> cache(100);
     EntryRemovedCallback callback;
+    LruCache<SimpleKey, StringValue> cache(100);
     cache.setOnEntryRemovedListener(&callback);
 
     cache.put(1, "one");
@@ -313,8 +313,8 @@ TEST_F(LruCacheTest, Callback) {
 }
 
 TEST_F(LruCacheTest, CallbackOnClear) {
-    LruCache<SimpleKey, StringValue> cache(100);
     EntryRemovedCallback callback;
+    LruCache<SimpleKey, StringValue> cache(100);
     cache.setOnEntryRemovedListener(&callback);
 
     cache.put(1, "one");
@@ -326,8 +326,8 @@ TEST_F(LruCacheTest, CallbackOnClear) {
 }
 
 TEST_F(LruCacheTest, CallbackRemovesKeyWorksOK) {
-    LruCache<KeyWithPointer, StringValue> cache(1);
     InvalidateKeyCallback callback;
+    LruCache<KeyWithPointer, StringValue> cache(1);
     cache.setOnEntryRemovedListener(&callback);
     KeyWithPointer key1;
     key1.ptr = new int(1);

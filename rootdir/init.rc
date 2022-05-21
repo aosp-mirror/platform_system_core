@@ -97,22 +97,18 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
     exec_start boringssl_self_test_apex64
 
 service boringssl_self_test32 /system/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
-    setenv BORINGSSL_SELF_TEST_CREATE_FLAG true # Any nonempty value counts as true
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
 
@@ -824,9 +820,15 @@ on post-fs-data
     # directory used for on-device refresh metrics file.
     mkdir /data/misc/odrefresh 0777 system system
     # directory used for on-device signing key blob
-    mkdir /data/misc/odsign 0700 root root
+    mkdir /data/misc/odsign 0710 root system
+    # directory used for odsign metrics
+    mkdir /data/misc/odsign/metrics 0770 root system
+
     # Directory for VirtualizationService temporary image files.
-    mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
+    # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
+    chmod 0770 /data/misc/virtualizationservice
+    exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
+    mkdir /data/misc/virtualizationservice 0770 system system
 
     mkdir /data/preloads 0775 system system encryption=None
 
@@ -967,7 +969,7 @@ on post-fs-data
     mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     # Create directories for boot animation.
-    mkdir /data/bootanim 0755 system system encryption=None
+    mkdir /data/bootanim 0755 system system encryption=DeleteIfNecessary
 
     exec_start derive_sdk
 
@@ -1092,6 +1094,9 @@ on boot
     write /dev/sys/fs/by-name/userdata/cp_interval 200
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
+
+    # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
+    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 16
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
@@ -1303,3 +1308,15 @@ on userspace-reboot-resume
 
 on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
   setprop sys.init.userspace_reboot.in_progress ""
+
+# Multi-Gen LRU Experiment
+on property:persist.device_config.mglru_native.lru_gen_config=none
+  write /sys/kernel/mm/lru_gen/enabled 0
+on property:persist.device_config.mglru_native.lru_gen_config=core
+  write /sys/kernel/mm/lru_gen/enabled 1
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
+  write /sys/kernel/mm/lru_gen/enabled 3
+on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
+  write /sys/kernel/mm/lru_gen/enabled 5
+on property:persist.device_config.mglru_native.lru_gen_config=all
+  write /sys/kernel/mm/lru_gen/enabled 7
