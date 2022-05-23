@@ -54,6 +54,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/result.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <property_info_parser/property_info_parser.h>
@@ -76,9 +77,12 @@
 
 using namespace std::literals;
 
+using android::base::ErrnoError;
+using android::base::Error;
 using android::base::GetProperty;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
+using android::base::Result;
 using android::base::Split;
 using android::base::StartsWith;
 using android::base::StringPrintf;
@@ -629,8 +633,8 @@ uint32_t InitPropertySet(const std::string& name, const std::string& value) {
     return result;
 }
 
-static bool load_properties_from_file(const char*, const char*,
-                                      std::map<std::string, std::string>*);
+static Result<void> load_properties_from_file(const char*, const char*,
+                                              std::map<std::string, std::string>*);
 
 /*
  * Filter is used to decide which properties to load: NULL loads all keys,
@@ -691,7 +695,10 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
                 continue;
             }
 
-            load_properties_from_file(expanded_filename->c_str(), key, properties);
+            if (auto res = load_properties_from_file(expanded_filename->c_str(), key, properties);
+                !res.ok()) {
+                LOG(WARNING) << res.error();
+            }
         } else {
             value = strchr(key, '=');
             if (!value) continue;
@@ -738,20 +745,19 @@ static void LoadProperties(char* data, const char* filter, const char* filename,
 
 // Filter is used to decide which properties to load: NULL loads all keys,
 // "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
-static bool load_properties_from_file(const char* filename, const char* filter,
-                                      std::map<std::string, std::string>* properties) {
+static Result<void> load_properties_from_file(const char* filename, const char* filter,
+                                              std::map<std::string, std::string>* properties) {
     Timer t;
     auto file_contents = ReadFile(filename);
     if (!file_contents.ok()) {
-        PLOG(WARNING) << "Couldn't load property file '" << filename
-                      << "': " << file_contents.error();
-        return false;
+        return Error() << "Couldn't load property file '" << filename
+                       << "': " << file_contents.error();
     }
     file_contents->push_back('\n');
 
     LoadProperties(file_contents->data(), filter, filename, properties);
     LOG(VERBOSE) << "(Loading properties from " << filename << " took " << t << ".)";
-    return true;
+    return {};
 }
 
 static void LoadPropertiesFromSecondStageRes(std::map<std::string, std::string>* properties) {
@@ -760,7 +766,9 @@ static void LoadPropertiesFromSecondStageRes(std::map<std::string, std::string>*
         CHECK(errno == ENOENT) << "Cannot access " << prop << ": " << strerror(errno);
         return;
     }
-    load_properties_from_file(prop.c_str(), nullptr, properties);
+    if (auto res = load_properties_from_file(prop.c_str(), nullptr, properties); !res.ok()) {
+        LOG(WARNING) << res.error();
+    }
 }
 
 // persist.sys.usb.config values can't be combined on build-time when property
@@ -1058,7 +1066,10 @@ void PropertyLoadBootDefaults() {
     std::map<std::string, std::string> properties;
 
     if (IsRecoveryMode()) {
-        load_properties_from_file("/prop.default", nullptr, &properties);
+        if (auto res = load_properties_from_file("/prop.default", nullptr, &properties);
+            !res.ok()) {
+            LOG(ERROR) << res.error();
+        }
     }
 
     // /<part>/etc/build.prop is the canonical location of the build-time properties since S.
@@ -1067,7 +1078,7 @@ void PropertyLoadBootDefaults() {
     const auto load_properties_from_partition = [&properties](const std::string& partition,
                                                               int support_legacy_path_until) {
         auto path = "/" + partition + "/etc/build.prop";
-        if (load_properties_from_file(path.c_str(), nullptr, &properties)) {
+        if (load_properties_from_file(path.c_str(), nullptr, &properties).ok()) {
             return;
         }
         // To read ro.<partition>.build.version.sdk, temporarily load the legacy paths into a
@@ -1105,7 +1116,13 @@ void PropertyLoadBootDefaults() {
     // Order matters here. The more the partition is specific to a product, the higher its
     // precedence is.
     LoadPropertiesFromSecondStageRes(&properties);
-    load_properties_from_file("/system/build.prop", nullptr, &properties);
+
+    // system should have build.prop, unlike the other partitions
+    if (auto res = load_properties_from_file("/system/build.prop", nullptr, &properties);
+        !res.ok()) {
+        LOG(WARNING) << res.error();
+    }
+
     load_properties_from_partition("system_ext", /* support_legacy_path_until */ 30);
     load_properties_from_file("/system_dlkm/etc/build.prop", nullptr, &properties);
     // TODO(b/117892318): uncomment the following condition when vendor.imgs for aosp_* targets are
@@ -1121,7 +1138,10 @@ void PropertyLoadBootDefaults() {
 
     if (access(kDebugRamdiskProp, R_OK) == 0) {
         LOG(INFO) << "Loading " << kDebugRamdiskProp;
-        load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);
+        if (auto res = load_properties_from_file(kDebugRamdiskProp, nullptr, &properties);
+            !res.ok()) {
+            LOG(WARNING) << res.error();
+        }
     }
 
     for (const auto& [name, value] : properties) {
