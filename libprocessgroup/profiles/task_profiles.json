@@ -647,7 +647,7 @@
       "Profiles": [ "ServicePerformance", "LowIoPriority", "TimerSlackNormal" ]
     },
     {
-      "Name": "VMCompilationPerformance",
+      "Name": "SCHED_SP_COMPUTE",
       "Profiles": [ "HighPerformance", "ProcessCapacityHigh", "LowIoPriority", "TimerSlackNormal" ]
     },
     {
