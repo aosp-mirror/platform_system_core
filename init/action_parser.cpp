@@ -142,6 +142,14 @@ Result<void> ActionParser::ParseSection(std::vector<std::string>&& args,
         action_subcontext = subcontext_;
     }
 
+    // We support 'on' for only Vendor APEXes from /{vendor, odm}.
+    // It is to prevent mainline modules from using 'on' triggers because events/properties are
+    // not stable for mainline modules.
+    // Note that this relies on Subcontext::PathMatchesSubcontext() to identify Vendor APEXes.
+    if (StartsWith(filename, "/apex/") && !action_subcontext) {
+        return Error() << "ParseSection() failed: 'on' is supported for only Vendor APEXes.";
+    }
+
     std::string event_trigger;
     std::map<std::string, std::string> property_triggers;
 
