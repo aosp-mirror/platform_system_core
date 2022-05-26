@@ -128,12 +128,9 @@ bool SnapshotManagerStub::UpdateUsesUserSnapshots() {
 
 class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     bool Start() override { return false; }
-    void set_state(android::snapshot::UpdateState, bool) override {}
-    void set_cow_file_size(uint64_t) override {}
+    void set_state(android::snapshot::UpdateState) override {}
     uint64_t cow_file_size() override { return 0; }
     std::unique_ptr<Result> Finish() override { return nullptr; }
-    void set_total_cow_size_bytes(uint64_t) override {}
-    void set_estimated_cow_size_bytes(uint64_t) override {}
     uint64_t total_cow_size_bytes() override { return 0; }
     uint64_t estimated_cow_size_bytes() override { return 0; }
     void set_boot_complete_time_ms(uint32_t) override {}
@@ -145,6 +142,10 @@ class SnapshotMergeStatsStub : public ISnapshotMergeStats {
     void set_source_build_fingerprint(const std::string&) override {}
     std::string source_build_fingerprint() override { return {}; }
     bool WriteState() override { return false; }
+    SnapshotMergeReport* report() override { return &report_; }
+
+  private:
+    SnapshotMergeReport report_;
 };
 
 ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
@@ -181,6 +182,10 @@ auto SnapshotManagerStub::ReadMergeFailureCode() -> MergeFailureCode {
 std::string SnapshotManagerStub::ReadSourceBuildFingerprint() {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return {};
+}
+
+void SnapshotManagerStub::SetMergeStatsFeatures(ISnapshotMergeStats*) {
+    LOG(ERROR) << __FUNCTION__ << " should never be called.";
 }
 
 }  // namespace android::snapshot
