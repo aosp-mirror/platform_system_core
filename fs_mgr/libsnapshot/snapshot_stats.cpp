@@ -84,25 +84,12 @@ bool SnapshotMergeStats::Start() {
     return WriteState();
 }
 
-void SnapshotMergeStats::set_state(android::snapshot::UpdateState state, bool using_compression) {
+void SnapshotMergeStats::set_state(android::snapshot::UpdateState state) {
     report_.set_state(state);
-    report_.set_compression_enabled(using_compression);
-}
-
-void SnapshotMergeStats::set_cow_file_size(uint64_t cow_file_size) {
-    report_.set_cow_file_size(cow_file_size);
 }
 
 uint64_t SnapshotMergeStats::cow_file_size() {
     return report_.cow_file_size();
-}
-
-void SnapshotMergeStats::set_total_cow_size_bytes(uint64_t bytes) {
-    report_.set_total_cow_size_bytes(bytes);
-}
-
-void SnapshotMergeStats::set_estimated_cow_size_bytes(uint64_t bytes) {
-    report_.set_estimated_cow_size_bytes(bytes);
 }
 
 uint64_t SnapshotMergeStats::total_cow_size_bytes() {
