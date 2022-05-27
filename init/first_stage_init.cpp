@@ -119,19 +119,14 @@ static void Copy(const char* src, const char* dst) {
 // Move snapuserd before switching root, so that it is available at the same path
 // after switching root.
 void PrepareSwitchRoot() {
-    constexpr const char* src = "/system/bin/snapuserd";
-    constexpr const char* dst = "/first_stage_ramdisk/system/bin/snapuserd";
+    static constexpr const auto& snapuserd = "/system/bin/snapuserd";
+    static constexpr const auto& snapuserd_ramdisk = "/system/bin/snapuserd_ramdisk";
+    static constexpr const auto& dst = "/first_stage_ramdisk/system/bin/snapuserd";
 
     if (access(dst, X_OK) == 0) {
         LOG(INFO) << dst << " already exists and it can be executed";
         return;
     }
-
-    if (access(src, F_OK) != 0) {
-        PLOG(INFO) << "Not moving " << src << " because it cannot be accessed";
-        return;
-    }
-
     auto dst_dir = android::base::Dirname(dst);
     std::error_code ec;
     if (access(dst_dir.c_str(), F_OK) != 0) {
@@ -139,7 +134,18 @@ void PrepareSwitchRoot() {
             LOG(FATAL) << "Cannot create " << dst_dir << ": " << ec.message();
         }
     }
-    Copy(src, dst);
+
+    // prefer the generic ramdisk copy of snapuserd, because that's on system side of treble
+    // boundary, and therefore is more likely to be updated along with the Android platform.
+    // The vendor ramdisk copy might be under vendor freeze, or vendor might choose not to update
+    // it.
+    if (access(snapuserd_ramdisk, F_OK) == 0) {
+        LOG(INFO) << "Using generic ramdisk copy of snapuserd " << snapuserd_ramdisk;
+        Copy(snapuserd_ramdisk, dst);
+    } else if (access(snapuserd, F_OK) == 0) {
+        LOG(INFO) << "Using vendor ramdisk copy of snapuserd " << snapuserd;
+        Copy(snapuserd, dst);
+    }
 }
 }  // namespace
 
