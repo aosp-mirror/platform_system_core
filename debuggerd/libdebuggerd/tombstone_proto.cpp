@@ -455,7 +455,7 @@ static void dump_thread(Tombstone* tombstone, unwindstack::Unwinder* unwinder,
   thread.set_tagged_addr_ctrl(thread_info.tagged_addr_ctrl);
   thread.set_pac_enabled_keys(thread_info.pac_enabled_keys);
 
-  if (thread_info.pid == getpid() && thread_info.pid != thread_info.tid) {
+  if (thread_info.registers == nullptr) {
     // Fallback path for non-main thread, doing unwind from running process.
     unwindstack::ThreadUnwinder thread_unwinder(kMaxFrames, unwinder->GetMaps());
     if (!thread_unwinder.Init()) {
