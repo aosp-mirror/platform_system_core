@@ -210,7 +210,10 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
   // Send a signal to all of our siblings, asking them to dump their stack.
   pid_t current_tid = gettid();
-  if (!iterate_tids(current_tid, [&output_fd](pid_t tid) {
+  if (!iterate_tids(current_tid, [&output_fd, &current_tid](pid_t tid) {
+        if (current_tid == tid) {
+          return;
+        }
         // Use a pipe, to be able to detect situations where the thread gracefully exits before
         // receiving our signal.
         unique_fd pipe_read, pipe_write;
