@@ -47,6 +47,8 @@ TEST(fs, ErofsSupported) {
     std::string fs;
     ASSERT_TRUE(android::base::ReadFileToString("/proc/filesystems", &fs));
     EXPECT_THAT(fs, ::testing::HasSubstr("\terofs\n"));
+
+    ASSERT_EQ(access("/sys/fs/erofs", F_OK), 0);
 }
 
 TEST(fs, PartitionTypes) {
