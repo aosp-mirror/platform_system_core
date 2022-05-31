@@ -333,7 +333,7 @@ void storaged_t::flush_proto_data(userid_t user_id,
             first_write = false;
         }
 
-        if (benchmark_size) {
+        if (benchmark_size && benchmark_time_ns) {
             int perf = benchmark_size * 1000000LLU / benchmark_time_ns;
             storage_info->update_perf_history(perf, system_clock::now());
         }
