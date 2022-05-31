@@ -505,7 +505,7 @@ bool SnapuserdServer::WaitForSocket() {
 
     // We don't care if the ACK is received.
     code[0] = 'a';
-    if (TEMP_FAILURE_RETRY(send(fd, code, sizeof(code), MSG_NOSIGNAL) < 0)) {
+    if (TEMP_FAILURE_RETRY(send(fd, code, sizeof(code), MSG_NOSIGNAL)) < 0) {
         PLOG(ERROR) << "Failed to send ACK to proxy";
         return false;
     }
