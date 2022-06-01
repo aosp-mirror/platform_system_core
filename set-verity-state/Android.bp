@@ -22,6 +22,17 @@ cc_binary {
     ],
 
     cflags: ["-Werror"],
+    cppflags: [
+        "-DALLOW_DISABLE_VERITY=0",
+    ],
+    product_variables: {
+        debuggable: {
+            cppflags: [
+                "-UALLOW_DISABLE_VERITY",
+                "-DALLOW_DISABLE_VERITY=1",
+            ],
+        },
+    },
     symlinks: [
         "enable-verity",
         "disable-verity",
