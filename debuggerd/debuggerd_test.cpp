@@ -1486,6 +1486,37 @@ TEST_F(CrasherTest, seccomp_tombstone_thread_abort) {
   ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
+TEST_F(CrasherTest, seccomp_tombstone_multiple_threads_abort) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        std::thread abort_thread([] { abort(); });
+        abort_thread.join();
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "abort");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
+  ASSERT_BACKTRACE_FRAME(result, "main");
+}
+
 TEST_F(CrasherTest, seccomp_backtrace) {
   int intercept_result;
   unique_fd output_fd;
@@ -1514,6 +1545,40 @@ TEST_F(CrasherTest, seccomp_backtrace) {
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
   ASSERT_BACKTRACE_FRAME(result, "foo");
   ASSERT_BACKTRACE_FRAME(result, "bar");
+}
+
+TEST_F(CrasherTest, seccomp_backtrace_from_thread) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdNativeBacktrace;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        std::thread raise_thread([] {
+          raise_debugger_signal(dump_type);
+          _exit(0);
+        });
+        raise_thread.join();
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
+  ASSERT_BACKTRACE_FRAME(result, "main");
 }
 
 TEST_F(CrasherTest, seccomp_crash_logcat) {
