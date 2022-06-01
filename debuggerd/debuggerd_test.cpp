@@ -1463,6 +1463,29 @@ TEST_F(CrasherTest, seccomp_tombstone) {
   ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
+TEST_F(CrasherTest, seccomp_tombstone_thread_abort) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        std::thread abort_thread([] { abort(); });
+        abort_thread.join();
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "abort");
+}
+
 TEST_F(CrasherTest, seccomp_backtrace) {
   int intercept_result;
   unique_fd output_fd;
