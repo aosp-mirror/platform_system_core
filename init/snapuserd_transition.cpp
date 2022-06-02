@@ -29,6 +29,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -40,6 +41,7 @@
 #include <snapuserd/snapuserd_client.h>
 
 #include "block_dev_initializer.h"
+#include "lmkd_service.h"
 #include "service_utils.h"
 #include "util.h"
 
@@ -319,6 +321,14 @@ void SnapuserdSelinuxHelper::RelaunchFirstStageSnapuserd() {
         setenv(kSnapuserdFirstStagePidVar, std::to_string(pid).c_str(), 1);
 
         LOG(INFO) << "Relaunched snapuserd with pid: " << pid;
+
+        // Since daemon is not started as a service, we have
+        // to explicitly set the OOM score to default which is unkillable
+        std::string oom_str = std::to_string(DEFAULT_OOM_SCORE_ADJUST);
+        std::string oom_file = android::base::StringPrintf("/proc/%d/oom_score_adj", pid);
+        if (!android::base::WriteStringToFile(oom_str, oom_file)) {
+            PLOG(ERROR) << "couldn't write oom_score_adj to snapuserd daemon with pid: " << pid;
+        }
 
         if (!TestSnapuserdIsReady()) {
             PLOG(FATAL) << "snapuserd daemon failed to launch";
