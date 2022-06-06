@@ -72,7 +72,7 @@ cc_defaults {
 
     cflags: [
         "-Wall",
-        "-Werror"
+        "-Werror",
     ],
 
     static_libs: [
@@ -89,14 +89,7 @@ cc_defaults {
         "liburing",
     ],
     include_dirs: ["bionic/libc/kernel"],
-}
-
-cc_binary {
-    name: "snapuserd",
-    defaults: ["snapuserd_defaults"],
-    init_rc: [
-        "snapuserd.rc",
-    ],
+    system_shared_libs: [],
 
     // snapuserd is started during early boot by first-stage init. At that
     // point, /system is mounted using the "dm-user" device-mapper kernel
@@ -105,16 +98,40 @@ cc_binary {
     // faults for its code pages.
     static_executable: true,
 
-    system_shared_libs: [],
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
-    recovery_available: true,
-
     // Snapuserd segfaults with ThinLTO
     // http://b/208565717
     lto: {
          never: true,
-    }
+    },
+}
+
+cc_binary {
+    name: "snapuserd",
+    defaults: ["snapuserd_defaults"],
+    init_rc: [
+        "snapuserd.rc",
+    ],
+    ramdisk_available: false,
+    vendor_ramdisk_available: true,
+    recovery_available: true,
+}
+
+// This target will install to /system/bin/snapuserd_ramdisk 
+// It will also create a symblink on /system/bin/snapuserd that point to
+// /system/bin/snapuserd_ramdisk .
+// This way, init can check if generic ramdisk copy exists.
+cc_binary {
+    name: "snapuserd_ramdisk",
+    defaults: ["snapuserd_defaults"],
+    init_rc: [
+        "snapuserd.rc",
+    ],
+    // This target is specifically for generic ramdisk, therefore we set
+    // vendor_ramdisk_available to false.
+    ramdisk_available: true,
+    vendor_ramdisk_available: false,
+    ramdisk: true,
+    symlinks: ["snapuserd"],
 }
 
 cc_test {

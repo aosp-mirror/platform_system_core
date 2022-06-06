@@ -293,6 +293,13 @@ cc_test {
         "libdebuggerd/test/utility_test.cpp",
     ],
 
+    product_variables: {
+        malloc_not_svelte: {
+            srcs: ["libdebuggerd/test/scudo_test.cpp"],
+            header_libs: ["scudo_headers"],
+        },
+    },
+
     target: {
         android: {
             srcs: [
