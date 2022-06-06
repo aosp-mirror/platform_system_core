@@ -104,6 +104,7 @@ class Charger {
     void HandleInputState(int64_t now);
     void HandlePowerSupplyState(int64_t now);
     int InputCallback(int fd, unsigned int epevents);
+    void InitHealthdDraw();
     void InitAnimation();
     int RequestEnableSuspend();
     int RequestDisableSuspend();

@@ -62,6 +62,7 @@ class MockSnapshotManager : public ISnapshotManager {
     MOCK_METHOD(std::unique_ptr<AutoDevice>, EnsureMetadataMounted, (), (override));
     MOCK_METHOD(ISnapshotMergeStats*, GetSnapshotMergeStatsInstance, (), (override));
     MOCK_METHOD(std::string, ReadSourceBuildFingerprint, (), (override));
+    MOCK_METHOD(void, SetMergeStatsFeatures, (ISnapshotMergeStats*), (override));
 };
 
 }  // namespace android::snapshot

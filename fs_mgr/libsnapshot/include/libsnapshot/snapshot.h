@@ -134,6 +134,9 @@ class ISnapshotManager {
     // may need to be merged before wiping.
     virtual bool FinishedSnapshotWrites(bool wipe) = 0;
 
+    // Set feature flags on an ISnapshotMergeStats object.
+    virtual void SetMergeStatsFeatures(ISnapshotMergeStats* stats) = 0;
+
     // Update an ISnapshotMergeStats object with statistics about COW usage.
     // This should be called before the merge begins as otherwise snapshots
     // may be deleted.
@@ -378,6 +381,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
     bool UnmapAllSnapshots() override;
     std::string ReadSourceBuildFingerprint() override;
+    void SetMergeStatsFeatures(ISnapshotMergeStats* stats) override;
 
     // We can't use WaitForFile during first-stage init, because ueventd is not
     // running and therefore will not automatically create symlinks. Instead,

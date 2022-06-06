@@ -171,11 +171,11 @@ class CowReader final : public ICowReader {
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
     std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
-    uint64_t merge_op_start_;
+    uint64_t merge_op_start_{};
     std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
-    uint64_t num_total_data_ops_;
-    uint64_t num_ordered_ops_to_merge_;
-    bool has_seq_ops_;
+    uint64_t num_total_data_ops_{};
+    uint64_t num_ordered_ops_to_merge_{};
+    bool has_seq_ops_{};
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     ReaderFlags reader_flag_;
 };

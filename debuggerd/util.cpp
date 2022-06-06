@@ -90,9 +90,7 @@ bool iterate_tids(pid_t pid, std::function<void(pid_t)> callback) {
     if (tid == 0) {
       continue;
     }
-    if (pid != tid) {
-      callback(tid);
-    }
+    callback(tid);
   }
   return true;
 }

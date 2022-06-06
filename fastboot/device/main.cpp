@@ -14,12 +14,29 @@
  * limitations under the License.
  */
 
+#include <stdarg.h>
+
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <sparse/sparse.h>
 
 #include "fastboot_device.h"
 
+static void LogSparseVerboseMessage(const char* fmt, ...) {
+    std::string message;
+
+    va_list ap;
+    va_start(ap, fmt);
+    android::base::StringAppendV(&message, fmt, ap);
+    va_end(ap);
+
+    LOG(ERROR) << "libsparse message: " << message;
+}
+
 int main(int /*argc*/, char* argv[]) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    sparse_print_verbose = LogSparseVerboseMessage;
 
     while (true) {
         FastbootDevice device;
