@@ -104,8 +104,11 @@ static int drop_privs(void) {
         return -1;
     }
 
-    /* no-execute for user, no access for group and other */
-    umask(S_IXUSR | S_IRWXG | S_IRWXO);
+    /*
+     * No access for group and other. We need execute access for user to create
+     * an accessible directory.
+     */
+    umask(S_IRWXG | S_IRWXO);
 
     return 0;
 }

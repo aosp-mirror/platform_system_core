@@ -112,11 +112,16 @@ static bool isMemoryCgroupSupported() {
 }
 
 void DropTaskProfilesResourceCaching() {
-    TaskProfiles::GetInstance().DropResourceCaching();
+    TaskProfiles::GetInstance().DropResourceCaching(ProfileAction::RCT_TASK);
+    TaskProfiles::GetInstance().DropResourceCaching(ProfileAction::RCT_PROCESS);
 }
 
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles);
+    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, false);
+}
+
+bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, true);
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {

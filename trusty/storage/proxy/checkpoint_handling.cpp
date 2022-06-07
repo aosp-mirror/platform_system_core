@@ -18,8 +18,11 @@
 #include "log.h"
 
 #include <fstab/fstab.h>
+#include <unistd.h>
 #include <cstring>
 #include <string>
+
+#include <libgsi/libgsi.h>
 
 namespace {
 
@@ -74,4 +77,16 @@ int is_data_checkpoint_active(bool* active) {
     }
 
     return 0;
+}
+
+/**
+ * is_gsi_running() - Check if a GSI image is running via DSU.
+ *
+ * This function is equivalent to android::gsi::IsGsiRunning(), but this API is
+ * not yet vendor-accessible although the underlying metadata file is.
+ *
+ */
+bool is_gsi_running() {
+    /* TODO(b/210501710): Expose GSI image running state to vendor storageproxyd */
+    return !access(android::gsi::kGsiBootedIndicatorFile, F_OK);
 }
