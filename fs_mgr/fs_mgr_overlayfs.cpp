@@ -866,9 +866,14 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
             errno = save_errno;
         }
         entry.flags &= ~MS_RDONLY;
+        entry.flags |= MS_SYNCHRONOUS;
+        entry.fs_options = "nodiscard";
         fs_mgr_set_blk_ro(device_path, false);
     }
-    entry.fs_mgr_flags.check = true;
+    // check_fs requires apex runtime library
+    if (fs_mgr_overlayfs_already_mounted("/data", false)) {
+        entry.fs_mgr_flags.check = true;
+    }
     auto save_errno = errno;
     if (mounted) mounted = fs_mgr_do_mount_one(entry) == 0;
     if (!mounted) {

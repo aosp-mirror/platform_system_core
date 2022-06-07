@@ -211,6 +211,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/fsck.f2fs" },
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },

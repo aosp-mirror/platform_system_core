@@ -32,6 +32,8 @@ extern "C" {
  */
 int is_data_checkpoint_active(bool* active);
 
+bool is_gsi_running();
+
 #ifdef __cplusplus
 }
 #endif
