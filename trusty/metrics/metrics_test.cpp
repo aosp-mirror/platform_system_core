@@ -31,7 +31,7 @@ namespace metrics {
 using android::base::unique_fd;
 
 static void TriggerCrash() {
-    size_t num_retries = 3;
+    size_t num_retries = 6;
     int fd = -1;
 
     for (size_t i = 0; i < num_retries; i++) {
