@@ -289,6 +289,10 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
+    if (name_ == "zygote" || name_ == "zygote64") {
+        removeAllEmptyProcessGroups();
+    }
+
     if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
@@ -543,6 +547,10 @@ Result<void> Service::Start() {
         if ((flags_ & SVC_ONESHOT) && disabled) {
             flags_ |= SVC_RESTART;
         }
+
+        LOG(INFO) << "service '" << name_
+                  << "' requested start, but it is already running (flags: " << flags_ << ")";
+
         // It is not an error to try to start a service that is already running.
         reboot_on_failure.Disable();
         return {};
