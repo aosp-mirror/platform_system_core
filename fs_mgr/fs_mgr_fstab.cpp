@@ -304,6 +304,14 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
+        } else if (StartsWith(flag, "zoned_device=")) {
+            std::string zoned;
+            if (ReadFileToString("/sys/class/block/" + arg + "/queue/zoned", &zoned) &&
+                android::base::StartsWith(zoned, "host-managed")) {
+                entry->zoned_device = "/dev/block/" + arg;
+            } else {
+                LWARNING << "Warning: cannot find the zoned device: " << arg;
+            }
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
