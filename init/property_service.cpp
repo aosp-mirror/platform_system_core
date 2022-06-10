@@ -1351,6 +1351,11 @@ static void HandleInitSocket() {
                 InitPropertySet(persistent_property_record.name(),
                                 persistent_property_record.value());
             }
+            // Apply debug ramdisk special settings after persistent properties are loaded.
+            if (android::base::GetBoolProperty("ro.force.debuggable", false)) {
+                // Always enable usb adb if device is booted with debug ramdisk.
+                update_sys_usb_config();
+            }
             InitPropertySet("ro.persistent_properties.ready", "true");
             persistent_properties_loaded = true;
             break;
