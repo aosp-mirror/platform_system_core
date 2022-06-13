@@ -1170,6 +1170,7 @@ on boot
     chown system system /sys/kernel/ipv4/tcp_rmem_def
     chown system system /sys/kernel/ipv4/tcp_rmem_max
     chown root radio /proc/cmdline
+    chown root system /proc/bootconfig
 
     # Define default initial receive window size in segments.
     setprop net.tcp_def_init_rwnd 60
