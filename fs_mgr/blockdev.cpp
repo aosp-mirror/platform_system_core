@@ -30,6 +30,7 @@ using android::base::Basename;
 using android::base::ErrnoError;
 using android::base::Error;
 using android::base::Result;
+using android::base::ResultError;
 using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::unique_fd;
@@ -93,8 +94,10 @@ static Result<uint32_t> BlockDeviceQueueDepth(const std::string& file_path) {
     std::string blockdev = "/dev/block/" + BlockdevName(statbuf.st_dev);
     LOG(DEBUG) << __func__ << ": " << file_path << " -> " << blockdev;
     if (blockdev.empty()) {
-        return Errorf("Failed to convert {}:{} (path {})", major(statbuf.st_dev),
-                      minor(statbuf.st_dev), file_path.c_str());
+        const std::string err_msg =
+                StringPrintf("Failed to convert %u:%u (path %s)", major(statbuf.st_dev),
+                             minor(statbuf.st_dev), file_path.c_str());
+        return ResultError(err_msg, 0);
     }
     auto& dm = DeviceMapper::Instance();
     for (;;) {
@@ -107,7 +110,7 @@ static Result<uint32_t> BlockDeviceQueueDepth(const std::string& file_path) {
     }
     std::optional<std::string> maybe_blockdev = android::dm::ExtractBlockDeviceName(blockdev);
     if (!maybe_blockdev) {
-        return Errorf("Failed to remove /dev/block/ prefix from {}", blockdev);
+        return ResultError("Failed to remove /dev/block/ prefix from " + blockdev, 0);
     }
     blockdev = PartitionParent(*maybe_blockdev);
     LOG(DEBUG) << __func__ << ": "
@@ -116,7 +119,7 @@ static Result<uint32_t> BlockDeviceQueueDepth(const std::string& file_path) {
             StringPrintf("/sys/class/block/%s/mq/0/nr_tags", blockdev.c_str());
     std::string nr_tags;
     if (!android::base::ReadFileToString(nr_tags_path, &nr_tags)) {
-        return Errorf("Failed to read {}", nr_tags_path);
+        return ResultError("Failed to read " + nr_tags_path, 0);
     }
     rtrim(nr_tags);
     LOG(DEBUG) << __func__ << ": " << file_path << " is backed by /dev/" << blockdev
@@ -134,9 +137,11 @@ Result<void> ConfigureQueueDepth(const std::string& loop_device_path,
 
     const std::string loop_device_name = Basename(loop_device_path);
 
-    const auto qd = BlockDeviceQueueDepth(file_path);
+    const Result<uint32_t> qd = BlockDeviceQueueDepth(file_path);
     if (!qd.ok()) {
-        return qd.error();
+        LOG(DEBUG) << __func__ << ": "
+                   << "BlockDeviceQueueDepth() returned " << qd.error();
+        return ResultError(qd.error());
     }
     const std::string nr_requests = StringPrintf("%u", *qd);
     const std::string sysfs_path =

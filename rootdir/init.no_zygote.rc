@@ -1,2 +1,0 @@
-# This is an empty file that does not specify any zygote services.
-# It exists to support targets that do not include a zygote.

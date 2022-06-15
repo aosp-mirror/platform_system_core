@@ -1,9 +1,6 @@
 {
   "presubmit": [
     {
-      "name": "CtsFsMgrTestCases"
-    },
-    {
       "name": "libdm_test"
     },
     {
@@ -14,9 +11,6 @@
     },
     {
       "name": "fiemap_writer_test"
-    },
-    {
-      "name": "fs_mgr_vendor_overlay_test"
     },
     {
       "name": "vts_libsnapshot_test"

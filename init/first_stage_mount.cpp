@@ -81,7 +81,8 @@ class FirstStageMount {
     FirstStageMount(Fstab fstab);
     virtual ~FirstStageMount() = default;
 
-    // The factory method to create a FirstStageMountVBootV2 instance.
+    // The factory method to create either FirstStageMountVBootV1 or FirstStageMountVBootV2
+    // based on device tree configurations.
     static Result<std::unique_ptr<FirstStageMount>> Create();
     bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
     bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
@@ -122,6 +123,16 @@ class FirstStageMount {
     // Reads all AVB keys before chroot into /system, as they might be used
     // later when mounting other partitions, e.g., /vendor and /product.
     std::map<std::string, std::vector<std::string>> preload_avb_key_blobs_;
+};
+
+class FirstStageMountVBootV1 : public FirstStageMount {
+  public:
+    FirstStageMountVBootV1(Fstab fstab) : FirstStageMount(std::move(fstab)) {}
+    ~FirstStageMountVBootV1() override = default;
+
+  protected:
+    bool GetDmVerityDevices(std::set<std::string>* devices) override;
+    bool SetUpDmVerity(FstabEntry* fstab_entry) override;
 };
 
 class FirstStageMountVBootV2 : public FirstStageMount {
@@ -191,6 +202,8 @@ static bool GetRootEntry(FstabEntry* root_entry) {
     auto& dm = android::dm::DeviceMapper::Instance();
     if (dm.GetState("vroot") != android::dm::DmDeviceState::INVALID) {
         root_entry->fs_mgr_flags.avb = true;
+    } else {
+        root_entry->fs_mgr_flags.verify = true;
     }
     return true;
 }
@@ -230,7 +243,11 @@ Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create() {
         return fstab.error();
     }
 
-    return std::make_unique<FirstStageMountVBootV2>(std::move(*fstab));
+    if (IsDtVbmetaCompatible(*fstab)) {
+        return std::make_unique<FirstStageMountVBootV2>(std::move(*fstab));
+    } else {
+        return std::make_unique<FirstStageMountVBootV1>(std::move(*fstab));
+    }
 }
 
 bool FirstStageMount::DoCreateDevices() {
@@ -374,11 +391,7 @@ bool FirstStageMount::CreateSnapshotPartitions(SnapshotManager* sm) {
 
     use_snapuserd_ = sm->IsSnapuserdRequired();
     if (use_snapuserd_) {
-        if (sm->UpdateUsesUserSnapshots()) {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_USER);
-        } else {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_SNAPSHOT);
-        }
+        LaunchFirstStageSnapuserd();
     }
 
     sm->SetUeventRegenCallback([this](const std::string& device) -> bool {
@@ -660,6 +673,56 @@ void FirstStageMount::UseDsuIfPresent() {
     // Publish the logical partition names for TransformFstabForDsu
     WriteFile(gsi::kGsiLpNamesFile, lp_names);
     TransformFstabForDsu(&fstab_, active_dsu, dsu_partitions);
+}
+
+bool FirstStageMountVBootV1::GetDmVerityDevices(std::set<std::string>* devices) {
+    need_dm_verity_ = false;
+
+    for (const auto& fstab_entry : fstab_) {
+        // Don't allow verifyatboot in the first stage.
+        if (fstab_entry.fs_mgr_flags.verify_at_boot) {
+            LOG(ERROR) << "Partitions can't be verified at boot";
+            return false;
+        }
+        // Checks for verified partitions.
+        if (fstab_entry.fs_mgr_flags.verify) {
+            need_dm_verity_ = true;
+        }
+    }
+
+    // Includes the partition names of fstab records.
+    // Notes that fstab_rec->blk_device has A/B suffix updated by fs_mgr when A/B is used.
+    for (const auto& fstab_entry : fstab_) {
+        // Skip pseudo filesystems.
+        if (fstab_entry.fs_type == "overlay") {
+            continue;
+        }
+        if (!fstab_entry.fs_mgr_flags.logical) {
+            devices->emplace(basename(fstab_entry.blk_device.c_str()));
+        }
+    }
+
+    return true;
+}
+
+bool FirstStageMountVBootV1::SetUpDmVerity(FstabEntry* fstab_entry) {
+    if (fstab_entry->fs_mgr_flags.verify) {
+        int ret = fs_mgr_setup_verity(fstab_entry, false /* wait_for_verity_dev */);
+        switch (ret) {
+            case FS_MGR_SETUP_VERITY_SKIPPED:
+            case FS_MGR_SETUP_VERITY_DISABLED:
+                LOG(INFO) << "Verity disabled/skipped for '" << fstab_entry->mount_point << "'";
+                return true;
+            case FS_MGR_SETUP_VERITY_SUCCESS:
+                // The exact block device name (fstab_rec->blk_device) is changed to
+                // "/dev/block/dm-XX". Needs to create it because ueventd isn't started in init
+                // first stage.
+                return block_dev_init_.InitDmDevice(fstab_entry->blk_device);
+            default:
+                return false;
+        }
+    }
+    return true;  // Returns true to mount the partition.
 }
 
 // First retrieve any vbmeta partitions from device tree (legacy) then read through the fstab

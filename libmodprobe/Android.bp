@@ -8,7 +8,6 @@ cc_library_static {
         "-Werror",
     ],
     vendor_available: true,
-    ramdisk_available: true,
     recovery_available: true,
     srcs: [
         "libmodprobe.cpp",

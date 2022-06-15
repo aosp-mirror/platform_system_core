@@ -30,8 +30,6 @@ liblp_lib_deps = [
 cc_library {
     name: "liblp",
     host_supported: true,
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
     recovery_available: true,
     defaults: ["fs_mgr_defaults"],
     cppflags: [
@@ -105,9 +103,7 @@ cc_test {
     defaults: ["liblp_test_defaults"],
     test_suites: ["vts"],
     auto_gen_config: true,
-    test_options: {
-        min_shipping_api_level: 29,
-    },
+    test_min_api_level: 29,
     require_root: true,
 }
 

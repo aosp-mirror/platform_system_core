@@ -25,7 +25,6 @@
 
 #include <gtest/gtest.h>
 
-#include <aidl/android/hardware/health/IHealth.h>
 #include <healthhalutils/HealthHalUtils.h>
 #include <storaged.h>               // data structures
 #include <storaged_utils.h>         // functions to test
@@ -65,23 +64,20 @@ void write_and_pause(uint32_t sec) {
 } // namespace
 
 // the return values of the tested functions should be the expected ones
-const char* get_disk_stats_path() {
-    if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
-        return MMC_DISK_STATS_PATH;
-    } else if (access(SDA_DISK_STATS_PATH, R_OK) >= 0) {
-        return SDA_DISK_STATS_PATH;
-    } else {
-        return nullptr;
-    }
-}
+const char* DISK_STATS_PATH;
 TEST(storaged_test, retvals) {
     struct disk_stats stats;
     memset(&stats, 0, sizeof(struct disk_stats));
 
-    auto disk_stats_path = get_disk_stats_path();
-    if (disk_stats_path == nullptr) GTEST_SKIP();
+    if (access(MMC_DISK_STATS_PATH, R_OK) >= 0) {
+        DISK_STATS_PATH = MMC_DISK_STATS_PATH;
+    } else if (access(SDA_DISK_STATS_PATH, R_OK) >= 0) {
+        DISK_STATS_PATH = SDA_DISK_STATS_PATH;
+    } else {
+        return;
+    }
 
-    EXPECT_TRUE(parse_disk_stats(disk_stats_path, &stats));
+    EXPECT_TRUE(parse_disk_stats(DISK_STATS_PATH, &stats));
 
     struct disk_stats old_stats;
     memset(&old_stats, 0, sizeof(struct disk_stats));
@@ -96,9 +92,7 @@ TEST(storaged_test, retvals) {
 
 TEST(storaged_test, disk_stats) {
     struct disk_stats stats = {};
-    auto disk_stats_path = get_disk_stats_path();
-    if (disk_stats_path == nullptr) GTEST_SKIP();
-    ASSERT_TRUE(parse_disk_stats(disk_stats_path, &stats));
+    ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &stats));
 
     // every entry of stats (except io_in_flight) should all be greater than 0
     for (uint i = 0; i < DISK_STATS_SIZE; ++i) {
@@ -109,7 +103,7 @@ TEST(storaged_test, disk_stats) {
     // accumulation of the increments should be the same with the overall increment
     struct disk_stats base = {}, tmp = {}, curr, acc = {}, inc[5];
     for (uint i = 0; i < 5; ++i) {
-        ASSERT_TRUE(parse_disk_stats(disk_stats_path, &curr));
+        ASSERT_TRUE(parse_disk_stats(DISK_STATS_PATH, &curr));
         if (i == 0) {
             base = curr;
             tmp = curr;
@@ -241,7 +235,9 @@ void expect_increasing(struct disk_stats stats1, struct disk_stats stats2) {
 }
 
 TEST(storaged_test, disk_stats_monitor) {
-    auto [healthService, hidlHealth] = HealthServicePair::get();
+    using android::hardware::health::V2_0::get_health_service;
+
+    auto healthService = get_health_service();
 
     // asserting that there is one file for diskstats
     ASSERT_TRUE(healthService != nullptr || access(MMC_DISK_STATS_PATH, R_OK) >= 0 ||
@@ -250,13 +246,6 @@ TEST(storaged_test, disk_stats_monitor) {
     // testing if detect() will return the right value
     disk_stats_monitor dsm_detect{healthService};
     ASSERT_TRUE(dsm_detect.enabled());
-
-    // Even if enabled(), healthService may not support disk stats. Check if it is supported.
-    std::vector<aidl::android::hardware::health::DiskStats> halStats;
-    if (healthService->getDiskStats(&halStats).getExceptionCode() == EX_UNSUPPORTED_OPERATION) {
-        GTEST_SKIP();
-    }
-
     // feed monitor with constant perf data for io perf baseline
     // using constant perf is reasonable since the functionality of stream_stats
     // has already been tested

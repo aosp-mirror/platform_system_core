@@ -37,8 +37,9 @@ struct FstabEntry {
     unsigned long flags = 0;
     std::string fs_options;
     std::string fs_checkpoint_opts;
+    std::string key_loc;
     std::string metadata_key_dir;
-    std::string metadata_encryption_options;
+    std::string metadata_encryption;
     off64_t length = 0;
     std::string label;
     int partnum = -1;
@@ -59,18 +60,22 @@ struct FstabEntry {
     struct FsMgrFlags {
         bool wait : 1;
         bool check : 1;
-        bool crypt : 1;  // Now only used to identify adoptable storage volumes
+        bool crypt : 1;
         bool nonremovable : 1;
         bool vold_managed : 1;
         bool recovery_only : 1;
+        bool verify : 1;
+        bool force_crypt : 1;
         bool no_emulated_sd : 1;  // No emulated sdcard daemon; sd card is the only external
                                   // storage.
         bool no_trim : 1;
         bool file_encryption : 1;
         bool formattable : 1;
         bool slot_select : 1;
+        bool force_fde_or_fbe : 1;
         bool late_mount : 1;
         bool no_fail : 1;
+        bool verify_at_boot : 1;
         bool quota : 1;
         bool avb : 1;
         bool logical : 1;
@@ -81,19 +86,17 @@ struct FstabEntry {
         bool fs_verity : 1;
         bool ext_meta_csum : 1;
         bool fs_compress : 1;
-        bool overlayfs_remove_missing_lowerdir : 1;
     } fs_mgr_flags = {};
 
-    bool is_encryptable() const { return fs_mgr_flags.crypt; }
+    bool is_encryptable() const {
+        return fs_mgr_flags.crypt || fs_mgr_flags.force_crypt || fs_mgr_flags.force_fde_or_fbe;
+    }
 };
 
 // An Fstab is a collection of FstabEntry structs.
 // The entries must be kept in the same order as they were seen in the fstab.
 // Unless explicitly requested, a lookup on mount point should always return the 1st one.
 using Fstab = std::vector<FstabEntry>;
-
-// Exported for testability. Regular users should use ReadFstabFromFile().
-bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);

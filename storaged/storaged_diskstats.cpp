@@ -30,8 +30,11 @@
 
 namespace {
 
-using aidl::android::hardware::health::DiskStats;
-using aidl::android::hardware::health::IHealth;
+using android::sp;
+using android::hardware::health::V2_0::DiskStats;
+using android::hardware::health::V2_0::IHealth;
+using android::hardware::health::V2_0::Result;
+using android::hardware::health::V2_0::toString;
 
 #ifdef DEBUG
 void log_debug_disk_perf(struct disk_perf* perf, const char* type) {
@@ -118,30 +121,39 @@ void convert_hal_disk_stats(struct disk_stats* dst, const DiskStats& src) {
     dst->io_in_queue = src.ioInQueue;
 }
 
-bool get_disk_stats_from_health_hal(const std::shared_ptr<IHealth>& service,
-                                    struct disk_stats* stats) {
+bool get_disk_stats_from_health_hal(const sp<IHealth>& service, struct disk_stats* stats) {
     struct timespec ts;
     if (!get_time(&ts)) {
         return false;
     }
 
-    std::vector<DiskStats> halStats;
-    auto ret = service->getDiskStats(&halStats);
-    if (ret.isOk()) {
-        if (halStats.size() > 0) {
-            convert_hal_disk_stats(stats, halStats[0]);
-            init_disk_stats_other(ts, stats);
-            return true;
+    bool success = false;
+    auto ret = service->getDiskStats([&success, stats](auto result, const auto& halStats) {
+        if (result == Result::NOT_SUPPORTED) {
+            LOG(DEBUG) << "getDiskStats is not supported on health HAL.";
+            return;
         }
-        LOG(ERROR) << "getDiskStats succeeded but size is 0";
+        if (result != Result::SUCCESS || halStats.size() == 0) {
+            LOG(ERROR) << "getDiskStats failed with result " << toString(result) << " and size "
+                       << halStats.size();
+            return;
+        }
+
+        convert_hal_disk_stats(stats, halStats[0]);
+        success = true;
+    });
+
+    if (!ret.isOk()) {
+        LOG(ERROR) << "getDiskStats failed with " << ret.description();
         return false;
     }
-    if (ret.getExceptionCode() == EX_UNSUPPORTED_OPERATION) {
-        LOG(DEBUG) << "getDiskStats is not supported on health HAL.";
+
+    if (!success) {
         return false;
     }
-    LOG(ERROR) << "getDiskStats failed with " << ret.getDescription();
-    return false;
+
+    init_disk_stats_other(ts, stats);
+    return true;
 }
 
 struct disk_perf get_disk_perf(struct disk_stats* stats)

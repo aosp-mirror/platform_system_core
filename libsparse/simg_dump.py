@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Copyright (C) 2012 The Android Open Source Project
 #
@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
 import csv
 import getopt
 import hashlib
@@ -46,7 +47,7 @@ def main():
     opts, args = getopt.getopt(sys.argv[1:],
                                "vsc:",
                                ["verbose", "showhash", "csvfile"])
-  except getopt.GetoptError as e:
+  except getopt.GetoptError, e:
     print(e)
     usage(me)
   for o, a in opts:
@@ -120,7 +121,7 @@ def main():
                           "output offset", "output blocks", "type", "hash"])
 
     offset = 0
-    for i in range(1, total_chunks + 1):
+    for i in xrange(1, total_chunks + 1):
       header_bin = FH.read(12)
       header = struct.unpack("<2H2I", header_bin)
       chunk_type = header[0]
@@ -159,7 +160,7 @@ def main():
           if showhash:
             h = hashlib.sha1()
             data = fill_bin * (blk_sz / 4);
-            for block in range(chunk_sz):
+            for block in xrange(chunk_sz):
               h.update(data)
             curhash = h.hexdigest()
       elif chunk_type == 0xCAC3:

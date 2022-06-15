@@ -18,7 +18,6 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <linux/f2fs.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <mntent.h>
@@ -219,7 +218,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
                  << stat;
 }
 
-static bool IsDataMounted(const std::string& fstype) {
+static bool IsDataMounted() {
     std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "re"), endmntent);
     if (fp == nullptr) {
         PLOG(ERROR) << "Failed to open /proc/mounts";
@@ -228,7 +227,7 @@ static bool IsDataMounted(const std::string& fstype) {
     mntent* mentry;
     while ((mentry = getmntent(fp.get())) != nullptr) {
         if (mentry->mnt_dir == "/data"s) {
-            return fstype == "*" || mentry->mnt_type == fstype;
+            return true;
         }
     }
     return false;
@@ -479,11 +478,6 @@ static Result<void> KillZramBackingDevice() {
     // cut the last "\n"
     backing_dev.erase(backing_dev.length() - 1);
 
-    if (android::base::StartsWith(backing_dev, "none")) {
-        LOG(INFO) << "No zram backing device configured";
-        return {};
-    }
-
     // shutdown zram handle
     Timer swap_timer;
     LOG(INFO) << "swapoff() start...";
@@ -634,13 +628,12 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
     // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
     // worry about unmounting it.
-    if (!IsDataMounted("*")) {
+    if (!IsDataMounted()) {
         sync();
         RebootSystem(cmd, reboot_target);
         abort();
     }
 
-    bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
     // watchdogd is a vendor specific component but should be alive to complete shutdown safely.
     const std::set<std::string> to_starts{"watchdogd"};
     std::set<std::string> stop_first;
@@ -654,8 +647,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
                            << "': " << result.error();
             }
             s->SetShutdownCritical();
-        } else if (do_shutdown_animation) {
-            continue;
         } else if (s->IsShutdownCritical()) {
             // Start shutdown critical service if not started.
             if (auto result = s->Start(); !result.ok()) {
@@ -668,13 +659,14 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     }
 
     // remaining operations (specifically fsck) may take a substantial duration
-    if (!do_shutdown_animation && (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown)) {
+    if (cmd == ANDROID_RB_POWEROFF || is_thermal_shutdown) {
         TurnOffBacklight();
     }
 
     Service* boot_anim = ServiceList::GetInstance().FindService("bootanim");
     Service* surface_flinger = ServiceList::GetInstance().FindService("surfaceflinger");
     if (boot_anim != nullptr && surface_flinger != nullptr && surface_flinger->IsRunning()) {
+        bool do_shutdown_animation = GetBoolProperty("ro.init.shutdown_animation", false);
 
         if (do_shutdown_animation) {
             SetProperty("service.bootanim.exit", "0");
@@ -759,16 +751,6 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     sem_post(&reboot_semaphore);
 
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
-    if (IsDataMounted("f2fs")) {
-        uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
-        unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
-        int ret = ioctl(fd, F2FS_IOC_SHUTDOWN, &flag);
-        if (ret) {
-            PLOG(ERROR) << "Shutdown /data: ";
-        } else {
-            LOG(INFO) << "Shutdown /data";
-        }
-    }
     RebootSystem(cmd, reboot_target);
     abort();
 }
@@ -1043,20 +1025,6 @@ void HandlePowerctlMessage(const std::string& command) {
                 // the other arguments in the bootloader message.
                 if (!CommandIsPresent(&boot)) {
                     strlcpy(boot.command, "boot-recovery", sizeof(boot.command));
-                    if (std::string err; !write_bootloader_message(boot, &err)) {
-                        LOG(ERROR) << "Failed to set bootloader message: " << err;
-                        return;
-                    }
-                }
-            } else if (reboot_target == "quiescent") {
-                bootloader_message boot = {};
-                if (std::string err; !read_bootloader_message(&boot, &err)) {
-                    LOG(ERROR) << "Failed to read bootloader message: " << err;
-                }
-                // Update the boot command field if it's empty, and preserve
-                // the other arguments in the bootloader message.
-                if (!CommandIsPresent(&boot)) {
-                    strlcpy(boot.command, "boot-quiescent", sizeof(boot.command));
                     if (std::string err; !write_bootloader_message(boot, &err)) {
                         LOG(ERROR) << "Failed to set bootloader message: " << err;
                         return;

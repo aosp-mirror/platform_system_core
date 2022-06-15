@@ -127,7 +127,6 @@ class DmTargetVerity final : public DmTarget {
     void UseFec(const std::string& device, uint32_t num_roots, uint32_t num_blocks, uint32_t start);
     void SetVerityMode(const std::string& mode);
     void IgnoreZeroBlocks();
-    void CheckAtMostOnce();
 
     std::string name() const override { return "verity"; }
     std::string GetParameterString() const override;

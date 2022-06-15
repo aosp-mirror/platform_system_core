@@ -23,12 +23,11 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
-#include <android/hardware/health/2.1/IHealth.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <health/utils.h>
 
-#include "healthd_mode_charger_hidl.h"
+#include "healthd_mode_charger.h"
 
 using android::hardware::Return;
 using android::hardware::health::InitHealthdConfig;
@@ -103,12 +102,12 @@ class MockHealth : public android::hardware::health::V2_1::IHealth {
     MOCK_METHOD(Return<void>, shouldKeepScreenOn, (shouldKeepScreenOn_cb _hidl_cb));
 };
 
-class TestCharger : public ChargerHidl {
+class TestCharger : public Charger {
   public:
     // Inherit constructor.
-    using ChargerHidl::ChargerHidl;
+    using Charger::Charger;
     // Expose protected functions to be used in tests.
-    void Init(struct healthd_config* config) override { ChargerHidl::Init(config); }
+    void Init(struct healthd_config* config) override { Charger::Init(config); }
     MOCK_METHOD(int, CreateDisplaySurface, (const std::string& name, GRSurface** surface));
     MOCK_METHOD(int, CreateMultiDisplaySurface,
                 (const std::string& name, int* frames, int* fps, GRSurface*** surface));

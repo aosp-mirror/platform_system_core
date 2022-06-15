@@ -17,18 +17,15 @@
 #ifndef _LIBDM_DM_H_
 #define _LIBDM_DM_H_
 
-#include <dirent.h>
 #include <fcntl.h>
 #include <linux/dm-ioctl.h>
 #include <linux/kdev_t.h>
 #include <linux/types.h>
 #include <stdint.h>
 #include <sys/sysmacros.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include <chrono>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -56,33 +53,7 @@ static constexpr uint64_t kSectorSize = 512;
 // that prefix.
 std::optional<std::string> ExtractBlockDeviceName(const std::string& path);
 
-// This interface is for testing purposes. See DeviceMapper proper for what these methods do.
-class IDeviceMapper {
-  public:
-    virtual ~IDeviceMapper() {}
-
-    struct TargetInfo {
-        struct dm_target_spec spec;
-        std::string data;
-        TargetInfo() {}
-        TargetInfo(const struct dm_target_spec& spec, const std::string& data)
-            : spec(spec), data(data) {}
-
-        bool IsOverflowSnapshot() const;
-    };
-
-    virtual bool CreateDevice(const std::string& name, const DmTable& table, std::string* path,
-                              const std::chrono::milliseconds& timeout_ms) = 0;
-    virtual DmDeviceState GetState(const std::string& name) const = 0;
-    virtual bool LoadTableAndActivate(const std::string& name, const DmTable& table) = 0;
-    virtual bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) = 0;
-    virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) = 0;
-    virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) = 0;
-    virtual bool GetDeviceString(const std::string& name, std::string* dev) = 0;
-    virtual bool DeleteDeviceIfExists(const std::string& name) = 0;
-};
-
-class DeviceMapper final : public IDeviceMapper {
+class DeviceMapper final {
   public:
     class DmBlockDevice final {
       public:
@@ -122,7 +93,7 @@ class DeviceMapper final : public IDeviceMapper {
     // Removes a device mapper device with the given name.
     // Returns 'true' on success, false otherwise.
     bool DeleteDevice(const std::string& name);
-    bool DeleteDeviceIfExists(const std::string& name) override;
+    bool DeleteDeviceIfExists(const std::string& name);
     // Removes a device mapper device with the given name and waits for |timeout_ms| milliseconds
     // for the corresponding block device to be deleted.
     bool DeleteDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms);
@@ -141,25 +112,12 @@ class DeviceMapper final : public IDeviceMapper {
     // Returns the current state of the underlying device mapper device
     // with given name.
     // One of INVALID, SUSPENDED or ACTIVE.
-    DmDeviceState GetState(const std::string& name) const override;
+    DmDeviceState GetState(const std::string& name) const;
 
     // Puts the given device to the specified status, which must be either:
     // - SUSPENDED: suspend the device, or
     // - ACTIVE: resumes the device.
     bool ChangeState(const std::string& name, DmDeviceState state);
-
-    // Creates empty device.
-    // This supports a use case when a caller doesn't need a device straight away, but instead
-    // asks kernel to create it beforehand, thus avoiding blocking itself from waiting for ueventd
-    // to create user space paths.
-    // Callers are expected to then activate their device by calling LoadTableAndActivate function.
-    // To avoid race conditions, callers must still synchronize with ueventd by calling
-    // WaitForDevice function.
-    bool CreateEmptyDevice(const std::string& name);
-
-    // Waits for device paths to be created in the user space.
-    bool WaitForDevice(const std::string& name, const std::chrono::milliseconds& timeout_ms,
-                       std::string* path);
 
     // Creates a device, loads the given table, and activates it. If the device
     // is not able to be activated, it is destroyed, and false is returned.
@@ -185,7 +143,7 @@ class DeviceMapper final : public IDeviceMapper {
     // not |path| is available. It is the caller's responsibility to ensure
     // there are no races.
     bool CreateDevice(const std::string& name, const DmTable& table, std::string* path,
-                      const std::chrono::milliseconds& timeout_ms) override;
+                      const std::chrono::milliseconds& timeout_ms);
 
     // Create a device and activate the given table, without waiting to acquire
     // a valid path. If the caller will use GetDmDevicePathByName(), it should
@@ -197,7 +155,7 @@ class DeviceMapper final : public IDeviceMapper {
     // process. A device with the given name must already exist.
     //
     // Returns 'true' on success, false otherwise.
-    bool LoadTableAndActivate(const std::string& name, const DmTable& table) override;
+    bool LoadTableAndActivate(const std::string& name, const DmTable& table);
 
     // Returns true if a list of available device mapper targets registered in the kernel was
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
@@ -243,7 +201,7 @@ class DeviceMapper final : public IDeviceMapper {
 
     // Returns a major:minor string for the named device-mapper node, that can
     // be used as inputs to DmTargets that take a block device.
-    bool GetDeviceString(const std::string& name, std::string* dev) override;
+    bool GetDeviceString(const std::string& name, std::string* dev);
 
     // The only way to create a DeviceMapper object.
     static DeviceMapper& Instance();
@@ -258,11 +216,20 @@ class DeviceMapper final : public IDeviceMapper {
     // contain one TargetInfo for each target in the table. If the device does
     // not exist, or there were too many targets, the call will fail and return
     // false.
-    bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) override;
+    struct TargetInfo {
+        struct dm_target_spec spec;
+        std::string data;
+        TargetInfo() {}
+        TargetInfo(const struct dm_target_spec& spec, const std::string& data)
+            : spec(spec), data(data) {}
+
+        bool IsOverflowSnapshot() const;
+    };
+    bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table);
 
     // Identical to GetTableStatus, except also retrives the active table for the device
     // mapper device from the kernel.
-    bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) override;
+    bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table);
 
     static std::string GetTargetType(const struct dm_target_spec& spec);
 
@@ -278,12 +245,6 @@ class DeviceMapper final : public IDeviceMapper {
     //  * A dm device is based on top of more than one block devices.
     //  * A failure occurred.
     std::optional<std::string> GetParentBlockDeviceByPath(const std::string& path);
-
-    // Iterate the content over "/sys/block/dm-x/dm/name" and find
-    // all the dm-wrapped block devices.
-    //
-    // Returns mapping <partition-name, /dev/block/dm-x>
-    std::map<std::string, std::string> FindDmPartitions();
 
   private:
     // Maximum possible device mapper targets registered in the kernel.

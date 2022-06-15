@@ -105,12 +105,10 @@ cc_binary {
         "keymint/TrustySharedSecret.cpp",
         "keymint/service.cpp",
     ],
-    defaults: [
-        "keymint_use_latest_hal_aidl_ndk_shared",
-    ],
     shared_libs: [
-        "android.hardware.security.secureclock-V1-ndk",
-        "android.hardware.security.sharedsecret-V1-ndk",
+        "android.hardware.security.keymint-V1-ndk_platform",
+        "android.hardware.security.secureclock-V1-ndk_platform",
+        "android.hardware.security.sharedsecret-V1-ndk_platform",
         "lib_android_keymaster_keymint_utils",
         "libbase",
         "libbinder_ndk",
@@ -119,7 +117,6 @@ cc_binary {
         "libkeymint",
         "liblog",
         "libtrusty",
-        "libutils",
     ],
     required: [
         "android.hardware.hardware_keystore.xml",
@@ -145,7 +142,6 @@ cc_library {
         "libtrusty",
         "libhardware",
         "libkeymaster_messages",
-        "libutils",
         "libxml2",
     ],
     export_include_dirs: ["include"],
@@ -173,7 +169,6 @@ cc_binary {
         "libtrusty",
         "libhardware",
         "libkeymaster_messages",
-        "libutils",
         "libxml2",
     ],
     cflags: [

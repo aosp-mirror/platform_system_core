@@ -18,8 +18,6 @@
 #include <optional>
 #include <string>
 
-#include <android-base/file.h>
-#include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <fstab/fstab.h>
@@ -46,51 +44,11 @@ class PartitionHandle {
     }
     const std::string& path() const { return path_; }
     int fd() const { return fd_.get(); }
-    bool Open(int flags) {
-        flags |= (O_EXCL | O_CLOEXEC | O_BINARY);
+    void set_fd(android::base::unique_fd&& fd) { fd_ = std::move(fd); }
 
-        // Attempts to open a second device can fail with EBUSY if the device is already open.
-        // Explicitly close any previously opened devices as unique_fd won't close them until
-        // after the attempt to open.
-        fd_.reset();
-
-        fd_ = android::base::unique_fd(TEMP_FAILURE_RETRY(open(path_.c_str(), flags)));
-        if (fd_ < 0) {
-            PLOG(ERROR) << "Failed to open block device: " << path_;
-            return false;
-        }
-        flags_ = flags;
-
-        return true;
-    }
-    bool Reset(int flags) {
-        if (fd_.ok() && (flags | O_EXCL | O_CLOEXEC | O_BINARY) == flags_) {
-            return true;
-        }
-
-        off_t offset = fd_.ok() ? lseek(fd_.get(), 0, SEEK_CUR) : 0;
-        if (offset < 0) {
-            PLOG(ERROR) << "Failed lseek on block device: " << path_;
-            return false;
-        }
-
-        sync();
-
-        if (Open(flags) == false) {
-            return false;
-        }
-
-        if (lseek(fd_.get(), offset, SEEK_SET) != offset) {
-            PLOG(ERROR) << "Failed lseek on block device: " << path_;
-            return false;
-        }
-
-        return true;
-    }
   private:
     std::string path_;
     android::base::unique_fd fd_;
-    int flags_;
     std::function<void()> closer_;
 };
 
@@ -118,11 +76,9 @@ std::optional<std::string> FindPhysicalPartition(const std::string& name);
 bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
                             bool* is_zero_length = nullptr);
 
-// Partition is O_WRONLY by default, caller should pass O_RDONLY for reading.
-// Caller may pass additional flags if needed. (O_EXCL | O_CLOEXEC | O_BINARY)
-// will be logically ORed internally.
+// If read, partition is readonly. Else it is write only.
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
-                   int flags = O_WRONLY);
+                   bool read = false);
 
 bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);

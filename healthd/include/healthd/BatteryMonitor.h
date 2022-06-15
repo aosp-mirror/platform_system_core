@@ -25,10 +25,6 @@
 
 #include <healthd/healthd.h>
 
-namespace aidl::android::hardware::health {
-class HealthInfo;
-}  // namespace aidl::android::hardware::health
-
 namespace android {
 namespace hardware {
 namespace health {
@@ -52,8 +48,7 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_AC,
         ANDROID_POWER_SUPPLY_TYPE_USB,
         ANDROID_POWER_SUPPLY_TYPE_WIRELESS,
-        ANDROID_POWER_SUPPLY_TYPE_BATTERY,
-        ANDROID_POWER_SUPPLY_TYPE_DOCK
+        ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
     BatteryMonitor();
@@ -63,10 +58,9 @@ class BatteryMonitor {
     status_t getProperty(int id, struct BatteryProperty *val);
     void dumpState(int fd);
 
-    android::hardware::health::V1_0::HealthInfo getHealthInfo_1_0() const;
-    android::hardware::health::V2_0::HealthInfo getHealthInfo_2_0() const;
-    android::hardware::health::V2_1::HealthInfo getHealthInfo_2_1() const;
-    const aidl::android::hardware::health::HealthInfo& getHealthInfo() const;
+    const android::hardware::health::V1_0::HealthInfo& getHealthInfo_1_0() const;
+    const android::hardware::health::V2_0::HealthInfo& getHealthInfo_2_0() const;
+    const android::hardware::health::V2_1::HealthInfo& getHealthInfo_2_1() const;
 
     void updateValues(void);
     void logValues(void);
@@ -81,7 +75,13 @@ class BatteryMonitor {
     bool mBatteryDevicePresent;
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
-    std::unique_ptr<aidl::android::hardware::health::HealthInfo> mHealthInfo;
+    std::unique_ptr<android::hardware::health::V2_1::HealthInfo> mHealthInfo;
+
+    int readFromFile(const String8& path, std::string* buf);
+    PowerSupplyType readPowerSupplyType(const String8& path);
+    bool getBooleanField(const String8& path);
+    int getIntField(const String8& path);
+    bool isScopedPowerSupply(const char* name);
 };
 
 }; // namespace android

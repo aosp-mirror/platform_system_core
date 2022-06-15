@@ -32,7 +32,6 @@
 #include <set>
 #include <vector>
 
-#include <android-base/errno_restorer.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/macros.h>
@@ -68,9 +67,8 @@
 #include "protocol.h"
 #include "util.h"
 
-using android::base::ErrnoRestorer;
-using android::base::StringPrintf;
 using android::base::unique_fd;
+using android::base::StringPrintf;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -91,11 +89,10 @@ static pid_t get_tracer(pid_t tracee) {
 static bool ptrace_seize_thread(int pid_proc_fd, pid_t tid, std::string* error, int flags = 0) {
   if (ptrace(PTRACE_SEIZE, tid, 0, flags) != 0) {
     if (errno == EPERM) {
-      ErrnoRestorer errno_restorer;  // In case get_tracer() fails and we fall through.
-      pid_t tracer_pid = get_tracer(tid);
-      if (tracer_pid > 0) {
+      pid_t tracer = get_tracer(tid);
+      if (tracer != -1) {
         *error = StringPrintf("failed to attach to thread %d, already traced by %d (%s)", tid,
-                              tracer_pid, get_process_name(tracer_pid).c_str());
+                              tracer, get_process_name(tracer).c_str());
         return false;
       }
     }
@@ -502,22 +499,13 @@ int main(int argc, char** argv) {
         continue;
       }
 
-      struct iovec tagged_addr_iov = {
+      struct iovec iov = {
           &info.tagged_addr_ctrl,
           sizeof(info.tagged_addr_ctrl),
       };
       if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_TAGGED_ADDR_CTRL,
-                 reinterpret_cast<void*>(&tagged_addr_iov)) == -1) {
+                 reinterpret_cast<void*>(&iov)) == -1) {
         info.tagged_addr_ctrl = -1;
-      }
-
-      struct iovec pac_enabled_keys_iov = {
-          &info.pac_enabled_keys,
-          sizeof(info.pac_enabled_keys),
-      };
-      if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_PAC_ENABLED_KEYS,
-                 reinterpret_cast<void*>(&pac_enabled_keys_iov)) == -1) {
-        info.pac_enabled_keys = -1;
       }
 
       if (thread == g_target_thread) {

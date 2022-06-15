@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <grp.h>
 #include <pwd.h>
 
 #include <functional>
@@ -32,11 +31,9 @@ namespace init {
 
 struct ExternalFirmwareHandler {
     ExternalFirmwareHandler(std::string devpath, uid_t uid, std::string handler_path);
-    ExternalFirmwareHandler(std::string devpath, uid_t uid, gid_t gid, std::string handler_path);
 
     std::string devpath;
     uid_t uid;
-    gid_t gid;
     std::string handler_path;
 
     std::function<bool(const std::string&)> match;
@@ -54,7 +51,7 @@ class FirmwareHandler : public UeventHandler {
     friend void FirmwareTestWithExternalHandler(const std::string& test_name,
                                                 bool expect_new_firmware);
 
-    Result<std::string> RunExternalHandler(const std::string& handler, uid_t uid, gid_t gid,
+    Result<std::string> RunExternalHandler(const std::string& handler, uid_t uid,
                                            const Uevent& uevent) const;
     std::string GetFirmwarePath(const Uevent& uevent) const;
     void ProcessFirmwareEvent(const std::string& root, const std::string& firmware) const;

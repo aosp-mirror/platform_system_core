@@ -57,14 +57,14 @@ struct AutoDeviceList {
 // Automatically unmap a device upon deletion.
 struct AutoUnmapDevice : AutoDevice {
     // On destruct, delete |name| from device mapper.
-    AutoUnmapDevice(android::dm::IDeviceMapper* dm, const std::string& name)
+    AutoUnmapDevice(android::dm::DeviceMapper* dm, const std::string& name)
         : AutoDevice(name), dm_(dm) {}
     AutoUnmapDevice(AutoUnmapDevice&& other) = default;
     ~AutoUnmapDevice();
 
   private:
     DISALLOW_COPY_AND_ASSIGN(AutoUnmapDevice);
-    android::dm::IDeviceMapper* dm_ = nullptr;
+    android::dm::DeviceMapper* dm_ = nullptr;
 };
 
 // Automatically unmap an image upon deletion.
@@ -131,13 +131,8 @@ void AppendExtent(google::protobuf::RepeatedPtrField<chromeos_update_engine::Ext
 
 bool IsCompressionEnabled();
 
-bool IsUserspaceSnapshotsEnabled();
-
-bool IsDmSnapshotTestingEnabled();
-
-bool IsIouringEnabled();
-
 // Swap the suffix of a partition name.
 std::string GetOtherPartitionName(const std::string& name);
+
 }  // namespace snapshot
 }  // namespace android

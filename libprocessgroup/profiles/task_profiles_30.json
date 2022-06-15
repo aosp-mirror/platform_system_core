@@ -40,19 +40,6 @@
       ]
     },
     {
-      "Name": "ServicePerformance",
-      "Actions": [
-        {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "schedtune",
-            "Path": "background"
-          }
-        }
-      ]
-    },
-    {
       "Name": "HighPerformance",
       "Actions": [
         {
@@ -117,19 +104,7 @@
         }
       ]
     },
-    {
-      "Name": "Dex2oatPerformance",
-      "Actions": [
-        {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "schedtune",
-            "Path": "background"
-          }
-        }
-      ]
-    },
+
     {
       "Name": "CpuPolicySpread",
       "Actions": [

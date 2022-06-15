@@ -18,30 +18,19 @@
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
 
-#include "healthd_draw.h"
-
-#if !defined(__ANDROID_VNDK__)
 #include "charger.sysprop.h"
-#endif
+#include "healthd_draw.h"
 
 #define LOGE(x...) KLOG_ERROR("charger", x);
 #define LOGW(x...) KLOG_WARNING("charger", x);
 #define LOGV(x...) KLOG_DEBUG("charger", x);
 
 static bool get_split_screen() {
-#if !defined(__ANDROID_VNDK__)
     return android::sysprop::ChargerProperties::draw_split_screen().value_or(false);
-#else
-    return false;
-#endif
 }
 
 static int get_split_offset() {
-#if !defined(__ANDROID_VNDK__)
     int64_t value = android::sysprop::ChargerProperties::draw_split_offset().value_or(0);
-#else
-    int64_t value = 0;
-#endif
     if (value < static_cast<int64_t>(std::numeric_limits<int>::min())) {
         LOGW("draw_split_offset = %" PRId64 " overflow for an int; resetting to %d.\n", value,
              std::numeric_limits<int>::min());
@@ -57,6 +46,14 @@ static int get_split_offset() {
 
 HealthdDraw::HealthdDraw(animation* anim)
     : kSplitScreen(get_split_screen()), kSplitOffset(get_split_offset()) {
+    int ret = gr_init();
+
+    if (ret < 0) {
+        LOGE("gr_init failed\n");
+        graphics_available = false;
+        return;
+    }
+
     graphics_available = true;
     sys_font = gr_sys_font();
     if (sys_font == nullptr) {
@@ -94,18 +91,9 @@ void HealthdDraw::redraw_screen(const animation* batt_anim, GRSurface* surf_unkn
     gr_flip();
 }
 
-void HealthdDraw::blank_screen(bool blank, int drm) {
+void HealthdDraw::blank_screen(bool blank) {
     if (!graphics_available) return;
-    gr_fb_blank(blank, drm);
-}
-
-/* support screen rotation for foldable phone */
-void HealthdDraw::rotate_screen(int drm) {
-    if (!graphics_available) return;
-    if (drm == 0)
-        gr_rotate(GRRotation::RIGHT /* landscape mode */);
-    else
-        gr_rotate(GRRotation::NONE /* Portrait mode */);
+    gr_fb_blank(blank);
 }
 
 void HealthdDraw::clear_screen(void) {
@@ -148,8 +136,6 @@ int HealthdDraw::draw_text(const GRFont* font, int x, int y, const char* str) {
 void HealthdDraw::determine_xy(const animation::text_field& field,
                                const int length, int* x, int* y) {
   *x = field.pos_x;
-  screen_width_ = gr_fb_width() / (kSplitScreen ? 2 : 1);
-  screen_height_ = gr_fb_height();
 
   int str_len_px = length * field.font->char_width;
   if (field.pos_x == CENTER_VAL) {
@@ -248,12 +234,4 @@ void HealthdDraw::draw_unknown(GRSurface* surf_unknown) {
   } else {
       LOGW("Charging, level unknown\n");
   }
-}
-
-std::unique_ptr<HealthdDraw> HealthdDraw::Create(animation *anim) {
-    if (gr_init() < 0) {
-        LOGE("gr_init failed\n");
-        return nullptr;
-    }
-    return std::unique_ptr<HealthdDraw>(new HealthdDraw(anim));
 }
