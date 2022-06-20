@@ -91,7 +91,7 @@ std::string fake_super;
 
 void MountMetadata();
 bool ShouldUseCompression();
-bool ShouldUseUserspaceSnapshots();
+bool IsDaemonRequired();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -1208,7 +1208,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1342,7 +1342,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1450,7 +1450,7 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -2750,13 +2750,26 @@ void SnapshotTestEnvironment::TearDown() {
     }
 }
 
-bool ShouldUseUserspaceSnapshots() {
+bool IsDaemonRequired() {
     if (FLAGS_force_config == "dmsnap") {
         return false;
     }
+
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // No userspace snapshots if vendor partition is on Android 12
+    // However, for GRF devices, snapuserd daemon will be on
+    // vendor ramdisk in Android 12.
+    if (vendor_release.find("12") != std::string::npos) {
+        return true;
+    }
+
     if (!FLAGS_force_config.empty()) {
         return true;
     }
+
     return IsUserspaceSnapshotsEnabled();
 }
 
