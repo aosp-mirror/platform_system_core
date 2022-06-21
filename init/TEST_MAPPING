@@ -10,7 +10,7 @@
       "name": "MicrodroidHostTestCases"
     }
   ],
-  "hwasan-postsubmit": [
+  "hwasan-presubmit": [
     {
       "name": "CtsInitTestCases"
     },
