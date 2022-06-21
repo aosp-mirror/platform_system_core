@@ -4,7 +4,7 @@
       "name": "libpackagelistparser_test"
     }
   ],
-  "hwasan-postsubmit": [
+  "hwasan-presubmit": [
     {
       "name": "libpackagelistparser_test"
     }
