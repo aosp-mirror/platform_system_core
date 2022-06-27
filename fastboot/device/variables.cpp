@@ -17,6 +17,7 @@
 #include "variables.h"
 
 #include <inttypes.h>
+#include <stdio.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -28,6 +29,7 @@
 #include <fs_mgr.h>
 #include <liblp/liblp.h>
 
+#include "constants.h"
 #include "fastboot_device.h"
 #include "flashing.h"
 #include "utility.h"
@@ -46,6 +48,7 @@ using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
 using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
 using namespace android::fs_mgr;
+using namespace std::string_literals;
 
 constexpr char kFastbootProtocolVersion[] = "0.4";
 
@@ -516,5 +519,38 @@ bool GetMaxFetchSize(FastbootDevice* /* device */, const std::vector<std::string
         return false;
     }
     *message = android::base::StringPrintf("0x%X", kMaxFetchSizeDefault);
+    return true;
+}
+
+bool GetDmesg(FastbootDevice* device) {
+    if (GetDeviceLockStatus()) {
+        return device->WriteFail("Cannot use when device flashing is locked");
+    }
+
+    std::unique_ptr<FILE, decltype(&::fclose)> fp(popen("/system/bin/dmesg", "re"), ::fclose);
+    if (!fp) {
+        PLOG(ERROR) << "popen /system/bin/dmesg";
+        return device->WriteFail("Unable to run dmesg: "s + strerror(errno));
+    }
+
+    ssize_t rv;
+    size_t n = 0;
+    char* str = nullptr;
+    while ((rv = ::getline(&str, &n, fp.get())) > 0) {
+        if (str[rv - 1] == '\n') {
+            rv--;
+        }
+        device->WriteInfo(std::string(str, rv));
+    }
+
+    int saved_errno = errno;
+    ::free(str);
+
+    if (rv < 0 && saved_errno) {
+        LOG(ERROR) << "dmesg getline: " << strerror(saved_errno);
+        device->WriteFail("Unable to read dmesg: "s + strerror(saved_errno));
+        return false;
+    }
+
     return true;
 }
