@@ -1109,14 +1109,17 @@ TEST(fs_mgr, TransformFstabForDsu) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
     std::string fstab_contents = R"fs(
+data   /data        f2fs    noatime     wait,latemount
 system /system      erofs   ro  wait,logical,first_stage_mount
 system /system      ext4    ro  wait,logical,first_stage_mount
 vendor /vendor      ext4    ro  wait,logical,first_stage_mount
-data   /data        f2fs    noatime     wait
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
+    // If GSI is installed, ReadFstabFromFile() would have called TransformFstabForDsu() implicitly.
+    // In other words, TransformFstabForDsu() would be called two times if running CTS-on-GSI,
+    // which implies TransformFstabForDsu() should be idempotent.
     Fstab fstab;
     EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
     TransformFstabForDsu(&fstab, "dsu", {"system_gsi", "userdata_gsi"});
@@ -1126,10 +1129,12 @@ data   /data        f2fs    noatime     wait
 
     EXPECT_EQ("/system", entry->mount_point);
     EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("erofs", entry->fs_type);
     entry++;
 
     EXPECT_EQ("/system", entry->mount_point);
     EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("ext4", entry->fs_type);
     entry++;
 
     EXPECT_EQ("/vendor", entry->mount_point);
@@ -1147,7 +1152,7 @@ TEST(fs_mgr, TransformFstabForDsu_synthesisExt4Entry) {
     std::string fstab_contents = R"fs(
 system /system      erofs   ro  wait,logical,first_stage_mount
 vendor /vendor      ext4    ro  wait,logical,first_stage_mount
-data   /data        f2fs    noatime     wait
+data   /data        f2fs    noatime     wait,latemount
 )fs";
 
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
@@ -1171,6 +1176,42 @@ data   /data        f2fs    noatime     wait
 
     EXPECT_EQ("/vendor", entry->mount_point);
     EXPECT_EQ("vendor", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/data", entry->mount_point);
+    EXPECT_EQ("userdata_gsi", entry->blk_device);
+    entry++;
+}
+
+TEST(fs_mgr, TransformFstabForDsu_synthesisAllMissingEntries) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    std::string fstab_contents = R"fs(
+data   /data        f2fs    noatime     wait,latemount
+vendor /vendor      ext4    ro  wait,logical,first_stage_mount
+)fs";
+
+    ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
+
+    Fstab fstab;
+    EXPECT_TRUE(ReadFstabFromFile(tf.path, &fstab));
+    TransformFstabForDsu(&fstab, "dsu", {"system_gsi", "userdata_gsi"});
+    ASSERT_EQ(4U, fstab.size());
+
+    auto entry = fstab.begin();
+
+    EXPECT_EQ("/vendor", entry->mount_point);
+    EXPECT_EQ("vendor", entry->blk_device);
+    entry++;
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("ext4", entry->fs_type);
+    entry++;
+
+    EXPECT_EQ("/system", entry->mount_point);
+    EXPECT_EQ("system_gsi", entry->blk_device);
+    EXPECT_EQ("erofs", entry->fs_type);
     entry++;
 
     EXPECT_EQ("/data", entry->mount_point);
