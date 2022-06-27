@@ -79,3 +79,4 @@
 #define FB_VAR_SECURITY_PATCH_LEVEL "security-patch-level"
 #define FB_VAR_TREBLE_ENABLED "treble-enabled"
 #define FB_VAR_MAX_FETCH_SIZE "max-fetch-size"
+#define FB_VAR_DMESG "dmesg"
