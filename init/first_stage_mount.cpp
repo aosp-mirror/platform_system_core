@@ -651,14 +651,9 @@ void FirstStageMount::UseDsuIfPresent() {
         return;
     }
 
-    std::string lp_names = "";
-    std::vector<std::string> dsu_partitions;
-    for (auto&& name : images->GetAllBackingImages()) {
-        dsu_partitions.push_back(name);
-        lp_names += name + ",";
-    }
-    // Publish the logical partition names for TransformFstabForDsu
-    WriteFile(gsi::kGsiLpNamesFile, lp_names);
+    // Publish the logical partition names for TransformFstabForDsu() and ReadFstabFromFile().
+    const auto dsu_partitions = images->GetAllBackingImages();
+    WriteFile(gsi::kGsiLpNamesFile, android::base::Join(dsu_partitions, ","));
     TransformFstabForDsu(&fstab_, active_dsu, dsu_partitions);
 }
 
