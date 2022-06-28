@@ -90,9 +90,6 @@
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
 #define SYSFS_EXT4_CASEFOLD "/sys/fs/ext4/features/casefold"
 
-// FIXME: this should be in system/extras
-#define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
-
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Basename;
