@@ -3273,8 +3273,21 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
                 snapuserd_client_ = nullptr;
             }
         } else {
-            status.set_userspace_snapshots(!IsDmSnapshotTestingEnabled());
-            if (IsDmSnapshotTestingEnabled()) {
+            bool userSnapshotsEnabled = true;
+            const std::string UNKNOWN = "unknown";
+            const std::string vendor_release = android::base::GetProperty(
+                    "ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+            // No user-space snapshots if vendor partition is on Android 12
+            if (vendor_release.find("12") != std::string::npos) {
+                LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
+                          << vendor_release;
+                userSnapshotsEnabled = false;
+            }
+
+            userSnapshotsEnabled = (userSnapshotsEnabled && !IsDmSnapshotTestingEnabled());
+            status.set_userspace_snapshots(userSnapshotsEnabled);
+            if (!userSnapshotsEnabled) {
                 is_snapshot_userspace_ = false;
                 LOG(INFO) << "User-space snapshots disabled for testing";
             } else {
@@ -4150,9 +4163,20 @@ void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
         estimated_cow_size += status.estimated_cow_size();
     }
 
-    stats->set_cow_file_size(cow_file_size);
-    stats->set_total_cow_size_bytes(total_cow_size);
-    stats->set_estimated_cow_size_bytes(estimated_cow_size);
+    stats->report()->set_cow_file_size(cow_file_size);
+    stats->report()->set_total_cow_size_bytes(total_cow_size);
+    stats->report()->set_estimated_cow_size_bytes(estimated_cow_size);
+}
+
+void SnapshotManager::SetMergeStatsFeatures(ISnapshotMergeStats* stats) {
+    auto lock = LockExclusive();
+    if (!lock) return;
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    stats->report()->set_iouring_used(update_status.io_uring_enabled());
+    stats->report()->set_userspace_snapshots_used(update_status.userspace_snapshots());
+    stats->report()->set_xor_compression_used(
+            android::base::GetBoolProperty("ro.virtual_ab.compression.xor.enabled", false));
 }
 
 bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,

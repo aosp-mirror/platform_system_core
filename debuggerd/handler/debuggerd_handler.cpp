@@ -38,6 +38,8 @@
 #include <unistd.h>
 
 #include <android-base/macros.h>
+#include <android-base/parsebool.h>
+#include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
 #include <bionic/reserved_signals.h>
@@ -49,7 +51,10 @@
 
 #include "handler/fallback.h"
 
-using android::base::Pipe;
+using ::android::base::GetBoolProperty;
+using ::android::base::ParseBool;
+using ::android::base::ParseBoolResult;
+using ::android::base::Pipe;
 
 // We muck with our fds in a 'thread' that doesn't share the same fd table.
 // Close fds in that thread with a raw close syscall instead of going through libc.
@@ -80,6 +85,13 @@ static pid_t __getpid() {
 
 static pid_t __gettid() {
   return syscall(__NR_gettid);
+}
+
+static bool is_permissive_mte() {
+  // Environment variable for testing or local use from shell.
+  char* permissive_env = getenv("MTE_PERMISSIVE");
+  return GetBoolProperty("persist.sys.mte.permissive", false) ||
+         (permissive_env && ParseBool(permissive_env) == ParseBoolResult::kTrue);
 }
 
 static inline void futex_wait(volatile void* ftx, int value) {
@@ -592,7 +604,28 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
-  } else {
+  }
+#ifdef __aarch64__
+  else if (info->si_signo == SIGSEGV &&
+           (info->si_code == SEGV_MTESERR || info->si_code == SEGV_MTEAERR) &&
+           is_permissive_mte()) {
+    // If we are in permissive MTE mode, we do not crash, but instead disable MTE on this thread,
+    // and then let the failing instruction be retried. The second time should work (except
+    // if there is another non-MTE fault).
+    int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+    if (tagged_addr_ctrl < 0) {
+      fatal_errno("failed to PR_GET_TAGGED_ADDR_CTRL");
+    }
+    tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_NONE;
+    if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) < 0) {
+      fatal_errno("failed to PR_SET_TAGGED_ADDR_CTRL");
+    }
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                          "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
+    pthread_mutex_unlock(&crash_mutex);
+  }
+#endif
+  else {
     // Resend the signal, so that either the debugger or the parent's waitpid sees it.
     resend_signal(info);
   }

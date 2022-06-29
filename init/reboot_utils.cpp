@@ -26,8 +26,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
-#include <backtrace/Backtrace.h>
 #include <cutils/android_reboot.h>
+#include <unwindstack/AndroidUnwinder.h>
 
 #include "capabilities.h"
 #include "reboot_utils.h"
@@ -157,13 +157,13 @@ void __attribute__((noreturn)) InitFatalReboot(int signal_number) {
 
     // In the parent, let's try to get a backtrace then shutdown.
     LOG(ERROR) << __FUNCTION__ << ": signal " << signal_number;
-    std::unique_ptr<Backtrace> backtrace(
-            Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-    if (!backtrace->Unwind(0)) {
-        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
+    unwindstack::AndroidLocalUnwinder unwinder;
+    unwindstack::AndroidUnwinderData data;
+    if (!unwinder.Unwind(data)) {
+        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack: " << data.GetErrorString();
     }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-        LOG(ERROR) << backtrace->FormatFrameData(i);
+    for (const auto& frame : data.frames) {
+        LOG(ERROR) << unwinder.FormatFrame(frame);
     }
     if (init_fatal_panic) {
         LOG(ERROR) << __FUNCTION__ << ": Trigger crash";

@@ -21,9 +21,8 @@
 #include "gwp_asan/common.h"
 #include "gwp_asan/crash_handler.h"
 
-#include <unwindstack/Maps.h>
+#include <unwindstack/AndroidUnwinder.h>
 #include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
 #include <unwindstack/Unwinder.h>
 
 #include "tombstone.pb.h"
@@ -106,7 +105,8 @@ bool GwpAsanCrashData::CrashIsMine() const {
 
 constexpr size_t kMaxTraceLength = gwp_asan::AllocationMetadata::kMaxTraceLengthToCollect;
 
-void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const {
+void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone,
+                                      unwindstack::AndroidUnwinder* unwinder) const {
   if (!CrashIsMine()) {
     ALOGE("Internal Error: AddCauseProtos() on a non-GWP-ASan crash.");
     return;
@@ -140,7 +140,6 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
 
   heap_object->set_address(__gwp_asan_get_allocation_address(responsible_allocation_));
   heap_object->set_size(__gwp_asan_get_allocation_size(responsible_allocation_));
-  unwinder->SetDisplayBuildID(true);
 
   std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
 

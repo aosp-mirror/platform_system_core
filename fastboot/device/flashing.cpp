@@ -121,7 +121,12 @@ int FlashRawData(PartitionHandle* handle, const std::vector<char>& downloaded_da
 int WriteCallback(void* priv, const void* data, size_t len) {
     PartitionHandle* handle = reinterpret_cast<PartitionHandle*>(priv);
     if (!data) {
-        return lseek64(handle->fd(), len, SEEK_CUR) >= 0 ? 0 : -errno;
+        if (lseek64(handle->fd(), len, SEEK_CUR) < 0) {
+            int rv = -errno;
+            PLOG(ERROR) << "lseek failed";
+            return rv;
+        }
+        return 0;
     }
     return FlashRawDataChunk(handle, reinterpret_cast<const char*>(data), len);
 }
@@ -131,6 +136,7 @@ int FlashSparseData(PartitionHandle* handle, std::vector<char>& downloaded_data)
                                                       downloaded_data.size(), true, false);
     if (!file) {
         // Invalid sparse format
+        LOG(ERROR) << "Unable to open sparse data for flashing";
         return -EINVAL;
     }
     return sparse_file_callback(file, false, false, WriteCallback, reinterpret_cast<void*>(handle));
@@ -175,10 +181,13 @@ int Flash(FastbootDevice* device, const std::string& partition_name) {
 
     std::vector<char> data = std::move(device->download_data());
     if (data.size() == 0) {
+        LOG(ERROR) << "Cannot flash empty data vector";
         return -EINVAL;
     }
     uint64_t block_device_size = get_block_device_size(handle.fd());
     if (data.size() > block_device_size) {
+        LOG(ERROR) << "Cannot flash " << data.size() << " bytes to block device of size "
+                   << block_device_size;
         return -EOVERFLOW;
     } else if (data.size() < block_device_size &&
                (partition_name == "boot" || partition_name == "boot_a" ||

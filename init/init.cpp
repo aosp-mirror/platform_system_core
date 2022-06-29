@@ -48,7 +48,6 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <backtrace/Backtrace.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
@@ -58,6 +57,7 @@
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
+#include <unwindstack/AndroidUnwinder.h>
 
 #include "action_parser.h"
 #include "builtins.h"
@@ -84,6 +84,10 @@
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
+
+#ifndef RECOVERY
+#include "com_android_apex.h"
+#endif  // RECOVERY
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -253,12 +257,14 @@ static class ShutdownState {
 } shutdown_state;
 
 static void UnwindMainThreadStack() {
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
-    if (!backtrace->Unwind(0)) {
-        LOG(ERROR) << __FUNCTION__ << "sys.powerctl: Failed to unwind callstack.";
+    unwindstack::AndroidLocalUnwinder unwinder;
+    unwindstack::AndroidUnwinderData data;
+    if (!unwinder.Unwind(data)) {
+        LOG(ERROR) << __FUNCTION__
+                   << "sys.powerctl: Failed to unwind callstack: " << data.GetErrorString();
     }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-        LOG(ERROR) << "sys.powerctl: " << backtrace->FormatFrameData(i);
+    for (const auto& frame : data.frames) {
+        LOG(ERROR) << "sys.powerctl: " << unwinder.FormatFrame(frame);
     }
 }
 
@@ -291,13 +297,59 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
-// parser that only accepts new services
-Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex) {
-    Parser parser;
+#ifndef RECOVERY
+template <typename T>
+struct LibXmlErrorHandler {
+    T handler_;
+    template <typename Handler>
+    LibXmlErrorHandler(Handler&& handler) : handler_(std::move(handler)) {
+        xmlSetGenericErrorFunc(nullptr, &ErrorHandler);
+    }
+    ~LibXmlErrorHandler() { xmlSetGenericErrorFunc(nullptr, nullptr); }
+    static void ErrorHandler(void*, const char* msg, ...) {
+        va_list args;
+        va_start(args, msg);
+        char* formatted;
+        if (vasprintf(&formatted, msg, args) >= 0) {
+            LOG(ERROR) << formatted;
+        }
+        free(formatted);
+        va_end(args);
+    }
+};
 
-    parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&service_list, GetSubcontext(), std::nullopt,
-                                                       from_apex));
+template <typename Handler>
+LibXmlErrorHandler(Handler&&) -> LibXmlErrorHandler<Handler>;
+#endif  // RECOVERY
+
+// Returns a Parser that accepts scripts from APEX modules. It supports `service` and `on`.
+Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list) {
+    Parser parser;
+    auto subcontext = GetSubcontext();
+#ifndef RECOVERY
+    if (subcontext) {
+        const auto apex_info_list_file = "/apex/apex-info-list.xml";
+        auto error_handler = LibXmlErrorHandler([&](const auto& error_message) {
+            LOG(ERROR) << "Failed to read " << apex_info_list_file << ":" << error_message;
+        });
+        const auto apex_info_list = com::android::apex::readApexInfoList(apex_info_list_file);
+        if (apex_info_list.has_value()) {
+            std::vector<std::string> subcontext_apexes;
+            for (const auto& info : apex_info_list->getApexInfo()) {
+                if (info.hasPreinstalledModulePath() &&
+                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                    subcontext_apexes.push_back(info.getModuleName());
+                }
+            }
+            subcontext->SetApexList(std::move(subcontext_apexes));
+        }
+    }
+#endif  // RECOVERY
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, subcontext, std::nullopt,
+                                                            /*from_apex=*/true));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontext));
+
     return parser;
 }
 

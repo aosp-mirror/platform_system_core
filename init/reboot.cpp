@@ -892,7 +892,16 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "ns_switch";
         return Error() << "Failed to switch to bootstrap namespace";
     }
-    // Remove services that were defined in an APEX.
+    ActionManager::GetInstance().RemoveActionIf([](const auto& action) -> bool {
+        if (action->IsFromApex()) {
+            std::string trigger_name = action->BuildTriggersString();
+            LOG(INFO) << "Removing action (" << trigger_name << ") from (" << action->filename()
+                      << ":" << action->line() << ")";
+            return true;
+        }
+        return false;
+    });
+    // Remove services that were defined in an APEX
     ServiceList::GetInstance().RemoveServiceIf([](const std::unique_ptr<Service>& s) -> bool {
         if (s->is_from_apex()) {
             LOG(INFO) << "Removing service '" << s->name() << "' because it's defined in an APEX";
