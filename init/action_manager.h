@@ -37,6 +37,10 @@ class ActionManager {
     size_t CheckAllCommands();
 
     void AddAction(std::unique_ptr<Action> action);
+    template <class UnaryPredicate>
+    void RemoveActionIf(UnaryPredicate predicate) {
+        actions_.erase(std::remove_if(actions_.begin(), actions_.end(), predicate), actions_.end());
+    }
     void QueueEventTrigger(const std::string& trigger);
     void QueuePropertyChange(const std::string& name, const std::string& value);
     void QueueAllPropertyActions();

@@ -606,8 +606,12 @@ provides the `aidl_lazy_test_1` interface.
   group. If not provided, the directory is created with permissions 755 and
   owned by the root user and root group. If provided, the mode, owner and group
   will be updated if the directory exists already.
+  If the directory does not exist, it will receive the security context from
+  the current SELinux policy or its parent if not specified in the policy. If
+  the directory exists, its security context will not be changed (even if
+  different from the policy).
 
- > _action_ can be one of:
+  > _action_ can be one of:
   * `None`: take no encryption action; directory will be encrypted if parent is.
   * `Require`: encrypt directory, abort boot process if encryption fails
   * `Attempt`: try to set an encryption policy, but continue if it fails

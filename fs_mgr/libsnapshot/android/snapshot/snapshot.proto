@@ -235,4 +235,13 @@ message SnapshotMergeReport {
 
     // The source fingerprint at the time the OTA was downloaded.
     string source_build_fingerprint = 10;
+
+    // Whether this update attempt uses userspace snapshots.
+    bool userspace_snapshots_used = 11;
+
+    // Whether this update attempt uses XOR compression.
+    bool xor_compression_used = 12;
+
+    // Whether this update attempt used io_uring.
+    bool iouring_used = 13;
 }

@@ -426,7 +426,7 @@ static Result<void> make_dir_with_options(const MkdirOptions& options) {
             return ErrnoError() << "fchmodat() failed on " << options.target;
         }
     }
-    if (fscrypt_is_native()) {
+    if (IsFbeEnabled()) {
         if (!FscryptSetDirectoryPolicy(ref_basename, options.fscrypt_action, options.target)) {
             return reboot_into_recovery(
                     {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + options.target});
@@ -1175,7 +1175,7 @@ static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
     auto reboot = [reboot_reason, should_reboot_into_recovery](const std::string& message) {
         // TODO (b/122850122): support this in gsi
         if (should_reboot_into_recovery) {
-            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
+            if (IsFbeEnabled() && !android::gsi::IsGsiRunning()) {
                 LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
                 if (auto result = reboot_into_recovery(
                             {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
@@ -1288,7 +1288,8 @@ static Result<void> parse_apex_configs() {
         return Error() << "glob pattern '" << glob_pattern << "' failed";
     }
     std::vector<std::string> configs;
-    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance(), true);
+    Parser parser =
+            CreateApexConfigParser(ActionManager::GetInstance(), ServiceList::GetInstance());
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
         std::string path = glob_result.gl_pathv[i];
         // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to

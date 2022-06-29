@@ -52,11 +52,15 @@ TrustyKeyMintOperation::~TrustyKeyMintOperation() {
 }
 
 ScopedAStatus TrustyKeyMintOperation::updateAad(
-        const vector<uint8_t>& input, const optional<HardwareAuthToken>& /* authToken */,
+        const vector<uint8_t>& input, const optional<HardwareAuthToken>& authToken,
         const optional<TimeStampToken>& /* timestampToken */) {
     UpdateOperationRequest request(impl_->message_version());
     request.op_handle = opHandle_;
     request.additional_params.push_back(TAG_ASSOCIATED_DATA, input.data(), input.size());
+    if (authToken) {
+        auto tokenAsVec(authToken2AidlVec(*authToken));
+        request.additional_params.push_back(TAG_AUTH_TOKEN, tokenAsVec.data(), tokenAsVec.size());
+    }
 
     UpdateOperationResponse response(impl_->message_version());
     impl_->UpdateOperation(request, &response);
