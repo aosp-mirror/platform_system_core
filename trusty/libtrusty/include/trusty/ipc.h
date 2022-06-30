@@ -23,15 +23,19 @@
 
 /**
  * enum transfer_kind - How to send an fd to Trusty
- * @TRUSTY_SHARE: Memory will be accessible by Linux and Trusty. On ARM it will
- *                be mapped as nonsecure. Suitable for shared memory. The paired
- *                fd must be a "memfd".
- * @TRUSTY_LEND:  Memory will be accessible only to Trusty. On ARM it will be
- *                transitioned to "Secure" memory if Trusty is in TrustZone.
- *                This transfer kind is suitable for donating video buffers or
- *                other similar resources. The paired fd may need to come from a
- *                platform-specific allocator for memory that may be
- *                transitioned to "Secure".
+ * @TRUSTY_SHARE:       Memory will be accessible by Linux and Trusty. On ARM it
+ *                      will be mapped as nonsecure. Suitable for shared memory.
+ *                      The paired fd must be a "dma_buf".
+ * @TRUSTY_LEND:        Memory will be accessible only to Trusty. On ARM it will
+ *                      be transitioned to "Secure" memory if Trusty is in
+ *                      TrustZone. This transfer kind is suitable for donating
+ *                      video buffers or other similar resources. The paired fd
+ *                      may need to come from a platform-specific allocator for
+ *                      memory that may be transitioned to "Secure".
+ * @TRUSTY_SEND_SECURE: Send memory that is already "Secure". Memory will be
+ *                      accessible only to Trusty. The paired fd may need to
+ *                      come from a platform-specific allocator that returns
+ *                      "Secure" buffers.
  *
  * Describes how the user would like the resource in question to be sent to
  * Trusty. Options may be valid only for certain kinds of fds.
@@ -39,6 +43,7 @@
 enum transfer_kind {
     TRUSTY_SHARE = 0,
     TRUSTY_LEND = 1,
+    TRUSTY_SEND_SECURE = 2,
 };
 
 /**

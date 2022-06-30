@@ -38,7 +38,7 @@ struct FstabEntry {
     std::string fs_options;
     std::string fs_checkpoint_opts;
     std::string metadata_key_dir;
-    std::string metadata_encryption;
+    std::string metadata_encryption_options;
     off64_t length = 0;
     std::string label;
     int partnum = -1;

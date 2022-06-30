@@ -49,3 +49,13 @@
 #define PROJECT_ID_EXT_OBB_START 40000
 /* End of project IDs for apps to mark external OBB data. */
 #define PROJECT_ID_EXT_OBB_END 49999
+
+/* Start of project IDs for apps to mark internal app data. */
+#define PROJECT_ID_APP_START 50000
+/* End of project IDs for apps to mark internal app data. */
+#define PROJECT_ID_APP_END 59999
+
+/* Start of project IDs for apps to mark internal app cache data. */
+#define PROJECT_ID_APP_CACHE_START 60000
+/* End of project IDs for apps to mark internal app cache data. */
+#define PROJECT_ID_APP_CACHE_END 69999

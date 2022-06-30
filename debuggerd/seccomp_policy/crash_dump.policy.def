@@ -34,7 +34,15 @@ rt_sigprocmask: 1
 rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 
+// this is referenced from mainline modules running on Q devices, where not all
+// of the constants used here are defined in headers, so minijail rejects them.
+// we define them here to avoid those errors.
+        // constants introduced in R
 #define PR_SET_VMA 0x53564d41
+#define PR_GET_TAGGED_ADDR_CTRL 56
+        // constants introduced in S
+#define PR_PAC_GET_ENABLED_KEYS 61
+
 #if defined(__aarch64__)
 // PR_PAC_RESET_KEYS happens on aarch64 in pthread_create path.
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA || arg0 == PR_PAC_RESET_KEYS || arg0 == PR_GET_TAGGED_ADDR_CTRL || arg0 == PR_PAC_GET_ENABLED_KEYS

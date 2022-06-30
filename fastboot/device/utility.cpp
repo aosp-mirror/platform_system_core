@@ -90,14 +90,7 @@ bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHan
         return false;
     }
 
-    flags |= (O_EXCL | O_CLOEXEC | O_BINARY);
-    unique_fd fd(TEMP_FAILURE_RETRY(open(handle->path().c_str(), flags)));
-    if (fd < 0) {
-        PLOG(ERROR) << "Failed to open block device: " << handle->path();
-        return false;
-    }
-    handle->set_fd(std::move(fd));
-    return true;
+    return handle->Open(flags);
 }
 
 std::optional<std::string> FindPhysicalPartition(const std::string& name) {

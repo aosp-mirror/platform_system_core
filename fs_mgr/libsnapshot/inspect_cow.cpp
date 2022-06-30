@@ -155,6 +155,7 @@ static bool Inspect(const std::string& path, Options opt) {
     }
     StringSink sink;
     bool success = true;
+    uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
     while (!iter->Done()) {
         const CowOperation& op = iter->Get();
 
@@ -187,7 +188,24 @@ static bool Inspect(const std::string& path, Options opt) {
             }
         }
 
+        if (op.type == kCowCopyOp) {
+            copy_ops++;
+        } else if (op.type == kCowReplaceOp) {
+            replace_ops++;
+        } else if (op.type == kCowZeroOp) {
+            zero_ops++;
+        } else if (op.type == kCowXorOp) {
+            xor_ops++;
+        }
+
         iter->Next();
+    }
+
+    if (!opt.silent) {
+        auto total_ops = replace_ops + zero_ops + copy_ops + xor_ops;
+        std::cout << "Total-data-ops: " << total_ops << "Replace-ops: " << replace_ops
+                  << " Zero-ops: " << zero_ops << " Copy-ops: " << copy_ops
+                  << " Xor_ops: " << xor_ops << std::endl;
     }
 
     return success;

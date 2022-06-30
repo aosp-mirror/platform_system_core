@@ -332,8 +332,8 @@ bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& ar
 
     auto fastboot_hal = device->fastboot_hal();
     if (!fastboot_hal) {
-        *message = "Fastboot HAL not found";
-        return false;
+        *message = "raw";
+        return true;
     }
 
     FileSystemType type;

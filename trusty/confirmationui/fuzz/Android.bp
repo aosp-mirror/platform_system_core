@@ -25,6 +25,9 @@ cc_fuzz {
         "-DTRUSTY_APP_UUID=\"7dee2364-c036-425b-b086-df0f6c233c1b\"",
         "-DTRUSTY_APP_FILENAME=\"confirmationui.syms.elf\"",
     ],
+    fuzz_config: {
+       cc: ["trong@google.com"],
+    },
 
 }
 
@@ -36,6 +39,9 @@ cc_fuzz {
     shared_libs: [
         "libdmabufheap",
     ],
+    fuzz_config: {
+       cc: ["trong@google.com"],
+    },
 
     // The initial corpus for this fuzzer was derived by dumping messages from/to
     // HAL to/from TA triggered by VtsHalConfirmationUIV1_0TargetTest.

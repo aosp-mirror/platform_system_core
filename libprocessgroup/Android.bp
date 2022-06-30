@@ -73,3 +73,29 @@ cc_library {
     ],
     min_sdk_version: "29",
 }
+
+cc_test {
+    name: "task_profiles_test",
+    host_supported: true,
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wexit-time-destructors",
+        "-Wno-unused-parameter",
+    ],
+    srcs: [
+        "task_profiles_test.cpp",
+    ],
+    header_libs: [
+        "libcutils_headers",
+        "libprocessgroup_headers",
+    ],
+    shared_libs: [
+        "libbase",
+        "libcgrouprc",
+        "libprocessgroup",
+    ],
+    static_libs: [
+        "libgmock",
+    ],
+}

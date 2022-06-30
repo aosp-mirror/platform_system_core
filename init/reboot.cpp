@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/f2fs.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
 #include <mntent.h>
@@ -218,7 +219,7 @@ static void LogShutdownTime(UmountStat stat, Timer* t) {
                  << stat;
 }
 
-static bool IsDataMounted() {
+static bool IsDataMounted(const std::string& fstype) {
     std::unique_ptr<std::FILE, int (*)(std::FILE*)> fp(setmntent("/proc/mounts", "re"), endmntent);
     if (fp == nullptr) {
         PLOG(ERROR) << "Failed to open /proc/mounts";
@@ -227,7 +228,7 @@ static bool IsDataMounted() {
     mntent* mentry;
     while ((mentry = getmntent(fp.get())) != nullptr) {
         if (mentry->mnt_dir == "/data"s) {
-            return true;
+            return fstype == "*" || mentry->mnt_type == fstype;
         }
     }
     return false;
@@ -633,7 +634,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
 
     // If /data isn't mounted then we can skip the extra reboot steps below, since we don't need to
     // worry about unmounting it.
-    if (!IsDataMounted()) {
+    if (!IsDataMounted("*")) {
         sync();
         RebootSystem(cmd, reboot_target);
         abort();
@@ -758,6 +759,16 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     sem_post(&reboot_semaphore);
 
     // Reboot regardless of umount status. If umount fails, fsck after reboot will fix it.
+    if (IsDataMounted("f2fs")) {
+        uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
+        unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
+        int ret = ioctl(fd, F2FS_IOC_SHUTDOWN, &flag);
+        if (ret) {
+            PLOG(ERROR) << "Shutdown /data: ";
+        } else {
+            LOG(INFO) << "Shutdown /data";
+        }
+    }
     RebootSystem(cmd, reboot_target);
     abort();
 }

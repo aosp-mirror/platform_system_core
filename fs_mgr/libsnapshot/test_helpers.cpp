@@ -267,8 +267,8 @@ AssertionResult LowSpaceUserdata::Init(uint64_t max_free_space) {
         return AssertionFailure() << "Temp file allocated to " << big_file_->path << ", not in "
                                   << kUserDataDevice;
     }
-    uint64_t next_consume =
-            std::min(free_space_ - max_free_space, (uint64_t)std::numeric_limits<off_t>::max());
+    uint64_t next_consume = std::min(available_space_ - max_free_space,
+                                     (uint64_t)std::numeric_limits<off_t>::max());
     off_t allocated = 0;
     while (next_consume > 0 && free_space_ > max_free_space) {
         int status = fallocate(big_file_->fd, 0, allocated, next_consume);

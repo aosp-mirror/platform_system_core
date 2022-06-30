@@ -37,8 +37,12 @@ class IProfileAttribute {
 
 class ProfileAttribute : public IProfileAttribute {
   public:
-    ProfileAttribute(const CgroupController& controller, const std::string& file_name)
-        : controller_(controller), file_name_(file_name) {}
+    // Cgroup attributes may have different names in the v1 and v2 hierarchies. If `file_v2_name` is
+    // not empty, `file_name` is the name for the v1 hierarchy and `file_v2_name` is the name for
+    // the v2 hierarchy. If `file_v2_name` is empty, `file_name` is used for both hierarchies.
+    ProfileAttribute(const CgroupController& controller, const std::string& file_name,
+                     const std::string& file_v2_name)
+        : controller_(controller), file_name_(file_name), file_v2_name_(file_v2_name) {}
     ~ProfileAttribute() = default;
 
     const CgroupController* controller() const override { return &controller_; }
@@ -50,6 +54,7 @@ class ProfileAttribute : public IProfileAttribute {
   private:
     CgroupController controller_;
     std::string file_name_;
+    std::string file_v2_name_;
 };
 
 // Abstract profile element
@@ -102,8 +107,8 @@ class SetTimerSlackAction : public ProfileAction {
 // Set attribute profile element
 class SetAttributeAction : public ProfileAction {
   public:
-    SetAttributeAction(const IProfileAttribute* attribute, const std::string& value)
-        : attribute_(attribute), value_(value) {}
+    SetAttributeAction(const IProfileAttribute* attribute, const std::string& value, bool optional)
+        : attribute_(attribute), value_(value), optional_(optional) {}
 
     const char* Name() const override { return "SetAttribute"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
@@ -112,6 +117,7 @@ class SetAttributeAction : public ProfileAction {
   private:
     const IProfileAttribute* attribute_;
     std::string value_;
+    bool optional_;
 };
 
 // Set cgroup profile element
@@ -140,7 +146,8 @@ class SetCgroupAction : public ProfileAction {
 // Write to file action
 class WriteFileAction : public ProfileAction {
   public:
-    WriteFileAction(const std::string& path, const std::string& value, bool logfailures);
+    WriteFileAction(const std::string& task_path, const std::string& proc_path,
+                    const std::string& value, bool logfailures);
 
     const char* Name() const override { return "WriteFile"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
@@ -149,13 +156,13 @@ class WriteFileAction : public ProfileAction {
     void DropResourceCaching(ResourceCacheType cache_type) override;
 
   private:
-    std::string path_, value_;
+    std::string task_path_, proc_path_, value_;
     bool logfailures_;
-    android::base::unique_fd fd_;
+    android::base::unique_fd fd_[ProfileAction::RCT_COUNT];
     mutable std::mutex fd_mutex_;
 
-    static bool WriteValueToFile(const std::string& value, const std::string& path,
-                                 bool logfailures);
+    bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, int uid, int pid,
+                          bool logfailures) const;
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, const std::string& value) const;
 };
 

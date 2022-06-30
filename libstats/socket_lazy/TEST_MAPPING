@@ -3,5 +3,10 @@
     {
       "name" : "libstatssocket_lazy_test"
     }
+  ],
+  "hwasan-postsubmit" : [
+    {
+      "name" : "libstatssocket_lazy_test"
+    }
   ]
 }

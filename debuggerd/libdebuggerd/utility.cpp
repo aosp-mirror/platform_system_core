@@ -28,6 +28,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <set>
 #include <string>
 
 #include <android-base/properties.h>
@@ -483,7 +484,16 @@ std::string describe_pac_enabled_keys(long value) {
 }
 
 void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix) {
-  if (unwinder->elf_from_memory_not_file()) {
+  std::set<std::string> unreadable_elf_files;
+  unwinder->SetDisplayBuildID(true);
+  for (const auto& frame : unwinder->frames()) {
+    if (frame.map_info != nullptr && frame.map_info->ElfFileNotReadable()) {
+      unreadable_elf_files.emplace(frame.map_info->name());
+    }
+  }
+
+  // Put the preamble ahead of the backtrace.
+  if (!unreadable_elf_files.empty()) {
     _LOG(log, logtype::BACKTRACE,
          "%sNOTE: Function names and BuildId information is missing for some frames due\n", prefix);
     _LOG(log, logtype::BACKTRACE,
@@ -493,10 +503,13 @@ void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* pref
     _LOG(log, logtype::BACKTRACE,
          "%sNOTE: On this device, run setenforce 0 to make the libraries readable.\n", prefix);
 #endif
+    _LOG(log, logtype::BACKTRACE, "%sNOTE: Unreadable libraries:\n", prefix);
+    for (auto& name : unreadable_elf_files) {
+      _LOG(log, logtype::BACKTRACE, "%sNOTE:   %s\n", prefix, name.c_str());
+    }
   }
 
-  unwinder->SetDisplayBuildID(true);
-  for (size_t i = 0; i < unwinder->NumFrames(); i++) {
-    _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(i).c_str());
+  for (const auto& frame : unwinder->frames()) {
+    _LOG(log, logtype::BACKTRACE, "%s%s\n", prefix, unwinder->FormatFrame(frame).c_str());
   }
 }

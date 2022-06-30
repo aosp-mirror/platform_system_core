@@ -3,5 +3,10 @@
     {
       "name": "CtsBionicTestCases"
     }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "CtsBionicTestCases"
+    }
   ]
 }

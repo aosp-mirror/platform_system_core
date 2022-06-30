@@ -91,7 +91,7 @@ std::string fake_super;
 
 void MountMetadata();
 bool ShouldUseCompression();
-bool ShouldUseUserspaceSnapshots();
+bool IsDaemonRequired();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -1208,7 +1208,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1342,7 +1342,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1450,7 +1450,7 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), ShouldUseUserspaceSnapshots());
+    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -2411,8 +2411,15 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
     SetSize(sys_, partition_size);
+    SetSize(vnd_, partition_size);
+    SetSize(prd_, 18_MiB);
 
-    AddOperationForPartitions({sys_});
+    // Make sure |prd| does not fit in super at all. On VABC, this means we
+    // fake an extra large COW for |vnd| to fill up super.
+    vnd_->set_estimate_cow_size(30_MiB);
+    prd_->set_estimate_cow_size(30_MiB);
+
+    AddOperationForPartitions();
 
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2422,8 +2429,25 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
         GTEST_SKIP() << "Test does not apply to userspace snapshots";
     }
 
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    // Test that partitions prioritize using space in super.
+    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
+    ASSERT_NE(tgt, nullptr);
+    ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
+    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
+    ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
+
+    // Write some data to target partitions.
+    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    }
+
+    // Assert that source partitions aren't affected.
+    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
+        ASSERT_TRUE(IsPartitionUnchanged(name));
+    }
+
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
     ASSERT_TRUE(UnmapAll());
 
     class DmStatusFailure final : public DeviceMapperWrapper {
@@ -2726,13 +2750,26 @@ void SnapshotTestEnvironment::TearDown() {
     }
 }
 
-bool ShouldUseUserspaceSnapshots() {
+bool IsDaemonRequired() {
     if (FLAGS_force_config == "dmsnap") {
         return false;
     }
+
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // No userspace snapshots if vendor partition is on Android 12
+    // However, for GRF devices, snapuserd daemon will be on
+    // vendor ramdisk in Android 12.
+    if (vendor_release.find("12") != std::string::npos) {
+        return true;
+    }
+
     if (!FLAGS_force_config.empty()) {
         return true;
     }
+
     return IsUserspaceSnapshotsEnabled();
 }
 

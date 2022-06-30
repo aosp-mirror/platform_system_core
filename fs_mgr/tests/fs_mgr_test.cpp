@@ -943,7 +943,7 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
     ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("adiantum", entry->metadata_encryption);
+    EXPECT_EQ("adiantum", entry->metadata_encryption_options);
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_MetadataEncryption_WrappedKey) {
@@ -960,8 +960,8 @@ source none0       swap   defaults      keydirectory=/dir/key,metadata_encryptio
     ASSERT_LE(1U, fstab.size());
 
     auto entry = fstab.begin();
-    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption);
-    auto parts = android::base::Split(entry->metadata_encryption, ":");
+    EXPECT_EQ("aes-256-xts:wrappedkey_v0", entry->metadata_encryption_options);
+    auto parts = android::base::Split(entry->metadata_encryption_options, ":");
     EXPECT_EQ(2U, parts.size());
     EXPECT_EQ("aes-256-xts", parts[0]);
     EXPECT_EQ("wrappedkey_v0", parts[1]);

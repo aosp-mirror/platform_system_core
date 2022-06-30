@@ -78,7 +78,8 @@ void SwitchRoot(const std::string& new_root) {
         auto new_mount_path = new_root + mount_path;
         mkdir(new_mount_path.c_str(), 0755);
         if (mount(mount_path.c_str(), new_mount_path.c_str(), nullptr, MS_MOVE, nullptr) != 0) {
-            PLOG(FATAL) << "Unable to move mount at '" << mount_path << "'";
+            PLOG(FATAL) << "Unable to move mount at '" << mount_path << "' to "
+                        << "'" << new_mount_path << "'";
         }
     }
 

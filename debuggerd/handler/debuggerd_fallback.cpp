@@ -73,14 +73,13 @@ static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
     thread.registers.reset(
         unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
-    // TODO: Create this once and store it in a global?
-    unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid());
     // Do not use the thread cache here because it will call pthread_key_create
     // which doesn't work in linker code. See b/189803009.
     // Use a normal cached object because the process is stopped, and there
     // is no chance of data changing between reads.
     auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
-    unwinder.SetProcessMemory(process_memory);
+    // TODO: Create this once and store it in a global?
+    unwindstack::UnwinderFromPid unwinder(kMaxFrames, getpid(), process_memory);
     dump_backtrace_thread(output_fd, &unwinder, thread);
   }
   __linker_disable_fallback_allocator();

@@ -48,13 +48,11 @@ cc_library_headers {
             header_libs: ["libbacktrace_headers"],
             export_header_lib_headers: ["libbacktrace_headers"],
         },
-        linux_glibc: {
+        host_linux: {
             header_libs: ["libbacktrace_headers"],
             export_header_lib_headers: ["libbacktrace_headers"],
         },
         linux_bionic: {
-            header_libs: ["libbacktrace_headers"],
-            export_header_lib_headers: ["libbacktrace_headers"],
             enabled: true,
         },
         windows: {
@@ -131,6 +129,9 @@ cc_defaults {
             enabled: true,
         },
     },
+    fuzz_config: {
+       cc: ["smoreland@google.com"],
+    },
 }
 
 cc_library {
@@ -181,6 +182,10 @@ cc_library {
     min_sdk_version: "apex_inherit",
 
     afdo: true,
+
+    header_abi_checker: {
+        diff_flags: ["-allow-adding-removing-weak-symbols"],
+    },
 }
 
 cc_library {
@@ -188,6 +193,7 @@ cc_library {
     defaults: ["libutils_defaults"],
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
+    min_sdk_version: "29",
 
     srcs: [
         "CallStack.cpp",

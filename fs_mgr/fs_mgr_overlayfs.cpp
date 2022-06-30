@@ -126,8 +126,12 @@ namespace {
 
 bool fs_mgr_in_recovery() {
     // Check the existence of recovery binary instead of using the compile time
-    // macro, because first-stage-init is compiled with __ANDROID_RECOVERY__
-    // defined, albeit not in recovery. More details: system/core/init/README.md
+    // __ANDROID_RECOVERY__ macro.
+    // If BOARD_USES_RECOVERY_AS_BOOT is true, both normal and recovery boot
+    // mode would use the same init binary, which would mean during normal boot
+    // the '/init' binary is actually a symlink pointing to
+    // init_second_stage.recovery, which would be compiled with
+    // __ANDROID_RECOVERY__ defined.
     return fs_mgr_access("/system/bin/recovery");
 }
 

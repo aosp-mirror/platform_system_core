@@ -22,9 +22,15 @@ cc_library_static {
         "libutils",
         "libbase",
 
-        // Need latest HealthInfo definition from headers of this shared
-        // library. Clients don't need to link to this.
+        // Need HealthInfo definition from headers of these shared
+        // libraries. Clients don't need to link to these.
         "android.hardware.health@2.1",
+        "android.hardware.health-V1-ndk",
+    ],
+    whole_static_libs: [
+        // Need to translate HIDL to AIDL to support legacy APIs in
+        // BatteryMonitor.
+        "android.hardware.health-translate-ndk",
     ],
     header_libs: ["libhealthd_headers"],
     export_header_lib_headers: ["libhealthd_headers"],

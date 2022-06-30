@@ -18,6 +18,8 @@
 
 #include <dirent.h>
 
+#include <map>
+
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -152,6 +154,58 @@ bool Parser::ParseConfigFile(const std::string& path) {
 
     LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
     return true;
+}
+
+std::vector<std::string> Parser::FilterVersionedConfigs(const std::vector<std::string>& configs,
+                                                        int active_sdk) {
+    std::vector<std::string> filtered_configs;
+
+    std::map<std::string, std::pair<std::string, int>> script_map;
+    for (const auto& c : configs) {
+        int sdk = 0;
+        const std::vector<std::string> parts = android::base::Split(c, ".");
+        std::string base;
+        if (parts.size() < 2) {
+            continue;
+        }
+
+        // parts[size()-1], aka the suffix, should be "rc" or "#rc"
+        // any other pattern gets discarded
+
+        const auto& suffix = parts[parts.size() - 1];
+        if (suffix == "rc") {
+            sdk = 0;
+        } else {
+            char trailer[9] = {0};
+            int r = sscanf(suffix.c_str(), "%d%8s", &sdk, trailer);
+            if (r != 2) {
+                continue;
+            }
+            if (strlen(trailer) > 2 || strcmp(trailer, "rc") != 0) {
+                continue;
+            }
+        }
+
+        if (sdk < 0 || sdk > active_sdk) {
+            continue;
+        }
+
+        base = parts[0];
+        for (unsigned int i = 1; i < parts.size() - 1; i++) {
+            base = base + "." + parts[i];
+        }
+
+        // is this preferred over what we already have
+        auto it = script_map.find(base);
+        if (it == script_map.end() || it->second.second < sdk) {
+            script_map[base] = std::make_pair(c, sdk);
+        }
+    }
+
+    for (const auto& m : script_map) {
+        filtered_configs.push_back(m.second.first);
+    }
+    return filtered_configs;
 }
 
 bool Parser::ParseConfigDir(const std::string& path) {

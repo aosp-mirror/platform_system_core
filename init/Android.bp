@@ -532,8 +532,8 @@ genrule {
     cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location check_builtins.cpp) > $(out)",
 }
 
-cc_binary {
-    name: "host_init_verifier",
+cc_defaults {
+    name: "init_host_defaults",
     host_supported: true,
     cflags: [
         "-Wall",
@@ -556,7 +556,6 @@ cc_binary {
         "libprocessgroup",
         "libprotobuf-cpp-lite",
     ],
-    srcs: init_common_sources + init_host_sources,
     proto: {
         type: "lite",
     },
@@ -572,6 +571,26 @@ cc_binary {
             enabled: false,
         },
     },
+}
+
+cc_binary {
+    name: "host_init_verifier",
+    defaults: ["init_host_defaults"],
+    srcs: init_common_sources + init_host_sources,
+}
+
+cc_library_host_static {
+    name: "libinit_host",
+    defaults: ["init_host_defaults"],
+    srcs: init_common_sources,
+    export_include_dirs: ["."],
+    proto: {
+        export_proto_headers: true,
+    },
+    visibility: [
+        // host_apex_verifier performs a subset of init.rc validation
+        "//system/apex/tools",
+    ],
 }
 
 sh_binary {

@@ -67,6 +67,7 @@ bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInByte
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 
 void removeAllProcessGroups(void);
+void removeAllEmptyProcessGroups(void);
 
 // Provides the path for an attribute in a specific process group
 // Returns false in case of error, true in case of success
