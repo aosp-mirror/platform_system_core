@@ -87,6 +87,7 @@ cc_defaults {
         "liblog",
         "libsnapshot_cow",
         "libz",
+        "liblz4",
         "libext4_utils",
         "liburing",
     ],
@@ -145,6 +146,7 @@ cc_test {
     name: "cow_snapuserd_test",
     defaults: [
         "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
     ],
     srcs: [
         "dm-snapshot-merge/cow_snapuserd_test.cpp",
@@ -186,6 +188,7 @@ cc_test {
     name: "snapuserd_test",
     defaults: [
         "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
     ],
     srcs: [
         "user-space-merge/snapuserd_test.cpp",
