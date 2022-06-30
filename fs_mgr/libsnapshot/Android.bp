@@ -44,7 +44,6 @@ cc_defaults {
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
-        "libsnapshot_cow",
         "libsnapshot_snapuserd",
         "libz",
     ],
@@ -154,22 +153,6 @@ cc_defaults {
         "-Wall",
         "-Werror",
     ],
-    export_include_dirs: ["include"],
-    srcs: [
-        "cow_decompress.cpp",
-        "cow_reader.cpp",
-        "cow_writer.cpp",
-        "cow_format.cpp",
-    ],
-}
-
-cc_library_static {
-    name: "libsnapshot_cow",
-    defaults: [
-        "libsnapshot_cow_defaults",
-    ],
-    host_supported: true,
-    recovery_available: true,
     shared_libs: [
         "libbase",
         "liblog",
@@ -177,7 +160,24 @@ cc_library_static {
     static_libs: [
         "libbrotli",
         "libz",
+        "liblz4",
     ],
+    export_include_dirs: ["include"],
+}
+
+cc_library_static {
+    name: "libsnapshot_cow",
+    defaults: [
+        "libsnapshot_cow_defaults",
+    ],
+    srcs: [
+        "cow_decompress.cpp",
+        "cow_reader.cpp",
+        "cow_writer.cpp",
+        "cow_format.cpp",
+    ],
+    host_supported: true,
+    recovery_available: true,
     ramdisk_available: true,
     vendor_ramdisk_available: true,
 }
@@ -214,7 +214,7 @@ cc_library_static {
 
 cc_defaults {
     name: "libsnapshot_test_defaults",
-    defaults: ["libsnapshot_defaults"],
+    defaults: ["libsnapshot_defaults", "libsnapshot_cow_defaults"],
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
@@ -295,6 +295,7 @@ cc_test {
 
 cc_binary {
     name: "snapshotctl",
+    defaults: ["libsnapshot_cow_defaults", "libsnapshot_hal_deps"],
     srcs: [
         "snapshotctl.cpp",
     ],
@@ -343,6 +344,9 @@ cc_test {
 
 cc_defaults {
     name: "libsnapshot_fuzzer_defaults",
+    defaults: [
+        "libsnapshot_cow_defaults",
+    ],
     native_coverage : true,
     srcs: [
         // Compile the protobuf definition again with type full.
@@ -416,6 +420,7 @@ cc_test {
     name: "cow_api_test",
     defaults: [
         "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
     ],
     srcs: [
         "cow_api_test.cpp",
@@ -471,6 +476,7 @@ cc_binary {
         "libsparse",
         "libxz",
         "libz",
+        "liblz4",
         "libziparchive",
         "update_metadata-protos",
     ],
@@ -486,6 +492,9 @@ cc_binary {
 
 cc_binary {
     name: "estimate_cow_from_nonab_ota",
+    defaults: [
+        "libsnapshot_cow_defaults",
+    ],
     host_supported: true,
     device_supported: false,
     cflags: [
@@ -519,6 +528,7 @@ cc_binary {
     name: "inspect_cow",
     host_supported: true,
     device_supported: true,
+    defaults: ["libsnapshot_cow_defaults"],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
         "-Wall",
