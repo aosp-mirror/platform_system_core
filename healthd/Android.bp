@@ -346,7 +346,7 @@ phony {
 prebuilt_etc {
     name: "system_core_charger_res_images_battery_fail.png_default_vendor",
     src: "images/battery_fail.png",
-    relative_install_path: "res/images/charger/default",
+    relative_install_path: "res/images/default/charger",
     vendor: true,
     filename: "battery_fail.png",
 }
@@ -355,7 +355,7 @@ prebuilt_etc {
 prebuilt_etc {
     name: "system_core_charger_res_images_battery_scale.png_default_vendor",
     src: "images/battery_scale.png",
-    relative_install_path: "res/images/charger/default",
+    relative_install_path: "res/images/default/charger",
     vendor: true,
     filename: "battery_scale.png",
 }
