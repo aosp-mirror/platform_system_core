@@ -193,9 +193,8 @@ void set_human_readable_cause(Cause* cause, uint64_t fault_addr) {
 static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
                                 const ProcessInfo& process_info, const ThreadInfo& main_thread) {
 #if defined(USE_SCUDO)
-  ScudoCrashData scudo_crash_data;
-  if (scudo_crash_data.SetErrorInfo(unwinder->GetProcessMemory().get(), process_info) &&
-      scudo_crash_data.CrashIsMine()) {
+  ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
+  if (scudo_crash_data.CrashIsMine()) {
     scudo_crash_data.AddCauseProtos(tombstone, unwinder);
     return;
   }
