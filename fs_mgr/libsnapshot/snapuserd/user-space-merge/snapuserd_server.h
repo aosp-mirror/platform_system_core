@@ -15,6 +15,7 @@
 #pragma once
 
 #include <poll.h>
+#include <sys/eventfd.h>
 
 #include <cstdio>
 #include <cstring>
@@ -22,6 +23,8 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <optional>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -34,6 +37,7 @@ namespace android {
 namespace snapshot {
 
 static constexpr uint32_t kMaxPacketSize = 512;
+static constexpr uint8_t kMaxMergeThreads = 2;
 
 enum class DaemonOps {
     INIT,
@@ -85,13 +89,19 @@ class UserSnapshotServer {
     std::vector<struct pollfd> watched_fds_;
     bool is_socket_present_ = false;
     int num_partitions_merge_complete_ = 0;
+    int active_merge_threads_ = 0;
+    bool stop_monitor_merge_thread_ = false;
     bool is_server_running_ = false;
     bool io_uring_enabled_ = false;
+    std::optional<bool> is_merge_monitor_started_;
+
+    android::base::unique_fd monitor_merge_event_fd_;
 
     std::mutex lock_;
 
     using HandlerList = std::vector<std::shared_ptr<UserSnapshotDmUserHandler>>;
     HandlerList dm_users_;
+    std::queue<std::shared_ptr<UserSnapshotDmUserHandler>> merge_handlers_;
 
     void AddWatchedFd(android::base::borrowed_fd fd, int events);
     void AcceptClient();
@@ -109,6 +119,8 @@ class UserSnapshotServer {
     bool IsTerminating() { return terminating_; }
 
     void RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler);
+    void MonitorMerge();
+
     void JoinAllThreads();
     bool StartWithSocket(bool start_listening);
 
@@ -122,7 +134,7 @@ class UserSnapshotServer {
     bool UpdateVerification(std::lock_guard<std::mutex>* proof_of_lock);
 
   public:
-    UserSnapshotServer() { terminating_ = false; }
+    UserSnapshotServer();
     ~UserSnapshotServer();
 
     bool Start(const std::string& socketname);
@@ -136,9 +148,11 @@ class UserSnapshotServer {
                                                           const std::string& backing_device,
                                                           const std::string& base_path_merge);
     bool StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
-    bool StartMerge(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
+    bool StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
+                    const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
     std::string GetMergeStatus(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
 
+    void WakeupMonitorMergeThread();
     void SetTerminating() { terminating_ = true; }
     void ReceivedSocketSignal() { received_socket_signal_ = true; }
     void SetServerRunning() { is_server_running_ = true; }
