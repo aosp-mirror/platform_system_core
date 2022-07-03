@@ -2151,8 +2151,17 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
         if (!suffix.empty() && !android::base::EndsWith(name, suffix)) {
             continue;
         }
-        snapshots->emplace_back(std::move(name));
+
+        // Insert system and product partition at the beginning so that
+        // during snapshot-merge, these partitions are merged first.
+        if (name == "system_a" || name == "system_b" || name == "product_a" ||
+            name == "product_b") {
+            snapshots->insert(snapshots->begin(), std::move(name));
+        } else {
+            snapshots->emplace_back(std::move(name));
+        }
     }
+
     return true;
 }
 
