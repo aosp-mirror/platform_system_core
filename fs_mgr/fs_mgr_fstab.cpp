@@ -510,35 +510,6 @@ std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     return boot_devices;
 }
 
-FstabEntry BuildDsuUserdataFstabEntry() {
-    constexpr uint32_t kFlags = MS_NOATIME | MS_NOSUID | MS_NODEV;
-
-    FstabEntry userdata = {
-            .blk_device = "userdata_gsi",
-            .mount_point = "/data",
-            .fs_type = "ext4",
-            .flags = kFlags,
-            .reserved_size = 128 * 1024 * 1024,
-    };
-    userdata.fs_mgr_flags.wait = true;
-    userdata.fs_mgr_flags.check = true;
-    userdata.fs_mgr_flags.logical = true;
-    userdata.fs_mgr_flags.quota = true;
-    userdata.fs_mgr_flags.late_mount = true;
-    userdata.fs_mgr_flags.formattable = true;
-    return userdata;
-}
-
-bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
-    auto iter = std::remove_if(fstab->begin(), fstab->end(),
-                               [&](const auto& entry) { return entry.mount_point == mount_point; });
-    if (iter != fstab->end()) {
-        fstab->erase(iter, fstab->end());
-        return true;
-    }
-    return false;
-}
-
 template <typename Pred>
 std::vector<FstabEntry*> GetEntriesByPred(Fstab* fstab, const Pred& pred) {
     if (fstab == nullptr) {
@@ -613,34 +584,28 @@ bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab*
 void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                           const std::vector<std::string>& dsu_partitions) {
     static constexpr char kDsuKeysDir[] = "/avb";
-    // Convert userdata
-    // Inherit fstab properties for userdata.
-    FstabEntry userdata;
-    if (FstabEntry* entry = GetEntryForMountPoint(fstab, "/data")) {
-        userdata = *entry;
-        userdata.blk_device = android::gsi::kDsuUserdata;
-        userdata.fs_mgr_flags.logical = true;
-        userdata.fs_mgr_flags.formattable = true;
-        if (!userdata.metadata_key_dir.empty()) {
-            userdata.metadata_key_dir = android::gsi::GetDsuMetadataKeyDir(dsu_slot);
-        }
-    } else {
-        userdata = BuildDsuUserdataFstabEntry();
-    }
-
-    // Convert RO partitions.
     for (auto&& partition : dsu_partitions) {
         if (!EndsWith(partition, gsi::kDsuPostfix)) {
-            continue;
-        }
-        // userdata has been handled
-        if (partition == android::gsi::kDsuUserdata) {
             continue;
         }
         // scratch is handled by fs_mgr_overlayfs
         if (partition == android::gsi::kDsuScratch) {
             continue;
         }
+        // Convert userdata partition.
+        if (partition == android::gsi::kDsuUserdata) {
+            for (auto&& entry : GetEntriesForMountPoint(fstab, "/data")) {
+                entry->blk_device = android::gsi::kDsuUserdata;
+                entry->fs_mgr_flags.logical = true;
+                entry->fs_mgr_flags.formattable = true;
+                if (!entry->metadata_key_dir.empty()) {
+                    entry->metadata_key_dir = android::gsi::GetDsuMetadataKeyDir(dsu_slot);
+                }
+            }
+            continue;
+        }
+        // Convert RO partitions.
+        //
         // dsu_partition_name = corresponding_partition_name + kDsuPostfix
         // e.g.
         //    system_gsi for system
@@ -695,11 +660,6 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                                                   }}));
             }
         }
-    }
-
-    // Always append userdata last for stable ordering.
-    if (EraseFstabEntry(fstab, "/data")) {
-        fstab->emplace_back(userdata);
     }
 }
 
@@ -877,18 +837,8 @@ FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
 }
 
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path) {
-    std::vector<FstabEntry*> entries;
-    if (fstab == nullptr) {
-        return entries;
-    }
-
-    for (auto& entry : *fstab) {
-        if (entry.mount_point == path) {
-            entries.emplace_back(&entry);
-        }
-    }
-
-    return entries;
+    return GetEntriesByPred(fstab,
+                            [&path](const FstabEntry& entry) { return entry.mount_point == path; });
 }
 
 std::set<std::string> GetBootDevices() {
