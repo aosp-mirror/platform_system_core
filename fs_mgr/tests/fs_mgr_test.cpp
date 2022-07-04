@@ -1127,6 +1127,10 @@ vendor /vendor      ext4    ro  wait,logical,first_stage_mount
 
     auto entry = fstab.begin();
 
+    EXPECT_EQ("/data", entry->mount_point);
+    EXPECT_EQ("userdata_gsi", entry->blk_device);
+    entry++;
+
     EXPECT_EQ("/system", entry->mount_point);
     EXPECT_EQ("system_gsi", entry->blk_device);
     EXPECT_EQ("erofs", entry->fs_type);
@@ -1139,10 +1143,6 @@ vendor /vendor      ext4    ro  wait,logical,first_stage_mount
 
     EXPECT_EQ("/vendor", entry->mount_point);
     EXPECT_EQ("vendor", entry->blk_device);
-    entry++;
-
-    EXPECT_EQ("/data", entry->mount_point);
-    EXPECT_EQ("userdata_gsi", entry->blk_device);
     entry++;
 }
 
@@ -1200,6 +1200,10 @@ vendor /vendor      ext4    ro  wait,logical,first_stage_mount
 
     auto entry = fstab.begin();
 
+    EXPECT_EQ("/data", entry->mount_point);
+    EXPECT_EQ("userdata_gsi", entry->blk_device);
+    entry++;
+
     EXPECT_EQ("/vendor", entry->mount_point);
     EXPECT_EQ("vendor", entry->blk_device);
     entry++;
@@ -1212,9 +1216,5 @@ vendor /vendor      ext4    ro  wait,logical,first_stage_mount
     EXPECT_EQ("/system", entry->mount_point);
     EXPECT_EQ("system_gsi", entry->blk_device);
     EXPECT_EQ("erofs", entry->fs_type);
-    entry++;
-
-    EXPECT_EQ("/data", entry->mount_point);
-    EXPECT_EQ("userdata_gsi", entry->blk_device);
     entry++;
 }
