@@ -518,6 +518,12 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
         return false;
     }
 
+    // Make /system a mountpoint so that adb-remount can move submounts under /system.
+    if (access("/system", F_OK) == 0 &&
+        mount("/system", "/system", nullptr, MS_BIND, nullptr) != 0) {
+        PLOG(WARNING) << "Failed to bind mount /system for overlayfs";
+    }
+
     return true;
 }
 
