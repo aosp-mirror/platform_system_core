@@ -442,6 +442,19 @@ static Result<void> DoControlRestart(Service* service) {
     return {};
 }
 
+static void DoUnloadApex(const std::string& apex_name) {
+    std::string prop_name = "init.apex." + apex_name;
+    // TODO(b/232114573) remove services and actions read from the apex
+    // TODO(b/232799709) kill services from the apex
+    SetProperty(prop_name, "unloaded");
+}
+
+static void DoLoadApex(const std::string& apex_name) {
+    std::string prop_name = "init.apex." + apex_name;
+    // TODO(b/232799709) read .rc files from the apex
+    SetProperty(prop_name, "loaded");
+}
+
 enum class ControlTarget {
     SERVICE,    // function gets called for the named service
     INTERFACE,  // action gets called for every service that holds this interface
@@ -465,6 +478,20 @@ static const std::map<std::string, ControlMessageFunction, std::less<>>& GetCont
     return control_message_functions;
 }
 
+static bool HandleApexControlMessage(std::string_view action, const std::string& name,
+                                     std::string_view message) {
+    if (action == "load") {
+        DoLoadApex(name);
+        return true;
+    } else if (action == "unload") {
+        DoUnloadApex(name);
+        return true;
+    } else {
+        LOG(ERROR) << "Unknown control msg '" << message << "'";
+        return false;
+    }
+}
+
 static bool HandleControlMessage(std::string_view message, const std::string& name,
                                  pid_t from_pid) {
     std::string cmdline_path = StringPrintf("proc/%d/cmdline", from_pid);
@@ -476,8 +503,12 @@ static bool HandleControlMessage(std::string_view message, const std::string& na
         process_cmdline = "unknown process";
     }
 
-    Service* service = nullptr;
     auto action = message;
+    if (ConsumePrefix(&action, "apex_")) {
+        return HandleApexControlMessage(action, name, message);
+    }
+
+    Service* service = nullptr;
     if (ConsumePrefix(&action, "interface_")) {
         service = ServiceList::GetInstance().FindInterface(name);
     } else {
