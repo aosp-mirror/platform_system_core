@@ -131,15 +131,28 @@ bool OptimizeSourceCopyOperation(const InstallOperation& operation, InstallOpera
     return is_optimized;
 }
 
-void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Extent& de,
+bool WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Extent& de,
                  unsigned int sectors_per_block) {
     const auto block_boundary = de.start_block() + de.num_blocks();
     for (auto b = de.start_block(); b < block_boundary; ++b) {
         for (unsigned int s = 0; s < sectors_per_block; ++s) {
-            const auto sector_id = b * sectors_per_block + s;
+            // sector_id = b * sectors_per_block + s;
+            uint64_t block_start_sector_id;
+            if (__builtin_mul_overflow(b, sectors_per_block, &block_start_sector_id)) {
+                LOG(ERROR) << "Integer overflow when calculating sector id (" << b << " * "
+                           << sectors_per_block << ")";
+                return false;
+            }
+            uint64_t sector_id;
+            if (__builtin_add_overflow(block_start_sector_id, s, &sector_id)) {
+                LOG(ERROR) << "Integer overflow when calculating sector id ("
+                           << block_start_sector_id << " + " << s << ")";
+                return false;
+            }
             sc->WriteSector(sector_id);
         }
     }
+    return true;
 }
 
 std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
@@ -167,7 +180,7 @@ std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
     // Allocate space for extra extents (if any). These extents are those that can be
     // used for error corrections or to store verity hash trees.
     for (const auto& de : extra_extents) {
-        WriteExtent(&sc, de, sectors_per_block);
+        if (!WriteExtent(&sc, de, sectors_per_block)) return std::nullopt;
     }
 
     if (update == nullptr) return sc.cow_size_bytes();
@@ -182,7 +195,7 @@ std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
         }
 
         for (const auto& de : written_op->dst_extents()) {
-            WriteExtent(&sc, de, sectors_per_block);
+            if (!WriteExtent(&sc, de, sectors_per_block)) return std::nullopt;
         }
     }
 
