@@ -231,24 +231,24 @@ void atrace_async_end_body(const char* name, int32_t cookie)
 
 void atrace_async_for_track_begin_body(const char* track_name, const char* name, int32_t cookie) {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("T", "|", "|%d", track_name, name, cookie);
+        WRITE_MSG_IN_CONTAINER("G", "|", "|%d", track_name, name, cookie);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("T|%d|", "|%" PRId32, track_name, name, cookie);
+    WRITE_MSG("G|%d|", "|%" PRId32, track_name, name, cookie);
 }
 
 void atrace_async_for_track_end_body(const char* track_name, const char* name, int32_t cookie) {
     if (CC_LIKELY(atrace_use_container_sock)) {
-        WRITE_MSG_IN_CONTAINER("U", "|", "|%d", track_name, name, cookie);
+        WRITE_MSG_IN_CONTAINER("H", "|", "|%d", track_name, name, cookie);
         return;
     }
 
     if (atrace_marker_fd < 0) return;
 
-    WRITE_MSG("U|%d|", "|%" PRId32, track_name, name, cookie);
+    WRITE_MSG("H|%d|", "|%" PRId32, track_name, name, cookie);
 }
 
 void atrace_instant_body(const char* name) {
