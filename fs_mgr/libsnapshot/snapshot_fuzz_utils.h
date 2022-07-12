@@ -29,6 +29,7 @@
 // by SnapshotManager.
 
 #include "android/snapshot/snapshot_fuzz.pb.h"
+#include "libsnapshot/snapshot.h"
 
 namespace android::snapshot {
 
@@ -94,6 +95,7 @@ class SnapshotFuzzEnv {
 
 class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
   public:
+    using MergeStatus = ISnapshotManager::IDeviceInfo::MergeStatus;
     // Client is responsible for maintaining the lifetime of |data|.
     SnapshotFuzzDeviceInfo(SnapshotFuzzEnv* env, const FuzzDeviceInfoData& data,
                            std::unique_ptr<TestPartitionOpener>&& partition_opener,
@@ -118,7 +120,7 @@ class SnapshotFuzzDeviceInfo : public ISnapshotManager::IDeviceInfo {
     std::string GetSlotSuffix() const override { return CurrentSlotIsA() ? "_a" : "_b"; }
     std::string GetOtherSlotSuffix() const override { return CurrentSlotIsA() ? "_b" : "_a"; }
     bool IsOverlayfsSetup() const override { return data_->is_overlayfs_setup(); }
-    bool SetBootControlMergeStatus(android::hardware::boot::V1_1::MergeStatus) override {
+    bool SetBootControlMergeStatus(MergeStatus) override {
         return data_->allow_set_boot_control_merge_status();
     }
     bool SetSlotAsUnbootable(unsigned int) override {
