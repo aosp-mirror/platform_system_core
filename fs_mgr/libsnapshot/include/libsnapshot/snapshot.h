@@ -644,6 +644,7 @@ class SnapshotManager final : public ISnapshotManager {
     MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
                                            const SnapshotStatus& update_status);
 
+    auto UpdateStateToStr(enum UpdateState state);
     // Get status or table information about a device-mapper node with a single target.
     enum class TableQuery {
         Table,
