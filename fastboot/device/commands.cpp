@@ -40,6 +40,7 @@
 #include <storage_literals/storage_literals.h>
 #include <uuid/uuid.h>
 
+#include "BootControlClient.h"
 #include "constants.h"
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -52,15 +53,12 @@ static constexpr bool kEnableFetch = false;
 #endif
 
 using android::fs_mgr::MetadataBuilder;
+using android::hal::CommandResult;
 using ::android::hardware::hidl_string;
-using ::android::hardware::boot::V1_0::BoolResult;
-using ::android::hardware::boot::V1_0::CommandResult;
-using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::boot::V1_1::MergeStatus;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
 using android::snapshot::SnapshotManager;
-using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
+using MergeStatus = android::hal::BootControlClient::MergeStatus;
 
 using namespace android::storage_literals;
 
@@ -317,7 +315,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
                                    "set_active command is not allowed on locked devices");
     }
 
-    Slot slot;
+    int32_t slot = 0;
     if (!GetSlotNumber(args[1], &slot)) {
         // Slot suffix needs to be between 'a' and 'z'.
         return device->WriteStatus(FastbootResult::FAIL, "Bad slot suffix");
@@ -329,7 +327,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
         return device->WriteStatus(FastbootResult::FAIL,
                                    "Cannot set slot: boot control HAL absent");
     }
-    if (slot >= boot_control_hal->getNumberSlots()) {
+    if (slot >= boot_control_hal->GetNumSlots()) {
         return device->WriteStatus(FastbootResult::FAIL, "Slot out of range");
     }
 
@@ -358,10 +356,8 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
         }
     }
 
-    CommandResult ret;
-    auto cb = [&ret](CommandResult result) { ret = result; };
-    auto result = boot_control_hal->setActiveBootSlot(slot, cb);
-    if (result.isOk() && ret.success) {
+    CommandResult ret = boot_control_hal->SetActiveBootSlot(slot);
+    if (ret.success) {
         // Save as slot suffix to match the suffix format as returned from
         // the boot control HAL.
         auto current_slot = "_" + args[1];
@@ -682,9 +678,14 @@ bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string
     if (args[1] == "cancel") {
         switch (status) {
             case MergeStatus::SNAPSHOTTED:
-            case MergeStatus::MERGING:
-                hal->setSnapshotMergeStatus(MergeStatus::CANCELLED);
+            case MergeStatus::MERGING: {
+                const auto ret = hal->SetSnapshotMergeStatus(MergeStatus::CANCELLED);
+                if (!ret.success) {
+                    device->WriteFail("Failed to SetSnapshotMergeStatus(MergeStatus::CANCELLED) " +
+                                      ret.errMsg);
+                }
                 break;
+            }
             default:
                 break;
         }
