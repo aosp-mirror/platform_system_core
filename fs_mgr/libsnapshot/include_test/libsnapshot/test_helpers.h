@@ -20,7 +20,6 @@
 #include <unordered_set>
 
 #include <android-base/file.h>
-#include <android/hardware/boot/1.1/IBootControl.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <libfiemap/image_manager.h>
@@ -33,10 +32,10 @@
 namespace android {
 namespace snapshot {
 
+using aidl::android::hardware::boot::MergeStatus;
 using android::fs_mgr::IPropertyFetcher;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::testing::MockPropertyFetcher;
-using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::PartitionUpdate;
 using testing::_;

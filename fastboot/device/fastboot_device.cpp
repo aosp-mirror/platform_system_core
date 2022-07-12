@@ -18,6 +18,7 @@
 
 #include <algorithm>
 
+#include <BootControlClient.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -38,9 +39,8 @@ using std::string_literals::operator""s;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
 using ::android::hardware::hidl_string;
-using ::android::hardware::boot::V1_0::IBootControl;
-using ::android::hardware::boot::V1_0::Slot;
 using ::android::hardware::fastboot::V1_1::IFastboot;
+using BootControlClient = FastbootDevice::BootControlClient;
 
 namespace sph = std::placeholders;
 
@@ -85,7 +85,7 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
               {FB_CMD_FETCH, FetchHandler},
       }),
-      boot_control_hal_(IBootControl::getService()),
+      boot_control_hal_(BootControlClient::WaitForService()),
       health_hal_(get_health_service()),
       fastboot_hal_(IFastboot::getService()),
       active_slot_("") {
@@ -93,10 +93,6 @@ FastbootDevice::FastbootDevice()
         transport_ = std::make_unique<ClientTcpTransport>();
     } else {
         transport_ = std::make_unique<ClientUsbTransport>();
-    }
-
-    if (boot_control_hal_) {
-        boot1_1_ = android::hardware::boot::V1_1::IBootControl::castFrom(boot_control_hal_);
     }
 
     // Make sure cache is unmounted, since recovery will have mounted it for
@@ -125,10 +121,15 @@ std::string FastbootDevice::GetCurrentSlot() {
     if (!boot_control_hal_) {
         return "";
     }
-    std::string suffix;
-    auto cb = [&suffix](hidl_string s) { suffix = s; };
-    boot_control_hal_->getSuffix(boot_control_hal_->getCurrentSlot(), cb);
+    std::string suffix = boot_control_hal_->GetSuffix(boot_control_hal_->GetCurrentSlot());
     return suffix;
+}
+
+BootControlClient* FastbootDevice::boot1_1() const {
+    if (boot_control_hal_->GetVersion() >= android::hal::BootControlVersion::BOOTCTL_V1_1) {
+        return boot_control_hal_.get();
+    }
+    return nullptr;
 }
 
 bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& message) {
