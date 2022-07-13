@@ -58,7 +58,7 @@ struct AtomInfo {
 };
 
 // Maps BootEvent used inside bootstat into statsd atom defined in
-// frameworks/base/cmds/statsd/src/atoms.proto.
+// frameworks/proto_logging/stats/atoms.proto.
 const std::unordered_map<std::string_view, AtomInfo> kBootEventToAtomInfo = {
     // ELAPSED_TIME
     {"ro.boottime.init",
