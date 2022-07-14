@@ -827,6 +827,7 @@ on post-fs-data
     mkdir /data/misc/odsign 0710 root system
     # directory used for odsign metrics
     mkdir /data/misc/odsign/metrics 0770 root system
+
     # Directory for VirtualizationService temporary image files.
     mkdir /data/misc/virtualizationservice 0700 virtualizationservice virtualizationservice
 
@@ -1030,7 +1031,8 @@ on zygote-start && property:ro.crypto.state=unencrypted
     exec_start update_verifier_nonencrypted
     start statsd
     start netd
-    trigger zygote-run
+    start zygote
+    start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=unsupported
     wait_for_prop odsign.verification.done 1
@@ -1038,7 +1040,8 @@ on zygote-start && property:ro.crypto.state=unsupported
     exec_start update_verifier_nonencrypted
     start statsd
     start netd
-    trigger zygote-run
+    start zygote
+    start zygote_secondary
 
 on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
     wait_for_prop odsign.verification.done 1
@@ -1046,15 +1049,6 @@ on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type
     exec_start update_verifier_nonencrypted
     start statsd
     start netd
-    trigger zygote-run
-
-on zygote-run && property:ro.zygote=zygote32
-    start zygote
-
-on zygote-run && property:ro.zygote=zygote64
-    start zygote
-
-on zygote-run && property:ro.zygote=zygote64_32
     start zygote
     start zygote_secondary
 
