@@ -28,8 +28,8 @@ static int GetVsrLevel() {
 }
 
 TEST(fs, ErofsSupported) {
-    // U and higher for this test.
-    if (GetVsrLevel() <= __ANDROID_API_T__) {
+    // T-launch GKI kernels and higher must support EROFS.
+    if (GetVsrLevel() < __ANDROID_API_T__) {
         GTEST_SKIP();
     }
 
