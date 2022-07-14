@@ -518,20 +518,20 @@ validate_reason() {
     reboot,bootloader | reboot,bootloader,* ) var=${var#reboot,} ; var=${var%,} ;;
     reboot | reboot,?* ) ;;
     # Aliases and Heuristics
-    *wdog* | *watchdog* )                   var="watchdog" ;;
-    *powerkey* | *power_key* | *PowerKey* ) var="cold,powerkey" ;;
-    *panic* | *kernel_panic* )              var="kernel_panic" ;;
-    *thermal* )                             var="shutdown,thermal" ;;
-    *s3_wakeup* )                           var="warm,s3_wakeup" ;;
-    *hw_reset* )                            var="hard,hw_reset" ;;
-    *usb* )                                 var="cold,charger" ;;
-    *rtc* )                                 var="cold,rtc" ;;
-    *2sec_reboot* )                         var="cold,rtc,2sec" ;;
-    *wdt_by_pass_pwk* )                     var="warm" ;;
-    wdt )                                   var="reboot" ;;
-    *tool_by_pass_pwk* )                    var="reboot,tool" ;;
-    *bootloader* )                          var="bootloader" ;;
-    * )                                     var="reboot" ;;
+    *wdog* | *watchdog* )                                    var="watchdog" ;;
+    *powerkey* | *power_on_key* | *power_key* | *PowerKey* ) var="cold,powerkey" ;;
+    *panic* | *kernel_panic* )                               var="kernel_panic" ;;
+    *thermal* )                                              var="shutdown,thermal" ;;
+    *s3_wakeup* )                                            var="warm,s3_wakeup" ;;
+    *hw_reset* )                                             var="hard,hw_reset" ;;
+    *usb* | *power_on_cable* )                               var="cold,charger" ;;
+    *rtc* )                                                  var="cold,rtc" ;;
+    *2sec_reboot* )                                          var="cold,rtc,2sec" ;;
+    *wdt_by_pass_pwk* )                                      var="warm" ;;
+    wdt )                                                    var="reboot" ;;
+    *tool_by_pass_pwk* )                                     var="reboot,tool" ;;
+    *bootloader* )                                           var="bootloader" ;;
+    * )                                                      var="reboot" ;;
   esac
   echo ${var}
 }
