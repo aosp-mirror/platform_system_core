@@ -28,8 +28,8 @@ static int GetVsrLevel() {
 }
 
 TEST(fs, ErofsSupported) {
-    // U and higher for this test.
-    if (GetVsrLevel() <= __ANDROID_API_T__) {
+    // S and higher for this test.
+    if (GetVsrLevel() < __ANDROID_API_S__) {
         GTEST_SKIP();
     }
 
