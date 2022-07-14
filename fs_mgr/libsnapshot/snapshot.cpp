@@ -53,6 +53,7 @@
 namespace android {
 namespace snapshot {
 
+using aidl::android::hardware::boot::MergeStatus;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
@@ -72,7 +73,6 @@ using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
-using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::Extent;
 using chromeos_update_engine::FileDescriptor;
@@ -988,6 +988,29 @@ bool SnapshotManager::IsSnapshotDevice(const std::string& dm_name, TargetInfo* t
     return true;
 }
 
+auto SnapshotManager::UpdateStateToStr(const enum UpdateState state) {
+    switch (state) {
+        case None:
+            return "None";
+        case Initiated:
+            return "Initiated";
+        case Unverified:
+            return "Unverified";
+        case Merging:
+            return "Merging";
+        case MergeNeedsReboot:
+            return "MergeNeedsReboot";
+        case MergeCompleted:
+            return "MergeCompleted";
+        case MergeFailed:
+            return "MergeFailed";
+        case Cancelled:
+            return "Cancelled";
+        default:
+            return "Unknown";
+    }
+}
+
 bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::string* target_type,
                                           DmTargetSnapshot::Status* status) {
     DeviceMapper::TargetInfo target;
@@ -1016,7 +1039,7 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& cal
                                                 const std::function<bool()>& before_cancel) {
     while (true) {
         auto result = CheckMergeState(before_cancel);
-        LOG(INFO) << "ProcessUpdateState handling state: " << result.state;
+        LOG(INFO) << "ProcessUpdateState handling state: " << UpdateStateToStr(result.state);
 
         if (result.state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure(result.failure_code);
@@ -1044,7 +1067,7 @@ auto SnapshotManager::CheckMergeState(const std::function<bool()>& before_cancel
     }
 
     auto result = CheckMergeState(lock.get(), before_cancel);
-    LOG(INFO) << "CheckMergeState for snapshots returned: " << result.state;
+    LOG(INFO) << "CheckMergeState for snapshots returned: " << UpdateStateToStr(result.state);
 
     if (result.state == UpdateState::MergeCompleted) {
         // Do this inside the same lock. Failures get acknowledged without the
@@ -1109,7 +1132,8 @@ auto SnapshotManager::CheckMergeState(LockedFile* lock, const std::function<bool
         }
 
         auto result = CheckTargetMergeState(lock, snapshot, update_status);
-        LOG(INFO) << "CheckTargetMergeState for " << snapshot << " returned: " << result.state;
+        LOG(INFO) << "CheckTargetMergeState for " << snapshot
+                  << " returned: " << UpdateStateToStr(result.state);
 
         switch (result.state) {
             case UpdateState::MergeFailed:
@@ -2250,8 +2274,8 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
                 .block_device = super_device,
                 .metadata = metadata.get(),
                 .partition = &partition,
-                .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
+                .partition_opener = &opener,
         };
         if (!MapPartitionWithSnapshot(lock, std::move(params), SnapshotContext::Mount, nullptr)) {
             return false;
@@ -2728,8 +2752,8 @@ bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds& timeout_m
                 .block_device = super_device,
                 .metadata = metadata.get(),
                 .partition_name = snapshot,
-                .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
+                .partition_opener = &opener,
         };
         if (!MapPartitionWithSnapshot(lock.get(), std::move(params), SnapshotContext::Mount,
                                       nullptr)) {

@@ -26,6 +26,7 @@
 #include <future>
 #include <iostream>
 
+#include <aidl/android/hardware/boot/MergeStatus.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -2752,6 +2753,10 @@ void SnapshotTestEnvironment::TearDown() {
 
 bool IsDaemonRequired() {
     if (FLAGS_force_config == "dmsnap") {
+        return false;
+    }
+
+    if (!IsCompressionEnabled()) {
         return false;
     }
 

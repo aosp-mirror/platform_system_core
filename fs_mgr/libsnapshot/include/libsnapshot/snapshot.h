@@ -46,6 +46,10 @@
 #define DEFINED_FRIEND_TEST
 #endif
 
+namespace aidl::android::hardware::boot {
+enum class MergeStatus;
+}
+
 namespace android {
 
 namespace fiemap {
@@ -59,13 +63,6 @@ class IPartitionOpener;
 
 // Forward declare IBootControl types since we cannot include only the headers
 // with Soong. Note: keep the enum width in sync.
-namespace hardware {
-namespace boot {
-namespace V1_1 {
-enum class MergeStatus : int32_t;
-}  // namespace V1_1
-}  // namespace boot
-}  // namespace hardware
 
 namespace snapshot {
 
@@ -95,6 +92,7 @@ class ISnapshotManager {
     class IDeviceInfo {
       public:
         using IImageManager = android::fiemap::IImageManager;
+        using MergeStatus = aidl::android::hardware::boot::MergeStatus;
 
         virtual ~IDeviceInfo() {}
         virtual std::string GetMetadataDir() const = 0;
@@ -103,8 +101,7 @@ class ISnapshotManager {
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
-        virtual bool SetBootControlMergeStatus(
-                android::hardware::boot::V1_1::MergeStatus status) = 0;
+        virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
         virtual bool IsTestDevice() const { return false; }
@@ -311,7 +308,7 @@ class SnapshotManager final : public ISnapshotManager {
     using LpMetadata = android::fs_mgr::LpMetadata;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
-    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using MergeStatus = aidl::android::hardware::boot::MergeStatus;
     using FiemapStatus = android::fiemap::FiemapStatus;
 
     friend class SnapshotMergeStats;
@@ -644,6 +641,7 @@ class SnapshotManager final : public ISnapshotManager {
     MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
                                            const SnapshotStatus& update_status);
 
+    auto UpdateStateToStr(enum UpdateState state);
     // Get status or table information about a device-mapper node with a single target.
     enum class TableQuery {
         Table,

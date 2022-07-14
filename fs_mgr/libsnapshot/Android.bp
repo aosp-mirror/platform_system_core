@@ -74,6 +74,8 @@ cc_defaults {
     shared_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "android.hardware.boot-V1-ndk",
+        "libboot_control_client",
     ],
 }
 
@@ -233,6 +235,7 @@ cc_defaults {
     static_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "android.hardware.boot-V1-ndk",
         "libbrotli",
         "libc++fs",
         "libfs_mgr_binder",
@@ -261,7 +264,7 @@ cc_defaults {
 
 cc_test {
     name: "vts_libsnapshot_test",
-    defaults: ["libsnapshot_test_defaults"],
+    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
 }
 
 sh_test {
@@ -309,8 +312,6 @@ cc_binary {
         "update_metadata-protos",
     ],
     shared_libs: [
-        "android.hardware.boot@1.0",
-        "android.hardware.boot@1.1",
         "libbase",
         "libext2_uuid",
         "libext4_utils",
