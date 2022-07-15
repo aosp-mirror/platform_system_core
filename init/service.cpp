@@ -316,7 +316,9 @@ void Service::Reap(const siginfo_t& siginfo) {
 #else
     static bool is_apex_updatable = false;
 #endif
-    const bool is_process_updatable = !use_bootstrap_ns_ && is_apex_updatable;
+    const bool use_default_mount_ns =
+            mount_namespace_.has_value() && *mount_namespace_ == NS_DEFAULT;
+    const bool is_process_updatable = use_default_mount_ns && is_apex_updatable;
 
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
@@ -476,10 +478,9 @@ void Service::ConfigureMemcg() {
 }
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
-void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
-                         const std::vector<Descriptor>& descriptors,
+void Service::RunService(const std::vector<Descriptor>& descriptors,
                          std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
-    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+    if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
 
@@ -583,26 +584,9 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    // APEXd is always started in the "current" namespace because it is the process to set up
-    // the current namespace.
-    const bool is_apexd = args_[0] == "/system/bin/apexd";
-
-    if (!IsDefaultMountNamespaceReady() && !is_apexd) {
-        // If this service is started before APEXes and corresponding linker configuration
-        // get available, mark it as pre-apexd one. Note that this marking is
-        // permanent. So for example, if the service is re-launched (e.g., due
-        // to crash), it is still recognized as pre-apexd... for consistency.
-        use_bootstrap_ns_ = true;
-    }
-
-    // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
-    // Note: "ueventd" is supposed to be run in "default" mount namespace even if it's pre-apexd
-    // to support loading firmwares from APEXes.
-    std::optional<MountNamespace> override_mount_namespace;
-    if (name_ == "ueventd") {
-        override_mount_namespace = NS_DEFAULT;
-    } else if (use_bootstrap_ns_) {
-        override_mount_namespace = NS_BOOTSTRAP;
+    if (!mount_namespace_.has_value()) {
+        // remember from which mount namespace the service should start
+        SetMountNamespace();
     }
 
     post_data_ = ServiceList::GetInstance().IsPostData();
@@ -635,7 +619,7 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        RunService(override_mount_namespace, descriptors, std::move(pipefd));
+        RunService(descriptors, std::move(pipefd));
         _exit(127);
     }
 
@@ -684,6 +668,33 @@ Result<void> Service::Start() {
     NotifyStateChange("running");
     reboot_on_failure.Disable();
     return {};
+}
+
+// Set mount namespace for the service.
+// The reason why remember the mount namespace:
+//   If this service is started before APEXes and corresponding linker configuration
+//   get available, mark it as pre-apexd one. Note that this marking is
+//   permanent. So for example, if the service is re-launched (e.g., due
+//   to crash), it is still recognized as pre-apexd... for consistency.
+void Service::SetMountNamespace() {
+    // APEXd is always started in the "current" namespace because it is the process to set up
+    // the current namespace. So, leave mount_namespace_ as empty.
+    if (args_[0] == "/system/bin/apexd") {
+        return;
+    }
+    // Services in the following list start in the "default" mount namespace.
+    // Note that they should use bootstrap bionic if they start before APEXes are ready.
+    static const std::set<std::string> kUseDefaultMountNamespace = {
+            "ueventd",           // load firmwares from APEXes
+            "hwservicemanager",  // load VINTF fragments from APEXes
+            "servicemanager",    // load VINTF fragments from APEXes
+    };
+    if (kUseDefaultMountNamespace.find(name_) != kUseDefaultMountNamespace.end()) {
+        mount_namespace_ = NS_DEFAULT;
+        return;
+    }
+    // Use the "default" mount namespace only if it's ready
+    mount_namespace_ = IsDefaultMountNamespaceReady() ? NS_DEFAULT : NS_BOOTSTRAP;
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {
