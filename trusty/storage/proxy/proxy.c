@@ -70,49 +70,6 @@ static void show_usage_and_exit(int code) {
     exit(code);
 }
 
-static int drop_privs(void) {
-    struct __user_cap_header_struct capheader;
-    struct __user_cap_data_struct capdata[2];
-
-    if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0) {
-        return -1;
-    }
-
-    /*
-     * ensure we're running as the system user
-     */
-    if (setgid(AID_SYSTEM) != 0) {
-        return -1;
-    }
-
-    if (setuid(AID_SYSTEM) != 0) {
-        return -1;
-    }
-
-    /*
-     * drop all capabilities except SYS_RAWIO
-     */
-    memset(&capheader, 0, sizeof(capheader));
-    memset(&capdata, 0, sizeof(capdata));
-    capheader.version = _LINUX_CAPABILITY_VERSION_3;
-    capheader.pid = 0;
-
-    capdata[CAP_TO_INDEX(CAP_SYS_RAWIO)].permitted = CAP_TO_MASK(CAP_SYS_RAWIO);
-    capdata[CAP_TO_INDEX(CAP_SYS_RAWIO)].effective = CAP_TO_MASK(CAP_SYS_RAWIO);
-
-    if (capset(&capheader, &capdata[0]) < 0) {
-        return -1;
-    }
-
-    /*
-     * No access for group and other. We need execute access for user to create
-     * an accessible directory.
-     */
-    umask(S_IRWXG | S_IRWXO);
-
-    return 0;
-}
-
 static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) {
     int rc;
 
@@ -260,8 +217,11 @@ static void parse_args(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     int rc;
 
-    /* drop privileges */
-    if (drop_privs() < 0) return EXIT_FAILURE;
+    /*
+     * No access for group and other. We need execute access for user to create
+     * an accessible directory.
+     */
+    umask(S_IRWXG | S_IRWXO);
 
     /* parse arguments */
     parse_args(argc, argv);
