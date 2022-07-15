@@ -25,4 +25,3 @@ service zygote_secondary /system/bin/app_process32 -Xzygote /system/bin --zygote
     socket usap_pool_secondary stream 660 root system
     onrestart restart zygote
     task_profiles ProcessCapacityHigh MaxPerformance
-    disabled
