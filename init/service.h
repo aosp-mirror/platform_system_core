@@ -142,6 +142,8 @@ class Service {
         }
     }
     Subcontext* subcontext() const { return subcontext_; }
+    const std::string& filename() const { return filename_; }
+    void set_filename(const std::string& name) { filename_ = name; }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;

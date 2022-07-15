@@ -15,11 +15,14 @@
  */
 
 #include <functional>
+#include <string_view>
+#include <type_traits>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <gtest/gtest.h>
+#include <selinux/selinux.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -27,6 +30,7 @@
 #include "builtin_arguments.h"
 #include "builtins.h"
 #include "import_parser.h"
+#include "init.h"
 #include "keyword_map.h"
 #include "parser.h"
 #include "service.h"
@@ -37,6 +41,7 @@
 using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::SetProperty;
+using android::base::StringReplace;
 using android::base::WaitForProperty;
 using namespace std::literals;
 
@@ -186,6 +191,186 @@ service A something
     EXPECT_EQ(std::set<std::string>({"second"}), service->classnames());
     EXPECT_EQ("A", service->name());
     EXPECT_TRUE(service->is_override());
+}
+
+static std::string GetSecurityContext() {
+    char* ctx;
+    if (getcon(&ctx) == -1) {
+        ADD_FAILURE() << "Failed to call getcon : " << strerror(errno);
+    }
+    std::string result = std::string(ctx);
+    freecon(ctx);
+    return result;
+}
+
+void TestStartApexServices(const std::vector<std::string>& service_names,
+        const std::string& apex_name) {
+    for (auto const& svc : service_names) {
+        auto service = ServiceList::GetInstance().FindService(svc);
+        ASSERT_NE(nullptr, service);
+        ASSERT_RESULT_OK(service->Start());
+        ASSERT_TRUE(service->IsRunning());
+        LOG(INFO) << "Service " << svc << " is running";
+        if (!apex_name.empty()) {
+            service->set_filename("/apex/" + apex_name + "/init_test.rc");
+        } else {
+            service->set_filename("");
+        }
+    }
+    if (!apex_name.empty()) {
+        auto apex_services = ServiceList::GetInstance().FindServicesByApexName(apex_name);
+        EXPECT_EQ(service_names.size(), apex_services.size());
+    }
+}
+
+void TestStopApexServices(const std::vector<std::string>& service_names, bool expect_to_run) {
+    for (auto const& svc : service_names) {
+        auto service = ServiceList::GetInstance().FindService(svc);
+        ASSERT_NE(nullptr, service);
+        EXPECT_EQ(expect_to_run, service->IsRunning());
+    }
+    ServiceList::GetInstance().RemoveServiceIf([&](const std::unique_ptr<Service>& s) -> bool {
+        if (std::find(service_names.begin(), service_names.end(), s->name())
+                != service_names.end()) {
+            return true;
+        }
+        return false;
+    });
+}
+
+void InitApexService(const std::string_view& init_template) {
+    std::string init_script = StringReplace(init_template, "$selabel",
+                                    GetSecurityContext(), true);
+
+    ActionManager action_manager;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager,
+            &ServiceList::GetInstance());
+}
+
+void TestApexServicesInit(const std::vector<std::string>& apex_services,
+            const std::vector<std::string>& other_apex_services,
+            const std::vector<std::string> non_apex_services) {
+    auto num_svc = apex_services.size() + other_apex_services.size() + non_apex_services.size();
+    ASSERT_EQ(static_cast<long>(num_svc), std::distance(ServiceList::GetInstance().begin(),
+            ServiceList::GetInstance().end()));
+
+    TestStartApexServices(apex_services, "com.android.apex.test_service");
+    TestStartApexServices(other_apex_services, "com.android.other_apex.test_service");
+    TestStartApexServices(non_apex_services, /*apex_anme=*/ "");
+
+    StopServicesFromApex("com.android.apex.test_service");
+    TestStopApexServices(apex_services, /*expect_to_run=*/ false);
+    TestStopApexServices(other_apex_services, /*expect_to_run=*/ true);
+    TestStopApexServices(non_apex_services, /*expect_to_run=*/ true);
+
+    ASSERT_EQ(0, std::distance(ServiceList::GetInstance().begin(),
+       ServiceList::GetInstance().end()));
+}
+
+TEST(init, StopServiceByApexName) {
+    std::string_view script_template = R"init(
+service apex_test_service /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+    TestApexServicesInit({"apex_test_service"}, {}, {});
+}
+
+TEST(init, StopMultipleServicesByApexName) {
+    std::string_view script_template = R"init(
+service apex_test_service_multiple_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_multiple_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+    TestApexServicesInit({"apex_test_service_multiple_a",
+            "apex_test_service_multiple_b"}, {}, {});
+}
+
+TEST(init, StopServicesFromMultipleApexes) {
+    std::string_view apex_script_template = R"init(
+service apex_test_service_multi_apex_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_multi_apex_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(apex_script_template);
+
+    std::string_view other_apex_script_template = R"init(
+service apex_test_service_multi_apex_c /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(other_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_multi_apex_a",
+            "apex_test_service_multi_apex_b"}, {"apex_test_service_multi_apex_c"}, {});
+}
+
+TEST(init, StopServicesFromApexAndNonApex) {
+    std::string_view apex_script_template = R"init(
+service apex_test_service_apex_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_apex_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(apex_script_template);
+
+    std::string_view non_apex_script_template = R"init(
+service apex_test_service_non_apex /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(non_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_apex_a",
+            "apex_test_service_apex_b"}, {}, {"apex_test_service_non_apex"});
+}
+
+TEST(init, StopServicesFromApexMixed) {
+    std::string_view script_template = R"init(
+service apex_test_service_mixed_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+
+    std::string_view other_apex_script_template = R"init(
+service apex_test_service_mixed_b /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(other_apex_script_template);
+
+    std::string_view non_apex_script_template = R"init(
+service apex_test_service_mixed_c /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(non_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_mixed_a"},
+            {"apex_test_service_mixed_b"}, {"apex_test_service_mixed_c"});
 }
 
 TEST(init, EventTriggerOrderMultipleFiles) {
