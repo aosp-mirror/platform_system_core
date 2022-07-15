@@ -32,6 +32,7 @@
 #include "action.h"
 #include "capabilities.h"
 #include "keyword_map.h"
+#include "mount_namespace.h"
 #include "parser.h"
 #include "service_utils.h"
 #include "subcontext.h"
@@ -151,10 +152,9 @@ class Service {
     Result<void> CheckConsole();
     void ConfigureMemcg();
     void RunService(
-            const std::optional<MountNamespace>& override_mount_namespace,
             const std::vector<Descriptor>& descriptors,
             std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
-
+    void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
     static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
@@ -219,7 +219,7 @@ class Service {
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
-    bool use_bootstrap_ns_ = false;
+    std::optional<MountNamespace> mount_namespace_;
 
     bool post_data_ = false;
 
