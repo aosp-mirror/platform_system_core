@@ -442,17 +442,19 @@ static Result<void> DoControlRestart(Service* service) {
     return {};
 }
 
-static void DoUnloadApex(const std::string& apex_name) {
+static Result<void> DoUnloadApex(const std::string& apex_name) {
     std::string prop_name = "init.apex." + apex_name;
     // TODO(b/232114573) remove services and actions read from the apex
     // TODO(b/232799709) kill services from the apex
     SetProperty(prop_name, "unloaded");
+    return {};
 }
 
-static void DoLoadApex(const std::string& apex_name) {
+static Result<void> DoLoadApex(const std::string& apex_name) {
     std::string prop_name = "init.apex." + apex_name;
     // TODO(b/232799709) read .rc files from the apex
     SetProperty(prop_name, "loaded");
+    return {};
 }
 
 enum class ControlTarget {
@@ -478,17 +480,14 @@ static const std::map<std::string, ControlMessageFunction, std::less<>>& GetCont
     return control_message_functions;
 }
 
-static bool HandleApexControlMessage(std::string_view action, const std::string& name,
-                                     std::string_view message) {
+static Result<void> HandleApexControlMessage(std::string_view action, const std::string& name,
+                                             std::string_view message) {
     if (action == "load") {
-        DoLoadApex(name);
-        return true;
+        return DoLoadApex(name);
     } else if (action == "unload") {
-        DoUnloadApex(name);
-        return true;
+        return DoUnloadApex(name);
     } else {
-        LOG(ERROR) << "Unknown control msg '" << message << "'";
-        return false;
+        return Error() << "Unknown control msg '" << message << "'";
     }
 }
 
@@ -505,7 +504,15 @@ static bool HandleControlMessage(std::string_view message, const std::string& na
 
     auto action = message;
     if (ConsumePrefix(&action, "apex_")) {
-        return HandleApexControlMessage(action, name, message);
+        if (auto result = HandleApexControlMessage(action, name, message); !result.ok()) {
+            LOG(ERROR) << "Control message: Could not ctl." << message << " for '" << name
+                       << "' from pid: " << from_pid << " (" << process_cmdline
+                       << "): " << result.error();
+            return false;
+        }
+        LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
+                  << "' from pid: " << from_pid << " (" << process_cmdline << ")";
+        return true;
     }
 
     Service* service = nullptr;
