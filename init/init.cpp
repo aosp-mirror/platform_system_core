@@ -442,6 +442,21 @@ static Result<void> DoControlRestart(Service* service) {
     return {};
 }
 
+static Result<void> DoUnloadApex(const std::string& apex_name) {
+    std::string prop_name = "init.apex." + apex_name;
+    // TODO(b/232114573) remove services and actions read from the apex
+    // TODO(b/232799709) kill services from the apex
+    SetProperty(prop_name, "unloaded");
+    return {};
+}
+
+static Result<void> DoLoadApex(const std::string& apex_name) {
+    std::string prop_name = "init.apex." + apex_name;
+    // TODO(b/232799709) read .rc files from the apex
+    SetProperty(prop_name, "loaded");
+    return {};
+}
+
 enum class ControlTarget {
     SERVICE,    // function gets called for the named service
     INTERFACE,  // action gets called for every service that holds this interface
@@ -465,6 +480,17 @@ static const std::map<std::string, ControlMessageFunction, std::less<>>& GetCont
     return control_message_functions;
 }
 
+static Result<void> HandleApexControlMessage(std::string_view action, const std::string& name,
+                                             std::string_view message) {
+    if (action == "load") {
+        return DoLoadApex(name);
+    } else if (action == "unload") {
+        return DoUnloadApex(name);
+    } else {
+        return Error() << "Unknown control msg '" << message << "'";
+    }
+}
+
 static bool HandleControlMessage(std::string_view message, const std::string& name,
                                  pid_t from_pid) {
     std::string cmdline_path = StringPrintf("proc/%d/cmdline", from_pid);
@@ -476,8 +502,20 @@ static bool HandleControlMessage(std::string_view message, const std::string& na
         process_cmdline = "unknown process";
     }
 
-    Service* service = nullptr;
     auto action = message;
+    if (ConsumePrefix(&action, "apex_")) {
+        if (auto result = HandleApexControlMessage(action, name, message); !result.ok()) {
+            LOG(ERROR) << "Control message: Could not ctl." << message << " for '" << name
+                       << "' from pid: " << from_pid << " (" << process_cmdline
+                       << "): " << result.error();
+            return false;
+        }
+        LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
+                  << "' from pid: " << from_pid << " (" << process_cmdline << ")";
+        return true;
+    }
+
+    Service* service = nullptr;
     if (ConsumePrefix(&action, "interface_")) {
         service = ServiceList::GetInstance().FindInterface(name);
     } else {
