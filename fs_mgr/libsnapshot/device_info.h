@@ -17,7 +17,7 @@
 #include <string>
 
 #ifdef LIBSNAPSHOT_USE_HAL
-#include <android/hardware/boot/1.1/IBootControl.h>
+#include <BootControlClient.h>
 #endif
 #include <liblp/partition_opener.h>
 #include <libsnapshot/snapshot.h>
@@ -26,7 +26,7 @@ namespace android {
 namespace snapshot {
 
 class DeviceInfo final : public SnapshotManager::IDeviceInfo {
-    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using MergeStatus = ::aidl::android::hardware::boot::MergeStatus;
 
   public:
     std::string GetMetadataDir() const override;
@@ -50,7 +50,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     android::fs_mgr::PartitionOpener opener_;
     bool first_stage_init_ = false;
 #ifdef LIBSNAPSHOT_USE_HAL
-    android::sp<android::hardware::boot::V1_1::IBootControl> boot_control_;
+    std::unique_ptr<::android::hal::BootControlClient> boot_control_;
 #endif
 };
 

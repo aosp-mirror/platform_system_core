@@ -24,8 +24,10 @@
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
 #include <brotli/encode.h>
+#include <libsnapshot/cow_format.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
+#include <lz4.h>
 #include <zlib.h>
 
 namespace android {
@@ -129,6 +131,8 @@ bool CowWriter::ParseOptions() {
         compression_ = kCowCompressGz;
     } else if (options_.compression == "brotli") {
         compression_ = kCowCompressBrotli;
+    } else if (options_.compression == "lz4") {
+        compression_ = kCowCompressLz4;
     } else if (options_.compression == "none") {
         compression_ = kCowCompressNone;
     } else if (!options_.compression.empty()) {
@@ -403,35 +407,56 @@ bool CowWriter::EmitClusterIfNeeded() {
 std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
     switch (compression_) {
         case kCowCompressGz: {
-            auto bound = compressBound(length);
-            auto buffer = std::make_unique<uint8_t[]>(bound);
+            const auto bound = compressBound(length);
+            std::basic_string<uint8_t> buffer(bound, '\0');
 
             uLongf dest_len = bound;
-            auto rv = compress2(buffer.get(), &dest_len, reinterpret_cast<const Bytef*>(data),
+            auto rv = compress2(buffer.data(), &dest_len, reinterpret_cast<const Bytef*>(data),
                                 length, Z_BEST_COMPRESSION);
             if (rv != Z_OK) {
                 LOG(ERROR) << "compress2 returned: " << rv;
                 return {};
             }
-            return std::basic_string<uint8_t>(buffer.get(), dest_len);
+            buffer.resize(dest_len);
+            return buffer;
         }
         case kCowCompressBrotli: {
-            auto bound = BrotliEncoderMaxCompressedSize(length);
+            const auto bound = BrotliEncoderMaxCompressedSize(length);
             if (!bound) {
                 LOG(ERROR) << "BrotliEncoderMaxCompressedSize returned 0";
                 return {};
             }
-            auto buffer = std::make_unique<uint8_t[]>(bound);
+            std::basic_string<uint8_t> buffer(bound, '\0');
 
             size_t encoded_size = bound;
             auto rv = BrotliEncoderCompress(
                     BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, length,
-                    reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.get());
+                    reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.data());
             if (!rv) {
                 LOG(ERROR) << "BrotliEncoderCompress failed";
                 return {};
             }
-            return std::basic_string<uint8_t>(buffer.get(), encoded_size);
+            buffer.resize(encoded_size);
+            return buffer;
+        }
+        case kCowCompressLz4: {
+            const auto bound = LZ4_compressBound(length);
+            if (!bound) {
+                LOG(ERROR) << "LZ4_compressBound returned 0";
+                return {};
+            }
+            std::basic_string<uint8_t> buffer(bound, '\0');
+
+            const auto compressed_size = LZ4_compress_default(
+                    static_cast<const char*>(data), reinterpret_cast<char*>(buffer.data()), length,
+                    buffer.size());
+            if (compressed_size <= 0) {
+                LOG(ERROR) << "LZ4_compress_default failed, input size: " << length
+                           << ", compression bound: " << bound << ", ret: " << compressed_size;
+                return {};
+            }
+            buffer.resize(compressed_size);
+            return buffer;
         }
         default:
             LOG(ERROR) << "unhandled compression type: " << compression_;

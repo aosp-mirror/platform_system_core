@@ -20,6 +20,7 @@
 
 #include <android-base/logging.h>
 #include <brotli/decode.h>
+#include <lz4.h>
 #include <zlib.h>
 
 namespace android {
@@ -258,6 +259,44 @@ bool BrotliDecompressor::DecompressInput(const uint8_t* data, size_t length) {
 
 std::unique_ptr<IDecompressor> IDecompressor::Brotli() {
     return std::unique_ptr<IDecompressor>(new BrotliDecompressor());
+}
+
+class Lz4Decompressor final : public IDecompressor {
+  public:
+    ~Lz4Decompressor() override = default;
+
+    bool Decompress(const size_t output_size) override {
+        size_t actual_buffer_size = 0;
+        auto&& output_buffer = sink_->GetBuffer(output_size, &actual_buffer_size);
+        if (actual_buffer_size != output_size) {
+            LOG(ERROR) << "Failed to allocate buffer of size " << output_size << " only got "
+                       << actual_buffer_size << " bytes";
+            return false;
+        }
+        std::string input_buffer;
+        input_buffer.resize(stream_->Size());
+        size_t bytes_read = 0;
+        stream_->Read(input_buffer.data(), input_buffer.size(), &bytes_read);
+        if (bytes_read != input_buffer.size()) {
+            LOG(ERROR) << "Failed to read all input at once. Expected: " << input_buffer.size()
+                       << " actual: " << bytes_read;
+            return false;
+        }
+        const int bytes_decompressed =
+                LZ4_decompress_safe(input_buffer.data(), static_cast<char*>(output_buffer),
+                                    input_buffer.size(), output_size);
+        if (bytes_decompressed != output_size) {
+            LOG(ERROR) << "Failed to decompress LZ4 block, expected output size: " << output_size
+                       << ", actual: " << bytes_decompressed;
+            return false;
+        }
+        sink_->ReturnData(output_buffer, output_size);
+        return true;
+    }
+};
+
+std::unique_ptr<IDecompressor> IDecompressor::Lz4() {
+    return std::make_unique<Lz4Decompressor>();
 }
 
 }  // namespace snapshot
