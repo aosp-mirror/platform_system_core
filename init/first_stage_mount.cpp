@@ -507,16 +507,16 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
         SaveRamdiskPathToSnapuserd();
     }
 
-    if (MountPartition(system_partition, false /* erase_same_mounts */)) {
-        if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
-            LOG(ERROR) << "check_most_at_once forbidden on external media";
-            return false;
-        }
-        SwitchRoot("/system");
-    } else {
+    if (!MountPartition(system_partition, false /* erase_same_mounts */)) {
         PLOG(ERROR) << "Failed to mount /system";
         return false;
     }
+    if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
+        LOG(ERROR) << "check_at_most_once forbidden on external media";
+        return false;
+    }
+
+    SwitchRoot("/system");
 
     return true;
 }
