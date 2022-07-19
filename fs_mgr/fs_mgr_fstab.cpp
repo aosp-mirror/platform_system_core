@@ -804,7 +804,7 @@ bool ReadDefaultFstab(Fstab* fstab) {
 
     std::string default_fstab_path;
     // Use different fstab paths for normal boot and recovery boot, respectively
-    if (access("/system/bin/recovery", F_OK) == 0) {
+    if ((access("/sbin/recovery", F_OK) == 0) || (access("/system/bin/recovery", F_OK) == 0)) {
         default_fstab_path = "/etc/recovery.fstab";
     } else {  // normal boot
         default_fstab_path = GetFstabPath();
