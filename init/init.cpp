@@ -57,6 +57,7 @@
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
+#include <logwrap/logwrap.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
@@ -453,9 +454,33 @@ static Result<void> DoUnloadApex(const std::string& apex_name) {
     return {};
 }
 
+static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
+    // Do not invoke linkerconfig when there's no bin/ in the apex.
+    const std::string bin_path = "/apex/" + apex_name + "/bin";
+    if (access(bin_path.c_str(), R_OK) != 0) {
+        return {};
+    }
+    const char* linkerconfig_binary = "/apex/com.android.runtime/bin/linkerconfig";
+    const char* linkerconfig_target = "/linkerconfig";
+    const char* arguments[] = {linkerconfig_binary, "--target", linkerconfig_target, "--apex",
+                               apex_name.c_str(),   "--strict"};
+
+    if (logwrap_fork_execvp(arraysize(arguments), arguments, nullptr, false, LOG_KLOG, false,
+                            nullptr) != 0) {
+        return ErrnoError() << "failed to execute linkerconfig";
+    }
+    LOG(INFO) << "Generated linker configuration for " << apex_name;
+    return {};
+}
+
 static Result<void> DoLoadApex(const std::string& apex_name) {
     std::string prop_name = "init.apex." + apex_name;
     // TODO(b/232799709) read .rc files from the apex
+
+    if (auto result = UpdateApexLinkerConfig(apex_name); !result.ok()) {
+        return result.error();
+    }
+
     SetProperty(prop_name, "loaded");
     return {};
 }
