@@ -90,7 +90,7 @@ static bool SetMmapRndBitsMin(int start, int min, bool compat) {
 
 // Set /proc/sys/vm/mmap_rnd_bits and potentially
 // /proc/sys/vm/mmap_rnd_compat_bits to the maximum supported values.
-// Returns -1 if unable to set these to an acceptable value.
+// Returns an error if unable to set these to an acceptable value.
 //
 // To support this sysctl, the following upstream commits are needed:
 //
@@ -106,12 +106,19 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     // uml does not support mmap_rnd_bits
     return {};
 #elif defined(__aarch64__)
-    // arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE
+    // arm64 architecture supports 18 - 33 rnd bits depending on pagesize and
+    // VA_SIZE. However the kernel might have been compiled with a narrower
+    // range using CONFIG_ARCH_MMAP_RND_BITS_MIN/MAX. To use the maximum
+    // supported number of bits, we start from the theoretical maximum of 33
+    // bits and try smaller values until we reach 24 bits which is the
+    // Android-specific minimum. Don't go lower even if the configured maximum
+    // is smaller than 24.
     if (SetMmapRndBitsMin(33, 24, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
 #elif defined(__x86_64__)
-    // x86_64 supports 28 - 32 bits
+    // x86_64 supports 28 - 32 rnd bits, but Android wants to ensure that the
+    // theoretical maximum of 32 bits is always supported and used.
     if (SetMmapRndBitsMin(32, 32, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
