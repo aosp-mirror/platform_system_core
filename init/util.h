@@ -106,5 +106,6 @@ bool IsDefaultMountNamespaceReady();
 void SetDefaultMountNamespaceReady();
 
 bool IsMicrodroid();
+bool Has32BitAbi();
 }  // namespace init
 }  // namespace android

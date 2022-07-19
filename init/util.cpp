@@ -733,5 +733,10 @@ bool IsMicrodroid() {
     return is_microdroid;
 }
 
+bool Has32BitAbi() {
+    static bool has = !android::base::GetProperty("ro.product.cpu.abilist32", "").empty();
+    return has;
+}
+
 }  // namespace init
 }  // namespace android
