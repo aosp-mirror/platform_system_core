@@ -15,6 +15,7 @@
  */
 
 #include "security.h"
+#include "util.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -106,12 +107,12 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     return {};
 #elif defined(__aarch64__)
     // arm64 supports 18 - 33 bits depending on pagesize and VA_SIZE
-    if (SetMmapRndBitsMin(33, 24, false) && SetMmapRndBitsMin(16, 16, true)) {
+    if (SetMmapRndBitsMin(33, 24, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
 #elif defined(__x86_64__)
     // x86_64 supports 28 - 32 bits
-    if (SetMmapRndBitsMin(32, 32, false) && SetMmapRndBitsMin(16, 16, true)) {
+    if (SetMmapRndBitsMin(32, 32, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
 #elif defined(__arm__) || defined(__i386__)
