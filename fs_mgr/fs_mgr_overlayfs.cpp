@@ -642,6 +642,10 @@ bool fs_mgr_overlayfs_set_shared_mount(const std::string& mount_point, bool shar
     if (ret) {
         PERROR << "__mount(target=" << mount_point
                << ",flag=" << (shared_flag ? "MS_SHARED" : "MS_PRIVATE") << ")=" << ret;
+        // If "/system" doesn't look like a mountpoint, retry with "/".
+        if (errno == EINVAL && mount_point == "/system") {
+            return fs_mgr_overlayfs_set_shared_mount("/", shared_flag);
+        }
         return false;
     }
     return true;
