@@ -439,34 +439,6 @@ std::string ReadFstabFromDt() {
     return fstab_result;
 }
 
-// Return the path to the fstab file.  There may be multiple fstab files; the
-// one that is returned will be the first that exists of fstab.<fstab_suffix>,
-// fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
-// in /odm/etc/ and /vendor/etc/, as well as in the locations where it may be in
-// the first stage ramdisk during early boot.  Previously, the first stage
-// ramdisk's copy of the fstab had to be located in the root directory, but now
-// the system/etc directory is supported too and is the preferred location.
-std::string GetFstabPath() {
-    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
-        std::string suffix;
-
-        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
-
-        for (const char* prefix : {// late-boot/post-boot locations
-                                   "/odm/etc/fstab.", "/vendor/etc/fstab.",
-                                   // early boot locations
-                                   "/system/etc/fstab.", "/first_stage_ramdisk/system/etc/fstab.",
-                                   "/fstab.", "/first_stage_ramdisk/fstab."}) {
-            std::string fstab_path = prefix + suffix;
-            if (access(fstab_path.c_str(), F_OK) == 0) {
-                return fstab_path;
-            }
-        }
-    }
-
-    return "";
-}
-
 /* Extracts <device>s from the by-name symlinks specified in a fstab:
  *   /dev/block/<type>/<device>/by-name/<partition>
  *
@@ -525,6 +497,34 @@ std::vector<FstabEntry*> GetEntriesByPred(Fstab* fstab, const Pred& pred) {
 }
 
 }  // namespace
+
+// Return the path to the fstab file.  There may be multiple fstab files; the
+// one that is returned will be the first that exists of fstab.<fstab_suffix>,
+// fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
+// in /odm/etc/ and /vendor/etc/, as well as in the locations where it may be in
+// the first stage ramdisk during early boot.  Previously, the first stage
+// ramdisk's copy of the fstab had to be located in the root directory, but now
+// the system/etc directory is supported too and is the preferred location.
+std::string GetFstabPath() {
+    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+        std::string suffix;
+
+        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
+
+        for (const char* prefix : {// late-boot/post-boot locations
+                                   "/odm/etc/fstab.", "/vendor/etc/fstab.",
+                                   // early boot locations
+                                   "/system/etc/fstab.", "/first_stage_ramdisk/system/etc/fstab.",
+                                   "/fstab.", "/first_stage_ramdisk/fstab."}) {
+            std::string fstab_path = prefix + suffix;
+            if (access(fstab_path.c_str(), F_OK) == 0) {
+                return fstab_path;
+            }
+        }
+    }
+
+    return "";
+}
 
 bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out) {
     const int expected_fields = proc_mounts ? 4 : 5;
@@ -804,7 +804,7 @@ bool ReadDefaultFstab(Fstab* fstab) {
 
     std::string default_fstab_path;
     // Use different fstab paths for normal boot and recovery boot, respectively
-    if (access("/system/bin/recovery", F_OK) == 0) {
+    if ((access("/sbin/recovery", F_OK) == 0) || (access("/system/bin/recovery", F_OK) == 0)) {
         default_fstab_path = "/etc/recovery.fstab";
     } else {  // normal boot
         default_fstab_path = GetFstabPath();

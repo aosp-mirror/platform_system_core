@@ -23,6 +23,9 @@
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 
+using testing::Contains;
+using testing::Not;
+
 static int GetVsrLevel() {
     return android::base::GetIntProperty("ro.vendor.api_level", -1);
 }
@@ -116,4 +119,31 @@ TEST(fs, NoDtFstab) {
 
     android::fs_mgr::Fstab fstab;
     EXPECT_FALSE(android::fs_mgr::ReadFstabFromDt(&fstab, false));
+}
+
+TEST(fs, NoLegacyVerifiedBoot) {
+    if (GetVsrLevel() < __ANDROID_API_T__) {
+        GTEST_SKIP();
+    }
+
+    const auto& default_fstab_path = android::fs_mgr::GetFstabPath();
+    EXPECT_FALSE(default_fstab_path.empty());
+
+    std::string fstab_str;
+    EXPECT_TRUE(android::base::ReadFileToString(default_fstab_path, &fstab_str,
+                                                /* follow_symlinks = */ true));
+
+    for (const auto& line : android::base::Split(fstab_str, "\n")) {
+        auto fields = android::base::Tokenize(line, " \t");
+        // Ignores empty lines and comments.
+        if (fields.empty() || android::base::StartsWith(fields.front(), '#')) {
+            continue;
+        }
+        // Each line in a fstab should have at least five entries.
+        //   <src> <mnt_point> <type> <mnt_flags and options> <fs_mgr_flags>
+        ASSERT_GE(fields.size(), 5);
+        EXPECT_THAT(android::base::Split(fields[4], ","), Not(Contains("verify")))
+                << "AVB 1.0 isn't supported now, but the 'verify' flag is found:\n"
+                << "  " << line;
+    }
 }
