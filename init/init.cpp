@@ -60,8 +60,10 @@
 #include <selinux/android.h>
 #include <unwindstack/AndroidUnwinder.h>
 
+#include "action.h"
+#include "action_manager.h"
 #include "action_parser.h"
-#include "builtins.h"
+#include "apex_init_util.h"
 #include "epoll.h"
 #include "first_stage_init.h"
 #include "first_stage_mount.h"
@@ -464,11 +466,27 @@ int StopServicesFromApex(const std::string& apex_name) {
     return still_running;
 }
 
+void RemoveServiceAndActionFromApex(const std::string& apex_name) {
+    // Remove services and actions that match apex name
+    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& action) -> bool {
+        if (GetApexNameFromFileName(action->filename()) == apex_name) {
+            return true;
+        }
+        return false;
+    });
+    ServiceList::GetInstance().RemoveServiceIf([&](const std::unique_ptr<Service>& s) -> bool {
+        if (GetApexNameFromFileName(s->filename()) == apex_name) {
+            return true;
+        }
+        return false;
+    });
+}
+
 static Result<void> DoUnloadApex(const std::string& apex_name) {
     if (StopServicesFromApex(apex_name) > 0) {
         return Error() << "Unable to stop all service from " << apex_name;
     }
-    // TODO(b/232114573) remove services and actions read from the apex
+    RemoveServiceAndActionFromApex(apex_name);
     SetProperty("init.apex." + apex_name, "unloaded");
     return {};
 }
@@ -493,7 +511,10 @@ static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
 }
 
 static Result<void> DoLoadApex(const std::string& apex_name) {
-    // TODO(b/232799709) read .rc files from the apex
+    if(auto result = ParseApexConfigs(apex_name); !result.ok()) {
+        return result.error();
+    }
+
     if (auto result = UpdateApexLinkerConfig(apex_name); !result.ok()) {
         return result.error();
     }

@@ -53,6 +53,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "apex_init_util.cpp",
     "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",

@@ -48,5 +48,7 @@ int SecondStageMain(int argc, char** argv);
 
 int StopServicesFromApex(const std::string& apex_name);
 
+void RemoveServiceAndActionFromApex(const std::string& apex_name);
+
 }  // namespace init
 }  // namespace android
