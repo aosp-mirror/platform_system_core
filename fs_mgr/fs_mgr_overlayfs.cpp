@@ -642,6 +642,10 @@ bool fs_mgr_overlayfs_set_shared_mount(const std::string& mount_point, bool shar
     if (ret) {
         PERROR << "__mount(target=" << mount_point
                << ",flag=" << (shared_flag ? "MS_SHARED" : "MS_PRIVATE") << ")=" << ret;
+        // If "/system" doesn't look like a mountpoint, retry with "/".
+        if (errno == EINVAL && mount_point == "/system") {
+            return fs_mgr_overlayfs_set_shared_mount("/", shared_flag);
+        }
         return false;
     }
     return true;
@@ -1140,7 +1144,13 @@ static inline uint64_t GetIdealDataScratchSize() {
         return 0;
     }
 
-    return std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
+    auto ideal_size = std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
+
+    // Align up to the filesystem block size.
+    if (auto remainder = ideal_size % s.f_bsize; remainder > 0) {
+        ideal_size += s.f_bsize - remainder;
+    }
+    return ideal_size;
 }
 
 static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exists, bool* change) {
