@@ -1140,7 +1140,13 @@ static inline uint64_t GetIdealDataScratchSize() {
         return 0;
     }
 
-    return std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
+    auto ideal_size = std::min(super_info.size, (uint64_t(s.f_frsize) * s.f_bfree) / 2);
+
+    // Align up to the filesystem block size.
+    if (auto remainder = ideal_size % s.f_bsize; remainder > 0) {
+        ideal_size += s.f_bsize - remainder;
+    }
+    return ideal_size;
 }
 
 static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exists, bool* change) {
