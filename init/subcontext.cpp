@@ -251,11 +251,8 @@ void Subcontext::Restart() {
 }
 
 bool Subcontext::PathMatchesSubcontext(const std::string& path) const {
-    static const std::string kApexDir = "/apex/";
-    if (StartsWith(path, kApexDir)) {
-        auto begin = kApexDir.size();
-        auto end = path.find('/', begin);
-        auto apex_name = path.substr(begin, end - begin);
+    auto apex_name = GetApexNameFromFileName(path);
+    if (!apex_name.empty()) {
         return std::find(apex_list_.begin(), apex_list_.end(), apex_name) != apex_list_.end();
     }
     for (const auto& prefix : path_prefixes_) {
