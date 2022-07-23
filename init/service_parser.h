@@ -31,13 +31,11 @@ class ServiceParser : public SectionParser {
   public:
     ServiceParser(
             ServiceList* service_list, Subcontext* subcontext,
-            const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy,
-            bool from_apex = false)
+            const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy)
         : service_list_(service_list),
           subcontext_(subcontext),
           interface_inheritance_hierarchy_(interface_inheritance_hierarchy),
-          service_(nullptr),
-          from_apex_(from_apex) {}
+          service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                               int line) override;
     Result<void> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -92,7 +90,6 @@ class ServiceParser : public SectionParser {
     std::optional<InterfaceInheritanceHierarchyMap> interface_inheritance_hierarchy_;
     std::unique_ptr<Service> service_;
     std::string filename_;
-    bool from_apex_ = false;
 };
 
 }  // namespace init

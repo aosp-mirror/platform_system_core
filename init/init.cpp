@@ -350,8 +350,8 @@ Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& servic
     }
 #endif  // RECOVERY
     parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&service_list, subcontext, std::nullopt,
-                                                            /*from_apex=*/true));
+                            std::make_unique<ServiceParser>(&service_list, subcontext,
+                            std::nullopt));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontext));
 
     return parser;
