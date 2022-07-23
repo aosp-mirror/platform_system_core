@@ -66,12 +66,12 @@ class Service {
 
   public:
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-            const std::vector<std::string>& args, bool from_apex = false);
+            const std::string& filename, const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
-            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args,
-            bool from_apex = false);
+            Subcontext* subcontext_for_restart_commands, const std::string& filename,
+            const std::vector<std::string>& args);
 
     static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
@@ -134,7 +134,7 @@ class Service {
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
     bool is_post_data() const { return post_data_; }
-    bool is_from_apex() const { return from_apex_; }
+    bool is_from_apex() const { return base::StartsWith(filename_, "/apex/"); }
     void set_oneshot(bool value) {
         if (value) {
             flags_ |= SVC_ONESHOT;
@@ -226,7 +226,7 @@ class Service {
 
     std::optional<std::string> on_failure_reboot_target_;
 
-    bool from_apex_ = false;
+    std::string filename_;
 };
 
 }  // namespace init
