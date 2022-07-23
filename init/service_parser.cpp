@@ -647,7 +647,7 @@ Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
         }
     }
 
-    service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args, from_apex_);
+    service_ = std::make_unique<Service>(name, restart_action_subcontext, filename, str_args);
     return {};
 }
 
