@@ -791,6 +791,8 @@ RefBase::~RefBase()
 
 void RefBase::extendObjectLifetime(int32_t mode)
 {
+    check_not_on_stack(this);
+
     // Must be happens-before ordered with respect to construction or any
     // operation that could destroy the object.
     mRefs->mFlags.fetch_or(mode, std::memory_order_relaxed);
