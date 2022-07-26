@@ -265,6 +265,16 @@ TEST(RefBase, AssertWeakRefExistsDeath) {
     delete foo;
 }
 
+TEST(RefBase, DoubleOwnershipDeath) {
+    bool isDeleted;
+    auto foo = sp<Foo>::make(&isDeleted);
+
+    // if something else thinks it owns foo, should die
+    EXPECT_DEATH(delete foo.get(), "");
+
+    EXPECT_FALSE(isDeleted);
+}
+
 // Set up a situation in which we race with visit2AndRremove() to delete
 // 2 strong references.  Bar destructor checks that there are no early
 // deletions and prior updates are visible to destructor.
