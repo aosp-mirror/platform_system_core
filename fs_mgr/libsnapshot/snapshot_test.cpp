@@ -2755,6 +2755,10 @@ bool IsDaemonRequired() {
         return false;
     }
 
+    if (!IsCompressionEnabled()) {
+        return false;
+    }
+
     const std::string UNKNOWN = "unknown";
     const std::string vendor_release =
             android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
