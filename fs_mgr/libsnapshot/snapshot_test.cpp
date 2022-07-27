@@ -40,6 +40,7 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
+#include <openssl/sha.h>
 #include <storage_literals/storage_literals.h>
 
 #include <android/snapshot/snapshot.pb.h>
@@ -1040,14 +1041,25 @@ class SnapshotUpdateTest : public SnapshotTest {
         }
     }
 
-    AssertionResult WriteSnapshotAndHash(const std::string& name) {
+    AssertionResult WriteSnapshots() {
+        for (const auto& partition : {sys_, vnd_, prd_}) {
+            auto res = WriteSnapshotAndHash(partition);
+            if (!res) {
+                return res;
+            }
+        }
+        return AssertionSuccess();
+    }
+
+    AssertionResult WriteSnapshotAndHash(PartitionUpdate* partition) {
+        std::string name = partition->partition_name() + "_b";
         if (ShouldUseCompression()) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
                 return res;
             }
-            if (!WriteRandomData(writer.get(), &hashes_[name])) {
+            if (!WriteRandomSnapshotData(writer.get(), &hashes_[name])) {
                 return AssertionFailure() << "Unable to write random data to snapshot " << name;
             }
             if (!writer->Finalize()) {
@@ -1069,6 +1081,42 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         return AssertionSuccess() << "Written random data to snapshot " << name
                                   << ", hash: " << hashes_[name];
+    }
+
+    bool WriteRandomSnapshotData(ICowWriter* writer, std::string* hash) {
+        unique_fd rand(open("/dev/urandom", O_RDONLY));
+        if (rand < 0) {
+            PLOG(ERROR) << "open /dev/urandom";
+            return false;
+        }
+
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+
+        if (!writer->options().max_blocks) {
+            LOG(ERROR) << "CowWriter must specify maximum number of blocks";
+            return false;
+        }
+        const auto num_blocks = writer->options().max_blocks.value();
+
+        const auto block_size = writer->options().block_size;
+        std::string block(block_size, '\0');
+        for (uint64_t i = 0; i < num_blocks; i++) {
+            if (!ReadFully(rand, block.data(), block.size())) {
+                PLOG(ERROR) << "read /dev/urandom";
+                return false;
+            }
+            if (!writer->AddRawBlocks(i, block.data(), block.size())) {
+                LOG(ERROR) << "Failed to add raw block " << i;
+                return false;
+            }
+            SHA256_Update(&ctx, block.data(), block.size());
+        }
+
+        uint8_t out[32];
+        SHA256_Final(out, &ctx);
+        *hash = ToHexString(out, sizeof(out));
+        return true;
     }
 
     // Generate a snapshot that moves all the upper blocks down to the start.
@@ -1179,9 +1227,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1245,9 +1291,7 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     std::vector<PartitionUpdate*> partitions = {sys_, vnd_, prd_};
     for (auto* partition : partitions) {
@@ -1311,8 +1355,8 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
         ASSERT_EQ(status.old_partition_size(), 3145728);
     }
 
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
-    ASSERT_TRUE(WriteSnapshotAndHash("vnd_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
+    ASSERT_TRUE(WriteSnapshotAndHash(vnd_));
     ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
 
     sync();
@@ -1415,8 +1459,8 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
-    ASSERT_TRUE(WriteSnapshotAndHash("vnd_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
+    ASSERT_TRUE(WriteSnapshotAndHash(vnd_));
     ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
 
     sync();
@@ -1577,9 +1621,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1738,9 +1780,7 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
     ASSERT_FALSE(image_manager_->BackingImageExists("prd_b-cow-img"));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -2012,9 +2052,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
 
@@ -2054,9 +2092,7 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Create a stale snapshot that should not exist.
     {
@@ -2139,7 +2175,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
     // Map and write some data to target partition.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
 
     // Finish update.
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
@@ -2175,7 +2211,7 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 
     // Map and write some data to target partitions.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
 
     std::vector<android::dm::DeviceMapper::TargetInfo> table;
     ASSERT_TRUE(DeviceMapper::Instance().GetTableStatus("sys_b", &table));
@@ -2235,8 +2271,8 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b", "dlkm_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    for (const auto& partition : {sys_, vnd_, prd_, dlkm}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(partition));
     }
 
     // Assert that source partitions aren't affected.
@@ -2360,9 +2396,7 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
     ASSERT_TRUE(sm->MapAllSnapshots(10s));
 
@@ -2412,13 +2446,6 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
     SetSize(sys_, partition_size);
-    SetSize(vnd_, partition_size);
-    SetSize(prd_, 18_MiB);
-
-    // Make sure |prd| does not fit in super at all. On VABC, this means we
-    // fake an extra large COW for |vnd| to fill up super.
-    vnd_->set_estimate_cow_size(30_MiB);
-    prd_->set_estimate_cow_size(30_MiB);
 
     AddOperationForPartitions();
 
@@ -2430,23 +2457,7 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
         GTEST_SKIP() << "Test does not apply to userspace snapshots";
     }
 
-    // Test that partitions prioritize using space in super.
-    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
-    ASSERT_NE(tgt, nullptr);
-    ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
-    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
-    ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
-
-    // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
-
-    // Assert that source partitions aren't affected.
-    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
-        ASSERT_TRUE(IsPartitionUnchanged(name));
-    }
-
+    ASSERT_TRUE(WriteSnapshots());
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     ASSERT_TRUE(UnmapAll());
