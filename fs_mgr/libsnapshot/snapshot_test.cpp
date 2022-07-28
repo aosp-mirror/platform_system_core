@@ -90,10 +90,9 @@ using namespace std::string_literals;
 std::unique_ptr<SnapshotManager> sm;
 TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
+bool gIsSnapuserdRequired;
 
 void MountMetadata();
-bool ShouldUseCompression();
-bool IsDaemonRequired();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -359,7 +358,7 @@ class SnapshotTest : public ::testing::Test {
         DeltaArchiveManifest manifest;
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(gIsSnapuserdRequired);
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         auto group = dynamic_partition_metadata->add_groups();
@@ -398,7 +397,7 @@ class SnapshotTest : public ::testing::Test {
             if (!res) {
                 return res;
             }
-        } else if (!IsCompressionEnabled()) {
+        } else if (!gIsSnapuserdRequired) {
             std::string ignore;
             if (!MapUpdateSnapshot("test_partition_b", &ignore)) {
                 return AssertionFailure() << "Failed to map test_partition_b";
@@ -457,8 +456,8 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = ShouldUseCompression();
-    if (cow_creator.compression_enabled) {
+    cow_creator.using_snapuserd = gIsSnapuserdRequired;
+    if (cow_creator.using_snapuserd) {
         cow_creator.compression_algorithm = "gz";
     } else {
         cow_creator.compression_algorithm = "none";
@@ -485,7 +484,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.state(), SnapshotState::CREATED);
         ASSERT_EQ(status.device_size(), kDeviceSize);
         ASSERT_EQ(status.snapshot_size(), kDeviceSize);
-        ASSERT_EQ(status.compression_enabled(), cow_creator.compression_enabled);
+        ASSERT_EQ(status.using_snapuserd(), cow_creator.using_snapuserd);
         ASSERT_EQ(status.compression_algorithm(), cow_creator.compression_algorithm);
     }
 
@@ -498,7 +497,7 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = ShouldUseCompression();
+    cow_creator.using_snapuserd = gIsSnapuserdRequired;
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -625,7 +624,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
-    if (ShouldUseCompression()) {
+    if (gIsSnapuserdRequired) {
         ASSERT_EQ(status.compression_algorithm(), "gz");
     } else {
         ASSERT_EQ(status.compression_algorithm(), "none");
@@ -899,7 +898,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(ShouldUseCompression());
+        dynamic_partition_metadata->set_vabc_enabled(gIsSnapuserdRequired);
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         // Create a fake update package metadata.
@@ -1032,7 +1031,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
-        if (ShouldUseCompression()) {
+        if (gIsSnapuserdRequired) {
             std::unique_ptr<ISnapshotWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
@@ -1053,7 +1052,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
     AssertionResult WriteSnapshotAndHash(PartitionUpdate* partition) {
         std::string name = partition->partition_name() + "_b";
-        if (ShouldUseCompression()) {
+        if (gIsSnapuserdRequired) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
@@ -1255,7 +1254,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), gIsSnapuserdRequired);
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1282,8 +1281,8 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 }
 
 TEST_F(SnapshotUpdateTest, DuplicateOps) {
-    if (!ShouldUseCompression()) {
-        GTEST_SKIP() << "Compression-only test";
+    if (!gIsSnapuserdRequired) {
+        GTEST_SKIP() << "snapuserd-only test";
     }
 
     // Execute the update.
@@ -1324,9 +1323,9 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
-    if (!ShouldUseCompression()) {
+    if (!gIsSnapuserdRequired) {
         // b/179111359
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     auto old_sys_size = GetSize(sys_);
@@ -1387,7 +1386,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), gIsSnapuserdRequired);
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1441,9 +1440,9 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
 // Test that a transient merge consistency check failure can resume properly.
 TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
-    if (!ShouldUseCompression()) {
+    if (!gIsSnapuserdRequired) {
         // b/179111359
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     auto old_sys_size = GetSize(sys_);
@@ -1495,7 +1494,7 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), gIsSnapuserdRequired);
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -2099,8 +2098,8 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
         ASSERT_TRUE(AcquireLock());
 
         PartitionCowCreator cow_creator = {
-                .compression_enabled = ShouldUseCompression(),
-                .compression_algorithm = ShouldUseCompression() ? "gz" : "none",
+                .using_snapuserd = gIsSnapuserdRequired,
+                .compression_algorithm = gIsSnapuserdRequired ? "gz" : "",
         };
         SnapshotStatus status;
         status.set_name("sys_a");
@@ -2196,8 +2195,8 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
-    if (ShouldUseCompression()) {
-        GTEST_SKIP() << "No overflow bit set for userspace COWs";
+    if (gIsSnapuserdRequired) {
+        GTEST_SKIP() << "No overflow bit set for snapuserd COWs";
     }
 
     const auto actual_write_size = GetSize(sys_);
@@ -2331,8 +2330,8 @@ class AutoKill final {
 };
 
 TEST_F(SnapshotUpdateTest, DaemonTransition) {
-    if (!ShouldUseCompression()) {
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+    if (!gIsSnapuserdRequired) {
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     // Ensure a connection to the second-stage daemon, but use the first-stage
@@ -2762,41 +2761,21 @@ void SnapshotTestEnvironment::TearDown() {
     }
 }
 
-bool IsDaemonRequired() {
+void SetGlobalConfigOptions() {
     if (FLAGS_force_config == "dmsnap") {
-        return false;
+        ASSERT_TRUE(android::base::SetProperty("snapuserd.test.dm.snapshots", "1"))
+                << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
     }
 
-    if (!IsCompressionEnabled()) {
-        return false;
+    if (FLAGS_force_iouring_disable == "iouring_disabled") {
+        ASSERT_TRUE(android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1"))
+                << "Failed to disable property: snapuserd.test.io_uring.disabled";
     }
 
-    const std::string UNKNOWN = "unknown";
-    const std::string vendor_release =
-            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
-
-    // No userspace snapshots if vendor partition is on Android 12
-    // However, for GRF devices, snapuserd daemon will be on
-    // vendor ramdisk in Android 12.
-    if (vendor_release.find("12") != std::string::npos) {
-        return true;
+    if (FLAGS_force_config != "dmsnap" &&
+        (GetLegacyCompressionEnabledProperty() || CanUseUserspaceSnapshots())) {
+        gIsSnapuserdRequired = true;
     }
-
-    if (!FLAGS_force_config.empty()) {
-        return true;
-    }
-
-    return IsUserspaceSnapshotsEnabled();
-}
-
-bool ShouldUseCompression() {
-    if (FLAGS_force_config == "vab" || FLAGS_force_config == "dmsnap") {
-        return false;
-    }
-    if (FLAGS_force_config == "vabc") {
-        return true;
-    }
-    return IsCompressionEnabled();
 }
 
 }  // namespace snapshot
@@ -2815,19 +2794,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (FLAGS_force_config == "dmsnap") {
-        if (!android::base::SetProperty("snapuserd.test.dm.snapshots", "1")) {
-            return testing::AssertionFailure()
-                   << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
-        }
-    }
-
-    if (FLAGS_force_iouring_disable == "iouring_disabled") {
-        if (!android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1")) {
-            return testing::AssertionFailure()
-                   << "Failed to disable property: snapuserd.test.io_uring.disabled";
-        }
-    }
+    android::snapshot::SetGlobalConfigOptions();
 
     int ret = RUN_ALL_TESTS();
 
