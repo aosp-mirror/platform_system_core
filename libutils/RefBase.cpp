@@ -149,6 +149,29 @@ namespace android {
 // Same for weak counts.
 #define BAD_WEAK(c) ((c) == 0 || ((c) & (~MAX_COUNT)) != 0)
 
+// see utils/StrongPointer.h - declared there for legacy reasons
+void sp_report_stack_pointer();
+
+// Check whether address is definitely on the calling stack.  We actually check whether it is on
+// the same 4K page as the frame pointer.
+//
+// Assumptions:
+// - Pages are never smaller than 4K (MIN_PAGE_SIZE)
+// - Malloced memory never shares a page with a stack.
+//
+// It does not appear safe to broaden this check to include adjacent pages; apparently this code
+// is used in environments where there may not be a guard page below (at higher addresses than)
+// the bottom of the stack.
+static void check_not_on_stack(const void* ptr) {
+    static constexpr int MIN_PAGE_SIZE = 0x1000;  // 4K. Safer than including sys/user.h.
+    static constexpr uintptr_t MIN_PAGE_MASK = ~static_cast<uintptr_t>(MIN_PAGE_SIZE - 1);
+    uintptr_t my_frame_address =
+            reinterpret_cast<uintptr_t>(__builtin_frame_address(0 /* this frame */));
+    if (((reinterpret_cast<uintptr_t>(ptr) ^ my_frame_address) & MIN_PAGE_MASK) == 0) {
+        sp_report_stack_pointer();
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 class RefBase::weakref_impl : public RefBase::weakref_type
@@ -431,6 +454,8 @@ void RefBase::incStrong(const void* id) const
     if (c != INITIAL_STRONG_VALUE)  {
         return;
     }
+
+    check_not_on_stack(this);
 
     int32_t old __unused = refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE, std::memory_order_relaxed);
     // A decStrong() must still happen after us.
