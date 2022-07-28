@@ -627,7 +627,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     if (gIsSnapuserdRequired) {
         ASSERT_EQ(status.compression_algorithm(), "gz");
     } else {
-        ASSERT_EQ(status.compression_algorithm(), "none");
+        ASSERT_EQ(status.compression_algorithm(), "");
     }
 
     DeviceMapper::TargetInfo target;
