@@ -184,16 +184,44 @@ void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uin
     new_extent->set_num_blocks(num_blocks);
 }
 
-bool IsCompressionEnabled() {
+bool GetLegacyCompressionEnabledProperty() {
     return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
-bool IsUserspaceSnapshotsEnabled() {
+bool GetUserspaceSnapshotsEnabledProperty() {
     return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
-bool IsIouringEnabled() {
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        return false;
+    }
+
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // No user-space snapshots if vendor partition is on Android 12
+    if (vendor_release.find("12") != std::string::npos) {
+        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
+                  << vendor_release;
+        return false;
+    }
+
+    if (IsDmSnapshotTestingEnabled()) {
+        LOG(INFO) << "Userspace snapshots disabled for testing";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetIouringEnabledProperty() {
     return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+}
+
+bool GetXorCompressionEnabledProperty() {
+    return android::base::GetBoolProperty("ro.virtual_ab.compression.xor.enabled", false);
 }
 
 std::string GetOtherPartitionName(const std::string& name) {

@@ -56,8 +56,8 @@ struct PartitionCowCreator {
     // Extra extents that are going to be invalidated during the update
     // process.
     std::vector<ChromeOSExtent> extra_extents = {};
-    // True if compression is enabled.
-    bool compression_enabled = false;
+    // True if snapuserd COWs are enabled.
+    bool using_snapuserd = false;
     std::string compression_algorithm;
 
     struct Return {
