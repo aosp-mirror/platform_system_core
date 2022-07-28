@@ -97,8 +97,8 @@ message SnapshotStatus {
     // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
     uint64 metadata_sectors = 8;
 
-    // True if compression is enabled, false otherwise.
-    bool compression_enabled = 9;
+    // True if using snapuserd, false otherwise.
+    bool using_snapuserd = 9;
 
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
@@ -184,7 +184,7 @@ message SnapshotUpdateStatus {
     uint64 metadata_sectors = 4;
 
     // Whether compression/dm-user was used for any snapshots.
-    bool compression_enabled = 5;
+    bool using_snapuserd = 5;
 
     // Merge phase (if state == MERGING).
     MergePhase merge_phase = 6;
