@@ -184,7 +184,6 @@ COMPARE_STRONG_FUNCTIONAL(>=, std::greater_equal)
 
 // For code size reasons, we do not want these inlined or templated.
 void sp_report_race();
-void sp_report_stack_pointer();
 
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
