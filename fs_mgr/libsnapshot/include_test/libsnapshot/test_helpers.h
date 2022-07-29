@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <android-base/file.h>
@@ -165,27 +166,25 @@ class DeviceMapperWrapper : public android::dm::IDeviceMapper {
     android::dm::IDeviceMapper& impl_;
 };
 
-class SnapshotTestPropertyFetcher : public android::fs_mgr::testing::MockPropertyFetcher {
+class SnapshotTestPropertyFetcher : public android::fs_mgr::IPropertyFetcher {
   public:
-    SnapshotTestPropertyFetcher(const std::string& slot_suffix) {
-        using testing::Return;
-        ON_CALL(*this, GetProperty("ro.boot.slot_suffix", _)).WillByDefault(Return(slot_suffix));
-        ON_CALL(*this, GetBoolProperty("ro.boot.dynamic_partitions", _))
-                .WillByDefault(Return(true));
-        ON_CALL(*this, GetBoolProperty("ro.boot.dynamic_partitions_retrofit", _))
-                .WillByDefault(Return(false));
-        ON_CALL(*this, GetBoolProperty("ro.virtual_ab.enabled", _)).WillByDefault(Return(true));
-    }
+    explicit SnapshotTestPropertyFetcher(const std::string& slot_suffix,
+                                         std::unordered_map<std::string, std::string>&& props = {});
+
+    std::string GetProperty(const std::string& key, const std::string& defaultValue) override;
+    bool GetBoolProperty(const std::string& key, bool defaultValue) override;
 
     static void SetUp(const std::string& slot_suffix = "_a") { Reset(slot_suffix); }
-
     static void TearDown() { Reset("_a"); }
 
   private:
     static void Reset(const std::string& slot_suffix) {
         IPropertyFetcher::OverrideForTesting(
-                std::make_unique<NiceMock<SnapshotTestPropertyFetcher>>(slot_suffix));
+                std::make_unique<SnapshotTestPropertyFetcher>(slot_suffix));
     }
+
+  private:
+    std::unordered_map<std::string, std::string> properties_;
 };
 
 // Helper for error-spam-free cleanup.

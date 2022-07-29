@@ -18,10 +18,12 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parsebool.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <gtest/gtest.h>
+#include <liblp/property_fetcher.h>
 #include <openssl/sha.h>
 #include <payload_consumer/file_descriptor.h>
 
@@ -276,6 +278,39 @@ uint64_t LowSpaceUserdata::bsize() const {
 
 bool IsVirtualAbEnabled() {
     return android::base::GetBoolProperty("ro.virtual_ab.enabled", false);
+}
+
+SnapshotTestPropertyFetcher::SnapshotTestPropertyFetcher(
+        const std::string& slot_suffix, std::unordered_map<std::string, std::string>&& props)
+    : properties_(std::move(props)) {
+    properties_["ro.boot.slot_suffix"] = slot_suffix;
+    properties_["ro.boot.dynamic_partitions"] = "true";
+    properties_["ro.boot.dynamic_partitions_retrofit"] = "false";
+    properties_["ro.virtual_ab.enabled"] = "true";
+}
+
+std::string SnapshotTestPropertyFetcher::GetProperty(const std::string& key,
+                                                     const std::string& defaultValue) {
+    auto iter = properties_.find(key);
+    if (iter == properties_.end()) {
+        return android::base::GetProperty(key, defaultValue);
+    }
+    return iter->second;
+}
+
+bool SnapshotTestPropertyFetcher::GetBoolProperty(const std::string& key, bool defaultValue) {
+    auto iter = properties_.find(key);
+    if (iter == properties_.end()) {
+        return android::base::GetBoolProperty(key, defaultValue);
+    }
+    switch (android::base::ParseBool(iter->second)) {
+        case android::base::ParseBoolResult::kTrue:
+            return true;
+        case android::base::ParseBoolResult::kFalse:
+            return false;
+        default:
+            return defaultValue;
+    }
 }
 
 }  // namespace snapshot
