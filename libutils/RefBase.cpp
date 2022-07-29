@@ -149,8 +149,8 @@ namespace android {
 // Same for weak counts.
 #define BAD_WEAK(c) ((c) == 0 || ((c) & (~MAX_COUNT)) != 0)
 
-// see utils/StrongPointer.h - declared there for legacy reasons
-void sp_report_stack_pointer();
+// name kept because prebuilts used to use it from inlining sp<> code
+void sp_report_stack_pointer() { LOG_ALWAYS_FATAL("RefBase used with stack pointer argument"); }
 
 // Check whether address is definitely on the calling stack.  We actually check whether it is on
 // the same 4K page as the frame pointer.
