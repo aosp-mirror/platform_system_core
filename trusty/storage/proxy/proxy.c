@@ -130,7 +130,7 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
     if (msg->flags & STORAGE_MSG_FLAG_PRE_COMMIT) {
         rc = storage_sync_checkpoint();
         if (rc < 0) {
-            msg->result = STORAGE_ERR_GENERIC;
+            msg->result = STORAGE_ERR_SYNC_FAILURE;
             return ipc_respond(msg, NULL, 0);
         }
     }
