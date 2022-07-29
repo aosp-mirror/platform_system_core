@@ -61,6 +61,18 @@ class TrustyMetricsTest : public TrustyMetrics, public ::testing::Test {
     virtual void SetUp() override {
         auto ret = Open();
         ASSERT_TRUE(ret.ok()) << ret.error();
+
+        /* Drain events (if any) and reset state */
+        DrainEvents();
+        crashed_app_.clear();
+        event_drop_count_ = 0;
+    }
+
+    void DrainEvents() {
+        while (WaitForEvent(1000 /* 1 second timeout */).ok()) {
+            auto ret = HandleEvent();
+            ASSERT_TRUE(ret.ok()) << ret.error();
+        }
     }
 
     void WaitForAndHandleEvent() {
@@ -78,6 +90,9 @@ class TrustyMetricsTest : public TrustyMetrics, public ::testing::Test {
 TEST_F(TrustyMetricsTest, Crash) {
     TriggerCrash();
     WaitForAndHandleEvent();
+
+    /* Check that no event was dropped. */
+    ASSERT_EQ(event_drop_count_, 0);
 
     /* Check that correct TA crashed. */
     ASSERT_EQ(crashed_app_, "36f5b435-5bd3-4526-8b76-200e3a7e79f3:crasher");
@@ -109,6 +124,9 @@ TEST_F(TrustyMetricsTest, PollSet) {
 
     auto ret = HandleEvent();
     ASSERT_TRUE(ret.ok()) << ret.error();
+
+    /* Check that no event was dropped. */
+    ASSERT_EQ(event_drop_count_, 0);
 
     /* Check that correct TA crashed. */
     ASSERT_EQ(crashed_app_, "36f5b435-5bd3-4526-8b76-200e3a7e79f3:crasher");
