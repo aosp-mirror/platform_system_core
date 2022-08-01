@@ -18,6 +18,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include <condition_variable>
 #include <cstring>
@@ -53,6 +56,8 @@ static constexpr size_t PAYLOAD_BUFFER_SZ = (1UL << 20);
 static_assert(PAYLOAD_BUFFER_SZ >= BLOCK_SZ);
 
 static constexpr int kNumWorkerThreads = 4;
+
+static constexpr int kNiceValueForMergeThreads = -5;
 
 #define SNAP_LOG(level) LOG(level) << misc_name_ << ": "
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
@@ -274,7 +279,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     const bool& IsAttached() const { return attached_; }
     void AttachControlDevice() { attached_ = true; }
 
-    void CheckMergeCompletionStatus();
+    bool CheckMergeCompletionStatus();
     bool CommitMerge(int num_merge_ops);
 
     void CloseFds() { cow_fd_ = {}; }
@@ -305,6 +310,8 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     // State transitions for merge
     void InitiateMerge();
+    void MonitorMerge();
+    void WakeupMonitorMergeThread();
     void WaitForMergeComplete();
     bool WaitForMergeBegin();
     void NotifyRAForMergeReady();
@@ -333,6 +340,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void SetSocketPresent(bool socket) { is_socket_present_ = socket; }
     void SetIouringEnabled(bool io_uring_enabled) { is_io_uring_enabled_ = io_uring_enabled; }
     bool MergeInitiated() { return merge_initiated_; }
+    bool MergeMonitored() { return merge_monitored_; }
     double GetMergePercentage() { return merge_completion_percentage_; }
 
     // Merge Block State Transitions
@@ -407,6 +415,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     double merge_completion_percentage_;
 
     bool merge_initiated_ = false;
+    bool merge_monitored_ = false;
     bool attached_ = false;
     bool is_socket_present_;
     bool is_io_uring_enabled_ = false;

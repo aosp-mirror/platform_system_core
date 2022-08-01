@@ -59,6 +59,14 @@ DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
     return DaemonOps::INVALID;
 }
 
+UserSnapshotServer::UserSnapshotServer() {
+    monitor_merge_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
+    if (monitor_merge_event_fd_ == -1) {
+        PLOG(FATAL) << "monitor_merge_event_fd_: failed to create eventfd";
+    }
+    terminating_ = false;
+}
+
 UserSnapshotServer::~UserSnapshotServer() {
     // Close any client sockets that were added via AcceptClient().
     for (size_t i = 1; i < watched_fds_.size(); i++) {
@@ -249,7 +257,7 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
                     return Sendmsg(fd, "fail");
                 }
 
-                if (!StartMerge(*iter)) {
+                if (!StartMerge(&lock, *iter)) {
                     return Sendmsg(fd, "fail");
                 }
 
@@ -298,7 +306,7 @@ void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> ha
     }
 
     handler->snapuserd()->CloseFds();
-    handler->snapuserd()->CheckMergeCompletionStatus();
+    bool merge_completed = handler->snapuserd()->CheckMergeCompletionStatus();
     handler->snapuserd()->UnmapBufferRegion();
 
     auto misc_name = handler->misc_name();
@@ -306,7 +314,11 @@ void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> ha
 
     {
         std::lock_guard<std::mutex> lock(lock_);
-        num_partitions_merge_complete_ += 1;
+        if (merge_completed) {
+            num_partitions_merge_complete_ += 1;
+            active_merge_threads_ -= 1;
+            WakeupMonitorMergeThread();
+        }
         handler->SetThreadTerminated();
         auto iter = FindHandler(&lock, handler->misc_name());
         if (iter == dm_users_.end()) {
@@ -418,6 +430,9 @@ void UserSnapshotServer::JoinAllThreads() {
 
         if (th.joinable()) th.join();
     }
+
+    stop_monitor_merge_thread_ = true;
+    WakeupMonitorMergeThread();
 }
 
 void UserSnapshotServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
@@ -502,13 +517,24 @@ bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHa
     return true;
 }
 
-bool UserSnapshotServer::StartMerge(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+bool UserSnapshotServer::StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
+                                    const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+    CHECK(proof_of_lock);
+
     if (!handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler not attached to dm-user - Merge thread cannot be started";
         return false;
     }
 
-    handler->snapuserd()->InitiateMerge();
+    handler->snapuserd()->MonitorMerge();
+
+    if (!is_merge_monitor_started_.has_value()) {
+        std::thread(&UserSnapshotServer::MonitorMerge, this).detach();
+        is_merge_monitor_started_ = true;
+    }
+
+    merge_handlers_.push(handler);
+    WakeupMonitorMergeThread();
     return true;
 }
 
@@ -590,6 +616,42 @@ bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
     return true;
 }
 
+void UserSnapshotServer::WakeupMonitorMergeThread() {
+    uint64_t notify = 1;
+    ssize_t rc = TEMP_FAILURE_RETRY(write(monitor_merge_event_fd_.get(), &notify, sizeof(notify)));
+    if (rc < 0) {
+        PLOG(FATAL) << "failed to notify monitor merge thread";
+    }
+}
+
+void UserSnapshotServer::MonitorMerge() {
+    while (!stop_monitor_merge_thread_) {
+        uint64_t testVal;
+        ssize_t ret =
+                TEMP_FAILURE_RETRY(read(monitor_merge_event_fd_.get(), &testVal, sizeof(testVal)));
+        if (ret == -1) {
+            PLOG(FATAL) << "Failed to read from eventfd";
+        } else if (ret == 0) {
+            LOG(FATAL) << "Hit EOF on eventfd";
+        }
+
+        LOG(INFO) << "MonitorMerge: active-merge-threads: " << active_merge_threads_;
+        {
+            std::lock_guard<std::mutex> lock(lock_);
+            while (active_merge_threads_ < kMaxMergeThreads && merge_handlers_.size() > 0) {
+                auto handler = merge_handlers_.front();
+                merge_handlers_.pop();
+                LOG(INFO) << "Starting merge for partition: "
+                          << handler->snapuserd()->GetMiscName();
+                handler->snapuserd()->InitiateMerge();
+                active_merge_threads_ += 1;
+            }
+        }
+    }
+
+    LOG(INFO) << "Exiting MonitorMerge: size: " << merge_handlers_.size();
+}
+
 bool UserSnapshotServer::WaitForSocket() {
     auto scope_guard = android::base::make_scope_guard([this]() -> void { JoinAllThreads(); });
 
@@ -646,6 +708,7 @@ bool UserSnapshotServer::WaitForSocket() {
     if (!StartWithSocket(true)) {
         return false;
     }
+
     return Run();
 }
 
