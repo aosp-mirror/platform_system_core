@@ -22,6 +22,10 @@ rust_bindgen {
     name: "libstatspull_bindgen",
     wrapper_src: "statslog.h",
     crate_name: "statspull_bindgen",
+    visibility: [
+        "//frameworks/proto_logging/stats/stats_log_api_gen",
+        "//packages/modules/Virtualization/libs/statslog_virtualization",
+    ],
     source_stem: "bindings",
     bindgen_flags: [
         "--size_t-is-usize",
@@ -48,7 +52,7 @@ rust_bindgen {
     apex_available: [
         "//apex_available:platform",
         "com.android.virt",
-    ]
+    ],
 }
 
 rust_library {
