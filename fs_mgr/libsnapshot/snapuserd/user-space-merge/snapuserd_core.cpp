@@ -143,17 +143,18 @@ void SnapshotHandler::PrepareReadAhead() {
     NotifyRAForMergeReady();
 }
 
-void SnapshotHandler::CheckMergeCompletionStatus() {
+bool SnapshotHandler::CheckMergeCompletionStatus() {
     if (!merge_initiated_) {
         SNAP_LOG(INFO) << "Merge was not initiated. Total-data-ops: "
                        << reader_->get_num_total_data_ops();
-        return;
+        return false;
     }
 
     struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
 
     SNAP_LOG(INFO) << "Merge-status: Total-Merged-ops: " << ch->num_merge_ops
                    << " Total-data-ops: " << reader_->get_num_total_data_ops();
+    return true;
 }
 
 bool SnapshotHandler::ReadMetadata() {
