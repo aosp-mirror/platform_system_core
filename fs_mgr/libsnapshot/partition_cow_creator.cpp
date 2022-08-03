@@ -143,7 +143,7 @@ void WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Exte
 }
 
 std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
-    if (compression_enabled) {
+    if (using_snapuserd) {
         if (update == nullptr || !update->has_estimate_cow_size()) {
             LOG(ERROR) << "Update manifest does not include a COW size";
             return std::nullopt;

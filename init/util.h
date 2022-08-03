@@ -107,5 +107,7 @@ void SetDefaultMountNamespaceReady();
 
 bool IsMicrodroid();
 bool Has32BitAbi();
+
+std::string GetApexNameFromFileName(const std::string& path);
 }  // namespace init
 }  // namespace android
