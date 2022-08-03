@@ -364,9 +364,65 @@ static RemountStatus EnableDsuIfNeeded() {
     return REMOUNT_SUCCESS;
 }
 
-static int do_remount(int argc, char* argv[]) {
-    RemountStatus retval = REMOUNT_SUCCESS;
+static RemountStatus RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& entry) {
+    // unlock the r/o key for the mount point device
+    if (entry.fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(&entry);
+    }
+    auto blk_device = entry.blk_device;
+    auto mount_point = entry.mount_point;
 
+    auto found = false;
+    for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
+        auto& rentry = *it;
+        if (mount_point == rentry.mount_point) {
+            blk_device = rentry.blk_device;
+            found = true;
+            break;
+        }
+        // Find overlayfs mount point?
+        if ((mount_point == "/" && rentry.mount_point == "/system") ||
+            (mount_point == "/system" && rentry.mount_point == "/")) {
+            blk_device = rentry.blk_device;
+            mount_point = "/system";
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        PLOG(INFO) << "skip unmounted partition dev:" << blk_device << " mnt:" << mount_point;
+        return REMOUNT_SUCCESS;
+    }
+    if (blk_device == "/dev/root") {
+        auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
+        if (from_fstab) blk_device = from_fstab->blk_device;
+    }
+    fs_mgr_set_blk_ro(blk_device, false);
+
+    // Find system-as-root mount point?
+    if ((mount_point == "/system") && !GetEntryForMountPoint(&mounts, mount_point) &&
+        GetEntryForMountPoint(&mounts, "/")) {
+        mount_point = "/";
+    }
+
+    // Now remount!
+    if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
+                nullptr) == 0) {
+        return REMOUNT_SUCCESS;
+    }
+    if ((errno == EINVAL) && (mount_point != entry.mount_point)) {
+        mount_point = entry.mount_point;
+        if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
+                    nullptr) == 0) {
+            return REMOUNT_SUCCESS;
+        }
+    }
+
+    PLOG(ERROR) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
+    return REMOUNT_FAILED;
+}
+
+static int do_remount(int argc, char* argv[]) {
     // If somehow this executable is delivered on a "user" build, it can
     // not function, so providing a clear message to the caller rather than
     // letting if fall through and provide a lot of confusing failure messages.
@@ -446,7 +502,7 @@ static int do_remount(int argc, char* argv[]) {
 
     // Check verity and optionally setup overlayfs backing.
     RemountCheckResult check_result;
-    retval = CheckVerityAndOverlayfs(&partitions, &check_result);
+    auto retval = CheckVerityAndOverlayfs(&partitions, &check_result);
 
     bool auto_reboot = check_result.reboot_later && can_reboot;
 
@@ -474,88 +530,28 @@ static int do_remount(int argc, char* argv[]) {
     // Mount overlayfs.
     errno = 0;
     if (!fs_mgr_overlayfs_mount_all(&partitions) && errno) {
-        retval = BAD_OVERLAY;
         PLOG(ERROR) << "Can not mount overlayfs for partitions";
+        return BAD_OVERLAY;
     }
 
     // Get actual mounts _after_ overlayfs has been added.
     android::fs_mgr::Fstab mounts;
     if (!android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts) || mounts.empty()) {
         PLOG(ERROR) << "Failed to read /proc/mounts";
-        retval = NO_MOUNTS;
+        return NO_MOUNTS;
     }
 
     // Remount selected partitions.
     for (auto& entry : partitions) {
-        // unlock the r/o key for the mount point device
-        if (entry.fs_mgr_flags.logical) {
-            fs_mgr_update_logical_partition(&entry);
+        if (auto rv = RemountPartition(fstab, mounts, entry); rv != REMOUNT_SUCCESS) {
+            retval = rv;
         }
-        auto blk_device = entry.blk_device;
-        auto mount_point = entry.mount_point;
-
-        auto found = false;
-        for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
-            auto& rentry = *it;
-            if (mount_point == rentry.mount_point) {
-                blk_device = rentry.blk_device;
-                found = true;
-                break;
-            }
-            // Find overlayfs mount point?
-            if ((mount_point == "/" && rentry.mount_point == "/system")  ||
-                (mount_point == "/system" && rentry.mount_point == "/")) {
-                blk_device = rentry.blk_device;
-                mount_point = "/system";
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            PLOG(INFO) << "skip unmounted partition dev:" << blk_device << " mnt:" << mount_point;
-            continue;
-        }
-        if (blk_device == "/dev/root") {
-            auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
-            if (from_fstab) blk_device = from_fstab->blk_device;
-        }
-        fs_mgr_set_blk_ro(blk_device, false);
-
-        // Find system-as-root mount point?
-        if ((mount_point == "/system") && !GetEntryForMountPoint(&mounts, mount_point) &&
-            GetEntryForMountPoint(&mounts, "/")) {
-            mount_point = "/";
-        }
-
-        // Now remount!
-        if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                    nullptr) == 0) {
-            continue;
-        }
-        if ((errno == EINVAL) && (mount_point != entry.mount_point)) {
-            mount_point = entry.mount_point;
-            if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                        nullptr) == 0) {
-                continue;
-            }
-        }
-        PLOG(ERROR) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
-        // If errno is EROFS at this point, we are dealing with r/o
-        // filesystem types like squashfs, erofs or ext4 dedupe. We will
-        // consider such a device that does not have CONFIG_OVERLAY_FS
-        // in the kernel as a misconfigured.
-        if (errno == EROFS) {
-            LOG(ERROR) << "Consider providing all the dependencies to enable overlayfs";
-        }
-        retval = REMOUNT_FAILED;
     }
 
     if (auto_reboot) reboot(check_result.setup_overlayfs);
     if (check_result.reboot_later) {
         LOG(INFO) << "Now reboot your device for settings to take effect";
-        return 0;
     }
-
     return retval;
 }
 
