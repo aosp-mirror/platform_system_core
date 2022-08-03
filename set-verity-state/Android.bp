@@ -12,7 +12,6 @@ cc_binary {
         "libcrypto",
         "libcrypto_utils",
         "libcutils",
-        "libfec",
         "libfs_mgr_binder",
         "liblog",
         "libutils",
