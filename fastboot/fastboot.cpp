@@ -1683,10 +1683,9 @@ static unsigned fb_get_flash_block_size(std::string name) {
     return size;
 }
 
-static void fb_perform_format(
-                              const std::string& partition, int skip_if_not_supported,
+static void fb_perform_format(const std::string& partition, int skip_if_not_supported,
                               const std::string& type_override, const std::string& size_override,
-                              const std::string& initial_dir, const unsigned fs_options) {
+                              const unsigned fs_options) {
     std::string partition_type, partition_size;
 
     struct fastboot_buffer buf;
@@ -1748,8 +1747,7 @@ static void fb_perform_format(
     eraseBlkSize = fb_get_flash_block_size("erase-block-size");
     logicalBlkSize = fb_get_flash_block_size("logical-block-size");
 
-    if (fs_generator_generate(gen, output.path, size, initial_dir,
-            eraseBlkSize, logicalBlkSize, fs_options)) {
+    if (fs_generator_generate(gen, output.path, size, eraseBlkSize, logicalBlkSize, fs_options)) {
         die("Cannot generate image for %s", partition.c_str());
     }
 
@@ -2091,7 +2089,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string partition = next_arg(&args);
 
             auto format = [&](const std::string& partition) {
-                fb_perform_format(partition, 0, type_override, size_override, "", fs_options);
+                fb_perform_format(partition, 0, type_override, size_override, fs_options);
             };
             do_for_partitions(partition, slot_override, format, true);
         } else if (command == "signature") {
@@ -2282,7 +2280,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             if (partition_type.empty()) continue;
             fb->Erase(partition);
-            fb_perform_format(partition, 1, partition_type, "", "", fs_options);
+            fb_perform_format(partition, 1, partition_type, "", fs_options);
         }
     }
     if (wants_set_active) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "sp"
-
-#include <log/log.h>
-
-namespace android {
-
-void sp_report_race() { LOG_ALWAYS_FATAL("sp<> assignment detected data race"); }
+/*
+ * Hello, world!
+ */
+@Backing(type="byte")
+enum ByteEnum {
+    // Comment about FOO.
+    FOO = 1,
+    BAR = 2,
+    BAZ,
 }
