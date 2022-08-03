@@ -410,7 +410,7 @@ int storage_file_write(struct storage_msg *msg,
     if (msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) {
         rc = storage_sync_checkpoint();
         if (rc < 0) {
-            msg->result = STORAGE_ERR_GENERIC;
+            msg->result = STORAGE_ERR_SYNC_FAILURE;
             goto err_response;
         }
     }
