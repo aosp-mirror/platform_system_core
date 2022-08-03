@@ -70,6 +70,9 @@ enum storage_cmd {
  * @STORAGE_ERR_TRANSACT        returned by various operations to indicate that current transaction
  *                              is in error state. Such state could be only cleared by sending
  *                              STORAGE_END_TRANSACTION message.
+ * @STORAGE_ERR_SYNC_FAILURE    indicates that the current operation failed to sync
+ *                              to disk. Only returned if STORAGE_MSG_FLAG_PRE_COMMIT or
+ *                              STORAGE_MSG_FLAG_POST_COMMIT was set for the request.
  */
 enum storage_err {
 	STORAGE_NO_ERROR          = 0,
@@ -80,6 +83,7 @@ enum storage_err {
 	STORAGE_ERR_NOT_FOUND     = 5,
 	STORAGE_ERR_EXIST         = 6,
 	STORAGE_ERR_TRANSACT      = 7,
+	STORAGE_ERR_SYNC_FAILURE  = 8,
 };
 
 /**
