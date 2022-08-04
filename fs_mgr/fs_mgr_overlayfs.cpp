@@ -370,28 +370,6 @@ bool fs_mgr_rw_access(const std::string& path) {
     return ret;
 }
 
-bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true) {
-    Fstab fstab;
-    auto save_errno = errno;
-    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
-        return false;
-    }
-    errno = save_errno;
-    const auto lowerdir = kLowerdirOption + mount_point;
-    for (const auto& entry : fstab) {
-        if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
-        if (mount_point != entry.mount_point) continue;
-        if (!overlay_only) return true;
-        const auto options = android::base::Split(entry.fs_options, ",");
-        for (const auto& opt : options) {
-            if (opt == lowerdir) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
 
 bool fs_mgr_overlayfs_setup_dir(const std::string& dir, std::string* overlay, bool* change) {
@@ -1290,8 +1268,23 @@ bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
 }
 
 Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
+    android::fs_mgr::Fstab mounts;
+    if (!android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts)) {
+        PLOG(ERROR) << "Failed to read /proc/mounts";
+        return {};
+    }
+
     Fstab candidates;
     for (const auto& entry : fstab) {
+        // Filter out partitions whose type doesn't match what's mounted.
+        // This avoids spammy behavior on devices which can mount different
+        // filesystems for each partition.
+        auto proc_mount_point = (entry.mount_point == "/system") ? "/" : entry.mount_point;
+        auto mounted = GetEntryForMountPoint(&mounts, proc_mount_point);
+        if (!mounted || mounted->fs_type != entry.fs_type) {
+            continue;
+        }
+
         FstabEntry new_entry = entry;
         if (!fs_mgr_overlayfs_already_mounted(entry.mount_point) &&
             !fs_mgr_wants_overlayfs(&new_entry)) {
@@ -1697,6 +1690,28 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
 }  // namespace android
 
 #endif  // ALLOW_ADBD_DISABLE_VERITY != 0
+
+bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only) {
+    Fstab fstab;
+    auto save_errno = errno;
+    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
+        return false;
+    }
+    errno = save_errno;
+    const auto lowerdir = kLowerdirOption + mount_point;
+    for (const auto& entry : fstab) {
+        if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
+        if (mount_point != entry.mount_point) continue;
+        if (!overlay_only) return true;
+        const auto options = android::base::Split(entry.fs_options, ",");
+        for (const auto& opt : options) {
+            if (opt == lowerdir) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev) {
     struct statfs fs;

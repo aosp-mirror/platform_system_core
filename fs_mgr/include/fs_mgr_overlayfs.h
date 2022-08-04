@@ -33,6 +33,7 @@ bool fs_mgr_overlayfs_setup(const char* backing = nullptr, const char* mount_poi
 bool fs_mgr_overlayfs_teardown(const char* mount_point = nullptr, bool* change = nullptr);
 bool fs_mgr_overlayfs_is_setup();
 bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev);
+bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
 std::string fs_mgr_get_context(const std::string& mount_point);
 
 enum class OverlayfsValidResult {

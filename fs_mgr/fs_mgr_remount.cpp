@@ -186,8 +186,8 @@ static bool IsRemountable(Fstab& candidates, const FstabEntry& entry) {
     if (entry.fs_type == "vfat") {
         return false;
     }
-    if (GetEntryForMountPoint(&candidates, entry.mount_point)) {
-        return true;
+    if (auto candidate_entry = GetEntryForMountPoint(&candidates, entry.mount_point)) {
+        return candidate_entry->fs_type == entry.fs_type;
     }
     if (GetWrappedEntry(candidates, entry)) {
         return false;
@@ -196,13 +196,22 @@ static bool IsRemountable(Fstab& candidates, const FstabEntry& entry) {
 }
 
 static Fstab::const_iterator FindPartition(const Fstab& fstab, const std::string& partition) {
+    Fstab mounts;
+    if (!android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts)) {
+        LOG(ERROR) << "Failed to read /proc/mounts";
+        return fstab.end();
+    }
+
     for (auto iter = fstab.begin(); iter != fstab.end(); iter++) {
         const auto mount_point = system_mount_point(*iter);
-        if (partition == mount_point) {
-            return iter;
-        }
-        if (partition == android::base::Basename(mount_point)) {
-            return iter;
+        if (partition == mount_point || partition == android::base::Basename(mount_point)) {
+            // In case fstab has multiple entries, pick the one that matches the
+            // actual mounted filesystem type.
+            auto proc_mount_point = (iter->mount_point == "/system") ? "/" : iter->mount_point;
+            auto mounted = GetEntryForMountPoint(&mounts, proc_mount_point);
+            if (mounted && mounted->fs_type == iter->fs_type) {
+                return iter;
+            }
         }
     }
     return fstab.end();
@@ -243,7 +252,10 @@ static RemountStatus GetRemountList(const Fstab& fstab, const std::vector<std::s
             entry = wrap;
         }
 
-        if (!IsRemountable(candidates, *entry)) {
+        // If it's already remounted, include it so it gets gracefully skipped
+        // later on.
+        if (!fs_mgr_overlayfs_already_mounted(entry->mount_point) &&
+            !IsRemountable(candidates, *entry)) {
             LOG(ERROR) << "Invalid partition " << arg;
             return INVALID_PARTITION;
         }
