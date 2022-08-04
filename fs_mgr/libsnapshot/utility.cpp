@@ -26,6 +26,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
+#include <liblp/property_fetcher.h>
 
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
@@ -33,6 +34,7 @@ using android::fs_mgr::EnsurePathMounted;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::GetEntryForPath;
+using android::fs_mgr::IPropertyFetcher;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
 using android::fs_mgr::ReadDefaultFstab;
@@ -184,16 +186,50 @@ void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uin
     new_extent->set_num_blocks(num_blocks);
 }
 
-bool IsCompressionEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
+bool GetLegacyCompressionEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
-bool IsUserspaceSnapshotsEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
+bool GetUserspaceSnapshotsEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
-bool IsIouringEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        return false;
+    }
+
+    auto fetcher = IPropertyFetcher::GetInstance();
+
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            fetcher->GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // No user-space snapshots if vendor partition is on Android 12
+    if (vendor_release.find("12") != std::string::npos) {
+        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
+                  << vendor_release;
+        return false;
+    }
+
+    if (IsDmSnapshotTestingEnabled()) {
+        LOG(INFO) << "Userspace snapshots disabled for testing";
+        return false;
+    }
+
+    return true;
+}
+
+bool GetIouringEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+}
+
+bool GetXorCompressionEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.compression.xor.enabled", false);
 }
 
 std::string GetOtherPartitionName(const std::string& name) {
@@ -205,7 +241,8 @@ std::string GetOtherPartitionName(const std::string& name) {
 }
 
 bool IsDmSnapshotTestingEnabled() {
-    return android::base::GetBoolProperty("snapuserd.test.dm.snapshots", false);
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("snapuserd.test.dm.snapshots", false);
 }
 
 }  // namespace snapshot

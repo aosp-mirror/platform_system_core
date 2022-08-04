@@ -17,7 +17,14 @@
 #include <android-base/properties.h>
 #include <gtest/gtest.h>
 
+static int GetVsrLevel() {
+    return android::base::GetIntProperty("ro.vendor.api_level", -1);
+}
+
 TEST(VAB, Enabled) {
     ASSERT_TRUE(android::base::GetBoolProperty("ro.virtual_ab.enabled", false));
+    if (GetVsrLevel() < __ANDROID_API_T__) {
+        GTEST_SKIP();
+    }
     ASSERT_TRUE(android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false));
 }

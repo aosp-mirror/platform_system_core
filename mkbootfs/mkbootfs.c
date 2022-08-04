@@ -24,8 +24,7 @@
 ** - device notes, pipes, etc are not supported (error)
 */
 
-void die(const char *why, ...)
-{
+static void die(const char* why, ...) {
     va_list ap;
 
     va_start(ap, why);
@@ -42,7 +41,7 @@ struct fs_config_entry {
 };
 
 static struct fs_config_entry* canned_config = NULL;
-static char *target_out_path = NULL;
+static const char* target_out_path = NULL;
 
 /* Each line in the canned file should be a path plus three ints (uid,
  * gid, mode). */
@@ -273,8 +272,7 @@ static void _archive(char *in, char *out, int ilen, int olen)
     }
 }
 
-void archive(const char *start, const char *prefix)
-{
+static void archive(const char* start, const char* prefix) {
     char in[8192];
     char out[8192];
 
@@ -294,7 +292,7 @@ static void read_canned_config(char* filename)
 
     char line[CANNED_LINE_LENGTH];
     FILE* f = fopen(filename, "r");
-    if (f == NULL) die("failed to open canned file");
+    if (f == NULL) die("failed to open canned file '%s'", filename);
 
     while (fgets(line, CANNED_LINE_LENGTH, f) != NULL) {
         if (!line[0]) break;
@@ -332,6 +330,13 @@ static void read_canned_config(char* filename)
 
 int main(int argc, char *argv[])
 {
+    if (argc == 1) {
+        fprintf(stderr,
+                "usage: %s [-d TARGET_OUTPUT_PATH] [-f CANNED_CONFIGURATION_PATH] DIRECTORIES...\n",
+                argv[0]);
+        exit(1);
+    }
+
     argc--;
     argv++;
 

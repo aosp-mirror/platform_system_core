@@ -41,6 +41,7 @@ class IDecompressor {
     static std::unique_ptr<IDecompressor> Uncompressed();
     static std::unique_ptr<IDecompressor> Gz();
     static std::unique_ptr<IDecompressor> Brotli();
+    static std::unique_ptr<IDecompressor> Lz4();
 
     // |output_bytes| is the expected total number of bytes to sink.
     virtual bool Decompress(size_t output_bytes) = 0;
