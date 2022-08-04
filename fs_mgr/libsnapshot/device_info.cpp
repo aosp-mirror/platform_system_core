@@ -23,8 +23,9 @@ namespace android {
 namespace snapshot {
 
 #ifdef LIBSNAPSHOT_USE_HAL
-using android::hardware::boot::V1_0::BoolResult;
-using android::hardware::boot::V1_0::CommandResult;
+using android::hal::BootControlClient;
+using android::hal::BootControlVersion;
+using android::hal::CommandResult;
 #endif
 
 using namespace std::chrono_literals;
@@ -63,16 +64,16 @@ bool DeviceInfo::IsOverlayfsSetup() const {
 #ifdef LIBSNAPSHOT_USE_HAL
 bool DeviceInfo::EnsureBootHal() {
     if (!boot_control_) {
-        auto hal = android::hardware::boot::V1_0::IBootControl::getService();
+        auto hal = BootControlClient::WaitForService();
         if (!hal) {
             LOG(ERROR) << "Could not find IBootControl HAL";
             return false;
         }
-        boot_control_ = android::hardware::boot::V1_1::IBootControl::castFrom(hal);
-        if (!boot_control_) {
+        if (hal->GetVersion() < BootControlVersion::BOOTCTL_V1_1) {
             LOG(ERROR) << "Could not find IBootControl 1.1 HAL";
             return false;
         }
+        boot_control_ = std::move(hal);
     }
     return true;
 }
@@ -83,8 +84,9 @@ bool DeviceInfo::SetBootControlMergeStatus([[maybe_unused]] MergeStatus status) 
     if (!EnsureBootHal()) {
         return false;
     }
-    if (!boot_control_->setSnapshotMergeStatus(status)) {
-        LOG(ERROR) << "Unable to set the snapshot merge status";
+    const auto ret = boot_control_->SetSnapshotMergeStatus(status);
+    if (!ret.IsOk()) {
+        LOG(ERROR) << "Unable to set the snapshot merge status " << ret.errMsg;
         return false;
     }
     return true;
@@ -108,9 +110,7 @@ bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {
         return false;
     }
 
-    CommandResult result = {};
-    auto cb = [&](CommandResult r) -> void { result = r; };
-    boot_control_->setSlotAsUnbootable(slot, cb);
+    CommandResult result = boot_control_->MarkSlotUnbootable(slot);
     if (!result.success) {
         LOG(ERROR) << "Error setting slot " << slot << " unbootable: " << result.errMsg;
         return false;

@@ -70,56 +70,14 @@ static void show_usage_and_exit(int code) {
     exit(code);
 }
 
-static int drop_privs(void) {
-    struct __user_cap_header_struct capheader;
-    struct __user_cap_data_struct capdata[2];
-
-    if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0) {
-        return -1;
-    }
-
-    /*
-     * ensure we're running as the system user
-     */
-    if (setgid(AID_SYSTEM) != 0) {
-        return -1;
-    }
-
-    if (setuid(AID_SYSTEM) != 0) {
-        return -1;
-    }
-
-    /*
-     * drop all capabilities except SYS_RAWIO
-     */
-    memset(&capheader, 0, sizeof(capheader));
-    memset(&capdata, 0, sizeof(capdata));
-    capheader.version = _LINUX_CAPABILITY_VERSION_3;
-    capheader.pid = 0;
-
-    capdata[CAP_TO_INDEX(CAP_SYS_RAWIO)].permitted = CAP_TO_MASK(CAP_SYS_RAWIO);
-    capdata[CAP_TO_INDEX(CAP_SYS_RAWIO)].effective = CAP_TO_MASK(CAP_SYS_RAWIO);
-
-    if (capset(&capheader, &capdata[0]) < 0) {
-        return -1;
-    }
-
-    /*
-     * No access for group and other. We need execute access for user to create
-     * an accessible directory.
-     */
-    umask(S_IRWXG | S_IRWXO);
-
-    return 0;
-}
-
 static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) {
     int rc;
 
-    if ((msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) && (msg->cmd != STORAGE_RPMB_SEND)) {
+    if ((msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) && msg->cmd != STORAGE_RPMB_SEND &&
+        msg->cmd != STORAGE_FILE_WRITE) {
         /*
-         * handling post commit messages on non rpmb commands are not
-         * implemented as there is no use case for this yet.
+         * handling post commit messages on commands other than rpmb and write
+         * operations are not implemented as there is no use case for this yet.
          */
         ALOGE("cmd 0x%x: post commit option is not implemented\n", msg->cmd);
         msg->result = STORAGE_ERR_UNIMPLEMENTED;
@@ -129,7 +87,7 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
     if (msg->flags & STORAGE_MSG_FLAG_PRE_COMMIT) {
         rc = storage_sync_checkpoint();
         if (rc < 0) {
-            msg->result = STORAGE_ERR_GENERIC;
+            msg->result = STORAGE_ERR_SYNC_FAILURE;
             return ipc_respond(msg, NULL, 0);
         }
     }
@@ -260,8 +218,11 @@ static void parse_args(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     int rc;
 
-    /* drop privileges */
-    if (drop_privs() < 0) return EXIT_FAILURE;
+    /*
+     * No access for group and other. We need execute access for user to create
+     * an accessible directory.
+     */
+    umask(S_IRWXG | S_IRWXO);
 
     /* parse arguments */
     parse_args(argc, argv);

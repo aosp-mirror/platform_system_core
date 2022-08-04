@@ -733,5 +733,20 @@ bool IsMicrodroid() {
     return is_microdroid;
 }
 
+bool Has32BitAbi() {
+    static bool has = !android::base::GetProperty("ro.product.cpu.abilist32", "").empty();
+    return has;
+}
+
+std::string GetApexNameFromFileName(const std::string& path) {
+    static const std::string kApexDir = "/apex/";
+    if (StartsWith(path, kApexDir)) {
+        auto begin = kApexDir.size();
+        auto end = path.find('/', begin);
+        return path.substr(begin, end - begin);
+    }
+    return "";
+}
+
 }  // namespace init
 }  // namespace android

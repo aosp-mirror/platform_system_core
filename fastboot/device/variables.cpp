@@ -29,7 +29,7 @@
 #include <fs_mgr.h>
 #include <liblp/liblp.h>
 
-#include "constants.h"
+#include "BootControlClient.h"
 #include "fastboot_device.h"
 #include "flashing.h"
 #include "utility.h"
@@ -40,13 +40,10 @@ static constexpr bool kEnableFetch = true;
 static constexpr bool kEnableFetch = false;
 #endif
 
-using ::android::hardware::boot::V1_0::BoolResult;
-using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::boot::V1_1::MergeStatus;
+using MergeStatus = android::hal::BootControlClient::MergeStatus;
 using ::android::hardware::fastboot::V1_0::FileSystemType;
 using ::android::hardware::fastboot::V1_0::Result;
 using ::android::hardware::fastboot::V1_0::Status;
-using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
 using namespace android::fs_mgr;
 using namespace std::string_literals;
 
@@ -211,7 +208,7 @@ bool GetSlotCount(FastbootDevice* device, const std::vector<std::string>& /* arg
     if (!boot_control_hal) {
         *message = "0";
     } else {
-        *message = std::to_string(boot_control_hal->getNumberSlots());
+        *message = std::to_string(boot_control_hal->GetNumSlots());
     }
     return true;
 }
@@ -222,7 +219,7 @@ bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& a
         *message = "Missing argument";
         return false;
     }
-    Slot slot;
+    int32_t slot = -1;
     if (!GetSlotNumber(args[0], &slot)) {
         *message = "Invalid slot";
         return false;
@@ -232,7 +229,7 @@ bool GetSlotSuccessful(FastbootDevice* device, const std::vector<std::string>& a
         *message = "Device has no slots";
         return false;
     }
-    if (boot_control_hal->isSlotMarkedSuccessful(slot) != BoolResult::TRUE) {
+    if (boot_control_hal->IsSlotMarkedSuccessful(slot).value_or(false)) {
         *message = "no";
     } else {
         *message = "yes";
@@ -246,7 +243,7 @@ bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& a
         *message = "Missing argument";
         return false;
     }
-    Slot slot;
+    int32_t slot = -1;
     if (!GetSlotNumber(args[0], &slot)) {
         *message = "Invalid slot";
         return false;
@@ -256,7 +253,7 @@ bool GetSlotUnbootable(FastbootDevice* device, const std::vector<std::string>& a
         *message = "Device has no slots";
         return false;
     }
-    if (boot_control_hal->isSlotBootable(slot) != BoolResult::TRUE) {
+    if (!boot_control_hal->IsSlotBootable(slot).value_or(false)) {
         *message = "yes";
     } else {
         *message = "no";
