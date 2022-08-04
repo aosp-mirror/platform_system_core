@@ -147,6 +147,47 @@ enum RemountStatus {
     CLEAN_SCRATCH_FILES,
 };
 
+static bool ReadFstab(const char* fstab_file, android::fs_mgr::Fstab* fstab) {
+    if (fstab_file) {
+        return android::fs_mgr::ReadFstabFromFile(fstab_file, fstab);
+    }
+    if (!android::fs_mgr::ReadDefaultFstab(fstab)) {
+        return false;
+    }
+
+    // Manufacture a / entry from /proc/mounts if missing.
+    if (!GetEntryForMountPoint(fstab, "/system") && !GetEntryForMountPoint(fstab, "/")) {
+        android::fs_mgr::Fstab mounts;
+        if (android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts)) {
+            if (auto entry = GetEntryForMountPoint(&mounts, "/")) {
+                if (entry->fs_type != "rootfs") fstab->emplace_back(*entry);
+            }
+        }
+    }
+    return true;
+}
+
+static RemountStatus VerifyCheckpointing() {
+    if (!android::base::GetBoolProperty("ro.virtual_ab.enabled", false) &&
+        !android::base::GetBoolProperty("ro.virtual_ab.retrofit", false)) {
+        return REMOUNT_SUCCESS;
+    }
+
+    // Virtual A/B devices can use /data as backing storage; make sure we're
+    // not checkpointing.
+    auto vold = GetVold();
+    bool checkpointing = false;
+    if (!vold->isCheckpointing(&checkpointing).isOk()) {
+        LOG(ERROR) << "Could not determine checkpointing status.";
+        return BINDER_ERROR;
+    }
+    if (checkpointing) {
+        LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
+        return CHECKPOINTING;
+    }
+    return REMOUNT_SUCCESS;
+}
+
 static int do_remount(int argc, char* argv[]) {
     RemountStatus retval = REMOUNT_SUCCESS;
 
@@ -204,40 +245,13 @@ static int do_remount(int argc, char* argv[]) {
 
     // Read the selected fstab.
     android::fs_mgr::Fstab fstab;
-    auto fstab_read = false;
-    if (fstab_file) {
-        fstab_read = android::fs_mgr::ReadFstabFromFile(fstab_file, &fstab);
-    } else {
-        fstab_read = android::fs_mgr::ReadDefaultFstab(&fstab);
-        // Manufacture a / entry from /proc/mounts if missing.
-        if (!GetEntryForMountPoint(&fstab, "/system") && !GetEntryForMountPoint(&fstab, "/")) {
-            android::fs_mgr::Fstab mounts;
-            if (android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts)) {
-                if (auto entry = GetEntryForMountPoint(&mounts, "/")) {
-                    if (entry->fs_type != "rootfs") fstab.emplace_back(*entry);
-                }
-            }
-        }
-    }
-    if (!fstab_read || fstab.empty()) {
+    if (!ReadFstab(fstab_file, &fstab) || fstab.empty()) {
         PLOG(ERROR) << "Failed to read fstab";
         return NO_FSTAB;
     }
 
-    if (android::base::GetBoolProperty("ro.virtual_ab.enabled", false) &&
-        !android::base::GetBoolProperty("ro.virtual_ab.retrofit", false)) {
-        // Virtual A/B devices can use /data as backing storage; make sure we're
-        // not checkpointing.
-        auto vold = GetVold();
-        bool checkpointing = false;
-        if (!vold->isCheckpointing(&checkpointing).isOk()) {
-            LOG(ERROR) << "Could not determine checkpointing status.";
-            return BINDER_ERROR;
-        }
-        if (checkpointing) {
-            LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
-            return CHECKPOINTING;
-        }
+    if (auto rv = VerifyCheckpointing(); rv != REMOUNT_SUCCESS) {
+        return rv;
     }
 
     // Generate the list of supported overlayfs mount points.
