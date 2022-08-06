@@ -85,6 +85,10 @@ bool fs_mgr_overlayfs_filesystem_available(const std::string& filesystem) {
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
 
+bool fs_mgr_wants_overlayfs(FstabEntry*) {
+    return false;
+}
+
 Fstab fs_mgr_overlayfs_candidate_list(const Fstab&) {
     return {};
 }
@@ -388,26 +392,6 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
     return false;
 }
 
-bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
-    // Don't check entries that are managed by vold.
-    if (entry->fs_mgr_flags.vold_managed || entry->fs_mgr_flags.recovery_only) return false;
-
-    // *_other doesn't want overlayfs.
-    if (entry->fs_mgr_flags.slot_select_other) return false;
-
-    // Only concerned with readonly partitions.
-    if (!(entry->flags & MS_RDONLY)) return false;
-
-    // If unbindable, do not allow overlayfs as this could expose us to
-    // security issues.  On Android, this could also be used to turn off
-    // the ability to overlay an otherwise acceptable filesystem since
-    // /system and /vendor are never bound(sic) to.
-    if (entry->flags & MS_UNBINDABLE) return false;
-
-    if (!fs_mgr_overlayfs_enabled(entry)) return false;
-
-    return true;
-}
 constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
 
 bool fs_mgr_overlayfs_setup_dir(const std::string& dir, std::string* overlay, bool* change) {
@@ -1283,6 +1267,27 @@ bool fs_mgr_overlayfs_invalid() {
 }
 
 }  // namespace
+
+bool fs_mgr_wants_overlayfs(FstabEntry* entry) {
+    // Don't check entries that are managed by vold.
+    if (entry->fs_mgr_flags.vold_managed || entry->fs_mgr_flags.recovery_only) return false;
+
+    // *_other doesn't want overlayfs.
+    if (entry->fs_mgr_flags.slot_select_other) return false;
+
+    // Only concerned with readonly partitions.
+    if (!(entry->flags & MS_RDONLY)) return false;
+
+    // If unbindable, do not allow overlayfs as this could expose us to
+    // security issues.  On Android, this could also be used to turn off
+    // the ability to overlay an otherwise acceptable filesystem since
+    // /system and /vendor are never bound(sic) to.
+    if (entry->flags & MS_UNBINDABLE) return false;
+
+    if (!fs_mgr_overlayfs_enabled(entry)) return false;
+
+    return true;
+}
 
 Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
     Fstab candidates;
