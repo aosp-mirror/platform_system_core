@@ -43,6 +43,8 @@
 #include <libgsi/libgsid.h>
 
 using namespace std::literals;
+using android::fs_mgr::Fstab;
+using android::fs_mgr::FstabEntry;
 
 namespace {
 
@@ -62,22 +64,12 @@ namespace {
     ::exit(exit_status);
 }
 
-bool remountable_partition(const android::fs_mgr::FstabEntry& entry) {
-    if (entry.fs_mgr_flags.vold_managed) return false;
-    if (entry.fs_mgr_flags.recovery_only) return false;
-    if (entry.fs_mgr_flags.slot_select_other) return false;
-    if (!(entry.flags & MS_RDONLY)) return false;
-    if (entry.fs_type == "vfat") return false;
-    return true;
-}
-
 const std::string system_mount_point(const android::fs_mgr::FstabEntry& entry) {
     if (entry.mount_point == "/") return "/system";
     return entry.mount_point;
 }
 
-const android::fs_mgr::FstabEntry* is_wrapped(const android::fs_mgr::Fstab& overlayfs_candidates,
-                                              const android::fs_mgr::FstabEntry& entry) {
+const FstabEntry* GetWrappedEntry(const Fstab& overlayfs_candidates, const FstabEntry& entry) {
     auto mount_point = system_mount_point(entry);
     auto it = std::find_if(overlayfs_candidates.begin(), overlayfs_candidates.end(),
                            [&mount_point](const auto& entry) {
@@ -188,9 +180,249 @@ static RemountStatus VerifyCheckpointing() {
     return REMOUNT_SUCCESS;
 }
 
-static int do_remount(int argc, char* argv[]) {
-    RemountStatus retval = REMOUNT_SUCCESS;
+static bool IsRemountable(Fstab& candidates, const FstabEntry& entry) {
+    if (entry.fs_mgr_flags.vold_managed || entry.fs_mgr_flags.recovery_only ||
+        entry.fs_mgr_flags.slot_select_other) {
+        return false;
+    }
+    if (!(entry.flags & MS_RDONLY)) {
+        return false;
+    }
+    if (entry.fs_type == "vfat") {
+        return false;
+    }
+    if (GetEntryForMountPoint(&candidates, entry.mount_point)) {
+        return true;
+    }
+    if (GetWrappedEntry(candidates, entry)) {
+        return false;
+    }
+    return true;
+}
 
+static Fstab::const_iterator FindPartition(const Fstab& fstab, const std::string& partition) {
+    for (auto iter = fstab.begin(); iter != fstab.end(); iter++) {
+        const auto mount_point = system_mount_point(*iter);
+        if (partition == mount_point) {
+            return iter;
+        }
+        if (partition == android::base::Basename(mount_point)) {
+            return iter;
+        }
+    }
+    return fstab.end();
+}
+
+static Fstab GetAllRemountablePartitions(Fstab& fstab) {
+    auto candidates = fs_mgr_overlayfs_candidate_list(fstab);
+
+    Fstab partitions;
+    for (const auto& entry : fstab) {
+        if (IsRemountable(candidates, entry)) {
+            partitions.emplace_back(entry);
+        }
+    }
+    return partitions;
+}
+
+static RemountStatus GetRemountList(const Fstab& fstab, const std::vector<std::string>& argv,
+                                    Fstab* partitions) {
+    auto candidates = fs_mgr_overlayfs_candidate_list(fstab);
+
+    for (const auto& arg : argv) {
+        std::string partition = arg;
+        if (partition == "/") {
+            partition = "/system";
+        }
+
+        auto it = FindPartition(fstab, partition);
+        if (it == fstab.end()) {
+            LOG(ERROR) << "Unknown partition " << arg;
+            return UNKNOWN_PARTITION;
+        }
+
+        const FstabEntry* entry = &*it;
+        if (auto wrap = GetWrappedEntry(candidates, *entry); wrap != nullptr) {
+            LOG(INFO) << "partition " << arg << " covered by overlayfs for " << wrap->mount_point
+                      << ", switching";
+            entry = wrap;
+        }
+
+        if (!IsRemountable(candidates, *entry)) {
+            LOG(ERROR) << "Invalid partition " << arg;
+            return INVALID_PARTITION;
+        }
+        if (GetEntryForMountPoint(partitions, entry->mount_point) != nullptr) {
+            continue;
+        }
+        partitions->emplace_back(*entry);
+    }
+
+    return REMOUNT_SUCCESS;
+}
+
+struct RemountCheckResult {
+    bool reboot_later = false;
+    bool setup_overlayfs = false;
+    bool disabled_verity = false;
+    bool verity_error = false;
+};
+
+static RemountStatus CheckVerity(const FstabEntry& entry, RemountCheckResult* result) {
+    if (!fs_mgr_is_verity_enabled(entry)) {
+        return REMOUNT_SUCCESS;
+    }
+    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
+        return VERITY_PARTITION;
+    }
+
+    bool ok = false;
+
+    std::unique_ptr<AvbOps, decltype(&::avb_ops_user_free)> ops(avb_ops_user_new(),
+                                                                &::avb_ops_user_free);
+    if (ops) {
+        auto suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
+        ok = avb_user_verity_set(ops.get(), suffix.c_str(), false);
+    }
+    if (!ok && fs_mgr_set_blk_ro(entry.blk_device, false)) {
+        fec::io fh(entry.blk_device.c_str(), O_RDWR);
+        ok = fh && fh.set_verity_status(false);
+    }
+    if (!ok) {
+        return VERITY_PARTITION;
+    }
+    result->disabled_verity = true;
+    result->reboot_later = true;
+    return REMOUNT_SUCCESS;
+}
+
+static RemountStatus CheckVerityAndOverlayfs(Fstab* partitions, RemountCheckResult* result) {
+    RemountStatus status = REMOUNT_SUCCESS;
+    for (auto it = partitions->begin(); it != partitions->end();) {
+        auto& entry = *it;
+        const auto& mount_point = entry.mount_point;
+
+        if (auto rv = CheckVerity(entry, result); rv != REMOUNT_SUCCESS) {
+            LOG(ERROR) << "Skipping verified partition " << mount_point << " for remount";
+            status = rv;
+            it = partitions->erase(it);
+            continue;
+        }
+
+        if (fs_mgr_wants_overlayfs(&entry)) {
+            bool change = false;
+            bool force = result->disabled_verity;
+            if (!fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change, force)) {
+                LOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
+                status = BAD_OVERLAY;
+                it = partitions->erase(it);
+                continue;
+            }
+            if (change) {
+                LOG(INFO) << "Using overlayfs for " << mount_point;
+                result->reboot_later = true;
+                result->setup_overlayfs = true;
+            }
+        }
+        it++;
+    }
+    return status;
+}
+
+static RemountStatus EnableDsuIfNeeded() {
+    auto gsid = android::gsi::GetGsiService();
+    if (!gsid) {
+        return REMOUNT_SUCCESS;
+    }
+
+    auto dsu_running = false;
+    if (auto status = gsid->isGsiRunning(&dsu_running); !status.isOk()) {
+        LOG(ERROR) << "Failed to get DSU running state: " << status;
+        return BINDER_ERROR;
+    }
+    auto dsu_enabled = false;
+    if (auto status = gsid->isGsiEnabled(&dsu_enabled); !status.isOk()) {
+        LOG(ERROR) << "Failed to get DSU enabled state: " << status;
+        return BINDER_ERROR;
+    }
+    if (dsu_running && !dsu_enabled) {
+        std::string dsu_slot;
+        if (auto status = gsid->getActiveDsuSlot(&dsu_slot); !status.isOk()) {
+            LOG(ERROR) << "Failed to get active DSU slot: " << status;
+            return BINDER_ERROR;
+        }
+        LOG(INFO) << "DSU is running but disabled, enable DSU so that we stay within the "
+                     "DSU guest system after reboot";
+        int error = 0;
+        if (auto status = gsid->enableGsi(/* oneShot = */ true, dsu_slot, &error);
+            !status.isOk() || error != android::gsi::IGsiService::INSTALL_OK) {
+            LOG(ERROR) << "Failed to enable DSU: " << status << ", error code: " << error;
+            return !status.isOk() ? BINDER_ERROR : GSID_ERROR;
+        }
+        LOG(INFO) << "Successfully enabled DSU (one-shot mode)";
+    }
+    return REMOUNT_SUCCESS;
+}
+
+static RemountStatus RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& entry) {
+    // unlock the r/o key for the mount point device
+    if (entry.fs_mgr_flags.logical) {
+        fs_mgr_update_logical_partition(&entry);
+    }
+    auto blk_device = entry.blk_device;
+    auto mount_point = entry.mount_point;
+
+    auto found = false;
+    for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
+        auto& rentry = *it;
+        if (mount_point == rentry.mount_point) {
+            blk_device = rentry.blk_device;
+            found = true;
+            break;
+        }
+        // Find overlayfs mount point?
+        if ((mount_point == "/" && rentry.mount_point == "/system") ||
+            (mount_point == "/system" && rentry.mount_point == "/")) {
+            blk_device = rentry.blk_device;
+            mount_point = "/system";
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        PLOG(INFO) << "skip unmounted partition dev:" << blk_device << " mnt:" << mount_point;
+        return REMOUNT_SUCCESS;
+    }
+    if (blk_device == "/dev/root") {
+        auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
+        if (from_fstab) blk_device = from_fstab->blk_device;
+    }
+    fs_mgr_set_blk_ro(blk_device, false);
+
+    // Find system-as-root mount point?
+    if ((mount_point == "/system") && !GetEntryForMountPoint(&mounts, mount_point) &&
+        GetEntryForMountPoint(&mounts, "/")) {
+        mount_point = "/";
+    }
+
+    // Now remount!
+    if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
+                nullptr) == 0) {
+        return REMOUNT_SUCCESS;
+    }
+    if ((errno == EINVAL) && (mount_point != entry.mount_point)) {
+        mount_point = entry.mount_point;
+        if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
+                    nullptr) == 0) {
+            return REMOUNT_SUCCESS;
+        }
+    }
+
+    PLOG(ERROR) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
+    return REMOUNT_FAILED;
+}
+
+static int do_remount(int argc, char* argv[]) {
     // If somehow this executable is delivered on a "user" build, it can
     // not function, so providing a clear message to the caller rather than
     // letting if fall through and provide a lot of confusing failure messages.
@@ -201,6 +433,7 @@ static int do_remount(int argc, char* argv[]) {
 
     const char* fstab_file = nullptr;
     auto can_reboot = false;
+    std::vector<std::string> partition_args;
 
     struct option longopts[] = {
             {"fstab", required_argument, nullptr, 'T'},
@@ -237,6 +470,10 @@ static int do_remount(int argc, char* argv[]) {
         }
     }
 
+    for (; argc > optind; ++optind) {
+        partition_args.emplace_back(argv[optind]);
+    }
+
     // Make sure we are root.
     if (::getuid() != 0) {
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
@@ -244,7 +481,7 @@ static int do_remount(int argc, char* argv[]) {
     }
 
     // Read the selected fstab.
-    android::fs_mgr::Fstab fstab;
+    Fstab fstab;
     if (!ReadFstab(fstab_file, &fstab) || fstab.empty()) {
         PLOG(ERROR) << "Failed to read fstab";
         return NO_FSTAB;
@@ -254,154 +491,36 @@ static int do_remount(int argc, char* argv[]) {
         return rv;
     }
 
-    // Generate the list of supported overlayfs mount points.
-    auto overlayfs_candidates = fs_mgr_overlayfs_candidate_list(fstab);
-
-    // Generate the all remountable partitions sub-list
-    android::fs_mgr::Fstab all;
-    for (auto const& entry : fstab) {
-        if (!remountable_partition(entry)) continue;
-        if (overlayfs_candidates.empty() ||
-            GetEntryForMountPoint(&overlayfs_candidates, entry.mount_point) ||
-            (is_wrapped(overlayfs_candidates, entry) == nullptr)) {
-            all.emplace_back(entry);
+    Fstab partitions;
+    if (partition_args.empty()) {
+        partitions = GetAllRemountablePartitions(fstab);
+    } else {
+        if (auto rv = GetRemountList(fstab, partition_args, &partitions); rv != REMOUNT_SUCCESS) {
+            return rv;
         }
-    }
-
-    // Parse the unique list of valid partition arguments.
-    android::fs_mgr::Fstab partitions;
-    for (; argc > optind; ++optind) {
-        auto partition = std::string(argv[optind]);
-        if (partition.empty()) continue;
-        if (partition == "/") partition = "/system";
-        auto find_part = [&partition](const auto& entry) {
-            const auto mount_point = system_mount_point(entry);
-            if (partition == mount_point) return true;
-            if (partition == android::base::Basename(mount_point)) return true;
-            return false;
-        };
-        // Do we know about the partition?
-        auto it = std::find_if(fstab.begin(), fstab.end(), find_part);
-        if (it == fstab.end()) {
-            LOG(ERROR) << "Unknown partition " << argv[optind] << ", skipping";
-            retval = UNKNOWN_PARTITION;
-            continue;
-        }
-        // Is that one covered by an existing overlayfs?
-        auto wrap = is_wrapped(overlayfs_candidates, *it);
-        if (wrap) {
-            LOG(INFO) << "partition " << argv[optind] << " covered by overlayfs for "
-                      << wrap->mount_point << ", switching";
-            partition = system_mount_point(*wrap);
-        }
-        // Is it a remountable partition?
-        it = std::find_if(all.begin(), all.end(), find_part);
-        if (it == all.end()) {
-            LOG(ERROR) << "Invalid partition " << argv[optind] << ", skipping";
-            retval = INVALID_PARTITION;
-            continue;
-        }
-        if (GetEntryForMountPoint(&partitions, it->mount_point) == nullptr) {
-            partitions.emplace_back(*it);
-        }
-    }
-
-    if (partitions.empty() && !retval) {
-        partitions = all;
     }
 
     // Check verity and optionally setup overlayfs backing.
-    auto reboot_later = false;
-    auto user_please_reboot_later = false;
-    auto setup_overlayfs = false;
-    auto just_disabled_verity = false;
-    for (auto it = partitions.begin(); it != partitions.end();) {
-        auto& entry = *it;
-        auto& mount_point = entry.mount_point;
-        if (fs_mgr_is_verity_enabled(entry)) {
-            retval = VERITY_PARTITION;
-            auto ret = false;
-            if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") != "locked") {
-                if (AvbOps* ops = avb_ops_user_new()) {
-                    ret = avb_user_verity_set(
-                            ops, android::base::GetProperty("ro.boot.slot_suffix", "").c_str(),
-                            false);
-                    avb_ops_user_free(ops);
-                }
-                if (!ret && fs_mgr_set_blk_ro(entry.blk_device, false)) {
-                    fec::io fh(entry.blk_device.c_str(), O_RDWR);
-                    ret = fh && fh.set_verity_status(false);
-                }
-                if (ret) {
-                    LOG(WARNING) << "Disabling verity for " << mount_point;
-                    just_disabled_verity = true;
-                    reboot_later = can_reboot;
-                    user_please_reboot_later = true;
-                }
-            }
-            if (!ret) {
-                LOG(ERROR) << "Skipping " << mount_point << " for remount";
-                it = partitions.erase(it);
-                continue;
-            }
-        }
+    RemountCheckResult check_result;
+    auto retval = CheckVerityAndOverlayfs(&partitions, &check_result);
 
-        auto change = false;
-        errno = 0;
-        if (fs_mgr_overlayfs_setup(nullptr, mount_point.c_str(), &change, just_disabled_verity)) {
-            if (change) {
-                LOG(INFO) << "Using overlayfs for " << mount_point;
-                reboot_later = can_reboot;
-                user_please_reboot_later = true;
-                setup_overlayfs = true;
-            }
-        } else if (errno) {
-            PLOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
-            retval = BAD_OVERLAY;
-            it = partitions.erase(it);
-            continue;
-        }
-        ++it;
-    }
+    bool auto_reboot = check_result.reboot_later && can_reboot;
 
     // If (1) remount requires a reboot to take effect, (2) system is currently
     // running a DSU guest and (3) DSU is disabled, then enable DSU so that the
     // next reboot would not take us back to the host system but stay within
     // the guest system.
-    if (reboot_later) {
-        if (auto gsid = android::gsi::GetGsiService()) {
-            auto dsu_running = false;
-            if (auto status = gsid->isGsiRunning(&dsu_running); !status.isOk()) {
-                LOG(ERROR) << "Failed to get DSU running state: " << status;
-                return BINDER_ERROR;
-            }
-            auto dsu_enabled = false;
-            if (auto status = gsid->isGsiEnabled(&dsu_enabled); !status.isOk()) {
-                LOG(ERROR) << "Failed to get DSU enabled state: " << status;
-                return BINDER_ERROR;
-            }
-            if (dsu_running && !dsu_enabled) {
-                std::string dsu_slot;
-                if (auto status = gsid->getActiveDsuSlot(&dsu_slot); !status.isOk()) {
-                    LOG(ERROR) << "Failed to get active DSU slot: " << status;
-                    return BINDER_ERROR;
-                }
-                LOG(INFO) << "DSU is running but disabled, enable DSU so that we stay within the "
-                             "DSU guest system after reboot";
-                int error = 0;
-                if (auto status = gsid->enableGsi(/* oneShot = */ true, dsu_slot, &error);
-                    !status.isOk() || error != android::gsi::IGsiService::INSTALL_OK) {
-                    LOG(ERROR) << "Failed to enable DSU: " << status << ", error code: " << error;
-                    return !status.isOk() ? BINDER_ERROR : GSID_ERROR;
-                }
-                LOG(INFO) << "Successfully enabled DSU (one-shot mode)";
-            }
+    if (auto_reboot) {
+        if (auto rv = EnableDsuIfNeeded(); rv != REMOUNT_SUCCESS) {
+            return rv;
         }
     }
 
-    if (partitions.empty() || just_disabled_verity) {
-        if (reboot_later) reboot(setup_overlayfs);
-        if (user_please_reboot_later) {
+    if (partitions.empty() || check_result.disabled_verity) {
+        if (auto_reboot) {
+            reboot(check_result.setup_overlayfs);
+        }
+        if (check_result.reboot_later) {
             return MUST_REBOOT;
         }
         LOG(WARNING) << "No partitions to remount";
@@ -411,88 +530,28 @@ static int do_remount(int argc, char* argv[]) {
     // Mount overlayfs.
     errno = 0;
     if (!fs_mgr_overlayfs_mount_all(&partitions) && errno) {
-        retval = BAD_OVERLAY;
         PLOG(ERROR) << "Can not mount overlayfs for partitions";
+        return BAD_OVERLAY;
     }
 
     // Get actual mounts _after_ overlayfs has been added.
     android::fs_mgr::Fstab mounts;
     if (!android::fs_mgr::ReadFstabFromFile("/proc/mounts", &mounts) || mounts.empty()) {
         PLOG(ERROR) << "Failed to read /proc/mounts";
-        retval = NO_MOUNTS;
+        return NO_MOUNTS;
     }
 
     // Remount selected partitions.
     for (auto& entry : partitions) {
-        // unlock the r/o key for the mount point device
-        if (entry.fs_mgr_flags.logical) {
-            fs_mgr_update_logical_partition(&entry);
+        if (auto rv = RemountPartition(fstab, mounts, entry); rv != REMOUNT_SUCCESS) {
+            retval = rv;
         }
-        auto blk_device = entry.blk_device;
-        auto mount_point = entry.mount_point;
-
-        auto found = false;
-        for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
-            auto& rentry = *it;
-            if (mount_point == rentry.mount_point) {
-                blk_device = rentry.blk_device;
-                found = true;
-                break;
-            }
-            // Find overlayfs mount point?
-            if ((mount_point == "/" && rentry.mount_point == "/system")  ||
-                (mount_point == "/system" && rentry.mount_point == "/")) {
-                blk_device = rentry.blk_device;
-                mount_point = "/system";
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            PLOG(INFO) << "skip unmounted partition dev:" << blk_device << " mnt:" << mount_point;
-            continue;
-        }
-        if (blk_device == "/dev/root") {
-            auto from_fstab = GetEntryForMountPoint(&fstab, mount_point);
-            if (from_fstab) blk_device = from_fstab->blk_device;
-        }
-        fs_mgr_set_blk_ro(blk_device, false);
-
-        // Find system-as-root mount point?
-        if ((mount_point == "/system") && !GetEntryForMountPoint(&mounts, mount_point) &&
-            GetEntryForMountPoint(&mounts, "/")) {
-            mount_point = "/";
-        }
-
-        // Now remount!
-        if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                    nullptr) == 0) {
-            continue;
-        }
-        if ((errno == EINVAL) && (mount_point != entry.mount_point)) {
-            mount_point = entry.mount_point;
-            if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                        nullptr) == 0) {
-                continue;
-            }
-        }
-        PLOG(ERROR) << "failed to remount partition dev:" << blk_device << " mnt:" << mount_point;
-        // If errno is EROFS at this point, we are dealing with r/o
-        // filesystem types like squashfs, erofs or ext4 dedupe. We will
-        // consider such a device that does not have CONFIG_OVERLAY_FS
-        // in the kernel as a misconfigured.
-        if (errno == EROFS) {
-            LOG(ERROR) << "Consider providing all the dependencies to enable overlayfs";
-        }
-        retval = REMOUNT_FAILED;
     }
 
-    if (reboot_later) reboot(setup_overlayfs);
-    if (user_please_reboot_later) {
+    if (auto_reboot) reboot(check_result.setup_overlayfs);
+    if (check_result.reboot_later) {
         LOG(INFO) << "Now reboot your device for settings to take effect";
-        return 0;
     }
-
     return retval;
 }
 
