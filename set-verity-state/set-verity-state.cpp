@@ -86,7 +86,6 @@ static bool set_avb_verity_enabled_state(AvbOps* ops, bool enable_verity) {
     return false;
   }
 
-  overlayfs_setup(enable_verity);
   printf("Successfully %s verity\n", enable_verity ? "enabled" : "disabled");
   return true;
 }
@@ -122,8 +121,6 @@ int main(int argc, char* argv[]) {
 
   bool enable = enable_opt.value();
 
-  bool any_changed = false;
-
   // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
   // contract, androidboot.vbmeta.digest is set by the bootloader
   // when using AVB).
@@ -151,6 +148,7 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  bool any_changed = false;
   if (using_avb) {
     // Yep, the system is using AVB.
     AvbOps* ops = avb_ops_user_new();
@@ -158,12 +156,10 @@ int main(int argc, char* argv[]) {
       printf("Error getting AVB ops\n");
       return 1;
     }
-    if (set_avb_verity_enabled_state(ops, enable)) {
-      any_changed = true;
-    }
+    any_changed |= set_avb_verity_enabled_state(ops, enable);
     avb_ops_user_free(ops);
   }
-  if (!any_changed) any_changed = overlayfs_setup(enable);
+  any_changed |= overlayfs_setup(enable);
 
   if (any_changed) {
     printf("Now reboot your device for settings to take effect\n");
