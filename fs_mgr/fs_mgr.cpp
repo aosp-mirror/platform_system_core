@@ -889,7 +889,7 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
 // attempted_idx: On return, will indicate which fstab entry
 //     succeeded. In case of failure, it will be the start_idx.
 // Sets errno to match the 1st mount failure on failure.
-static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_idx,
+static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
                                     int* attempted_idx) {
     unsigned long i;
     int mount_errno = 0;
@@ -907,6 +907,14 @@ static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_
                    << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
                    << fstab[*attempted_idx].fs_type;
             continue;
+        }
+
+        // fstab[start_idx].blk_device is already updated to /dev/dm-<N> by
+        // AVB related functions. Copy it from start_idx to the current index i.
+        if ((i != start_idx) && fstab[i].fs_mgr_flags.logical &&
+            fstab[start_idx].fs_mgr_flags.logical &&
+            (fstab[i].logical_partition_name == fstab[start_idx].logical_partition_name)) {
+            fstab[i].blk_device = fstab[start_idx].blk_device;
         }
 
         int fs_stat = prepare_fs_for_mount(fstab[i].blk_device, fstab[i]);
