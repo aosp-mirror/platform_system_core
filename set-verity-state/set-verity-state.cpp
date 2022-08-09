@@ -15,26 +15,14 @@
  */
 
 #include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
 #include <libavb_user/libavb_user.h>
-#include <stdarg.h>
 #include <stdio.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
-#include <android-base/unique_fd.h>
-#include <fs_mgr.h>
 #include <fs_mgr_overlayfs.h>
-#include <fstab/fstab.h>
 #include <log/log_properties.h>
-
-#include "fec/io.h"
 
 #ifdef ALLOW_DISABLE_VERITY
 static const bool kAllowDisableVerity = true;
@@ -42,78 +30,8 @@ static const bool kAllowDisableVerity = true;
 static const bool kAllowDisableVerity = false;
 #endif
 
-using android::base::unique_fd;
-
 static void suggest_run_adb_root() {
   if (getuid() != 0) printf("Maybe run adb root?\n");
-}
-
-static bool make_block_device_writable(const std::string& dev) {
-  unique_fd fd(open(dev.c_str(), O_RDONLY | O_CLOEXEC));
-  if (fd == -1) {
-    return false;
-  }
-
-  int OFF = 0;
-  bool result = (ioctl(fd.get(), BLKROSET, &OFF) != -1);
-  return result;
-}
-
-/* Turn verity on/off */
-static bool set_verity_enabled_state(const char* block_device, const char* mount_point,
-                                     bool enable) {
-  if (!make_block_device_writable(block_device)) {
-    printf("Could not make block device %s writable (%s).\n", block_device, strerror(errno));
-    return false;
-  }
-
-  fec::io fh(block_device, O_RDWR);
-
-  if (!fh) {
-    printf("Could not open block device %s (%s).\n", block_device, strerror(errno));
-    suggest_run_adb_root();
-    return false;
-  }
-
-  fec_verity_metadata metadata;
-
-  if (!fh.get_verity_metadata(metadata)) {
-    printf("Couldn't find verity metadata!\n");
-    return false;
-  }
-
-  if (!enable && metadata.disabled) {
-    printf("Verity already disabled on %s\n", mount_point);
-    return false;
-  }
-
-  if (enable && !metadata.disabled) {
-    printf("Verity already enabled on %s\n", mount_point);
-    return false;
-  }
-
-  if (!fh.set_verity_status(enable)) {
-    printf("Could not set verity %s flag on device %s with error %s\n",
-           enable ? "enabled" : "disabled", block_device, strerror(errno));
-    return false;
-  }
-
-  auto change = false;
-  errno = 0;
-  if (enable ? fs_mgr_overlayfs_teardown(mount_point, &change)
-             : fs_mgr_overlayfs_setup(nullptr, mount_point, &change)) {
-    if (change) {
-      printf("%s overlayfs for %s\n", enable ? "disabling" : "using", mount_point);
-    }
-  } else if (errno) {
-    int expected_errno = enable ? EBUSY : ENOENT;
-    if (errno != expected_errno) {
-      printf("Overlayfs %s for %s failed with error %s\n", enable ? "teardown" : "setup",
-             mount_point, strerror(errno));
-    }
-  }
-  printf("Verity %s on %s\n", enable ? "enabled" : "disabled", mount_point);
-  return true;
 }
 
 /* Helper function to get A/B suffix, if any. If the device isn't
@@ -168,7 +86,6 @@ static bool set_avb_verity_enabled_state(AvbOps* ops, bool enable_verity) {
     return false;
   }
 
-  overlayfs_setup(enable_verity);
   printf("Successfully %s verity\n", enable_verity ? "enabled" : "disabled");
   return true;
 }
@@ -204,8 +121,6 @@ int main(int argc, char* argv[]) {
 
   bool enable = enable_opt.value();
 
-  bool any_changed = false;
-
   // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
   // contract, androidboot.vbmeta.digest is set by the bootloader
   // when using AVB).
@@ -233,6 +148,7 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  bool any_changed = false;
   if (using_avb) {
     // Yep, the system is using AVB.
     AvbOps* ops = avb_ops_user_new();
@@ -240,12 +156,10 @@ int main(int argc, char* argv[]) {
       printf("Error getting AVB ops\n");
       return 1;
     }
-    if (set_avb_verity_enabled_state(ops, enable)) {
-      any_changed = true;
-    }
+    any_changed |= set_avb_verity_enabled_state(ops, enable);
     avb_ops_user_free(ops);
   }
-  if (!any_changed) any_changed = overlayfs_setup(enable);
+  any_changed |= overlayfs_setup(enable);
 
   if (any_changed) {
     printf("Now reboot your device for settings to take effect\n");
