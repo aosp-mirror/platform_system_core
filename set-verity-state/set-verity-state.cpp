@@ -59,7 +59,7 @@ bool overlayfs_setup(bool enable) {
   auto change = false;
   errno = 0;
   if (enable ? fs_mgr_overlayfs_teardown(nullptr, &change)
-             : fs_mgr_overlayfs_setup(nullptr, nullptr, &change)) {
+             : fs_mgr_overlayfs_setup(nullptr, &change)) {
     if (change) {
       LOG(INFO) << (enable ? "disabling" : "using") << " overlayfs";
     }
