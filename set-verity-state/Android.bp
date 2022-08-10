@@ -11,10 +11,7 @@ cc_binary {
         "libbase",
         "libcrypto",
         "libcrypto_utils",
-        "libcutils",
         "libfs_mgr_binder",
-        "liblog",
-        "libutils",
     ],
     static_libs: [
         "libavb_user",
