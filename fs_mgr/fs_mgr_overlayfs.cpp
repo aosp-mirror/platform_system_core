@@ -81,6 +81,9 @@ bool fs_mgr_overlayfs_filesystem_available(const std::string& filesystem) {
     return filesystems.find("\t" + filesystem + "\n") != std::string::npos;
 }
 
+const auto kLowerdirOption = "lowerdir="s;
+const auto kUpperdirOption = "upperdir="s;
+
 }  // namespace
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0  // If we are a user build, provide stubs
@@ -327,9 +330,6 @@ std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
     }
     return "";
 }
-
-const auto kLowerdirOption = "lowerdir="s;
-const auto kUpperdirOption = "upperdir="s;
 
 static inline bool KernelSupportsUserXattrs() {
     struct utsname uts;
