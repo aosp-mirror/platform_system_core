@@ -9,9 +9,11 @@ cc_binary {
     srcs: ["set-verity-state.cpp"],
     shared_libs: [
         "libbase",
+        "libbinder",
         "libcrypto",
         "libcrypto_utils",
         "libfs_mgr_binder",
+        "libutils",
     ],
     static_libs: [
         "libavb_user",
