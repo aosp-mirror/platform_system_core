@@ -346,9 +346,7 @@ cc_binary_host {
     target: {
         not_windows: {
             required: [
-                "e2fsdroid",
                 "mke2fs.conf",
-                "sload_f2fs",
             ],
         },
         windows: {
