@@ -162,7 +162,7 @@ bool SnapshotHandler::CheckMergeCompletionStatus() {
 }
 
 bool SnapshotHandler::ReadMetadata() {
-    reader_ = std::make_unique<CowReader>(CowReader::ReaderFlags::USERSPACE_MERGE);
+    reader_ = std::make_unique<CowReader>(CowReader::ReaderFlags::USERSPACE_MERGE, true);
     CowHeader header;
     CowOptions options;
 
@@ -193,7 +193,7 @@ bool SnapshotHandler::ReadMetadata() {
     UpdateMergeCompletionPercentage();
 
     // Initialize the iterator for reading metadata
-    std::unique_ptr<ICowOpIter> cowop_iter = reader_->GetMergeOpIter();
+    std::unique_ptr<ICowOpIter> cowop_iter = reader_->GetOpIter(true);
 
     int num_ra_ops_per_iter = ((GetBufferDataSize()) / BLOCK_SZ);
     int ra_index = 0;
