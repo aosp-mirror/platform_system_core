@@ -19,6 +19,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <binder/ProcessState.h>
 #include <fs_mgr_overlayfs.h>
 #include <libavb_user/libavb_user.h>
 
@@ -59,7 +60,7 @@ bool overlayfs_setup(bool enable) {
   auto change = false;
   errno = 0;
   if (enable ? fs_mgr_overlayfs_teardown(nullptr, &change)
-             : fs_mgr_overlayfs_setup(nullptr, nullptr, &change)) {
+             : fs_mgr_overlayfs_setup(nullptr, &change)) {
     if (change) {
       LOG(INFO) << (enable ? "disabling" : "using") << " overlayfs";
     }
@@ -153,6 +154,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  // Start a threadpool to service waitForService() callbacks as
+  // fs_mgr_overlayfs_* might call waitForService() to get the image service.
+  android::ProcessState::self()->startThreadPool();
   bool any_changed = set_avb_verity_enabled_state(ops.get(), enable);
   any_changed |= overlayfs_setup(enable);
 
