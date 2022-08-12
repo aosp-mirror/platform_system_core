@@ -1319,26 +1319,9 @@ echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
 B="`adb_cat /system/priv-app/hello`" ||
   die "system priv-app hello"
 check_eq "${A}" "${B}" /system/priv-app before reboot
-SYSTEM_DEVT=`adb_sh stat --format=%D /system/hello </dev/null`
-VENDOR_DEVT=`adb_sh stat --format=%D /vendor/hello </dev/null`
 SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
 VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
-BASE_SYSTEM_DEVT=`adb_sh stat --format=%D /system/bin/stat </dev/null`
-BASE_VENDOR_DEVT=`adb_sh stat --format=%D /vendor/bin/stat </dev/null`
-check_eq "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" vendor and system devt
 check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
-if ${overlayfs_needed}; then
-  check_ne "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
-  check_ne "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
-else
-  check_eq "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
-  check_eq "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
-fi
-check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
-[ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  echo "${YELLOW}[  WARNING ]${NORMAL} system devt ${SYSTEM_DEVT} major 0" >&2
-[ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
 # Download libc.so, append some garbage, push back, and check if the file
 # is updated.
@@ -1411,13 +1394,8 @@ for i in ${MOUNTS}; do
   echo "${GREEN}[       OK ]${NORMAL} ${i} content remains after reboot" >&2
 done
 
-check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
-check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
 check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
 check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
-check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" --warning base vendor devt after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
@@ -1542,10 +1520,7 @@ else
              --warning vendor content after flash vendor
   fi
 
-  check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
   check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 fi
 
