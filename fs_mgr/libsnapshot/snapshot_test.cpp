@@ -349,7 +349,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     AssertionResult DeleteDevice(const std::string& device) {
-        if (!dm_.DeleteDeviceIfExists(device)) {
+        if (!sm->DeleteDeviceIfExists(device, 1s)) {
             return AssertionFailure() << "Can't delete " << device;
         }
         return AssertionSuccess();
