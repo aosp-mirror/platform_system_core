@@ -466,7 +466,7 @@ bool Worker::SyncMerge() {
 }
 
 bool Worker::Merge() {
-    cowop_iter_ = reader_->GetMergeOpIter();
+    cowop_iter_ = reader_->GetOpIter(true);
 
     bool retry = false;
     bool ordered_ops_merge_status;
