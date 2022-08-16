@@ -71,16 +71,16 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
 }
 
 bool Worker::MergeReplaceZeroOps() {
-    // Flush every 8192 ops. Since all ops are independent and there is no
+    // Flush after merging 2MB. Since all ops are independent and there is no
     // dependency between COW ops, we will flush the data and the number
-    // of ops merged in COW file for every 8192 ops. If there is a crash,
-    // we will end up replaying some of the COW ops which were already merged.
-    // That is ok.
+    // of ops merged in COW block device. If there is a crash, we will
+    // end up replaying some of the COW ops which were already merged. That is
+    // ok.
     //
-    // Why 8192 ops ? Increasing this may improve merge time 3-4 seconds but
-    // we need to make sure that we checkpoint; 8k ops seems optimal. In-case
-    // if there is a crash merge should always make forward progress.
-    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ) * 32;
+    // Although increasing this greater than 2MB may help in improving merge
+    // times; however, on devices with low memory, this can be problematic
+    // when there are multiple merge threads in parallel.
+    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ) * 2;
     int num_ops_merged = 0;
 
     SNAP_LOG(INFO) << "MergeReplaceZeroOps started....";
@@ -541,6 +541,10 @@ bool Worker::RunMergeThread() {
     if (!snapuserd_->WaitForMergeBegin()) {
         SNAP_LOG(ERROR) << "Merge terminated early...";
         return true;
+    }
+
+    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
     }
 
     SNAP_LOG(INFO) << "Merge starting..";
