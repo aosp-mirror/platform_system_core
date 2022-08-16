@@ -410,7 +410,7 @@ bool CgroupSetup() {
     // Make sure we do this only one time. No need for std::call_once because
     // init is a single-threaded process
     if (access(CGROUPS_RC_PATH, F_OK) == 0) {
-        LOG(WARNING) << "Attempt to call SetupCgroups more than once";
+        LOG(WARNING) << "Attempt to call CgroupSetup() more than once";
         return true;
     }
 

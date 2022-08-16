@@ -155,7 +155,7 @@ class CowWriter : public ICowWriter {
     android::base::borrowed_fd fd_;
     CowHeader header_{};
     CowFooter footer_{};
-    int compression_ = 0;
+    CowCompressionAlgorithm compression_ = kCowCompressNone;
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
     uint32_t cluster_size_ = 0;
