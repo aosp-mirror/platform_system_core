@@ -14,17 +14,32 @@
  * limitations under the License.
  */
 
+#include <getopt.h>
 #include <stdio.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <binder/ProcessState.h>
+#include <cutils/android_reboot.h>
 #include <fs_mgr_overlayfs.h>
 #include <libavb_user/libavb_user.h>
 
 using namespace std::string_literals;
 
 namespace {
+
+void print_usage() {
+  printf(
+      "Usage:\n"
+      "\tdisable-verity\n"
+      "\tenable-verity\n"
+      "\tset-verity-state [0|1]\n"
+      "Options:\n"
+      "\t-h --help\tthis help\n"
+      "\t-R --reboot\tautomatic reboot if needed for new settings to take effect\n"
+      "\t-v --verbose\tbe noisy\n");
+}
 
 #ifdef ALLOW_DISABLE_VERITY
 const bool kAllowDisableVerity = true;
@@ -55,78 +70,129 @@ bool is_using_avb() {
   return !android::base::GetProperty("ro.boot.vbmeta.digest", "").empty();
 }
 
+[[noreturn]] void reboot(const std::string& name) {
+  LOG(INFO) << "Rebooting device for new settings to take effect";
+  ::sync();
+  android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot," + name);
+  ::sleep(60);
+  LOG(ERROR) << "Failed to reboot";
+  ::exit(1);
+}
+
 bool overlayfs_setup(bool enable) {
   auto change = false;
   errno = 0;
-  if (enable ? fs_mgr_overlayfs_teardown(nullptr, &change)
-             : fs_mgr_overlayfs_setup(nullptr, &change)) {
+  if (enable ? fs_mgr_overlayfs_setup(nullptr, &change)
+             : fs_mgr_overlayfs_teardown(nullptr, &change)) {
     if (change) {
-      LOG(INFO) << (enable ? "disabling" : "using") << " overlayfs";
+      LOG(INFO) << (enable ? "Enabled" : "Disabled") << " overlayfs";
     }
-  } else if (errno) {
-    PLOG(ERROR) << "Failed to " << (enable ? "teardown" : "setup") << " overlayfs";
+  } else {
+    LOG(ERROR) << "Failed to " << (enable ? "enable" : "disable") << " overlayfs";
   }
   return change;
 }
 
+struct SetVerityStateResult {
+  bool success = false;
+  bool want_reboot = false;
+};
+
 /* Use AVB to turn verity on/off */
-bool set_avb_verity_enabled_state(AvbOps* ops, bool enable_verity) {
+SetVerityStateResult SetVerityState(bool enable_verity) {
   std::string ab_suffix = get_ab_suffix();
-  bool verity_enabled;
+  bool verity_enabled = false;
 
   if (is_avb_device_locked()) {
-    LOG(ERROR) << "Device is locked. Please unlock the device first";
-    return false;
+    LOG(ERROR) << "Device must be bootloader unlocked to change verity state";
+    return {};
   }
 
-  if (!avb_user_verity_get(ops, ab_suffix.c_str(), &verity_enabled)) {
+  std::unique_ptr<AvbOps, decltype(&avb_ops_user_free)> ops(avb_ops_user_new(), &avb_ops_user_free);
+  if (!ops) {
+    LOG(ERROR) << "Error getting AVB ops";
+    return {};
+  }
+
+  if (!avb_user_verity_get(ops.get(), ab_suffix.c_str(), &verity_enabled)) {
     LOG(ERROR) << "Error getting verity state";
-    return false;
+    return {};
   }
 
   if ((verity_enabled && enable_verity) || (!verity_enabled && !enable_verity)) {
-    LOG(INFO) << "verity is already " << (verity_enabled ? "enabled" : "disabled");
-    return false;
+    LOG(INFO) << "Verity is already " << (verity_enabled ? "enabled" : "disabled");
+    return {.success = true, .want_reboot = false};
   }
 
-  if (!avb_user_verity_set(ops, ab_suffix.c_str(), enable_verity)) {
+  if (!avb_user_verity_set(ops.get(), ab_suffix.c_str(), enable_verity)) {
     LOG(ERROR) << "Error setting verity state";
-    return false;
+    return {};
   }
 
   LOG(INFO) << "Successfully " << (enable_verity ? "enabled" : "disabled") << " verity";
-  return true;
+  return {.success = true, .want_reboot = true};
 }
 
-void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
-              const char* file, unsigned int line, const char* message) {
-  // Hide log starting with '[fs_mgr]' unless it's an error.
-  if (severity == android::base::ERROR || message[0] != '[') {
-    fprintf(stderr, "%s\n", message);
+class MyLogger {
+ public:
+  explicit MyLogger(bool verbose) : verbose_(verbose) {}
+
+  void operator()(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+                  const char* file, unsigned int line, const char* message) {
+    // Hide log starting with '[fs_mgr]' unless it's an error.
+    if (verbose_ || severity >= android::base::ERROR || message[0] != '[') {
+      fprintf(stderr, "%s\n", message);
+    }
+    logd_(id, severity, tag, file, line, message);
   }
-  static auto logd = android::base::LogdLogger();
-  logd(id, severity, tag, file, line, message);
-}
+
+ private:
+  android::base::LogdLogger logd_;
+  bool verbose_;
+};
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  android::base::InitLogging(argv, MyLogger);
+  bool auto_reboot = false;
+  bool verbose = false;
 
-  if (argc == 0) {
-    LOG(FATAL) << "set-verity-state called with empty argv";
+  struct option longopts[] = {
+      {"help", no_argument, nullptr, 'h'},
+      {"reboot", no_argument, nullptr, 'R'},
+      {"verbose", no_argument, nullptr, 'v'},
+      {0, 0, nullptr, 0},
+  };
+  for (int opt; (opt = ::getopt_long(argc, argv, "hRv", longopts, nullptr)) != -1;) {
+    switch (opt) {
+      case 'h':
+        print_usage();
+        return 0;
+      case 'R':
+        auto_reboot = true;
+        break;
+      case 'v':
+        verbose = true;
+        break;
+      default:
+        print_usage();
+        return 1;
+    }
   }
 
-  bool enable = false;
-  std::string procname = android::base::Basename(argv[0]);
-  if (procname == "enable-verity") {
-    enable = true;
-  } else if (procname == "disable-verity") {
-    enable = false;
-  } else if (argc == 2 && (argv[1] == "1"s || argv[1] == "0"s)) {
-    enable = (argv[1] == "1"s);
+  android::base::InitLogging(argv, MyLogger(verbose));
+
+  bool enable_verity = false;
+  const std::string progname = getprogname();
+  if (progname == "enable-verity") {
+    enable_verity = true;
+  } else if (progname == "disable-verity") {
+    enable_verity = false;
+  } else if (optind < argc && (argv[optind] == "1"s || argv[optind] == "0"s)) {
+    // progname "set-verity-state"
+    enable_verity = (argv[optind] == "1"s);
   } else {
-    printf("usage: %s [1|0]\n", argv[0]);
+    print_usage();
     return 1;
   }
 
@@ -147,18 +213,31 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::unique_ptr<AvbOps, decltype(&avb_ops_user_free)> ops(avb_ops_user_new(), &avb_ops_user_free);
-  if (!ops) {
-    LOG(ERROR) << "Error getting AVB ops";
-    return 1;
+  int exit_code = 0;
+  bool want_reboot = false;
+
+  auto ret = SetVerityState(enable_verity);
+  if (ret.success) {
+    want_reboot |= ret.want_reboot;
+  } else {
+    exit_code = 1;
   }
 
-  bool any_changed = set_avb_verity_enabled_state(ops.get(), enable);
-  any_changed |= overlayfs_setup(enable);
-
-  if (any_changed) {
-    printf("Now reboot your device for settings to take effect\n");
+  // Disable any overlayfs unconditionally if we want verity enabled.
+  // Enable overlayfs only if verity is successfully disabled or is already disabled.
+  if (enable_verity || ret.success) {
+    // Start a threadpool to service waitForService() callbacks as
+    // fs_mgr_overlayfs_* might call waitForService() to get the image service.
+    android::ProcessState::self()->startThreadPool();
+    want_reboot |= overlayfs_setup(!enable_verity);
   }
 
-  return 0;
+  if (want_reboot) {
+    if (auto_reboot) {
+      reboot(progname);
+    }
+    printf("Reboot the device for new settings to take effect\n");
+  }
+
+  return exit_code;
 }

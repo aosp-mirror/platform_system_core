@@ -128,7 +128,6 @@ enum RemountStatus {
     BAD_OVERLAY,
     NO_MOUNTS,
     REMOUNT_FAILED,
-    MUST_REBOOT,
     BINDER_ERROR,
     CHECKPOINTING,
     GSID_ERROR,
@@ -476,16 +475,15 @@ static int do_remount(Fstab& fstab, const std::vector<std::string>& partition_ar
     return retval;
 }
 
-static int do_clean_scratch_files() {
-    android::fs_mgr::CleanupOldScratchFiles();
-    return 0;
-}
-
 int main(int argc, char* argv[]) {
-    android::base::InitLogging(argv, MyLogger);
+    // Do not use MyLogger() when running as clean_scratch_files, as stdout/stderr of daemon process
+    // are discarded.
     if (argc > 0 && android::base::Basename(argv[0]) == "clean_scratch_files"s) {
-        return do_clean_scratch_files();
+        android::fs_mgr::CleanupOldScratchFiles();
+        return 0;
     }
+
+    android::base::InitLogging(argv, MyLogger);
 
     // Make sure we are root.
     if (::getuid() != 0) {
@@ -510,7 +508,6 @@ int main(int argc, char* argv[]) {
             {"help", no_argument, nullptr, 'h'},
             {"reboot", no_argument, nullptr, 'R'},
             {"verbose", no_argument, nullptr, 'v'},
-            {"clean_scratch_files", no_argument, nullptr, 'C'},
             {0, 0, nullptr, 0},
     };
     for (int opt; (opt = ::getopt_long(argc, argv, "hRT:v", longopts, nullptr)) != -1;) {
@@ -531,8 +528,6 @@ int main(int argc, char* argv[]) {
             case 'v':
                 verbose = true;
                 break;
-            case 'C':
-                return do_clean_scratch_files();
             default:
                 LOG(ERROR) << "Bad Argument -" << char(opt);
                 usage(BADARG);
@@ -581,7 +576,7 @@ int main(int argc, char* argv[]) {
         } else {
             LOG(INFO) << "Now reboot your device for settings to take effect";
         }
-        return MUST_REBOOT;
+        return REMOUNT_SUCCESS;
     }
     if (result == REMOUNT_SUCCESS) {
         printf("remount succeeded\n");
