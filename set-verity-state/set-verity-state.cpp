@@ -14,18 +14,32 @@
  * limitations under the License.
  */
 
+#include <getopt.h>
 #include <stdio.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <binder/ProcessState.h>
+#include <cutils/android_reboot.h>
 #include <fs_mgr_overlayfs.h>
 #include <libavb_user/libavb_user.h>
 
 using namespace std::string_literals;
 
 namespace {
+
+void print_usage() {
+  printf(
+      "Usage:\n"
+      "\tdisable-verity\n"
+      "\tenable-verity\n"
+      "\tset-verity-state [0|1]\n"
+      "Options:\n"
+      "\t-h --help\tthis help\n"
+      "\t-R --reboot\tautomatic reboot if needed for new settings to take effect\n"
+      "\t-v --verbose\tbe noisy\n");
+}
 
 #ifdef ALLOW_DISABLE_VERITY
 const bool kAllowDisableVerity = true;
@@ -54,6 +68,15 @@ bool is_using_avb() {
   // contract, androidboot.vbmeta.digest is set by the bootloader
   // when using AVB).
   return !android::base::GetProperty("ro.boot.vbmeta.digest", "").empty();
+}
+
+[[noreturn]] void reboot(const std::string& name) {
+  LOG(INFO) << "Rebooting device for new settings to take effect";
+  ::sync();
+  android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot," + name);
+  ::sleep(60);
+  LOG(ERROR) << "Failed to reboot";
+  ::exit(1);
 }
 
 bool overlayfs_setup(bool enable) {
@@ -110,35 +133,66 @@ SetVerityStateResult SetVerityState(bool enable_verity) {
   return {.success = true, .want_reboot = true};
 }
 
-void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
-              const char* file, unsigned int line, const char* message) {
-  // Hide log starting with '[fs_mgr]' unless it's an error.
-  if (severity == android::base::ERROR || message[0] != '[') {
-    fprintf(stderr, "%s\n", message);
+class MyLogger {
+ public:
+  explicit MyLogger(bool verbose) : verbose_(verbose) {}
+
+  void operator()(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+                  const char* file, unsigned int line, const char* message) {
+    // Hide log starting with '[fs_mgr]' unless it's an error.
+    if (verbose_ || severity >= android::base::ERROR || message[0] != '[') {
+      fprintf(stderr, "%s\n", message);
+    }
+    logd_(id, severity, tag, file, line, message);
   }
-  static auto logd = android::base::LogdLogger();
-  logd(id, severity, tag, file, line, message);
-}
+
+ private:
+  android::base::LogdLogger logd_;
+  bool verbose_;
+};
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  android::base::InitLogging(argv, MyLogger);
+  bool auto_reboot = false;
+  bool verbose = false;
 
-  if (argc == 0) {
-    LOG(FATAL) << "set-verity-state called with empty argv";
+  struct option longopts[] = {
+      {"help", no_argument, nullptr, 'h'},
+      {"reboot", no_argument, nullptr, 'R'},
+      {"verbose", no_argument, nullptr, 'v'},
+      {0, 0, nullptr, 0},
+  };
+  for (int opt; (opt = ::getopt_long(argc, argv, "hRv", longopts, nullptr)) != -1;) {
+    switch (opt) {
+      case 'h':
+        print_usage();
+        return 0;
+      case 'R':
+        auto_reboot = true;
+        break;
+      case 'v':
+        verbose = true;
+        break;
+      default:
+        print_usage();
+        return 1;
+    }
   }
 
+  android::base::InitLogging(argv, MyLogger(verbose));
+
   bool enable_verity = false;
-  std::string procname = android::base::Basename(argv[0]);
-  if (procname == "enable-verity") {
+  const std::string progname = getprogname();
+  if (progname == "enable-verity") {
     enable_verity = true;
-  } else if (procname == "disable-verity") {
+  } else if (progname == "disable-verity") {
     enable_verity = false;
-  } else if (argc == 2 && (argv[1] == "1"s || argv[1] == "0"s)) {
-    enable_verity = (argv[1] == "1"s);
+  } else if (optind < argc && (argv[optind] == "1"s || argv[optind] == "0"s)) {
+    // progname "set-verity-state"
+    enable_verity = (argv[optind] == "1"s);
   } else {
-    printf("usage: %s [1|0]\n", argv[0]);
+    print_usage();
     return 1;
   }
 
@@ -179,6 +233,9 @@ int main(int argc, char* argv[]) {
   }
 
   if (want_reboot) {
+    if (auto_reboot) {
+      reboot(progname);
+    }
     printf("Reboot the device for new settings to take effect\n");
   }
 
