@@ -18,6 +18,9 @@ cc_binary {
     static_libs: [
         "libavb_user",
     ],
+    header_libs: [
+        "libcutils_headers",
+    ],
 
     cflags: ["-Werror"],
     cppflags: [
