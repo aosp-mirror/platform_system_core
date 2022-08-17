@@ -23,6 +23,8 @@
 #include <functional>
 #include <map>
 
+#include <android-base/logging.h>
+
 namespace android {
 namespace init {
 
@@ -42,8 +44,11 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
     if (!events) {
         return Error() << "Must specify events";
     }
-    auto sp = std::make_shared<decltype(handler)>(std::move(handler));
-    auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(sp));
+
+    Info info;
+    info.events = events;
+    info.handler = std::make_shared<decltype(handler)>(std::move(handler));
+    auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(info));
     if (!inserted) {
         return Error() << "Cannot specify two epoll handlers for a given FD";
     }
@@ -84,8 +89,14 @@ Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
     }
     std::vector<std::shared_ptr<Handler>> pending_functions;
     for (int i = 0; i < num_events; ++i) {
-        auto sp = *reinterpret_cast<std::shared_ptr<Handler>*>(ev[i].data.ptr);
-        pending_functions.emplace_back(std::move(sp));
+        auto& info = *reinterpret_cast<Info*>(ev[i].data.ptr);
+        if ((info.events & (EPOLLIN | EPOLLPRI)) == (EPOLLIN | EPOLLPRI) &&
+            (ev[i].events & EPOLLIN) != ev[i].events) {
+            // This handler wants to know about exception events, and just got one.
+            // Log something informational.
+            LOG(ERROR) << "Received unexpected epoll event set: " << ev[i].events;
+        }
+        pending_functions.emplace_back(info.handler);
     }
 
     return pending_functions;

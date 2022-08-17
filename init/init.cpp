@@ -33,7 +33,10 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -695,10 +698,10 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
 
 static constexpr std::chrono::milliseconds kDiagnosticTimeout = 10s;
 
-static void HandleSignalFd() {
+static void HandleSignalFd(bool one_off) {
     signalfd_siginfo siginfo;
     auto started = std::chrono::steady_clock::now();
-    for (;;) {
+    do {
         ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
         if (bytes_read < 0 && errno == EAGAIN) {
             auto now = std::chrono::steady_clock::now();
@@ -716,7 +719,7 @@ static void HandleSignalFd() {
             return;
         }
         break;
-    }
+    } while (!one_off);
 
     switch (siginfo.ssi_signo) {
         case SIGCHLD:
@@ -776,7 +779,9 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         PLOG(FATAL) << "failed to create signalfd";
     }
 
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd); !result.ok()) {
+    constexpr int flags = EPOLLIN | EPOLLPRI;
+    auto handler = std::bind(HandleSignalFd, false);
+    if (auto result = epoll->RegisterHandler(signal_fd, handler, flags); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
@@ -903,6 +908,32 @@ static Result<void> ConnectEarlyStageSnapuserdAction(const BuiltinArguments& arg
         LOG(FATAL) << "Could not start snapuserd_proxy: " << result.error();
     }
     return {};
+}
+
+static void DumpPidFds(const std::string& prefix, pid_t pid) {
+    std::error_code ec;
+    std::string proc_dir = "/proc/" + std::to_string(pid) + "/fd";
+    for (const auto& entry : std::filesystem::directory_iterator(proc_dir)) {
+        std::string target;
+        if (android::base::Readlink(entry.path(), &target)) {
+            LOG(ERROR) << prefix << target;
+        } else {
+            LOG(ERROR) << prefix << entry.path();
+        }
+    }
+}
+
+static void DumpFile(const std::string& prefix, const std::string& file) {
+    std::ifstream fp(file);
+    if (!fp) {
+        LOG(ERROR) << "Could not open " << file;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(fp, line)) {
+        LOG(ERROR) << prefix << line;
+    }
 }
 
 int SecondStageMain(int argc, char** argv) {
@@ -1114,11 +1145,23 @@ int SecondStageMain(int argc, char** argv) {
                 (*function)();
             }
         } else if (Service::is_exec_service_running()) {
+            static bool dumped_diagnostics = false;
             std::chrono::duration<double> waited =
                     std::chrono::steady_clock::now() - Service::exec_service_started();
             if (waited >= kDiagnosticTimeout) {
                 LOG(ERROR) << "Exec service is hung? Waited " << waited.count()
                            << " without SIGCHLD";
+                if (!dumped_diagnostics) {
+                    DumpPidFds("exec service opened: ", Service::exec_service_pid());
+
+                    std::string status_file =
+                            "/proc/" + std::to_string(Service::exec_service_pid()) + "/status";
+                    DumpFile("exec service: ", status_file);
+                    dumped_diagnostics = true;
+
+                    LOG(INFO) << "Attempting to handle any stuck SIGCHLDs...";
+                    HandleSignalFd(true);
+                }
             }
         }
         if (!IsShuttingDown()) {

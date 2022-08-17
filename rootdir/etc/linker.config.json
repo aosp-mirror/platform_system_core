@@ -31,5 +31,9 @@
     "libadb_pairing_auth.so",
     "libadb_pairing_connection.so",
     "libadb_pairing_server.so"
+  ],
+  "provideLibs": [
+    "libaptX_encoder.so",
+    "libaptXHD_encoder.so"
   ]
 }
