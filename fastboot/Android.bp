@@ -154,6 +154,7 @@ cc_binary {
         "device/flashing.cpp",
         "device/main.cpp",
         "device/usb.cpp",
+        "device/usb_iouring.cpp",
         "device/usb_client.cpp",
         "device/tcp_client.cpp",
         "device/utility.cpp",
@@ -195,7 +196,9 @@ cc_binary {
         "liblz4",
         "libsnapshot_nobinder",
         "update_metadata-protos",
+        "liburing",
     ],
+    include_dirs: ["bionic/libc/kernel"],
 
     header_libs: [
         "avb_headers",
