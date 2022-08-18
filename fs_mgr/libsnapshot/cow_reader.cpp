@@ -34,12 +34,13 @@
 namespace android {
 namespace snapshot {
 
-CowReader::CowReader(ReaderFlags reader_flag)
+CowReader::CowReader(ReaderFlags reader_flag, bool is_merge)
     : fd_(-1),
       header_(),
       fd_size_(0),
       block_pos_index_(std::make_shared<std::vector<int>>()),
-      reader_flag_(reader_flag) {}
+      reader_flag_(reader_flag),
+      is_merge_(is_merge) {}
 
 static void SHA256(const void*, size_t, uint8_t[]) {
 #if 0
@@ -64,6 +65,7 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->has_seq_ops_ = has_seq_ops_;
     cow->data_loc_ = data_loc_;
     cow->block_pos_index_ = block_pos_index_;
+    cow->is_merge_ = is_merge_;
     return cow;
 }
 
@@ -476,13 +478,26 @@ bool CowReader::PrepMergeOps() {
 
     merge_op_blocks->insert(merge_op_blocks->end(), other_ops.begin(), other_ops.end());
 
-    for (auto block : *merge_op_blocks) {
-        block_pos_index_->push_back(block_map->at(block));
-    }
-
     num_total_data_ops_ = merge_op_blocks->size();
     if (header_.num_merge_ops > 0) {
         merge_op_start_ = header_.num_merge_ops;
+    }
+
+    if (is_merge_) {
+        // Metadata ops are not required for merge. Thus, just re-arrange
+        // the ops vector as required for merge operations.
+        auto merge_ops_buffer = std::make_shared<std::vector<CowOperation>>();
+        merge_ops_buffer->reserve(num_total_data_ops_);
+        for (auto block : *merge_op_blocks) {
+            merge_ops_buffer->emplace_back(ops_->data()[block_map->at(block)]);
+        }
+        ops_->clear();
+        ops_ = merge_ops_buffer;
+        ops_->shrink_to_fit();
+    } else {
+        for (auto block : *merge_op_blocks) {
+            block_pos_index_->push_back(block_map->at(block));
+        }
     }
 
     block_map->clear();
@@ -548,7 +563,7 @@ bool CowReader::GetLastLabel(uint64_t* label) {
 
 class CowOpIter final : public ICowOpIter {
   public:
-    CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops);
+    CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t start);
 
     bool Done() override;
     const CowOperation& Get() override;
@@ -562,9 +577,9 @@ class CowOpIter final : public ICowOpIter {
     std::vector<CowOperation>::iterator op_iter_;
 };
 
-CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops) {
+CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t start) {
     ops_ = ops;
-    op_iter_ = ops_->begin();
+    op_iter_ = ops_->begin() + start;
 }
 
 bool CowOpIter::RDone() {
@@ -691,8 +706,8 @@ const CowOperation& CowRevMergeOpIter::Get() {
     return ops_->data()[*block_riter_];
 }
 
-std::unique_ptr<ICowOpIter> CowReader::GetOpIter() {
-    return std::make_unique<CowOpIter>(ops_);
+std::unique_ptr<ICowOpIter> CowReader::GetOpIter(bool merge_progress) {
+    return std::make_unique<CowOpIter>(ops_, merge_progress ? merge_op_start_ : 0);
 }
 
 std::unique_ptr<ICowOpIter> CowReader::GetRevMergeOpIter(bool ignore_progress) {
