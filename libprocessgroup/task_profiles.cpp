@@ -139,6 +139,19 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     return true;
 }
 
+bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const
+{
+    if (path == nullptr) {
+        return true;
+    }
+
+    const std::string& file_name =
+            controller()->version() == 2 && !file_v2_name_.empty() ? file_v2_name_ : file_name_;
+    *path = StringPrintf("%s/uid_%d/%s", controller()->path(), uid, file_name.c_str());
+    return true;
+}
+
+
 bool SetClampsAction::ExecuteForProcess(uid_t, pid_t) const {
     // TODO: add support when kernel supports util_clamp
     LOG(WARNING) << "SetClampsAction::ExecuteForProcess is not supported";
@@ -224,6 +237,31 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
 
     return true;
 }
+
+bool SetAttributeAction::ExecuteForUID(uid_t uid) const
+{
+    std::string path;
+
+    if (!attribute_->GetPathForUID(uid, &path)) {
+        LOG(ERROR) << "Failed to find cgroup for uid " << uid;
+        return false;
+    }
+
+    if (!WriteStringToFile(value_, path)) {
+        if (access(path.c_str(), F_OK) < 0) {
+            if (optional_) {
+                return true;
+            } else {
+                LOG(ERROR) << "No such cgroup attribute: " << path;
+                return false;
+            }
+        }
+        PLOG(ERROR) << "Failed to write '" << value_ << "' to " << path;
+        return false;
+    }
+    return true;
+}
+
 
 SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
     : controller_(c), path_(p) {
@@ -552,6 +590,16 @@ bool TaskProfile::ExecuteForTask(int tid) const {
     return true;
 }
 
+bool TaskProfile::ExecuteForUID(uid_t uid) const {
+    for (const auto& element : elements_) {
+        if (!element->ExecuteForUID(uid)) {
+            LOG(VERBOSE) << "Applying profile action " << element->Name() << " failed";
+            return false;
+        }
+    }
+    return true;
+}
+
 void TaskProfile::EnableResourceCaching(ProfileAction::ResourceCacheType cache_type) {
     if (res_cached_) {
         return;
@@ -802,6 +850,24 @@ const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) con
         return iter->second.get();
     }
     return nullptr;
+}
+
+bool TaskProfiles::SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles,
+                                   bool use_fd_cache) {
+    for (const auto& name : profiles) {
+        TaskProfile* profile = GetProfile(name);
+        if (profile != nullptr) {
+            if (use_fd_cache) {
+                profile->EnableResourceCaching(ProfileAction::RCT_PROCESS);
+            }
+            if (!profile->ExecuteForUID(uid)) {
+                PLOG(WARNING) << "Failed to apply " << name << " process profile";
+            }
+        } else {
+            PLOG(WARNING) << "Failed to find " << name << "process profile";
+        }
+    }
+    return true;
 }
 
 bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
