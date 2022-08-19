@@ -174,10 +174,6 @@ extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_pr
     return SetProcessProfiles(uid, pid, profiles_);
 }
 
-bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetUserProfiles(uid, profiles, false);
-}
-
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
     return StringPrintf("%s/uid_%d", cgroup, uid);
 }
