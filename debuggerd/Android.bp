@@ -204,6 +204,7 @@ cc_library_static {
     header_libs: [
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
+        "liblog_headers",
     ],
 
     static_libs: [
@@ -212,7 +213,6 @@ cc_library_static {
         "liblzma",
         "libbase",
         "libcutils",
-        "liblog",
     ],
     runtime_libs: [
         "libdexfile",           // libdexfile_support dependency

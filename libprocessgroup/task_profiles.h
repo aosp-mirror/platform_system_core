@@ -33,6 +33,7 @@ class IProfileAttribute {
     virtual const CgroupController* controller() const = 0;
     virtual const std::string& file_name() const = 0;
     virtual bool GetPathForTask(int tid, std::string* path) const = 0;
+    virtual bool GetPathForUID(uid_t uid, std::string* path) const = 0;
 };
 
 class ProfileAttribute : public IProfileAttribute {
@@ -50,6 +51,7 @@ class ProfileAttribute : public IProfileAttribute {
     void Reset(const CgroupController& controller, const std::string& file_name) override;
 
     bool GetPathForTask(int tid, std::string* path) const override;
+    bool GetPathForUID(uid_t uid, std::string* path) const override;
 
   private:
     CgroupController controller_;
@@ -69,6 +71,7 @@ class ProfileAction {
     // Default implementations will fail
     virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; };
     virtual bool ExecuteForTask(int) const { return false; };
+    virtual bool ExecuteForUID(uid_t) const { return false; };
 
     virtual void EnableResourceCaching(ResourceCacheType) {}
     virtual void DropResourceCaching(ResourceCacheType) {}
@@ -113,6 +116,7 @@ class SetAttributeAction : public ProfileAction {
     const char* Name() const override { return "SetAttribute"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
     bool ExecuteForTask(int tid) const override;
+    bool ExecuteForUID(uid_t uid) const override;
 
   private:
     const IProfileAttribute* attribute_;
@@ -176,6 +180,7 @@ class TaskProfile {
 
     bool ExecuteForProcess(uid_t uid, pid_t pid) const;
     bool ExecuteForTask(int tid) const;
+    bool ExecuteForUID(uid_t uid) const;
     void EnableResourceCaching(ProfileAction::ResourceCacheType cache_type);
     void DropResourceCaching(ProfileAction::ResourceCacheType cache_type);
 
@@ -212,6 +217,7 @@ class TaskProfiles {
     bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
                             bool use_fd_cache);
     bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache);
+    bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles, bool use_fd_cache);
 
   private:
     std::map<std::string, std::shared_ptr<TaskProfile>> profiles_;
