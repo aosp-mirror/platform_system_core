@@ -48,6 +48,7 @@ enum apploader_command : uint32_t {
  * @APPLOADER_ERR_POLICY_VIOLATION:     signature verification succeeded but
  *                                      key+manifest combination not allowed
  *                                      by app loader policy engine
+ * @APPLOADER_ERR_NOT_ENCRYPTED:        unmet application encryption requirement
  */
 enum apploader_error : uint32_t {
     APPLOADER_NO_ERROR = 0,
@@ -60,6 +61,7 @@ enum apploader_error : uint32_t {
     APPLOADER_ERR_INTERNAL,
     APPLOADER_ERR_INVALID_VERSION,
     APPLOADER_ERR_POLICY_VIOLATION,
+    APPLOADER_ERR_NOT_ENCRYPTED,
 };
 
 /**
