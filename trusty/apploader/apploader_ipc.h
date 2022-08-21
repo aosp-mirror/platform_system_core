@@ -45,6 +45,9 @@ enum apploader_command : uint32_t {
  * @APPLOADER_ERR_INTERNAL:             miscellaneous or internal apploader
  *                                      error not covered by the above
  * @APPLOADER_ERR_INVALID_VERSION:      invalid application version
+ * @APPLOADER_ERR_POLICY_VIOLATION:     signature verification succeeded but
+ *                                      key+manifest combination not allowed
+ *                                      by app loader policy engine
  */
 enum apploader_error : uint32_t {
     APPLOADER_NO_ERROR = 0,
