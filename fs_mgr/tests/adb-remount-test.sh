@@ -1099,8 +1099,8 @@ D=`adb_sh df -k </dev/null` &&
   D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
   echo "${H}" &&
   echo "${D}" &&
-  echo "${YELLOW}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
-  echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
+  die "overlay takeover unexpected at this phase"
+echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
 overlayfs_needed=true
 D=`adb_sh cat /proc/mounts </dev/null |
    skip_administrative_mounts data`
@@ -1133,73 +1133,38 @@ elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
 fi
 
-echo "${GREEN}[ RUN      ]${NORMAL} disable verity" >&2
+echo "${GREEN}[ RUN      ]${NORMAL} disable-verity -R" >&2
 
-T=`adb_date`
-H=`adb disable-verity 2>&1`
-err=${?}
 L=
-D="${H%?Now reboot your device for settings to take effect*}"
-if [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ]; then
-  echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
+T=$(adb_date)
+H=$(adb_su disable-verity -R 2>&1)
+err="${?}"
+echo "${H}"
+
+if [ "${err}" != 0 ]; then
+  die -t "${T}" "disable-verity -R"
 fi
-if [ ${err} != 0 ]; then
-  echo "${H}"
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
-  die -t "${T}" "disable-verity"
+
+# Fuzzy search for a line that contains "overlay" and "fail". Informational only.
+if echo "${H}" | grep -i "overlay" | grep -iq "fail"; then
+  echo "${YELLOW}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
 fi
-rebooted=false
-if [ X"${D}" != X"${H}" ]; then
-  echo "${H}"
-  if [ X"${D}" != X"${D##*setup failed}" ]; then
-    echo "${YELLOW}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
-  fi
-  D=`adb_sh df -k </dev/null` &&
-    H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
-    [ -z "${D}" ] ||
-    ( echo "${H}" && echo "${D}" && false ) ||
-    die -t ${T} "overlay takeover unexpected at this phase"
-  echo "${GREEN}[     INFO ]${NORMAL} rebooting as requested" >&2
-  L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
-  adb_reboot &&
-    adb_wait ${ADB_WAIT} ||
-    die "lost device after reboot requested `usb_status`"
+
+adb_wait "${ADB_WAIT}" &&
   adb_root ||
-    die "lost device after elevation to root `usb_status`"
-  rebooted=true
-  # re-disable verity to see the setup remarks expected
-  T=`adb_date`
-  H=`adb disable-verity 2>&1`
-  err=${?}
-  D="${H%?Now reboot your device for settings to take effect*}"
-  if [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ]; then
-    echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
+  die "lost device after adb shell su root disable-verity -R $(usb_status)"
+
+if ${overlayfs_needed}; then
+  has_overlayfs_setup=false
+  for d in ${OVERLAYFS_BACKING}; do
+    if adb_test -d "/${d}/overlay"; then
+      has_overlayfs_setup=true
+      echo "${GREEN}[       OK ]${NORMAL} /${d}/overlay is setup" >&2
+    fi
+  done
+  if ! ${has_overlayfs_setup}; then
+    die "no overlay being setup after disable-verity -R"
   fi
-  if [ ${err} != 0 ]; then
-    T=
-  fi
-fi
-if ${overlayfs_supported} && ${overlayfs_needed} && [ X"${D}" != X"${D##*setup failed}" ]; then
-  echo "${D}"
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
-  die -t "${T}" "setup for overlay"
-fi
-if [ X"${D}" != X"${D##*Successfully disabled verity}" ]; then
-  echo "${H}"
-  D=`adb_sh df -k </dev/null` &&
-    H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
-    [ -z "${D}" ] ||
-    ( echo "${H}" && echo "${D}" && false ) ||
-    ( [ -n "${L}" ] && echo "${L}" && false ) ||
-    die -t "${T}" "overlay takeover unexpected"
-  [ -n "${L}" ] && echo "${L}"
-  die -t "${T}" "unexpected report of verity being disabled a second time"
-elif ${rebooted}; then
-  echo "${GREEN}[       OK ]${NORMAL} verity already disabled" >&2
-else
-  echo "${YELLOW}[  WARNING ]${NORMAL} verity already disabled" >&2
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
