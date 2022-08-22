@@ -226,6 +226,9 @@ static ssize_t read_response(int tipc_fd) {
         case APPLOADER_ERR_POLICY_VIOLATION:
             LOG(ERROR) << "Error: loading denied by policy engine";
             break;
+        case APPLOADER_ERR_NOT_ENCRYPTED:
+            LOG(ERROR) << "Error: unmet application encryption requirement";
+            break;
         default:
             LOG(ERROR) << "Unrecognized error: " << resp.error;
             break;
