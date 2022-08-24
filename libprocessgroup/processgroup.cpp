@@ -148,14 +148,35 @@ void DropTaskProfilesResourceCaching() {
 }
 
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string>(profiles), false);
+}
+
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::initializer_list<std::string_view> profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string_view>(profiles), false);
+}
+
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const std::string_view> profiles) {
     return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, false);
 }
 
 bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, true);
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string>(profiles), true);
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
+    return TaskProfiles::GetInstance().SetTaskProfiles(tid, std::span<const std::string>(profiles),
+                                                       use_fd_cache);
+}
+
+bool SetTaskProfiles(int tid, std::initializer_list<std::string_view> profiles, bool use_fd_cache) {
+    return TaskProfiles::GetInstance().SetTaskProfiles(
+            tid, std::span<const std::string_view>(profiles), use_fd_cache);
+}
+
+bool SetTaskProfiles(int tid, std::span<const std::string_view> profiles, bool use_fd_cache) {
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
 }
 
@@ -166,12 +187,12 @@ bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use
 // https://chromium-review.googlesource.com/c/chromiumos/platform/crosvm/+/3574427/5/src/linux/android.rs#12
 extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_profiles,
                                              const char* profiles[]) {
-    std::vector<std::string> profiles_;
+    std::vector<std::string_view> profiles_;
     profiles_.reserve(num_profiles);
     for (size_t i = 0; i < num_profiles; i++) {
         profiles_.emplace_back(profiles[i]);
     }
-    return SetProcessProfiles(uid, pid, profiles_);
+    return SetProcessProfiles(uid, pid, std::span<const std::string_view>(profiles_));
 }
 
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
