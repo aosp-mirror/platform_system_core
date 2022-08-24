@@ -18,8 +18,10 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <functional>
 #include <map>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -210,9 +212,10 @@ class TaskProfiles {
     TaskProfile* GetProfile(std::string_view name) const;
     const IProfileAttribute* GetAttribute(std::string_view name) const;
     void DropResourceCaching(ProfileAction::ResourceCacheType cache_type) const;
-    bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
-                            bool use_fd_cache);
-    bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache);
+    template <typename T>
+    bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> profiles, bool use_fd_cache);
+    template <typename T>
+    bool SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache);
 
   private:
     TaskProfiles();
