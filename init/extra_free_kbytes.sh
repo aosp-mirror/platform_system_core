@@ -77,7 +77,19 @@ then
     exit
 fi
 
-watermark_scale=`cat /proc/sys/vm/watermark_scale_factor`
+# record the original watermark_scale_factor value
+watermark_scale=$(getprop "ro.kernel.watermark_scale_factor")
+if [ -z "$watermark_scale" ]
+then
+    watermark_scale=$(cat /proc/sys/vm/watermark_scale_factor)
+    setprop "ro.kernel.watermark_scale_factor" "$watermark_scale"
+    # On older distributions with no policies configured setprop may fail.
+    # If that happens, use the kernel default of 10.
+    if [ -z $(getprop "ro.kernel.watermark_scale_factor") ]
+    then
+        watermark_scale=10
+    fi
+fi
 
 # convert extra_free_kbytes to pages
 page_size=$(getconf PAGESIZE)
