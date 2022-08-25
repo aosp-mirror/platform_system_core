@@ -2,6 +2,17 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
+cc_defaults {
+    name: "libprocessgroup_defaults",
+    cpp_std: "gnu++20",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wexit-time-destructors",
+        "-Wno-unused-parameter",
+    ],
+}
+
 cc_library_headers {
     name: "libprocessgroup_headers",
     vendor_available: true,
@@ -62,11 +73,7 @@ cc_library {
     export_header_lib_headers: [
         "libprocessgroup_headers",
     ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wexit-time-destructors",
-    ],
+    defaults: ["libprocessgroup_defaults"],
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
@@ -77,12 +84,7 @@ cc_library {
 cc_test {
     name: "task_profiles_test",
     host_supported: true,
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wexit-time-destructors",
-        "-Wno-unused-parameter",
-    ],
+    defaults: ["libprocessgroup_defaults"],
     srcs: [
         "task_profiles_test.cpp",
     ],

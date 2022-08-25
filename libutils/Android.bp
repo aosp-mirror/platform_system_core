@@ -68,6 +68,7 @@ cc_defaults {
         "-Wall",
         "-Werror",
         "-Wno-exit-time-destructors",
+        "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
     ],
     header_libs: [
         "libbase_headers",
@@ -173,6 +174,10 @@ cc_library {
     min_sdk_version: "apex_inherit",
 
     afdo: true,
+
+    header_abi_checker: {
+        diff_flags: ["-allow-adding-removing-weak-symbols"],
+    },
 }
 
 cc_library {

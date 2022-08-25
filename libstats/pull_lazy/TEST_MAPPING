@@ -4,7 +4,7 @@
       "name" : "libstatspull_lazy_test"
     }
   ],
-  "hwasan-postsubmit" : [
+  "hwasan-presubmit" : [
     {
       "name" : "libstatspull_lazy_test"
     }
