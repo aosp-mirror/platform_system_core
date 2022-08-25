@@ -45,7 +45,7 @@ extern "C" {
  * This must be at least as long as the longest reply from the ACVP service
  * (currently the reply from getConfig()).
  */
-#define ACVP_MIN_SHARED_MEMORY 16384
+#define ACVP_MIN_SHARED_MEMORY 32768
 
 /**
  * acvp_req - Request for the Trusty ACVP app

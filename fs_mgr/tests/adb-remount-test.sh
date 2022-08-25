@@ -1099,8 +1099,8 @@ D=`adb_sh df -k </dev/null` &&
   D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
   echo "${H}" &&
   echo "${D}" &&
-  echo "${YELLOW}[  WARNING ]${NORMAL} overlays present before setup" >&2 ||
-  echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
+  die "overlay takeover unexpected at this phase"
+echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
 overlayfs_needed=true
 D=`adb_sh cat /proc/mounts </dev/null |
    skip_administrative_mounts data`
@@ -1133,73 +1133,38 @@ elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
 fi
 
-echo "${GREEN}[ RUN      ]${NORMAL} disable verity" >&2
+echo "${GREEN}[ RUN      ]${NORMAL} disable-verity -R" >&2
 
-T=`adb_date`
-H=`adb disable-verity 2>&1`
-err=${?}
 L=
-D="${H%?Now reboot your device for settings to take effect*}"
-if [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ]; then
-  echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
+T=$(adb_date)
+H=$(adb_su disable-verity -R 2>&1)
+err="${?}"
+echo "${H}"
+
+if [ "${err}" != 0 ]; then
+  die -t "${T}" "disable-verity -R"
 fi
-if [ ${err} != 0 ]; then
-  echo "${H}"
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
-  die -t "${T}" "disable-verity"
+
+# Fuzzy search for a line that contains "overlay" and "fail". Informational only.
+if echo "${H}" | grep -i "overlay" | grep -iq "fail"; then
+  echo "${YELLOW}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
 fi
-rebooted=false
-if [ X"${D}" != X"${H}" ]; then
-  echo "${H}"
-  if [ X"${D}" != X"${D##*setup failed}" ]; then
-    echo "${YELLOW}[  WARNING ]${NORMAL} overlayfs setup whined" >&2
-  fi
-  D=`adb_sh df -k </dev/null` &&
-    H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
-    [ -z "${D}" ] ||
-    ( echo "${H}" && echo "${D}" && false ) ||
-    die -t ${T} "overlay takeover unexpected at this phase"
-  echo "${GREEN}[     INFO ]${NORMAL} rebooting as requested" >&2
-  L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
-  adb_reboot &&
-    adb_wait ${ADB_WAIT} ||
-    die "lost device after reboot requested `usb_status`"
+
+adb_wait "${ADB_WAIT}" &&
   adb_root ||
-    die "lost device after elevation to root `usb_status`"
-  rebooted=true
-  # re-disable verity to see the setup remarks expected
-  T=`adb_date`
-  H=`adb disable-verity 2>&1`
-  err=${?}
-  D="${H%?Now reboot your device for settings to take effect*}"
-  if [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ]; then
-    echo "${GREEN}[       OK ]${NORMAL} using overlayfs" >&2
+  die "lost device after adb shell su root disable-verity -R $(usb_status)"
+
+if ${overlayfs_needed}; then
+  has_overlayfs_setup=false
+  for d in ${OVERLAYFS_BACKING}; do
+    if adb_test -d "/${d}/overlay"; then
+      has_overlayfs_setup=true
+      echo "${GREEN}[       OK ]${NORMAL} /${d}/overlay is setup" >&2
+    fi
+  done
+  if ! ${has_overlayfs_setup}; then
+    die "no overlay being setup after disable-verity -R"
   fi
-  if [ ${err} != 0 ]; then
-    T=
-  fi
-fi
-if ${overlayfs_supported} && ${overlayfs_needed} && [ X"${D}" != X"${D##*setup failed}" ]; then
-  echo "${D}"
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
-  die -t "${T}" "setup for overlay"
-fi
-if [ X"${D}" != X"${D##*Successfully disabled verity}" ]; then
-  echo "${H}"
-  D=`adb_sh df -k </dev/null` &&
-    H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay " || true` &&
-    [ -z "${D}" ] ||
-    ( echo "${H}" && echo "${D}" && false ) ||
-    ( [ -n "${L}" ] && echo "${L}" && false ) ||
-    die -t "${T}" "overlay takeover unexpected"
-  [ -n "${L}" ] && echo "${L}"
-  die -t "${T}" "unexpected report of verity being disabled a second time"
-elif ${rebooted}; then
-  echo "${GREEN}[       OK ]${NORMAL} verity already disabled" >&2
-else
-  echo "${YELLOW}[  WARNING ]${NORMAL} verity already disabled" >&2
 fi
 
 echo "${GREEN}[ RUN      ]${NORMAL} remount" >&2
@@ -1319,26 +1284,9 @@ echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
 B="`adb_cat /system/priv-app/hello`" ||
   die "system priv-app hello"
 check_eq "${A}" "${B}" /system/priv-app before reboot
-SYSTEM_DEVT=`adb_sh stat --format=%D /system/hello </dev/null`
-VENDOR_DEVT=`adb_sh stat --format=%D /vendor/hello </dev/null`
 SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
 VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
-BASE_SYSTEM_DEVT=`adb_sh stat --format=%D /system/bin/stat </dev/null`
-BASE_VENDOR_DEVT=`adb_sh stat --format=%D /vendor/bin/stat </dev/null`
-check_eq "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" vendor and system devt
 check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
-if ${overlayfs_needed}; then
-  check_ne "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
-  check_ne "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
-else
-  check_eq "${SYSTEM_DEVT}" "${BASE_SYSTEM_DEVT}" system devt
-  check_eq "${VENDOR_DEVT}" "${BASE_VENDOR_DEVT}" vendor devt
-fi
-check_ne "${BASE_SYSTEM_DEVT}" "${BASE_VENDOR_DEVT}" --warning system/vendor devt
-[ -n "${SYSTEM_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  echo "${YELLOW}[  WARNING ]${NORMAL} system devt ${SYSTEM_DEVT} major 0" >&2
-[ -n "${VENDOR_DEVT%[0-9a-fA-F][0-9a-fA-F]}" ] ||
-  echo "${YELLOW}[  WARNING ]${NORMAL} vendor devt ${VENDOR_DEVT} major 0" >&2
 
 # Download libc.so, append some garbage, push back, and check if the file
 # is updated.
@@ -1411,13 +1359,8 @@ for i in ${MOUNTS}; do
   echo "${GREEN}[       OK ]${NORMAL} ${i} content remains after reboot" >&2
 done
 
-check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
-check_eq "${VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/hello </dev/null`" vendor devt after reboot
 check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
 check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" vendor inode after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
-check_eq "${BASE_VENDOR_DEVT}" "`adb_sh stat --format=%D /vendor/bin/stat </dev/null`" --warning base vendor devt after reboot
-check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
@@ -1542,10 +1485,7 @@ else
              --warning vendor content after flash vendor
   fi
 
-  check_eq "${SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/hello </dev/null`" system devt after reboot
   check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/bin/stat </dev/null`" --warning base system devt after reboot
-  check_eq "${BASE_SYSTEM_DEVT}" "`adb_sh stat --format=%D /system/xbin/su </dev/null`" --warning devt for su after reboot
 
 fi
 
