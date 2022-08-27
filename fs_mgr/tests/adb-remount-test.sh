@@ -721,7 +721,7 @@ skip_administrative_mounts() {
   local exclude_filesystems=(
     "overlay" "tmpfs" "none" "sysfs" "proc" "selinuxfs" "debugfs" "bpf"
     "binfmt_misc" "cg2_bpf" "pstore" "tracefs" "adb" "mtp" "ptp" "devpts"
-    "ramdumpfs" "binder" "securityfs" "functionfs" "rootfs"
+    "ramdumpfs" "binder" "securityfs" "functionfs" "rootfs" "fuse"
   )
   local exclude_devices=(
     "\/sys\/kernel\/debug" "\/data\/media" "\/dev\/block\/loop[0-9]*"
@@ -746,8 +746,10 @@ or output from df
 Filters out all apex and vendor override administrative overlay mounts
 uninteresting to the test" ]
 skip_unrelated_mounts() {
-    grep -v "^overlay.* /\(apex\|bionic\|system\|vendor\)/[^ ]" |
-      grep -v "[%] /\(data_mirror\|apex\|bionic\|system\|vendor\)/[^ ][^ ]*$"
+  grep -vE \
+      -e "^overlay.* /(apex|bionic|system|vendor)/[^ ]" \
+      -e "^[^ ]+ /apex/[^ ]" \
+      -e "[%] /(data_mirror|apex|bionic|system|vendor)/[^ ]+$"
 }
 
 [ "USAGE: surgically_wipe_overlayfs
@@ -1077,21 +1079,19 @@ is_overlayfs_mounted &&
   die "overlay takeover unexpected at this phase"
 
 overlayfs_needed=true
-D=`adb_sh cat /proc/mounts </dev/null |
-   skip_administrative_mounts data`
-if echo "${D}" | grep /dev/root >/dev/null; then
-  D=`echo / /
-     echo "${D}" | grep -v /dev/root`
-fi
-D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
+D=$(adb_sh grep " ro," /proc/mounts </dev/null |
+    skip_administrative_mounts data |
+    skip_unrelated_mounts |
+    awk '{ print $1 }' |
+    sed 's|/dev/root|/|' |
+    sort -u)
 no_dedupe=true
 for d in ${D}; do
   adb_sh tune2fs -l $d </dev/null 2>&1 |
     grep "Filesystem features:.*shared_blocks" >/dev/null &&
   no_dedupe=false
 done
-D=`adb_sh df -k ${D} </dev/null |
-   sed 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@'`
+D=$(adb_sh df -k ${D} </dev/null)
 echo "${D}" >&2
 if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
