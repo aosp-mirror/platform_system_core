@@ -231,17 +231,6 @@ adb_cat() {
     return ${ret}
 }
 
-[ "USAGE: adb_ls <dirfile> >stdout
-
-Returns: filename or directoru content to stdout with carriage returns skipped,
-         true if the ls had no errors" ]
-adb_ls() {
-    local OUTPUT="`adb_sh ls ${1} </dev/null 2>/dev/null`"
-    local ret=${?}
-    echo "${OUTPUT}" | tr -d '\r'
-    return ${ret}
-}
-
 [ "USAGE: adb_test <expression>
 
 Returns: exit status of the test expression" ]
@@ -648,9 +637,6 @@ die() {
     shift 2
   fi >&2
   LOG FAILED "${@}"
-  cleanup
-  restore
-  test_duration
   exit 1
 }
 
@@ -885,9 +871,31 @@ if ! ${color}; then
   NORMAL=""
 fi
 
+exit_handler() {
+  cleanup || true
+  local err=0
+  if ! restore; then
+    LOG ERROR "restore failed"
+    err=1
+  fi >&2
+  test_duration || true
+  if [ "${err}" != 0 ]; then
+    exit "${err}"
+  fi
+}
+trap 'exit_handler' EXIT
+
 if ${print_time}; then
   LOG INFO "start $(date)"
 fi
+
+if [ -z "${ANDROID_SERIAL}" ]; then
+  inAdb || die "no device or more than one device in adb mode"
+  D=$(adb devices | awk '$2 == "device" { print $1; exit }')
+  [ -n "${D}" ] || die "cannot get device serial"
+  ANDROID_SERIAL="${D}"
+fi
+export ANDROID_SERIAL
 
 inFastboot && die "device in fastboot mode"
 inRecovery && die "device in recovery mode"
@@ -913,9 +921,6 @@ fi
 
 # Collect characteristics of the device and report.
 
-D=`get_property ro.serialno`
-[ -n "${D}" ] || D=`get_property ro.boot.serialno`
-[ -z "${D}" -o -n "${ANDROID_SERIAL}" ] || ANDROID_SERIAL=${D}
 USB_SERIAL=
 if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
   USB_SERIAL="`find /sys/devices -name serial | grep usb || true`"
@@ -929,8 +934,8 @@ if [ -n "${USB_SERIAL}" ]; then
   USB_ADDRESS=${USB_SERIAL%/serial}
   USB_ADDRESS=usb${USB_ADDRESS##*/}
 fi
-[ -z "${ANDROID_SERIAL}${USB_ADDRESS}" ] ||
-  USB_DEVICE=`usb_devnum`
+USB_DEVICE=$(usb_devnum)
+[ -z "${ANDROID_SERIAL}${USB_ADDRESS}${USB_DEVICE}" ] ||
   LOG INFO "${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE}"
 BUILD_DESCRIPTION=`get_property ro.build.description`
 [ -z "${BUILD_DESCRIPTION}" ] ||
@@ -1042,7 +1047,7 @@ restore() {
 
 # If reboot too soon after fresh flash, could trip device update failure logic
 if ${screen_wait}; then
-  LOG WARNING "waiting for screen to come up. Consider --no-wait-screen option"
+  LOG INFO "waiting for screen to come up. Consider --no-wait-screen option"
 fi
 if ! wait_for_screen && ${screen_wait}; then
   screen_wait=false
@@ -1156,11 +1161,7 @@ adb_unroot
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 adb_root
 
-D=`adb remount 2>&1`
-ret=${?}
-echo "${D}" >&2
-[ ${ret} != 0 ] ||
-  [ X"${D}" = X"${D##*remount failed}" ] ||
+adb remount >&2 ||
   die -t "${T}" "adb remount failed"
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
@@ -1324,10 +1325,8 @@ if ${enforcing}; then
   adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 fi
 # If overlayfs has a nested security problem, this will fail.
-B="`adb_ls /system/`" ||
-  die "adb ls /system"
-[ X"${B}" != X"${B#*priv-app}" ] ||
-  die "adb ls /system/priv-app"
+adb_sh ls /system >/dev/null || die "ls /system"
+adb_test -d /system/priv-app || die "[ -d /system/priv-app ]"
 B="`adb_cat /system/priv-app/hello`"
 check_eq "${A}" "${B}" /system/priv-app after reboot
 # Only root can read vendor if sepolicy permissions are as expected.
@@ -1448,22 +1447,19 @@ else
   fi
   B="`adb_cat /system/hello`"
   check_eq "${A}" "${B}" system after flash vendor
-  B="`adb_ls /system/`" ||
-    die "adb ls /system"
-  [ X"${B}" != X"${B#*priv-app}" ] ||
-    die "adb ls /system/priv-app"
+  adb_sh ls /system >/dev/null || die "ls /system"
+  adb_test -d /system/priv-app || die "[ -d /system/priv-app ]"
   B="`adb_cat /system/priv-app/hello`"
   check_eq "${A}" "${B}" system/priv-app after flash vendor
   adb_root ||
     die "adb root"
-  B="`adb_cat /vendor/hello`"
   if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
-    check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
-             vendor content after flash vendor
+    adb_test -e /vendor/hello &&
+      die "vendor content after flash vendor"
   else
     LOG WARNING "user fastboot missing required to invalidate, ignoring a failure"
-    check_eq "cat: /vendor/hello: No such file or directory" "${B}" \
-             --warning vendor content after flash vendor
+    adb_test -e /vendor/hello &&
+      LOG WARNING "vendor content after flash vendor"
   fi
 
   check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
@@ -1495,12 +1491,12 @@ echo "${H}" >&2
   adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
   ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
   die -t ${T} "cleanup hello"
-B="`adb_cat /system/hello`"
-check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
-B="`adb_cat /system/priv-app/hello`"
-check_eq "cat: /system/priv-app/hello: No such file or directory" "${B}" after rm
-B="`adb_cat /vendor/hello`"
-check_eq "cat: /vendor/hello: No such file or directory" "${B}" after rm
+adb_test -e /system/hello &&
+  die "/system/hello lingers after rm"
+adb_test -e /system/priv-app/hello &&
+  die "/system/priv-app/hello lingers after rm"
+adb_test -e /vendor/hello &&
+  die "/vendor/hello lingers after rm"
 for i in ${MOUNTS}; do
   adb_sh rm ${i}/hello </dev/null 2>/dev/null || true
 done
@@ -1554,12 +1550,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
     [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ] &&
     LOG OK "${scratch_partition} recreated" ||
     die -t ${T} "setup for overlayfs"
-  D=`adb remount 2>&1`
-  err=${?}
-  echo "${D}" >&2
-  [ ${err} != 0 ] ||
-    [ X"${D}" = X"${D##*remount failed}" ] ||
-    ( echo "${D}" && false ) >&2 ||
+  adb remount >&2 ||
     die -t ${T} "remount failed"
 fi
 
@@ -1627,13 +1618,5 @@ adb_sh grep " \(/system\|/\) .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/system is not read-only"
 LOG OK "remount command works from scratch"
 
-if ! restore; then
-  restore() {
-    true
-  }
-  die "failed to restore verity after remount from scratch test"
-fi
 
 LOG PASSED "adb remount test"
-
-test_duration
