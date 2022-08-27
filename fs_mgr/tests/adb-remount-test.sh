@@ -241,15 +241,15 @@ format_duration() {
   if [ X"${duration}" != X"${duration%s}" ]; then
     duration=${duration%s}
   elif [ X"${duration}" != X"${duration%m}" ]; then
-    duration=`expr ${duration%m} \* 60`
+    duration=$(( ${duration%m} * 60 ))
   elif [ X"${duration}" != X"${duration%h}" ]; then
-    duration=`expr ${duration%h} \* 3600`
+    duration=$(( ${duration%h} * 3600 ))
   elif [ X"${duration}" != X"${duration%d}" ]; then
-    duration=`expr ${duration%d} \* 86400`
+    duration=$(( ${duration%d} * 86400 ))
   fi
-  local seconds=`expr ${duration} % 60`
-  local minutes=`expr \( ${duration} / 60 \) % 60`
-  local hours=`expr ${duration} / 3600`
+  local seconds=$(( ${duration} % 60 ))
+  local minutes=$(( ( ${duration} / 60 ) % 60 ))
+  local hours=$(( ${duration} / 3600 ))
   if [ 0 -eq ${minutes} -a 0 -eq ${hours} ]; then
     if [ 1 -eq ${duration} ]; then
       echo 1 second
@@ -265,10 +265,10 @@ format_duration() {
     return
   fi
   if [ 0 -eq ${hours} ]; then
-    echo ${minutes}:`expr ${seconds} / 10``expr ${seconds} % 10`
+    echo ${minutes}:$(( ${seconds} / 10 ))$(( ${seconds} % 10 ))
     return
   fi
-  echo ${hours}:`expr ${minutes} / 10``expr ${minutes} % 10`:`expr ${seconds} / 10``expr ${seconds} % 10`
+  echo ${hours}:$(( ${minutes} / 10 ))$(( ${minutes} % 10 )):$(( ${seconds} / 10 ))$(( ${seconds} % 10))
 }
 
 [ "USAGE: USB_DEVICE=\`usb_devnum [--next]\`
@@ -282,7 +282,7 @@ usb_devnum() {
     if [ -n "${usb_device}" ]; then
       USB_DEVICE=dev${usb_device}
     elif [ -n "${USB_DEVICE}" -a "${1}" ]; then
-      USB_DEVICE=dev`expr ${USB_DEVICE#dev} + 1`
+      USB_DEVICE=dev$(( ${USB_DEVICE#dev} + 1 ))
     fi
     echo "${USB_DEVICE}"
   fi
@@ -314,7 +314,7 @@ adb_wait() {
     fi
   fi
   local end=`date +%s`
-  local diff_time=`expr ${end} - ${start}`
+  local diff_time=$(( ${end} - ${start} ))
   local _print_time=${print_time}
   if [ ${diff_time} -lt 15 ]; then
     _print_time=false
@@ -494,7 +494,7 @@ wait_for_screen() {
         break
       fi
     fi
-    counter=`expr ${counter} + 1`
+    counter=$(( ${counter} + 1 ))
     if [ ${counter} -gt ${timeout} ]; then
       ${exit_function}
       echo "ERROR: wait_for_screen() timed out (`format_duration ${timeout}`)" >&2
@@ -596,7 +596,7 @@ test_duration() {
     echo "${BLUE}[     INFO ]${NORMAL} end `date`"
     [ -n "${start_time}" ] || return
     end_time=`date +%s`
-    local diff_time=`expr ${end_time} - ${start_time}`
+    local diff_time=$(( ${end_time} - ${start_time} ))
     echo "${BLUE}[     INFO ]${NORMAL} duration `format_duration ${diff_time}`"
   fi >&2
 }
@@ -874,9 +874,6 @@ if ! ${color}; then
   NORMAL=""
 fi
 
-# Set an ERR trap handler to report any unhandled error
-trap 'die "line ${LINENO}: unhandled error"' ERR
-
 if ${print_time}; then
   echo "${BLUE}[     INFO ]${NORMAL}" start `date` >&2
 fi
@@ -964,7 +961,7 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
         ;;
     esac
     size=`adb_su cat /sys/block/${device}/size 2>/dev/null </dev/null` &&
-      size=`expr ${size} / 2` &&
+      size=$(( ${size} / 2 )) &&
       echo "${BLUE}[     INFO ]${NORMAL} partition ${name} device ${device} size ${size}K" >&2
   done
 
@@ -1412,7 +1409,7 @@ else
     die "fastboot flash vendor"
   fastboot_getvar is-userspace yes &&
     is_userspace_fastboot=true
-  if [ -n "${scratch_paritition}" ]; then
+  if [ -n "${scratch_partition}" ]; then
     fastboot_getvar partition-type:${scratch_partition} raw ||
       ( fastboot reboot && false) ||
       die "fastboot can not see ${scratch_partition} parameters"
