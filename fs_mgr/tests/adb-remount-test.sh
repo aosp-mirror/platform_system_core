@@ -298,10 +298,10 @@ adb_wait() {
   if [ -n "${1}" -a -n "`which timeout`" ]; then
     USB_DEVICE=`usb_devnum --next`
     duration=`format_duration ${1}`
-    echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}"
+    echo -n ". . . waiting ${duration}" ${ANDROID_SERIAL} ${USB_ADDRESS} ${USB_DEVICE} "${CR}" >&2
     timeout --preserve-status --signal=KILL ${1} adb wait-for-device 2>/dev/null
     ret=${?}
-    echo -n "                                                                             ${CR}"
+    echo -n "                                                                             ${CR}" >&2
   else
     adb wait-for-device
     ret=${?}
@@ -1094,8 +1094,9 @@ fi
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
   D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` &&
-  echo "${H}" &&
-  echo "${D}" &&
+  ( echo "${H}" &&
+    echo "${D}"
+  ) >&2 &&
   die "overlay takeover unexpected at this phase"
 echo "${GREEN}[       OK ]${NORMAL} no overlay present before setup" >&2
 overlayfs_needed=true
@@ -1114,7 +1115,7 @@ for d in ${D}; do
 done
 D=`adb_sh df -k ${D} </dev/null |
    sed 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@'`
-echo "${D}"
+echo "${D}" >&2
 if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
   # if device does not need overlays, then adb enable-verity will brick device
@@ -1136,7 +1137,7 @@ L=
 T=$(adb_date)
 H=$(adb_su disable-verity -R 2>&1)
 err="${?}"
-echo "${H}"
+echo "${H}" >&2
 
 if [ "${err}" != 0 ]; then
   die -t "${T}" "disable-verity -R"
@@ -1173,15 +1174,15 @@ adb_root
 
 D=`adb remount 2>&1`
 ret=${?}
-echo "${D}"
+echo "${D}" >&2
 [ ${ret} != 0 ] ||
   [ X"${D}" = X"${D##*remount failed}" ] ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
+  ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
   die -t "${T}" "adb remount failed"
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
   D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` ||
-  ( [ -n "${L}" ] && echo "${L}" && false )
+  ( [ -n "${L}" ] && echo "${L}" && false ) >&2
 ret=${?}
 uses_dynamic_scratch=false
 scratch_partition=
@@ -1201,7 +1202,7 @@ if ${overlayfs_needed}; then
   M=`adb_sh cat /proc/mounts </dev/null |
      sed -n 's@\([^ ]*\) /mnt/scratch \([^ ]*\) .*@\2 on \1@p'`
   [ -n "${M}" ] &&
-    echo "${BLUE}[     INFO ]${NORMAL} scratch filesystem ${M}"
+    echo "${BLUE}[     INFO ]${NORMAL} scratch filesystem ${M}" >&2
   uses_dynamic_scratch=true
   if [ "${M}" != "${M##*/dev/block/by-name/}" ]; then
     uses_dynamic_scratch=false
@@ -1222,8 +1223,9 @@ if ${overlayfs_needed}; then
     fi
   done
 
-  echo "${H}" &&
-    echo "${D}" &&
+  ( echo "${H}" &&
+    echo "${D}"
+  ) >&2 &&
     echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
     die  "overlay takeover after remount"
   !(adb_sh grep "^overlay " /proc/mounts </dev/null |
@@ -1258,7 +1260,7 @@ if ${overlayfs_needed}; then
     D=`adb_sh df -k ${D} </dev/null |
        sed -e 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@' \
            -e 's/^Filesystem      /Filesystem (rw) /'`
-  [ -z "${D}" ] || echo "${D}"
+  [ -z "${D}" ] || echo "${D}" >&2
   ${bad_rw} && die "remount overlayfs missed a spot (rw)"
 else
   if [ ${ret} = 0 ]; then
@@ -1320,7 +1322,7 @@ if ${overlayfs_needed}; then
   D=`adb_su df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
     D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
-    ( echo "${L}" && false ) ||
+    ( echo "${L}" && false ) >&2 ||
     die -d "overlay takeover failed after reboot"
 
   adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
@@ -1382,20 +1384,20 @@ is_bootloader_fastboot=false
 is_userspace_fastboot=false
 
 if ! ${is_bootloader_fastboot}; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} does not support fastboot, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} does not support fastboot, skipping" >&2
 elif [ -z "${ANDROID_PRODUCT_OUT}" ]; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} build tree not setup, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} build tree not setup, skipping" >&2
 elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image missing, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image missing, skipping" >&2
 elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} wrong vendor image, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} wrong vendor image, skipping" >&2
 elif [ -z "${ANDROID_HOST_OUT}" ]; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} please run lunch, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} please run lunch, skipping" >&2
 elif ! (
           adb_cat /vendor/build.prop |
           cmp -s ${ANDROID_PRODUCT_OUT}/vendor/build.prop
        ) >/dev/null 2>/dev/null; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping"
+  echo "${YELLOW}[  WARNING ]${NORMAL} vendor image signature mismatch, skipping" >&2
 else
   wait_for_screen
   avc_check
@@ -1441,7 +1443,7 @@ else
   fi
   fastboot reboot ||
     die "can not reboot out of fastboot"
-  echo "${YELLOW}[  WARNING ]${NORMAL} adb after fastboot"
+  echo "${YELLOW}[  WARNING ]${NORMAL} adb after fastboot" >&2
   adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
     die "did not reboot after formatting ${scratch_partition} `usb_status`"
@@ -1450,8 +1452,9 @@ else
       D=`adb_sh df -k </dev/null` &&
       H=`echo "${D}" | head -1` &&
       D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` &&
-      echo "${H}" &&
-      echo "${D}" &&
+      ( echo "${H}" &&
+        echo "${D}"
+      ) >&2 &&
       echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
       die  "overlay /system takeover after flash vendor"
     echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
@@ -1495,7 +1498,7 @@ err=${?}
 L=
 D="${H%?Now reboot your device for settings to take effect*}"
 if [ X"${H}" != X"${D}" ]; then
-  echo "${YELLOW}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)"
+  echo "${YELLOW}[  WARNING ]${NORMAL} adb remount requires a reboot after partial flash (legacy avb)" >&2
   L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
   adb_reboot &&
     adb_wait ${ADB_WAIT} &&
@@ -1505,11 +1508,11 @@ if [ X"${H}" != X"${D}" ]; then
   H=`adb remount 2>&1`
   err=${?}
 fi
-echo "${H}"
+echo "${H}" >&2
 [ ${err} = 0 ] &&
   ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
   adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) ||
+  ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
   die -t ${T} "cleanup hello"
 B="`adb_cat /system/hello`"
 check_eq "cat: /system/hello: No such file or directory" "${B}" after rm
@@ -1553,7 +1556,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   err=${?}
   if [ X"${D}" != "${D%?Now reboot your device for settings to take effect*}" ]
   then
-    echo "${YELLOW}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash"
+    echo "${YELLOW}[  WARNING ]${NORMAL} adb disable-verity requires a reboot after partial flash" >&2
     adb_reboot &&
       adb_wait ${ADB_WAIT} &&
       adb_root ||
@@ -1564,7 +1567,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
     err=${?}
   fi
 
-  echo "${D}"
+  echo "${D}" >&2
   [ ${err} = 0 ] &&
     [ X"${D}" = X"${D##*setup failed}" ] &&
     [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ] &&
@@ -1572,10 +1575,10 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
     die -t ${T} "setup for overlayfs"
   D=`adb remount 2>&1`
   err=${?}
-  echo "${D}"
+  echo "${D}" >&2
   [ ${err} != 0 ] ||
     [ X"${D}" = X"${D##*remount failed}" ] ||
-    ( echo "${D}" && false ) ||
+    ( echo "${D}" && false ) >&2 ||
     die -t ${T} "remount failed"
 fi
 
@@ -1641,7 +1644,7 @@ adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
   die "/vendor is not read-only"
 adb_su remount vendor </dev/null ||
   die "remount command"
-adb_su df -k </dev/null | skip_unrelated_mounts
+adb_su df -k </dev/null | skip_unrelated_mounts >&2
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
   die "/vendor is not read-write"
 adb_sh grep " \(/system\|/\) .* rw," /proc/mounts >/dev/null </dev/null &&
