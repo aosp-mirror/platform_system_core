@@ -663,114 +663,61 @@ die() {
   exit 1
 }
 
-[ "USAGE: EXPECT_EQ <lval> <rval> [--warning [message]]
-
-Returns true if (regex) lval matches rval" ]
-EXPECT_EQ() {
-  local lval="${1}"
-  local rval="${2}"
-  shift 2
-  local error=1
-  local prefix="${RED}[    ERROR ]${NORMAL}"
-  if [ X"${1}" = X"--warning" ]; then
-      prefix="${RED}[  WARNING ]${NORMAL}"
-      error=0
-      shift 1
-  fi
-  if ! ( echo X"${rval}" | grep '^X'"${lval}"'$' >/dev/null 2>/dev/null ); then
-    if [ `echo ${lval}${rval}${*} | wc -c` -gt 50 -o "${rval}" != "${rval%
-*}" ]; then
-      echo "${prefix} expected \"${lval}\""
-      echo "${prefix} got \"${rval}\"" |
-        sed ": again
-             N
-             s/\(\n\)\([^ ]\)/\1${INDENT}\2/
-             t again"
-      if [ -n "${*}" ] ; then
-        echo "${prefix} ${*}"
-      fi
-    else
-      echo "${prefix} expected \"${lval}\" got \"${rval}\" ${*}"
-    fi >&2
-    return ${error}
-  fi
-  if [ -n "${*}" ] ; then
-    prefix="${GREEN}[     INFO ]${NORMAL}"
-    if [ X"${lval}" != X"${rval}" ]; then  # we were supplied a regex?
-      if [ `echo ${lval}${rval}${*} | wc -c` -gt 60 -o "${rval}" != "${rval% *}" ]; then
-        echo "${prefix} ok \"${lval}\""
-        echo "       = \"${rval}\"" |
-          sed ": again
-               N
-               s/\(\n\)\([^ ]\)/\1${INDENT}\2/
-               t again"
-        if [ -n "${*}" ] ; then
-          echo "${prefix} ${*}"
-        fi
-      else
-        echo "${prefix} ok \"${lval}\" = \"${rval}\" ${*}"
-      fi
-    else
-      echo "${prefix} ok \"${lval}\" ${*}"
-    fi >&2
-  fi
-  return 0
-}
-
-[ "USAGE: EXPECT_NE <lval> <rval> [--warning [message]]
-
-Returns true if lval matches rval" ]
-EXPECT_NE() {
-  local lval="${1}"
-  local rval="${2}"
-  shift 2
-  local error=1
-  local prefix="${RED}[    ERROR ]${NORMAL}"
-  if [ X"${1}" = X"--warning" ]; then
-      prefix="${RED}[  WARNING ]${NORMAL}"
-      error=0
-      shift 1
-  fi
-  if [ X"${rval}" = X"${lval}" ]; then
-    echo "${prefix} did not expect \"${lval}\" ${*}" >&2
-    return ${error}
-  fi
-  if [ -n "${*}" ] ; then
-    echo "${prefix} ok \"${lval}\" not \"${rval}\" ${*}" >&2
-  fi
-  return 0
-}
-
 [ "USAGE: check_eq <lval> <rval> [--warning [message]]
 
-Exits if (regex) lval mismatches rval" ]
+Exits if (regex) lval mismatches rval.
+
+Returns: true if lval matches rval" ]
 check_eq() {
   local lval="${1}"
   local rval="${2}"
   shift 2
+  if [[ "${rval}" =~ ^${lval}$ ]]; then
+    return 0
+  fi
+
+  local error=true
+  local logt=ERROR
   if [ X"${1}" = X"--warning" ]; then
-      EXPECT_EQ "${lval}" "${rval}" ${*}
-      return
+    shift 1
+    error=false
+    logt=WARNING
   fi
-  if ! EXPECT_EQ "${lval}" "${rval}"; then
-    die "${@}"
+  if [ $(( ${#lval} + ${#rval} )) -gt 40 ]; then
+    LOG "${logt}" "expected \"${lval}\"
+${INDENT}got      \"${rval}\""
+  else
+    LOG "${logt}" "expected \"${lval}\" got \"${rval}\""
   fi
+  ${error} && die "${*}"
+  [ -n "${*}" ] && LOG "${logt}" "${*}"
+  return 1
 }
 
 [ "USAGE: check_ne <lval> <rval> [--warning [message]]
 
-Exits if lval matches rval" ]
+Exits if (regex) lval matches rval.
+
+Returns: true if lval mismatches rval" ]
 check_ne() {
   local lval="${1}"
   local rval="${2}"
   shift 2
+  if ! [[ "${rval}" =~ ^${lval}$ ]]; then
+    return 0
+  fi
+
+  local error=true
+  local logt=ERROR
   if [ X"${1}" = X"--warning" ]; then
-      EXPECT_NE "${lval}" "${rval}" ${*}
-      return
+      shift 1
+      error=false
+      logt=WARNING
   fi
-  if ! EXPECT_NE "${lval}" "${rval}"; then
-    die "${@}"
-  fi
+  LOG "${logt}" "unexpected \"${rval}\""
+  ${error} && die "${*}"
+  [ -n "${*}" ] && LOG "${logt}" "${*}"
+  return 1
 }
 
 [ "USAGE: join_with <delimiter> <strings>
