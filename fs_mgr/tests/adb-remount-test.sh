@@ -50,12 +50,15 @@ TAB="`echo | tr '\n' '\t'`"
 ESCAPE="`echo | tr '\n' '\033'`"
 # A _real_ embedded carriage return character
 CR="`echo | tr '\n' '\r'`"
-GREEN="${ESCAPE}[32m"
-RED="${ESCAPE}[31m"
-YELLOW="${ESCAPE}[33m"
-BLUE="${ESCAPE}[34m"
-NORMAL="${ESCAPE}[0m"
-print_time=false
+RED=
+GREEN=
+YELLOW=
+BLUE=
+NORMAL=
+color=false
+# Assume support color if stdout is terminal.
+[ -t 1 ] && color=true
+print_time=true
 start_time=`date +%s`
 ACTIVE_SLOT=
 OVERLAYFS_BACKING="cache mnt/scratch"
@@ -70,6 +73,9 @@ screen_wait=true
 
 [ "USAGE: LOG [RUN|OK|PASSED|WARNING|ERROR|FAILED|INFO] [message]..." ]
 LOG() {
+  if ${print_time}; then
+    echo -n "$(date '+%m-%d %T') "
+  fi >&2
   case "${1}" in
     R*)
       shift
@@ -793,7 +799,7 @@ GETOPTS="--alternative --unquoted
          --longoptions wait-adb:,wait-fastboot:
          --longoptions wait-screen,wait-display
          --longoptions no-wait-screen,no-wait-display
-         --longoptions gtest_print_time,print-time
+         --longoptions gtest_print_time,print-time,no-print-time
          --"
 if [ "Darwin" = "${HOSTOS}" ]; then
   GETOPTS=
@@ -808,12 +814,11 @@ if [ "Darwin" = "${HOSTOS}" ]; then
                  s/--wait-adb/          /g
                  s/--wait-fastboot/               /g'`"
 fi
-OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:t" ${*}` ||
+OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:tT" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
   die "getopt failure"
 set -- ${OPTIONS}
 
-color=false
 while [ ${#} -gt 0 ]; do
   case ${1} in
     -h | --help | -\?)
@@ -839,6 +844,9 @@ while [ ${#} -gt 0 ]; do
     -t | --print-time | --gtest_print_time)
       print_time=true
       ;;
+    -T | --no-print-time)
+      print_time=false
+      ;;
     -a | --wait-adb)
       ADB_WAIT=${2}
       shift
@@ -861,12 +869,13 @@ while [ ${#} -gt 0 ]; do
   esac
   shift
 done
-if ! ${color}; then
-  GREEN=""
-  RED=""
-  YELLOW=""
-  BLUE=""
-  NORMAL=""
+
+if ${color}; then
+  RED="${ESCAPE}[31m"
+  GREEN="${ESCAPE}[32m"
+  YELLOW="${ESCAPE}[33m"
+  BLUE="${ESCAPE}[34m"
+  NORMAL="${ESCAPE}[0m"
 fi
 
 TMPDIR=
