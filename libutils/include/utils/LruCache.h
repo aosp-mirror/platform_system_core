@@ -84,13 +84,13 @@ private:
         const TKey& getKey() const final { return key; }
     };
 
-    struct HashForEntry : public std::unary_function<KeyedEntry*, hash_t> {
+    struct HashForEntry {
         size_t operator() (const KeyedEntry* entry) const {
             return hash_type(entry->getKey());
         };
     };
 
-    struct EqualityForHashedEntries : public std::unary_function<KeyedEntry*, hash_t> {
+    struct EqualityForHashedEntries {
         bool operator() (const KeyedEntry* lhs, const KeyedEntry* rhs) const {
             return lhs->getKey() == rhs->getKey();
         };
