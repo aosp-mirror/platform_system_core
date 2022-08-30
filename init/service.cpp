@@ -653,6 +653,11 @@ Result<void> Service::Start() {
                        << ") failed for service '" << name_ << "'";
     }
 
+    // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+    // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+    // NormalIoPriority profile has to be applied explicitly.
+    SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+
     if (use_memcg) {
         ConfigureMemcg();
     }

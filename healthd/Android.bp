@@ -342,20 +342,20 @@ phony {
     ],
 }
 
-// /vendor/etc/res/images/charger/battery_fail.png
+// /vendor/etc/res/images/default/charger/battery_fail.png
 prebuilt_etc {
     name: "system_core_charger_res_images_battery_fail.png_default_vendor",
     src: "images/battery_fail.png",
-    relative_install_path: "res/images/charger/default",
+    relative_install_path: "res/images/default/charger",
     vendor: true,
     filename: "battery_fail.png",
 }
 
-// /vendor/etc/res/images/charger/battery_scale.png
+// /vendor/etc/res/images/default/charger/battery_scale.png
 prebuilt_etc {
     name: "system_core_charger_res_images_battery_scale.png_default_vendor",
     src: "images/battery_scale.png",
-    relative_install_path: "res/images/charger/default",
+    relative_install_path: "res/images/default/charger",
     vendor: true,
     filename: "battery_scale.png",
 }
