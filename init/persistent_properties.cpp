@@ -155,19 +155,33 @@ Result<std::string> ReadPersistentPropertyFile() {
     return *file_contents;
 }
 
+Result<PersistentProperties> ParsePersistentPropertyFile(const std::string& file_contents) {
+    PersistentProperties persistent_properties;
+    if (!persistent_properties.ParseFromString(file_contents)) {
+        return Error() << "Unable to parse persistent property file: Could not parse protobuf";
+    }
+    for (auto& prop : persistent_properties.properties()) {
+        if (!StartsWith(prop.name(), "persist.")) {
+            return Error() << "Unable to load persistent property file: property '" << prop.name()
+                           << "' doesn't start with 'persist.'";
+        }
+    }
+    return persistent_properties;
+}
+
 }  // namespace
 
 Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
     if (!file_contents.ok()) return file_contents.error();
 
-    PersistentProperties persistent_properties;
-    if (persistent_properties.ParseFromString(*file_contents)) return persistent_properties;
-
-    // If the file cannot be parsed in either format, then we don't have any recovery
-    // mechanisms, so we delete it to allow for future writes to take place successfully.
-    unlink(persistent_property_filename.c_str());
-    return Error() << "Unable to parse persistent property file: Could not parse protobuf";
+    auto persistent_properties = ParsePersistentPropertyFile(*file_contents);
+    if (!persistent_properties.ok()) {
+        // If the file cannot be parsed in either format, then we don't have any recovery
+        // mechanisms, so we delete it to allow for future writes to take place successfully.
+        unlink(persistent_property_filename.c_str());
+    }
+    return persistent_properties;
 }
 
 Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_properties) {
