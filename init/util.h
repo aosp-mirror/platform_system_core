@@ -109,5 +109,11 @@ bool IsMicrodroid();
 bool Has32BitAbi();
 
 std::string GetApexNameFromFileName(const std::string& path);
+
+// Compare all files */path.#rc and */path.rc with the same path prefix.
+// Keep the one with the highest # that doesn't exceed the system's SDK.
+// (.rc == .0rc for ranking purposes)
+std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
+                                                  int active_sdk);
 }  // namespace init
 }  // namespace android
