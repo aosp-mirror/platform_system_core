@@ -53,6 +53,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "apex_init_util.cpp",
     "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",
@@ -217,6 +218,7 @@ cc_library_static {
         "selinux_policy_version",
     ],
     srcs: init_common_sources + init_device_sources,
+    export_include_dirs: ["."],
     generated_sources: [
         "apex-info-list",
     ],
@@ -246,6 +248,10 @@ cc_library_static {
             ],
         },
     },
+    visibility: [
+        "//system/apex/apexd",
+        "//frameworks/native/cmds/installd",
+    ],
 }
 
 phony {
