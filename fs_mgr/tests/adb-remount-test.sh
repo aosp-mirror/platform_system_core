@@ -1341,6 +1341,7 @@ LOG OK "adb remount RW"
 
 LOG RUN "push content to ${MOUNTS}"
 
+adb_root || die "adb root"
 A="Hello World! $(date)"
 for i in ${MOUNTS}; do
   echo "${A}" | adb_sh cat - ">${i}/hello"
@@ -1356,18 +1357,24 @@ SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
 VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
 check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
 
-# Download libc.so, append some garbage, push back, and check if the file
-# is updated.
-adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so" >/dev/null ||
-  die "pull libc.so from device"
-garbage="D105225BBFCB1EB8AB8EBDB7094646F0"
-echo "${garbage}" >>"${TMPDIR}/libc.so"
-adb push "${TMPDIR}/libc.so" /system/lib/bootstrap/libc.so >/dev/null ||
-  die "push libc.so to device"
-adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
-  die "pull libc.so from device"
-diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null ||
-  die "libc.so differ"
+# Edit build.prop and check if properties are updated.
+system_build_prop_original="${TMPDIR}/system_build.prop.original"
+system_build_prop_modified="${TMPDIR}/system_build.prop.modified"
+system_build_prop_fromdevice="${TMPDIR}/system_build.prop.fromdevice"
+adb pull /system/build.prop "${system_build_prop_original}" >/dev/null ||
+  die "adb pull /system/build.prop"
+# Prepend with extra newline in case the original file doesn't end with a newline.
+cat "${system_build_prop_original}" - <<EOF >"${system_build_prop_modified}"
+
+# Properties added by adb remount test
+test.adb.remount.system.build.prop=true
+EOF
+adb push "${system_build_prop_modified}" /system/build.prop >/dev/null ||
+  die "adb push /system/build.prop"
+adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
+  die "adb pull /system/build.prop"
+diff "${system_build_prop_modified}" "${system_build_prop_fromdevice}" >/dev/null ||
+  die "/system/build.prop differs from pushed content"
 
 LOG RUN "reboot to confirm content persistent"
 
@@ -1409,9 +1416,9 @@ adb_sh ls /system >/dev/null || die "ls /system"
 adb_test -d /system/priv-app || die "[ -d /system/priv-app ]"
 B="`adb_cat /system/priv-app/hello`"
 check_eq "${A}" "${B}" /system/priv-app after reboot
+
 # Only root can read vendor if sepolicy permissions are as expected.
-adb_root ||
-  die "adb root"
+adb_root || die "adb root"
 for i in ${MOUNTS}; do
   B="`adb_cat ${i}/hello`"
   check_eq "${A}" "${B}" ${i#/} after reboot
@@ -1424,12 +1431,13 @@ check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" ve
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 
-# Check if the updated libc.so is persistent after reboot.
-adb_root &&
-  adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
-  die "pull libc.so from device"
-diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null || die "libc.so differ"
-LOG OK "/system/lib/bootstrap/libc.so content remains after reboot"
+# Check if the updated build.prop is persistent after reboot.
+check_eq "true" "$(get_property 'test.adb.remount.system.build.prop')" "load modified build.prop"
+adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
+  die "adb pull /system/build.prop"
+diff "${system_build_prop_modified}" "${system_build_prop_fromdevice}" >/dev/null ||
+  die "/system/build.prop differs from pushed content"
+LOG OK "/system/build.prop content remains after reboot"
 
 ################################################################################
 LOG RUN "flash vendor, and confirm vendor override disappears"
