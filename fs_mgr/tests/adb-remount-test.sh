@@ -197,7 +197,7 @@ adb_logcat() {
 
 Returns: worrisome avc violations" ]
 avc_check() {
-  if ! ${overlayfs_supported:-false}; then
+  if ! ${overlayfs_needed:-false}; then
     return
   fi
   local L=`adb_logcat -b all -v brief -d \
@@ -917,6 +917,9 @@ fi
 inAdb || die "specified device not in adb mode"
 [ "1" = "$(get_property ro.debuggable)" ] || die "device not a debug build"
 [ "orange" = "$(get_property ro.boot.verifiedbootstate)" ] || die "device not bootloader unlocked"
+
+################################################################################
+# Collect characteristics of the device and report.
 can_restore_verity=true
 if [ "2" != "$(get_property partition.system.verified)" ]; then
   LOG WARNING "device might not support verity"
@@ -927,10 +930,6 @@ if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
   LOG WARNING "device does not have sepolicy in enforcing mode"
   enforcing=false
 fi
-
-# Do something.
-
-# Collect characteristics of the device and report.
 
 USB_SERIAL=
 if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
@@ -1007,37 +1006,8 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
       LOG INFO "partition ${name} device ${device} size ${size}K"
   done
 
-LOG RUN "Checking kernel support for overlayfs"
-
-overlayfs_supported=true
-adb_root || die "becoming root to mine kernel information"
-if ! adb_test -d /sys/module/overlay; then
-  if adb_sh grep -q "nodev${TAB}overlay" /proc/filesystems; then
-    LOG OK "overlay module present"
-  else
-    LOG WARNING "overlay module not present"
-    overlayfs_supported=false
-  fi
-fi >&2
-if ${overlayfs_supported}; then
-  if adb_test -f /sys/module/overlay/parameters/override_creds; then
-    LOG OK "overlay module supports override_creds"
-  else
-    case "$(adb_sh uname -r </dev/null)" in
-      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
-        LOG WARNING "overlay module does not support override_creds"
-        overlayfs_supported=false
-        ;;
-      *)
-        LOG OK "overlay module uses caller's creds"
-        ;;
-    esac
-  fi
-fi
-
 restore() {
   LOG INFO "restoring device"
-  ${overlayfs_supported} || return 0
   inFastboot &&
     fastboot reboot &&
     adb_wait "${ADB_WAIT}" ||
@@ -1115,8 +1085,6 @@ if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
   # if device does not need overlays, then adb enable-verity will brick device
   can_restore_verity=false
-elif ! ${overlayfs_supported}; then
-  die "need overlayfs, but do not have it"
 fi
 LOG OK "no overlay present before setup"
 
@@ -1141,6 +1109,31 @@ if ${overlayfs_needed}; then
   LOG OK "overlay takeover after adb disable-verity -R"
 fi
 LOG OK "adb disable-verity -R"
+
+################################################################################
+LOG RUN "Checking kernel has overlayfs required patches"
+
+adb_root || die "adb root"
+if adb_test -d /sys/module/overlay ||
+    adb_sh grep -q "nodev${TAB}overlay" /proc/filesystems; then
+  LOG OK "overlay module present"
+else
+  LOG INFO "overlay module not present"
+fi
+if is_overlayfs_mounted 2>/dev/null; then
+  if adb_test -f /sys/module/overlay/parameters/override_creds; then
+    LOG OK "overlay module supports override_creds"
+  else
+    case "$(adb_sh uname -r </dev/null)" in
+      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
+        die "overlay module does not support override_creds"
+        ;;
+      *)
+        LOG OK "overlay module uses caller's creds"
+        ;;
+    esac
+  fi
+fi
 
 ################################################################################
 # Precondition is a verity-disabled device with overlayfs already setup.
