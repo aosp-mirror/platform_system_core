@@ -969,18 +969,21 @@ FSTAB_FILE=$(adb_su ls -1 '/vendor/etc/fstab*' </dev/null |
              head -1)
 
 # KISS (assume system partition mount point is "/<partition name>")
-[ -n "${FSTAB_FILE}" ] &&
+if [ -n "${FSTAB_FILE}" ]; then
   PARTITIONS=$(adb_su grep -v "^[#${SPACE}${TAB}]" "${FSTAB_FILE}" |
                skip_administrative_mounts |
                awk '$1 ~ /^[^\/]+$/ && "/"$1 == $2 && $4 ~ /(^|,)ro(,|$)/ { print $1 }' |
                sort -u |
                tr '\n' ' ')
-PARTITIONS="${PARTITIONS:-system vendor}"
+else
+  PARTITIONS="system vendor"
+fi
+
 # KISS (we do not support sub-mounts for system partitions currently)
-MOUNTS="`for i in ${PARTITIONS}; do
-           echo /${i}
-         done |
-         tr '\n' ' '`"
+# Ensure /system and /vendor mountpoints are in mounts list
+MOUNTS=$(for i in system vendor ${PARTITIONS}; do
+           echo "/${i}"
+         done | sort -u | tr '\n' ' ')
 LOG INFO "System Partitions list: ${PARTITIONS}"
 
 # Report existing partition sizes
@@ -1337,22 +1340,17 @@ fi
 
 LOG OK "adb remount RW"
 
-# Check something.
-
+################################################################################
 LOG RUN "push content to ${MOUNTS}"
 
 adb_root || die "adb root"
 A="Hello World! $(date)"
-for i in ${MOUNTS}; do
+for i in ${MOUNTS} /system/priv-app; do
   echo "${A}" | adb_sh cat - ">${i}/hello"
   B="`adb_cat ${i}/hello`" ||
     die "${i#/} hello"
   check_eq "${A}" "${B}" ${i} before reboot
 done
-echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
-B="`adb_cat /system/priv-app/hello`" ||
-  die "system priv-app hello"
-check_eq "${A}" "${B}" /system/priv-app before reboot
 SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
 VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
 check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
@@ -1376,6 +1374,7 @@ adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
 diff "${system_build_prop_modified}" "${system_build_prop_fromdevice}" >/dev/null ||
   die "/system/build.prop differs from pushed content"
 
+################################################################################
 LOG RUN "reboot to confirm content persistent"
 
 fixup_from_recovery() {
@@ -1545,40 +1544,26 @@ fi >&2
 wait_for_screen
 
 ################################################################################
-LOG RUN "remove test content (cleanup)"
+LOG RUN "Clean up test content"
 
-T=`adb_date`
-H=`adb remount 2>&1`
-err=${?}
-L=
-D="${H%?Now reboot your device for settings to take effect*}"
-if [ X"${H}" != X"${D}" ]; then
-  LOG WARNING "adb remount requires a reboot after partial flash (legacy avb)"
-  L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
-  adb_reboot &&
-    adb_wait ${ADB_WAIT} &&
-    adb_root ||
-    die "failed to reboot"
-  T=`adb_date`
-  H=`adb remount 2>&1`
-  err=${?}
+adb_root || die "adb root"
+T=$(adb_date)
+D=$(adb remount 2>&1) ||
+  die -t "${T}" "adb remount"
+echo "${D}" >&2
+if [[ "${D}" =~ [Rr]eboot ]]; then
+  LOG OK "adb remount calls for a reboot after partial flash"
+  # but we don't really want to, since rebooting just recreates the already tore
+  # down vendor overlay.
 fi
-echo "${H}" >&2
-[ ${err} = 0 ] &&
-  ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
-  adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
-  die -t ${T} "cleanup hello"
-adb_test -e /system/hello &&
-  die "/system/hello lingers after rm"
-adb_test -e /system/priv-app/hello &&
-  die "/system/priv-app/hello lingers after rm"
-adb_test -e /vendor/hello &&
-  die "/vendor/hello lingers after rm"
-for i in ${MOUNTS}; do
-  adb_sh rm ${i}/hello </dev/null 2>/dev/null || true
+
+for i in ${MOUNTS} /system/priv-app; do
+  adb_sh rm "${i}/hello" 2>/dev/null || true
+  adb_test -e "${i}/hello" &&
+    die -t "${T}" "/${i}/hello lingers after rm"
 done
 
+################################################################################
 if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 
   LOG RUN "test fastboot flash to ${scratch_partition} recovery"
