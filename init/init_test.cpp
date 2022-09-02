@@ -535,20 +535,6 @@ TEST(init, LazilyLoadedActionsCanBeTriggeredByTheNextTrigger) {
     EXPECT_EQ(2, num_executed);
 }
 
-TEST(init, RespondToCtlApexMessages) {
-    if (getuid() != 0) {
-        GTEST_SKIP() << "Skipping test, must be run as root.";
-        return;
-    }
-
-    std::string apex_name = "com.android.apex.cts.shim";
-    SetProperty("ctl.apex_unload", apex_name);
-    EXPECT_TRUE(WaitForProperty("init.apex." + apex_name, "unloaded", 10s));
-
-    SetProperty("ctl.apex_load", apex_name);
-    EXPECT_TRUE(WaitForProperty("init.apex." + apex_name, "loaded", 10s));
-}
-
 TEST(init, RejectsCriticalAndOneshotService) {
     if (GetIntProperty("ro.product.first_api_level", 10000) < 30) {
         GTEST_SKIP() << "Test only valid for devices launching with R or later";
