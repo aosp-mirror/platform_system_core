@@ -490,7 +490,6 @@ static Result<void> DoUnloadApex(const std::string& apex_name) {
         return Error() << "Unable to stop all service from " << apex_name;
     }
     RemoveServiceAndActionFromApex(apex_name);
-    SetProperty("init.apex." + apex_name, "unloaded");
     return {};
 }
 
@@ -522,7 +521,6 @@ static Result<void> DoLoadApex(const std::string& apex_name) {
         return result.error();
     }
 
-    SetProperty("init.apex." + apex_name, "loaded");
     return {};
 }
 

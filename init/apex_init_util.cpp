@@ -81,16 +81,13 @@ static Result<void> ParseConfigs(const std::vector<std::string>& configs) {
 }
 
 Result<void> ParseApexConfigs(const std::string& apex_name) {
-    Result<std::vector<std::string>> configs = CollectApexConfigs(apex_name);
-    if (!configs.ok()) {
-        return configs.error();
-    }
+    auto configs = OR_RETURN(CollectApexConfigs(apex_name));
 
-    if (configs.value().empty()) {
+    if (configs.empty()) {
         return {};
     }
 
-    auto filtered_configs = FilterVersionedConfigs(configs.value(),
+    auto filtered_configs = FilterVersionedConfigs(configs,
                                     android::base::GetIntProperty("ro.build.version.sdk", INT_MAX));
     return ParseConfigs(filtered_configs);
 }
