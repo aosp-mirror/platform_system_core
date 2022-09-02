@@ -68,7 +68,7 @@ impl Metadata {
     }
 
     /// Calls AStatsManager_PullAtomMetadata_setAdditiveFields.
-    pub fn set_additive_fields(&mut self, additive_fields: &mut Vec<i32>) {
+    pub fn set_additive_fields(&mut self, additive_fields: &mut [i32]) {
         // Safety: Metadata::new ensures that self.metadata is a valid object.
         unsafe {
             AStatsManager_PullAtomMetadata_setAdditiveFields(

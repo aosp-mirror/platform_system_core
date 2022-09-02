@@ -18,9 +18,12 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <functional>
 #include <map>
 #include <mutex>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <android-base/unique_fd.h>
@@ -206,18 +209,19 @@ class TaskProfiles {
     // Should be used by all users
     static TaskProfiles& GetInstance();
 
-    TaskProfile* GetProfile(const std::string& name) const;
-    const IProfileAttribute* GetAttribute(const std::string& name) const;
+    TaskProfile* GetProfile(std::string_view name) const;
+    const IProfileAttribute* GetAttribute(std::string_view name) const;
     void DropResourceCaching(ProfileAction::ResourceCacheType cache_type) const;
-    bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles,
-                            bool use_fd_cache);
-    bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache);
+    template <typename T>
+    bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> profiles, bool use_fd_cache);
+    template <typename T>
+    bool SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache);
 
   private:
-    std::map<std::string, std::shared_ptr<TaskProfile>> profiles_;
-    std::map<std::string, std::unique_ptr<IProfileAttribute>> attributes_;
-
     TaskProfiles();
 
     bool Load(const CgroupMap& cg_map, const std::string& file_name);
+
+    std::map<std::string, std::shared_ptr<TaskProfile>, std::less<>> profiles_;
+    std::map<std::string, std::unique_ptr<IProfileAttribute>, std::less<>> attributes_;
 };

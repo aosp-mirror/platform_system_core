@@ -27,7 +27,7 @@ extern "C" {
 /*
  * Maximum number of arguments
  */
-#define ACVP_MAX_NUM_ARGUMENTS 8
+#define ACVP_MAX_NUM_ARGUMENTS 9
 
 /*
  * Maximum length of an algorithm name
@@ -45,7 +45,7 @@ extern "C" {
  * This must be at least as long as the longest reply from the ACVP service
  * (currently the reply from getConfig()).
  */
-#define ACVP_MIN_SHARED_MEMORY 16384
+#define ACVP_MIN_SHARED_MEMORY 32768
 
 /**
  * acvp_req - Request for the Trusty ACVP app

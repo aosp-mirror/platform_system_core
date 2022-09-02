@@ -21,9 +21,8 @@
 #include "gwp_asan/common.h"
 #include "gwp_asan/crash_handler.h"
 
-#include <unwindstack/Maps.h>
+#include <unwindstack/AndroidUnwinder.h>
 #include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
 #include <unwindstack/Unwinder.h>
 
 #include "tombstone.pb.h"
@@ -43,10 +42,13 @@ static bool retrieve_gwp_asan_state(unwindstack::Memory* process_memory, uintptr
 static const gwp_asan::AllocationMetadata* retrieve_gwp_asan_metadata(
     unwindstack::Memory* process_memory, const gwp_asan::AllocatorState& state,
     uintptr_t metadata_addr) {
-  if (state.MaxSimultaneousAllocations > 1024) {
+  // 1 million GWP-ASan slots would take 4.1GiB of space. Thankfully, copying
+  // the metadata for that amount of slots is only 532MiB, and this really will
+  // only be used with some ridiculous torture-tests.
+  if (state.MaxSimultaneousAllocations > 1000000) {
     ALOGE(
         "Error when retrieving GWP-ASan metadata, MSA from state (%zu) "
-        "exceeds maximum allowed (1024).",
+        "exceeds maximum allowed (1,000,000).",
         state.MaxSimultaneousAllocations);
     return nullptr;
   }
@@ -103,7 +105,8 @@ bool GwpAsanCrashData::CrashIsMine() const {
 
 constexpr size_t kMaxTraceLength = gwp_asan::AllocationMetadata::kMaxTraceLengthToCollect;
 
-void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const {
+void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone,
+                                      unwindstack::AndroidUnwinder* unwinder) const {
   if (!CrashIsMine()) {
     ALOGE("Internal Error: AddCauseProtos() on a non-GWP-ASan crash.");
     return;
@@ -137,7 +140,6 @@ void GwpAsanCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinde
 
   heap_object->set_address(__gwp_asan_get_allocation_address(responsible_allocation_));
   heap_object->set_size(__gwp_asan_get_allocation_size(responsible_allocation_));
-  unwinder->SetDisplayBuildID(true);
 
   std::unique_ptr<uintptr_t[]> frames(new uintptr_t[kMaxTraceLength]);
 

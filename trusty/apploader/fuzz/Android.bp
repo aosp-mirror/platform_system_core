@@ -25,7 +25,10 @@ cc_fuzz {
         "-DTRUSTY_APP_PORT=\"com.android.trusty.apploader\"",
         "-DTRUSTY_APP_UUID=\"081ba88f-f1ee-452e-b5e8-a7e9ef173a97\"",
         "-DTRUSTY_APP_FILENAME=\"apploader.syms.elf\"",
-    ]
+    ],
+    fuzz_config: {
+       cc: ["trong@google.com"],
+    },
 }
 
 // Fuzz app package sent to apploader.
@@ -37,4 +40,7 @@ cc_fuzz {
     shared_libs: [
         "libdmabufheap",
     ],
+    fuzz_config: {
+       cc: ["trong@google.com"],
+    },
 }

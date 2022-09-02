@@ -33,7 +33,10 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -48,19 +51,22 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <backtrace/Backtrace.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
+#include <logwrap/logwrap.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 #include <selinux/android.h>
+#include <unwindstack/AndroidUnwinder.h>
 
+#include "action.h"
+#include "action_manager.h"
 #include "action_parser.h"
-#include "builtins.h"
+#include "apex_init_util.h"
 #include "epoll.h"
 #include "first_stage_init.h"
 #include "first_stage_mount.h"
@@ -78,12 +84,17 @@
 #include "selabel.h"
 #include "selinux.h"
 #include "service.h"
+#include "service_list.h"
 #include "service_parser.h"
 #include "sigchld_handler.h"
 #include "snapuserd_transition.h"
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
+
+#ifndef RECOVERY
+#include "com_android_apex.h"
+#endif  // RECOVERY
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -253,12 +264,14 @@ static class ShutdownState {
 } shutdown_state;
 
 static void UnwindMainThreadStack() {
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, 1));
-    if (!backtrace->Unwind(0)) {
-        LOG(ERROR) << __FUNCTION__ << "sys.powerctl: Failed to unwind callstack.";
+    unwindstack::AndroidLocalUnwinder unwinder;
+    unwindstack::AndroidUnwinderData data;
+    if (!unwinder.Unwind(data)) {
+        LOG(ERROR) << __FUNCTION__
+                   << "sys.powerctl: Failed to unwind callstack: " << data.GetErrorString();
     }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-        LOG(ERROR) << "sys.powerctl: " << backtrace->FormatFrameData(i);
+    for (const auto& frame : data.frames) {
+        LOG(ERROR) << "sys.powerctl: " << unwinder.FormatFrame(frame);
     }
 }
 
@@ -291,13 +304,59 @@ Parser CreateParser(ActionManager& action_manager, ServiceList& service_list) {
     return parser;
 }
 
-// parser that only accepts new services
-Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex) {
-    Parser parser;
+#ifndef RECOVERY
+template <typename T>
+struct LibXmlErrorHandler {
+    T handler_;
+    template <typename Handler>
+    LibXmlErrorHandler(Handler&& handler) : handler_(std::move(handler)) {
+        xmlSetGenericErrorFunc(nullptr, &ErrorHandler);
+    }
+    ~LibXmlErrorHandler() { xmlSetGenericErrorFunc(nullptr, nullptr); }
+    static void ErrorHandler(void*, const char* msg, ...) {
+        va_list args;
+        va_start(args, msg);
+        char* formatted;
+        if (vasprintf(&formatted, msg, args) >= 0) {
+            LOG(ERROR) << formatted;
+        }
+        free(formatted);
+        va_end(args);
+    }
+};
 
-    parser.AddSectionParser(
-            "service", std::make_unique<ServiceParser>(&service_list, GetSubcontext(), std::nullopt,
-                                                       from_apex));
+template <typename Handler>
+LibXmlErrorHandler(Handler&&) -> LibXmlErrorHandler<Handler>;
+#endif  // RECOVERY
+
+// Returns a Parser that accepts scripts from APEX modules. It supports `service` and `on`.
+Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list) {
+    Parser parser;
+    auto subcontext = GetSubcontext();
+#ifndef RECOVERY
+    if (subcontext) {
+        const auto apex_info_list_file = "/apex/apex-info-list.xml";
+        auto error_handler = LibXmlErrorHandler([&](const auto& error_message) {
+            LOG(ERROR) << "Failed to read " << apex_info_list_file << ":" << error_message;
+        });
+        const auto apex_info_list = com::android::apex::readApexInfoList(apex_info_list_file);
+        if (apex_info_list.has_value()) {
+            std::vector<std::string> subcontext_apexes;
+            for (const auto& info : apex_info_list->getApexInfo()) {
+                if (info.hasPreinstalledModulePath() &&
+                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                    subcontext_apexes.push_back(info.getModuleName());
+                }
+            }
+            subcontext->SetApexList(std::move(subcontext_apexes));
+        }
+    }
+#endif  // RECOVERY
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, subcontext,
+                            std::nullopt));
+    parser.AddSectionParser("on", std::make_unique<ActionParser>(&action_manager, subcontext));
+
     return parser;
 }
 
@@ -390,6 +449,81 @@ static Result<void> DoControlRestart(Service* service) {
     return {};
 }
 
+int StopServicesFromApex(const std::string& apex_name) {
+    auto services = ServiceList::GetInstance().FindServicesByApexName(apex_name);
+    if (services.empty()) {
+        LOG(INFO) << "No service found for APEX: " << apex_name;
+        return 0;
+    }
+    std::set<std::string> service_names;
+    for (const auto& service : services) {
+        service_names.emplace(service->name());
+    }
+    constexpr std::chrono::milliseconds kServiceStopTimeout = 10s;
+    int still_running = StopServicesAndLogViolations(service_names, kServiceStopTimeout,
+                        true /*SIGTERM*/);
+    // Send SIGKILL to ones that didn't terminate cleanly.
+    if (still_running > 0) {
+        still_running = StopServicesAndLogViolations(service_names, 0ms, false /*SIGKILL*/);
+    }
+    return still_running;
+}
+
+void RemoveServiceAndActionFromApex(const std::string& apex_name) {
+    // Remove services and actions that match apex name
+    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& action) -> bool {
+        if (GetApexNameFromFileName(action->filename()) == apex_name) {
+            return true;
+        }
+        return false;
+    });
+    ServiceList::GetInstance().RemoveServiceIf([&](const std::unique_ptr<Service>& s) -> bool {
+        if (GetApexNameFromFileName(s->filename()) == apex_name) {
+            return true;
+        }
+        return false;
+    });
+}
+
+static Result<void> DoUnloadApex(const std::string& apex_name) {
+    if (StopServicesFromApex(apex_name) > 0) {
+        return Error() << "Unable to stop all service from " << apex_name;
+    }
+    RemoveServiceAndActionFromApex(apex_name);
+    return {};
+}
+
+static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
+    // Do not invoke linkerconfig when there's no bin/ in the apex.
+    const std::string bin_path = "/apex/" + apex_name + "/bin";
+    if (access(bin_path.c_str(), R_OK) != 0) {
+        return {};
+    }
+    const char* linkerconfig_binary = "/apex/com.android.runtime/bin/linkerconfig";
+    const char* linkerconfig_target = "/linkerconfig";
+    const char* arguments[] = {linkerconfig_binary, "--target", linkerconfig_target, "--apex",
+                               apex_name.c_str(),   "--strict"};
+
+    if (logwrap_fork_execvp(arraysize(arguments), arguments, nullptr, false, LOG_KLOG, false,
+                            nullptr) != 0) {
+        return ErrnoError() << "failed to execute linkerconfig";
+    }
+    LOG(INFO) << "Generated linker configuration for " << apex_name;
+    return {};
+}
+
+static Result<void> DoLoadApex(const std::string& apex_name) {
+    if(auto result = ParseApexConfigs(apex_name); !result.ok()) {
+        return result.error();
+    }
+
+    if (auto result = UpdateApexLinkerConfig(apex_name); !result.ok()) {
+        return result.error();
+    }
+
+    return {};
+}
+
 enum class ControlTarget {
     SERVICE,    // function gets called for the named service
     INTERFACE,  // action gets called for every service that holds this interface
@@ -413,6 +547,17 @@ static const std::map<std::string, ControlMessageFunction, std::less<>>& GetCont
     return control_message_functions;
 }
 
+static Result<void> HandleApexControlMessage(std::string_view action, const std::string& name,
+                                             std::string_view message) {
+    if (action == "load") {
+        return DoLoadApex(name);
+    } else if (action == "unload") {
+        return DoUnloadApex(name);
+    } else {
+        return Error() << "Unknown control msg '" << message << "'";
+    }
+}
+
 static bool HandleControlMessage(std::string_view message, const std::string& name,
                                  pid_t from_pid) {
     std::string cmdline_path = StringPrintf("proc/%d/cmdline", from_pid);
@@ -424,8 +569,20 @@ static bool HandleControlMessage(std::string_view message, const std::string& na
         process_cmdline = "unknown process";
     }
 
-    Service* service = nullptr;
     auto action = message;
+    if (ConsumePrefix(&action, "apex_")) {
+        if (auto result = HandleApexControlMessage(action, name, message); !result.ok()) {
+            LOG(ERROR) << "Control message: Could not ctl." << message << " for '" << name
+                       << "' from pid: " << from_pid << " (" << process_cmdline
+                       << "): " << result.error();
+            return false;
+        }
+        LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
+                  << "' from pid: " << from_pid << " (" << process_cmdline << ")";
+        return true;
+    }
+
+    Service* service = nullptr;
     if (ConsumePrefix(&action, "interface_")) {
         service = ServiceList::GetInstance().FindInterface(name);
     } else {
@@ -580,10 +737,10 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
 
 static constexpr std::chrono::milliseconds kDiagnosticTimeout = 10s;
 
-static void HandleSignalFd() {
+static void HandleSignalFd(bool one_off) {
     signalfd_siginfo siginfo;
     auto started = std::chrono::steady_clock::now();
-    for (;;) {
+    do {
         ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
         if (bytes_read < 0 && errno == EAGAIN) {
             auto now = std::chrono::steady_clock::now();
@@ -601,7 +758,7 @@ static void HandleSignalFd() {
             return;
         }
         break;
-    }
+    } while (!one_off);
 
     switch (siginfo.ssi_signo) {
         case SIGCHLD:
@@ -662,7 +819,8 @@ static void InstallSignalFdHandler(Epoll* epoll) {
     }
 
     constexpr int flags = EPOLLIN | EPOLLPRI;
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd, flags); !result.ok()) {
+    auto handler = std::bind(HandleSignalFd, false);
+    if (auto result = epoll->RegisterHandler(signal_fd, handler, flags); !result.ok()) {
         LOG(FATAL) << result.error();
     }
 }
@@ -791,11 +949,41 @@ static Result<void> ConnectEarlyStageSnapuserdAction(const BuiltinArguments& arg
     return {};
 }
 
+static void DumpPidFds(const std::string& prefix, pid_t pid) {
+    std::error_code ec;
+    std::string proc_dir = "/proc/" + std::to_string(pid) + "/fd";
+    for (const auto& entry : std::filesystem::directory_iterator(proc_dir)) {
+        std::string target;
+        if (android::base::Readlink(entry.path(), &target)) {
+            LOG(ERROR) << prefix << target;
+        } else {
+            LOG(ERROR) << prefix << entry.path();
+        }
+    }
+}
+
+static void DumpFile(const std::string& prefix, const std::string& file) {
+    std::ifstream fp(file);
+    if (!fp) {
+        LOG(ERROR) << "Could not open " << file;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(fp, line)) {
+        LOG(ERROR) << prefix << line;
+    }
+}
+
 int SecondStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
     }
 
+    // No threads should be spin up until signalfd
+    // is registered. If the threads are indeed required,
+    // each of these threads _should_ make sure SIGCHLD signal
+    // is blocked. See b/223076262
     boot_clock::time_point start_time = boot_clock::now();
 
     trigger_shutdown = [](const std::string& command) { shutdown_state.TriggerShutdown(command); };
@@ -996,11 +1184,23 @@ int SecondStageMain(int argc, char** argv) {
                 (*function)();
             }
         } else if (Service::is_exec_service_running()) {
+            static bool dumped_diagnostics = false;
             std::chrono::duration<double> waited =
                     std::chrono::steady_clock::now() - Service::exec_service_started();
             if (waited >= kDiagnosticTimeout) {
                 LOG(ERROR) << "Exec service is hung? Waited " << waited.count()
                            << " without SIGCHLD";
+                if (!dumped_diagnostics) {
+                    DumpPidFds("exec service opened: ", Service::exec_service_pid());
+
+                    std::string status_file =
+                            "/proc/" + std::to_string(Service::exec_service_pid()) + "/status";
+                    DumpFile("exec service: ", status_file);
+                    dumped_diagnostics = true;
+
+                    LOG(INFO) << "Attempting to handle any stuck SIGCHLDs...";
+                    HandleSignalFd(true);
+                }
             }
         }
         if (!IsShuttingDown()) {

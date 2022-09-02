@@ -932,7 +932,6 @@ void CowSnapuserdMetadataTest::ValidatePartialFilledArea() {
 
     ASSERT_EQ(area_sz, 2);
 
-    size_t new_chunk = 263;
     // Verify the partially filled area
     void* buffer = snapuserd_->GetExceptionBuffer(1);
     loff_t offset = 0;
@@ -941,7 +940,6 @@ void CowSnapuserdMetadataTest::ValidatePartialFilledArea() {
         de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);
         ASSERT_EQ(de->old_chunk, i);
         offset += sizeof(struct disk_exception);
-        new_chunk += 1;
     }
 
     de = reinterpret_cast<struct disk_exception*>((char*)buffer + offset);

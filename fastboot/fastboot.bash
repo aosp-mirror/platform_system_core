@@ -109,7 +109,7 @@ _fastboot_cmd_flash() {
 
     cur="${COMP_WORDS[COMP_CWORD]}"
     if [[ $i -eq $COMP_CWORD ]]; then
-        partitions="boot bootloader dtbo init_boot modem odm odm_dlkm oem product pvmfw radio recovery system system_dlkm vbmeta vendor vendor_dlkm"
+        partitions="boot bootloader dtbo init_boot modem odm odm_dlkm oem product pvmfw radio recovery system system_dlkm vbmeta vendor vendor_dlkm vendor_kernel_boot"
         COMPREPLY=( $(compgen -W "$partitions" -- $cur) )
     else
         _fastboot_util_complete_local_file "${cur}" '!*.img'

@@ -18,6 +18,8 @@
 
 #include <dirent.h>
 
+#include <map>
+
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>

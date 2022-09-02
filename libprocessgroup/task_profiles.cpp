@@ -207,7 +207,7 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     }
 
     if (!WriteStringToFile(value_, path)) {
-        if (errno == ENOENT) {
+        if (access(path.c_str(), F_OK) < 0) {
             if (optional_) {
                 return true;
             } else {
@@ -215,6 +215,9 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
                 return false;
             }
         }
+        // The PLOG() statement below uses the error code stored in `errno` by
+        // WriteStringToFile() because access() only overwrites `errno` if it fails
+        // and because this code is only reached if the access() function returns 0.
         PLOG(ERROR) << "Failed to write '" << value_ << "' to " << path;
         return false;
     }
@@ -783,7 +786,7 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
     return true;
 }
 
-TaskProfile* TaskProfiles::GetProfile(const std::string& name) const {
+TaskProfile* TaskProfiles::GetProfile(std::string_view name) const {
     auto iter = profiles_.find(name);
 
     if (iter != profiles_.end()) {
@@ -792,7 +795,7 @@ TaskProfile* TaskProfiles::GetProfile(const std::string& name) const {
     return nullptr;
 }
 
-const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) const {
+const IProfileAttribute* TaskProfiles::GetAttribute(std::string_view name) const {
     auto iter = attributes_.find(name);
 
     if (iter != attributes_.end()) {
@@ -801,8 +804,10 @@ const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) con
     return nullptr;
 }
 
-bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
-                                      const std::vector<std::string>& profiles, bool use_fd_cache) {
+template <typename T>
+bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> profiles,
+                                      bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -811,16 +816,19 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
             }
             if (!profile->ExecuteForProcess(uid, pid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " process profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "process profile";
+            PLOG(WARNING) << "Failed to find " << name << " process profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
 
-bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& profiles,
-                                   bool use_fd_cache) {
+template <typename T>
+bool TaskProfiles::SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache) {
+    bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
         if (profile != nullptr) {
@@ -829,10 +837,23 @@ bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& prof
             }
             if (!profile->ExecuteForTask(tid)) {
                 PLOG(WARNING) << "Failed to apply " << name << " task profile";
+                success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << "task profile";
+            PLOG(WARNING) << "Failed to find " << name << " task profile";
+            success = false;
         }
     }
-    return true;
+    return success;
 }
+
+template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
+                                               std::span<const std::string> profiles,
+                                               bool use_fd_cache);
+template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
+                                               std::span<const std::string_view> profiles,
+                                               bool use_fd_cache);
+template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string> profiles,
+                                            bool use_fd_cache);
+template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+                                            bool use_fd_cache);

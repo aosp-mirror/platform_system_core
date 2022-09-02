@@ -32,6 +32,7 @@
 #include "action.h"
 #include "capabilities.h"
 #include "keyword_map.h"
+#include "mount_namespace.h"
 #include "parser.h"
 #include "service_utils.h"
 #include "subcontext.h"
@@ -65,12 +66,12 @@ class Service {
 
   public:
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-            const std::vector<std::string>& args, bool from_apex = false);
+            const std::string& filename, const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
-            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args,
-            bool from_apex = false);
+            Subcontext* subcontext_for_restart_commands, const std::string& filename,
+            const std::vector<std::string>& args);
 
     static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
@@ -102,6 +103,7 @@ class Service {
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
+    static pid_t exec_service_pid() { return exec_service_pid_; }
     static std::chrono::time_point<std::chrono::steady_clock> exec_service_started() {
         return exec_service_started_;
     }
@@ -132,7 +134,7 @@ class Service {
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
     bool is_post_data() const { return post_data_; }
-    bool is_from_apex() const { return from_apex_; }
+    bool is_from_apex() const { return base::StartsWith(filename_, "/apex/"); }
     void set_oneshot(bool value) {
         if (value) {
             flags_ |= SVC_ONESHOT;
@@ -141,6 +143,8 @@ class Service {
         }
     }
     Subcontext* subcontext() const { return subcontext_; }
+    const std::string& filename() const { return filename_; }
+    void set_filename(const std::string& name) { filename_ = name; }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
@@ -151,10 +155,9 @@ class Service {
     Result<void> CheckConsole();
     void ConfigureMemcg();
     void RunService(
-            const std::optional<MountNamespace>& override_mount_namespace,
             const std::vector<Descriptor>& descriptors,
             std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
-
+    void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
     static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
@@ -219,13 +222,13 @@ class Service {
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
-    bool use_bootstrap_ns_ = false;
+    std::optional<MountNamespace> mount_namespace_;
 
     bool post_data_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
 
-    bool from_apex_ = false;
+    std::string filename_;
 };
 
 }  // namespace init

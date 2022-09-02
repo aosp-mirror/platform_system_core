@@ -507,16 +507,16 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
         SaveRamdiskPathToSnapuserd();
     }
 
-    if (MountPartition(system_partition, false /* erase_same_mounts */)) {
-        if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
-            LOG(ERROR) << "check_most_at_once forbidden on external media";
-            return false;
-        }
-        SwitchRoot("/system");
-    } else {
+    if (!MountPartition(system_partition, false /* erase_same_mounts */)) {
         PLOG(ERROR) << "Failed to mount /system";
         return false;
     }
+    if (dsu_not_on_userdata_ && fs_mgr_verity_is_check_at_most_once(*system_partition)) {
+        LOG(ERROR) << "check_at_most_once forbidden on external media";
+        return false;
+    }
+
+    SwitchRoot("/system");
 
     return true;
 }
@@ -651,14 +651,9 @@ void FirstStageMount::UseDsuIfPresent() {
         return;
     }
 
-    std::string lp_names = "";
-    std::vector<std::string> dsu_partitions;
-    for (auto&& name : images->GetAllBackingImages()) {
-        dsu_partitions.push_back(name);
-        lp_names += name + ",";
-    }
-    // Publish the logical partition names for TransformFstabForDsu
-    WriteFile(gsi::kGsiLpNamesFile, lp_names);
+    // Publish the logical partition names for TransformFstabForDsu() and ReadFstabFromFile().
+    const auto dsu_partitions = images->GetAllBackingImages();
+    WriteFile(gsi::kGsiLpNamesFile, android::base::Join(dsu_partitions, ","));
     TransformFstabForDsu(&fstab_, active_dsu, dsu_partitions);
 }
 

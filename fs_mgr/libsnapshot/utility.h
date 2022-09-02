@@ -59,7 +59,6 @@ struct AutoUnmapDevice : AutoDevice {
     // On destruct, delete |name| from device mapper.
     AutoUnmapDevice(android::dm::IDeviceMapper* dm, const std::string& name)
         : AutoDevice(name), dm_(dm) {}
-    AutoUnmapDevice(AutoUnmapDevice&& other) = default;
     ~AutoUnmapDevice();
 
   private:
@@ -72,7 +71,6 @@ struct AutoUnmapImage : AutoDevice {
     // On destruct, delete |name| from image manager.
     AutoUnmapImage(android::fiemap::IImageManager* images, const std::string& name)
         : AutoDevice(name), images_(images) {}
-    AutoUnmapImage(AutoUnmapImage&& other) = default;
     ~AutoUnmapImage();
 
   private:
@@ -86,7 +84,6 @@ struct AutoDeleteSnapshot : AutoDevice {
     AutoDeleteSnapshot(SnapshotManager* manager, SnapshotManager::LockedFile* lock,
                        const std::string& name)
         : AutoDevice(name), manager_(manager), lock_(lock) {}
-    AutoDeleteSnapshot(AutoDeleteSnapshot&& other);
     ~AutoDeleteSnapshot();
 
   private:
@@ -129,15 +126,16 @@ std::ostream& operator<<(std::ostream& os, const Now&);
 void AppendExtent(google::protobuf::RepeatedPtrField<chromeos_update_engine::Extent>* extents,
                   uint64_t start_block, uint64_t num_blocks);
 
-bool IsCompressionEnabled();
+bool GetLegacyCompressionEnabledProperty();
+bool GetUserspaceSnapshotsEnabledProperty();
+bool GetIouringEnabledProperty();
+bool GetXorCompressionEnabledProperty();
 
-bool IsUserspaceSnapshotsEnabled();
-
+bool CanUseUserspaceSnapshots();
 bool IsDmSnapshotTestingEnabled();
-
-bool IsIouringEnabled();
 
 // Swap the suffix of a partition name.
 std::string GetOtherPartitionName(const std::string& name);
+
 }  // namespace snapshot
 }  // namespace android
