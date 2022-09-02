@@ -18,8 +18,9 @@
 #include <optional>
 #include <string>
 
+#include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/unique_fd.h>
-#include <android/hardware/boot/1.0/IBootControl.h>
 #include <fstab/fstab.h>
 #include <liblp/liblp.h>
 
@@ -44,11 +45,51 @@ class PartitionHandle {
     }
     const std::string& path() const { return path_; }
     int fd() const { return fd_.get(); }
-    void set_fd(android::base::unique_fd&& fd) { fd_ = std::move(fd); }
+    bool Open(int flags) {
+        flags |= (O_EXCL | O_CLOEXEC | O_BINARY);
 
+        // Attempts to open a second device can fail with EBUSY if the device is already open.
+        // Explicitly close any previously opened devices as unique_fd won't close them until
+        // after the attempt to open.
+        fd_.reset();
+
+        fd_ = android::base::unique_fd(TEMP_FAILURE_RETRY(open(path_.c_str(), flags)));
+        if (fd_ < 0) {
+            PLOG(ERROR) << "Failed to open block device: " << path_;
+            return false;
+        }
+        flags_ = flags;
+
+        return true;
+    }
+    bool Reset(int flags) {
+        if (fd_.ok() && (flags | O_EXCL | O_CLOEXEC | O_BINARY) == flags_) {
+            return true;
+        }
+
+        off_t offset = fd_.ok() ? lseek(fd_.get(), 0, SEEK_CUR) : 0;
+        if (offset < 0) {
+            PLOG(ERROR) << "Failed lseek on block device: " << path_;
+            return false;
+        }
+
+        sync();
+
+        if (Open(flags) == false) {
+            return false;
+        }
+
+        if (lseek(fd_.get(), offset, SEEK_SET) != offset) {
+            PLOG(ERROR) << "Failed lseek on block device: " << path_;
+            return false;
+        }
+
+        return true;
+    }
   private:
     std::string path_;
     android::base::unique_fd fd_;
+    int flags_;
     std::function<void()> closer_;
 };
 
@@ -82,7 +123,7 @@ bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
                    int flags = O_WRONLY);
 
-bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
+bool GetSlotNumber(const std::string& slot, int32_t* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);
 bool GetDeviceLockStatus();
 

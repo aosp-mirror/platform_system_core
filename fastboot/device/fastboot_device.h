@@ -22,9 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include <BootControlClient.h>
 #include <aidl/android/hardware/health/IHealth.h>
-#include <android/hardware/boot/1.0/IBootControl.h>
-#include <android/hardware/boot/1.1/IBootControl.h>
 #include <android/hardware/fastboot/1.1/IFastboot.h>
 
 #include "commands.h"
@@ -33,6 +32,7 @@
 
 class FastbootDevice {
   public:
+    using BootControlClient = android::hal::BootControlClient;
     FastbootDevice();
     ~FastbootDevice();
 
@@ -50,10 +50,8 @@ class FastbootDevice {
 
     std::vector<char>& download_data() { return download_data_; }
     Transport* get_transport() { return transport_.get(); }
-    android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal() {
-        return boot_control_hal_;
-    }
-    android::sp<android::hardware::boot::V1_1::IBootControl> boot1_1() { return boot1_1_; }
+    BootControlClient* boot_control_hal() const { return boot_control_hal_.get(); }
+    BootControlClient* boot1_1() const;
     android::sp<android::hardware::fastboot::V1_1::IFastboot> fastboot_hal() {
         return fastboot_hal_;
     }
@@ -65,8 +63,7 @@ class FastbootDevice {
     const std::unordered_map<std::string, CommandHandler> kCommandMap;
 
     std::unique_ptr<Transport> transport_;
-    android::sp<android::hardware::boot::V1_0::IBootControl> boot_control_hal_;
-    android::sp<android::hardware::boot::V1_1::IBootControl> boot1_1_;
+    std::unique_ptr<BootControlClient> boot_control_hal_;
     std::shared_ptr<aidl::android::hardware::health::IHealth> health_hal_;
     android::sp<android::hardware::fastboot::V1_1::IFastboot> fastboot_hal_;
     std::vector<char> download_data_;

@@ -22,6 +22,8 @@
 #include <variant>
 #include <vector>
 
+#include <android-base/strings.h>
+
 #include "builtins.h"
 #include "keyword_map.h"
 #include "result.h"
@@ -79,6 +81,7 @@ class Action {
     static void set_function_map(const BuiltinFunctionMap* function_map) {
         function_map_ = function_map;
     }
+    bool IsFromApex() const { return base::StartsWith(filename_, "/apex/"); }
 
   private:
     void ExecuteCommand(const Command& command) const;

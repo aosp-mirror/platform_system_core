@@ -23,13 +23,16 @@
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 
+using testing::Contains;
+using testing::Not;
+
 static int GetVsrLevel() {
     return android::base::GetIntProperty("ro.vendor.api_level", -1);
 }
 
 TEST(fs, ErofsSupported) {
-    // S and higher for this test.
-    if (GetVsrLevel() < __ANDROID_API_S__) {
+    // T-launch GKI kernels and higher must support EROFS.
+    if (GetVsrLevel() < __ANDROID_API_T__) {
         GTEST_SKIP();
     }
 
@@ -47,6 +50,8 @@ TEST(fs, ErofsSupported) {
     std::string fs;
     ASSERT_TRUE(android::base::ReadFileToString("/proc/filesystems", &fs));
     EXPECT_THAT(fs, ::testing::HasSubstr("\terofs\n"));
+
+    ASSERT_EQ(access("/sys/fs/erofs", F_OK), 0);
 }
 
 TEST(fs, PartitionTypes) {
@@ -94,7 +99,13 @@ TEST(fs, PartitionTypes) {
         }
 
         if (entry.flags & MS_RDONLY) {
-            EXPECT_EQ(entry.fs_type, "erofs") << entry.mount_point;
+            std::vector<std::string> allowed = {"erofs", "ext4"};
+            if (vsr_level == __ANDROID_API_T__) {
+                allowed.emplace_back("f2fs");
+            }
+
+            EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
+                    << entry.mount_point;
         } else {
             EXPECT_NE(entry.fs_type, "ext4") << entry.mount_point;
         }
@@ -108,4 +119,31 @@ TEST(fs, NoDtFstab) {
 
     android::fs_mgr::Fstab fstab;
     EXPECT_FALSE(android::fs_mgr::ReadFstabFromDt(&fstab, false));
+}
+
+TEST(fs, NoLegacyVerifiedBoot) {
+    if (GetVsrLevel() < __ANDROID_API_T__) {
+        GTEST_SKIP();
+    }
+
+    const auto& default_fstab_path = android::fs_mgr::GetFstabPath();
+    EXPECT_FALSE(default_fstab_path.empty());
+
+    std::string fstab_str;
+    EXPECT_TRUE(android::base::ReadFileToString(default_fstab_path, &fstab_str,
+                                                /* follow_symlinks = */ true));
+
+    for (const auto& line : android::base::Split(fstab_str, "\n")) {
+        auto fields = android::base::Tokenize(line, " \t");
+        // Ignores empty lines and comments.
+        if (fields.empty() || android::base::StartsWith(fields.front(), '#')) {
+            continue;
+        }
+        // Each line in a fstab should have at least five entries.
+        //   <src> <mnt_point> <type> <mnt_flags and options> <fs_mgr_flags>
+        ASSERT_GE(fields.size(), 5);
+        EXPECT_THAT(android::base::Split(fields[4], ","), Not(Contains("verify")))
+                << "AVB 1.0 isn't supported now, but the 'verify' flag is found:\n"
+                << "  " << line;
+    }
 }

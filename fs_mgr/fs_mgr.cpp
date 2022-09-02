@@ -90,9 +90,6 @@
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
 #define SYSFS_EXT4_CASEFOLD "/sys/fs/ext4/features/casefold"
 
-// FIXME: this should be in system/extras
-#define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
-
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Basename;
@@ -124,8 +121,8 @@ enum FsStatFlags {
     FS_STAT_RO_MOUNT_FAILED = 0x0040,
     FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
-    FS_STAT_E2FSCK_FAILED = 0x0200,
-    FS_STAT_E2FSCK_FS_FIXED = 0x0400,
+    FS_STAT_FSCK_FAILED = 0x0200,
+    FS_STAT_FSCK_FS_FIXED = 0x0400,
     FS_STAT_INVALID_MAGIC = 0x0800,
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
@@ -136,7 +133,6 @@ enum FsStatFlags {
 };
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
-    if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
     std::string msg =
             android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device.c_str(), fs_stat);
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(FSCK_LOG_FILE, O_WRONLY | O_CLOEXEC |
@@ -166,7 +162,7 @@ static bool should_force_check(int fs_stat) {
     return fs_stat &
            (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
             FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED | FS_STAT_FULL_MOUNT_FAILED |
-            FS_STAT_E2FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
+            FS_STAT_FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
@@ -255,10 +251,10 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << E2FSCK_BIN;
-                *fs_stat |= FS_STAT_E2FSCK_FAILED;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
             } else if (status != 0) {
                 LINFO << "e2fsck returned status 0x" << std::hex << status;
-                *fs_stat |= FS_STAT_E2FSCK_FS_FIXED;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
             }
         }
     } else if (is_f2fs(fs_type)) {
@@ -267,20 +263,30 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         const char* f2fs_fsck_forced_argv[] = {
                 F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
-        if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, nullptr);
+        if (access(F2FS_FSCK_BIN, X_OK)) {
+            LINFO << "Not running " << F2FS_FSCK_BIN << " on " << realpath(blk_device)
+                  << " (executable not in system image)";
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, nullptr);
-        }
-        if (ret < 0) {
-            /* No need to check for error in fork, we can't really handle it now */
-            LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+            if (should_force_check(*fs_stat)) {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
+                                          &status, false, LOG_KLOG | LOG_FILE, false,
+                                          FSCK_LOG_FILE);
+            } else {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status,
+                                          false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+            }
+            if (ret < 0) {
+                /* No need to check for error in fork, we can't really handle it now */
+                LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
+            } else if (status != 0) {
+                LINFO << F2FS_FSCK_BIN << " returned status 0x" << std::hex << status;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
+            }
         }
     }
     android::base::SetProperty("ro.boottime.init.fsck." + Basename(target),
@@ -840,8 +846,10 @@ static int __mount(const std::string& source, const std::string& target, const F
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
-    android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
-                               std::to_string(t.duration().count()));
+    if (ret == 0) {
+        android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
+                                   std::to_string(t.duration().count()));
+    }
     errno = save_errno;
     return ret;
 }
@@ -881,7 +889,7 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
 // attempted_idx: On return, will indicate which fstab entry
 //     succeeded. In case of failure, it will be the start_idx.
 // Sets errno to match the 1st mount failure on failure.
-static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_idx,
+static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
                                     int* attempted_idx) {
     unsigned long i;
     int mount_errno = 0;
@@ -899,6 +907,14 @@ static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_
                    << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
                    << fstab[*attempted_idx].fs_type;
             continue;
+        }
+
+        // fstab[start_idx].blk_device is already updated to /dev/dm-<N> by
+        // AVB related functions. Copy it from start_idx to the current index i.
+        if ((i != start_idx) && fstab[i].fs_mgr_flags.logical &&
+            fstab[start_idx].fs_mgr_flags.logical &&
+            (fstab[i].logical_partition_name == fstab[start_idx].logical_partition_name)) {
+            fstab[i].blk_device = fstab[start_idx].blk_device;
         }
 
         int fs_stat = prepare_fs_for_mount(fstab[i].blk_device, fstab[i]);
@@ -1474,7 +1490,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
                                    attempted_entry.mount_point, wiped ? "true" : "false",
-                                   attempted_entry.fs_type},
+                                   attempted_entry.fs_type, attempted_entry.zoned_device},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1514,7 +1530,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
 
                 if (!call_vdc({"cryptfs", "encryptFstab", current_entry.blk_device,
                                current_entry.mount_point, "true" /* shouldFormat */,
-                               current_entry.fs_type},
+                               current_entry.fs_type, current_entry.zoned_device},
                               nullptr)) {
                     LERROR << "Encryption failed";
                 } else {
@@ -1539,7 +1555,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         if (mount_errno != EBUSY && mount_errno != EACCES &&
             should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
-                           attempted_entry.mount_point},
+                           attempted_entry.mount_point, attempted_entry.zoned_device},
                           nullptr)) {
                 ++error_count;
             } else if (current_entry.mount_point == "/data") {
@@ -1911,6 +1927,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         while (retry_count-- > 0) {
             if (!__mount(n_blk_device, mount_point, fstab_entry)) {
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
+                log_fs_stat(fstab_entry.blk_device, fs_stat);
                 return FS_MGR_DOMNT_SUCCESS;
             } else {
                 if (retry_count <= 0) break;  // run check_fs only once

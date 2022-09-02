@@ -14,242 +14,230 @@
  * limitations under the License.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <libavb_user/libavb_user.h>
-#include <stdarg.h>
+#include <getopt.h>
 #include <stdio.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
-#include <android-base/unique_fd.h>
-#include <fs_mgr.h>
+#include <binder/ProcessState.h>
+#include <cutils/android_reboot.h>
 #include <fs_mgr_overlayfs.h>
-#include <fstab/fstab.h>
-#include <log/log_properties.h>
+#include <libavb_user/libavb_user.h>
 
-#include "fec/io.h"
+using namespace std::string_literals;
+
+namespace {
+
+void print_usage() {
+  printf(
+      "Usage:\n"
+      "\tdisable-verity\n"
+      "\tenable-verity\n"
+      "\tset-verity-state [0|1]\n"
+      "Options:\n"
+      "\t-h --help\tthis help\n"
+      "\t-R --reboot\tautomatic reboot if needed for new settings to take effect\n"
+      "\t-v --verbose\tbe noisy\n");
+}
 
 #ifdef ALLOW_DISABLE_VERITY
-static const bool kAllowDisableVerity = true;
+const bool kAllowDisableVerity = true;
 #else
-static const bool kAllowDisableVerity = false;
+const bool kAllowDisableVerity = false;
 #endif
-
-using android::base::unique_fd;
-
-static void suggest_run_adb_root() {
-  if (getuid() != 0) printf("Maybe run adb root?\n");
-}
-
-static bool make_block_device_writable(const std::string& dev) {
-  unique_fd fd(open(dev.c_str(), O_RDONLY | O_CLOEXEC));
-  if (fd == -1) {
-    return false;
-  }
-
-  int OFF = 0;
-  bool result = (ioctl(fd.get(), BLKROSET, &OFF) != -1);
-  return result;
-}
-
-/* Turn verity on/off */
-static bool set_verity_enabled_state(const char* block_device, const char* mount_point,
-                                     bool enable) {
-  if (!make_block_device_writable(block_device)) {
-    printf("Could not make block device %s writable (%s).\n", block_device, strerror(errno));
-    return false;
-  }
-
-  fec::io fh(block_device, O_RDWR);
-
-  if (!fh) {
-    printf("Could not open block device %s (%s).\n", block_device, strerror(errno));
-    suggest_run_adb_root();
-    return false;
-  }
-
-  fec_verity_metadata metadata;
-
-  if (!fh.get_verity_metadata(metadata)) {
-    printf("Couldn't find verity metadata!\n");
-    return false;
-  }
-
-  if (!enable && metadata.disabled) {
-    printf("Verity already disabled on %s\n", mount_point);
-    return false;
-  }
-
-  if (enable && !metadata.disabled) {
-    printf("Verity already enabled on %s\n", mount_point);
-    return false;
-  }
-
-  if (!fh.set_verity_status(enable)) {
-    printf("Could not set verity %s flag on device %s with error %s\n",
-           enable ? "enabled" : "disabled", block_device, strerror(errno));
-    return false;
-  }
-
-  auto change = false;
-  errno = 0;
-  if (enable ? fs_mgr_overlayfs_teardown(mount_point, &change)
-             : fs_mgr_overlayfs_setup(nullptr, mount_point, &change)) {
-    if (change) {
-      printf("%s overlayfs for %s\n", enable ? "disabling" : "using", mount_point);
-    }
-  } else if (errno) {
-    int expected_errno = enable ? EBUSY : ENOENT;
-    if (errno != expected_errno) {
-      printf("Overlayfs %s for %s failed with error %s\n", enable ? "teardown" : "setup",
-             mount_point, strerror(errno));
-    }
-  }
-  printf("Verity %s on %s\n", enable ? "enabled" : "disabled", mount_point);
-  return true;
-}
 
 /* Helper function to get A/B suffix, if any. If the device isn't
  * using A/B the empty string is returned. Otherwise either "_a",
  * "_b", ... is returned.
  */
-static std::string get_ab_suffix() {
+std::string get_ab_suffix() {
   return android::base::GetProperty("ro.boot.slot_suffix", "");
 }
 
-static bool is_avb_device_locked() {
+bool is_avb_device_locked() {
   return android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked";
 }
 
-static bool overlayfs_setup(bool enable) {
+bool is_debuggable() {
+  return android::base::GetBoolProperty("ro.debuggable", false);
+}
+
+bool is_using_avb() {
+  // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
+  // contract, androidboot.vbmeta.digest is set by the bootloader
+  // when using AVB).
+  return !android::base::GetProperty("ro.boot.vbmeta.digest", "").empty();
+}
+
+[[noreturn]] void reboot(const std::string& name) {
+  LOG(INFO) << "Rebooting device for new settings to take effect";
+  ::sync();
+  android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot," + name);
+  ::sleep(60);
+  LOG(ERROR) << "Failed to reboot";
+  ::exit(1);
+}
+
+bool overlayfs_setup(bool enable) {
   auto change = false;
   errno = 0;
-  if (enable ? fs_mgr_overlayfs_teardown(nullptr, &change)
-             : fs_mgr_overlayfs_setup(nullptr, nullptr, &change)) {
+  if (enable ? fs_mgr_overlayfs_setup(nullptr, &change)
+             : fs_mgr_overlayfs_teardown(nullptr, &change)) {
     if (change) {
-      printf("%s overlayfs\n", enable ? "disabling" : "using");
+      LOG(INFO) << (enable ? "Enabled" : "Disabled") << " overlayfs";
     }
-  } else if (errno) {
-    printf("Overlayfs %s failed with error %s\n", enable ? "teardown" : "setup", strerror(errno));
-    suggest_run_adb_root();
+  } else {
+    LOG(ERROR) << "Failed to " << (enable ? "enable" : "disable") << " overlayfs";
   }
   return change;
 }
 
+struct SetVerityStateResult {
+  bool success = false;
+  bool want_reboot = false;
+};
+
 /* Use AVB to turn verity on/off */
-static bool set_avb_verity_enabled_state(AvbOps* ops, bool enable_verity) {
+SetVerityStateResult SetVerityState(bool enable_verity) {
   std::string ab_suffix = get_ab_suffix();
-  bool verity_enabled;
+  bool verity_enabled = false;
 
   if (is_avb_device_locked()) {
-    printf("Device is locked. Please unlock the device first\n");
-    return false;
+    LOG(ERROR) << "Device must be bootloader unlocked to change verity state";
+    return {};
   }
 
-  if (!avb_user_verity_get(ops, ab_suffix.c_str(), &verity_enabled)) {
-    printf("Error getting verity state. Try adb root first?\n");
-    return false;
+  std::unique_ptr<AvbOps, decltype(&avb_ops_user_free)> ops(avb_ops_user_new(), &avb_ops_user_free);
+  if (!ops) {
+    LOG(ERROR) << "Error getting AVB ops";
+    return {};
+  }
+
+  if (!avb_user_verity_get(ops.get(), ab_suffix.c_str(), &verity_enabled)) {
+    LOG(ERROR) << "Error getting verity state";
+    return {};
   }
 
   if ((verity_enabled && enable_verity) || (!verity_enabled && !enable_verity)) {
-    printf("verity is already %s\n", verity_enabled ? "enabled" : "disabled");
-    return false;
+    LOG(INFO) << "Verity is already " << (verity_enabled ? "enabled" : "disabled");
+    return {.success = true, .want_reboot = false};
   }
 
-  if (!avb_user_verity_set(ops, ab_suffix.c_str(), enable_verity)) {
-    printf("Error setting verity\n");
-    return false;
+  if (!avb_user_verity_set(ops.get(), ab_suffix.c_str(), enable_verity)) {
+    LOG(ERROR) << "Error setting verity state";
+    return {};
   }
 
-  overlayfs_setup(enable_verity);
-  printf("Successfully %s verity\n", enable_verity ? "enabled" : "disabled");
-  return true;
+  LOG(INFO) << "Successfully " << (enable_verity ? "enabled" : "disabled") << " verity";
+  return {.success = true, .want_reboot = true};
 }
 
+class MyLogger {
+ public:
+  explicit MyLogger(bool verbose) : verbose_(verbose) {}
+
+  void operator()(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+                  const char* file, unsigned int line, const char* message) {
+    // Hide log starting with '[fs_mgr]' unless it's an error.
+    if (verbose_ || severity >= android::base::ERROR || message[0] != '[') {
+      fprintf(stderr, "%s\n", message);
+    }
+    logd_(id, severity, tag, file, line, message);
+  }
+
+ private:
+  android::base::LogdLogger logd_;
+  bool verbose_;
+};
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
-  if (argc == 0) {
-    LOG(FATAL) << "set-verity-state called with empty argv";
-  }
+  bool auto_reboot = false;
+  bool verbose = false;
 
-  std::optional<bool> enable_opt;
-  std::string procname = android::base::Basename(argv[0]);
-  if (procname == "enable-verity") {
-    enable_opt = true;
-  } else if (procname == "disable-verity") {
-    enable_opt = false;
-  }
-
-  if (!enable_opt.has_value()) {
-    if (argc != 2) {
-      printf("usage: %s [1|0]\n", argv[0]);
-      return 1;
-    }
-
-    if (strcmp(argv[1], "1") == 0) {
-      enable_opt = true;
-    } else if (strcmp(argv[1], "0") == 0) {
-      enable_opt = false;
-    } else {
-      printf("usage: %s [1|0]\n", argv[0]);
-      return 1;
+  struct option longopts[] = {
+      {"help", no_argument, nullptr, 'h'},
+      {"reboot", no_argument, nullptr, 'R'},
+      {"verbose", no_argument, nullptr, 'v'},
+      {0, 0, nullptr, 0},
+  };
+  for (int opt; (opt = ::getopt_long(argc, argv, "hRv", longopts, nullptr)) != -1;) {
+    switch (opt) {
+      case 'h':
+        print_usage();
+        return 0;
+      case 'R':
+        auto_reboot = true;
+        break;
+      case 'v':
+        verbose = true;
+        break;
+      default:
+        print_usage();
+        return 1;
     }
   }
 
-  bool enable = enable_opt.value();
+  android::base::InitLogging(argv, MyLogger(verbose));
 
-  bool any_changed = false;
-
-  // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
-  // contract, androidboot.vbmeta.digest is set by the bootloader
-  // when using AVB).
-  bool using_avb = !android::base::GetProperty("ro.boot.vbmeta.digest", "").empty();
-
-  // If using AVB, dm-verity is used on any build so we want it to
-  // be possible to disable/enable on any build (except USER). For
-  // VB1.0 dm-verity is only enabled on certain builds.
-  if (!using_avb) {
-    if (!kAllowDisableVerity) {
-      printf("%s only works for userdebug builds\n", argv[0]);
-    }
-
-    if (!android::base::GetBoolProperty("ro.secure", false)) {
-      overlayfs_setup(enable);
-      printf("verity not enabled - ENG build\n");
-      return 0;
-    }
+  bool enable_verity = false;
+  const std::string progname = getprogname();
+  if (progname == "enable-verity") {
+    enable_verity = true;
+  } else if (progname == "disable-verity") {
+    enable_verity = false;
+  } else if (optind < argc && (argv[optind] == "1"s || argv[optind] == "0"s)) {
+    // progname "set-verity-state"
+    enable_verity = (argv[optind] == "1"s);
+  } else {
+    print_usage();
+    return 1;
   }
 
-  // Should never be possible to disable dm-verity on a USER build
-  // regardless of using AVB or VB1.0.
-  if (!__android_log_is_debuggable()) {
-    printf("verity cannot be disabled/enabled - USER build\n");
-    return 0;
+  if (!kAllowDisableVerity || !is_debuggable()) {
+    errno = EPERM;
+    PLOG(ERROR) << "Cannot disable/enable verity on user build";
+    return 1;
   }
 
-  if (using_avb) {
-    // Yep, the system is using AVB.
-    AvbOps* ops = avb_ops_user_new();
-    if (ops == nullptr) {
-      printf("Error getting AVB ops\n");
-      return 1;
+  if (getuid() != 0) {
+    errno = EACCES;
+    PLOG(ERROR) << "Must be running as root (adb root)";
+    return 1;
+  }
+
+  if (!is_using_avb()) {
+    LOG(ERROR) << "Expected AVB device, VB1.0 is no longer supported";
+    return 1;
+  }
+
+  int exit_code = 0;
+  bool want_reboot = false;
+
+  auto ret = SetVerityState(enable_verity);
+  if (ret.success) {
+    want_reboot |= ret.want_reboot;
+  } else {
+    exit_code = 1;
+  }
+
+  // Disable any overlayfs unconditionally if we want verity enabled.
+  // Enable overlayfs only if verity is successfully disabled or is already disabled.
+  if (enable_verity || ret.success) {
+    // Start a threadpool to service waitForService() callbacks as
+    // fs_mgr_overlayfs_* might call waitForService() to get the image service.
+    android::ProcessState::self()->startThreadPool();
+    want_reboot |= overlayfs_setup(!enable_verity);
+  }
+
+  if (want_reboot) {
+    if (auto_reboot) {
+      reboot(progname);
     }
-    if (set_avb_verity_enabled_state(ops, enable)) {
-      any_changed = true;
-    }
-    avb_ops_user_free(ops);
-  }
-  if (!any_changed) any_changed = overlayfs_setup(enable);
-
-  if (any_changed) {
-    printf("Now reboot your device for settings to take effect\n");
+    printf("Reboot the device for new settings to take effect\n");
   }
 
-  return 0;
+  return exit_code;
 }

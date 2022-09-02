@@ -14,9 +14,15 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
         "-fno-finite-loops",
+        "-DANDROID_DEBUGGABLE=0",
     ],
 
     local_include_dirs: ["include"],
+    product_variables: {
+        debuggable: {
+            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
+        }
+    },
 }
 
 cc_library_headers {
@@ -24,6 +30,10 @@ cc_library_headers {
     export_include_dirs: ["common/include"],
     recovery_available: true,
     vendor_ramdisk_available: true,
+    apex_available: [
+        "com.android.virt",
+        "//apex_available:platform",
+   ],
 }
 
 cc_library_shared {
@@ -43,6 +53,10 @@ cc_library_shared {
     shared_libs: [
         "libbase",
         "libcutils",
+    ],
+    apex_available: [
+        "com.android.virt",
+        "//apex_available:platform",
     ],
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
@@ -196,6 +210,7 @@ cc_library_static {
     header_libs: [
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
+        "liblog_headers",
     ],
 
     static_libs: [
@@ -204,7 +219,6 @@ cc_library_static {
         "liblzma",
         "libbase",
         "libcutils",
-        "liblog",
     ],
     runtime_libs: [
         "libdexfile",           // libdexfile_support dependency

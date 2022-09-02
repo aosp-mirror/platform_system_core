@@ -25,6 +25,9 @@ cc_fuzz {
         "-DTRUSTY_APP_UUID=\"38ba0cdc-df0e-11e4-9869-233fb6ae4795\"",
         "-DTRUSTY_APP_FILENAME=\"gatekeeper.syms.elf\"",
     ],
+    fuzz_config: {
+       cc: ["trong@google.com"],
+    },
 
     // The initial corpus for this fuzzer was derived by dumping messages from
     // the `secure_env` emulator interface for cuttlefish while enrolling a new

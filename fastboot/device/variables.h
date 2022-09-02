@@ -83,6 +83,9 @@ bool GetTrebleEnabled(FastbootDevice* device, const std::vector<std::string>& ar
 bool GetMaxFetchSize(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
                      std::string* message);
 
+// Complex cases.
+bool GetDmesg(FastbootDevice* device);
+
 // Helpers for getvar all.
 std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device);
 std::vector<std::vector<std::string>> GetAllPartitionArgsNoSlot(FastbootDevice* device);

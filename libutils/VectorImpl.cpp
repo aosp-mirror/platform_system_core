@@ -279,14 +279,12 @@ ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 
 ssize_t VectorImpl::removeItemsAt(size_t index, size_t count)
 {
-    ALOG_ASSERT((index+count)<=size(),
-        "[%p] remove: index=%d, count=%d, size=%d",
-               this, (int)index, (int)count, (int)size());
-
-    if ((index+count) > size())
-        return BAD_VALUE;
-   _shrink(index, count);
-   return index;
+    size_t end;
+    LOG_ALWAYS_FATAL_IF(__builtin_add_overflow(index, count, &end), "overflow: index=%zu count=%zu",
+                        index, count);
+    if (end > size()) return BAD_VALUE;
+    _shrink(index, count);
+    return index;
 }
 
 void VectorImpl::finish_vector()

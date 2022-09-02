@@ -45,6 +45,8 @@ cc_binary {
     shared_libs: [
         "libbase",
         "liblog",
+    ],
+    static_libs: [
         "libseccomp_policy",
     ],
     multilib: {

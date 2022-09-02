@@ -69,6 +69,7 @@
 #include <system/thread_defs.h>
 
 #include "action_manager.h"
+#include "apex_init_util.h"
 #include "bootchart.h"
 #include "builtin_arguments.h"
 #include "fscrypt_init_extensions.h"
@@ -426,7 +427,7 @@ static Result<void> make_dir_with_options(const MkdirOptions& options) {
             return ErrnoError() << "fchmodat() failed on " << options.target;
         }
     }
-    if (fscrypt_is_native()) {
+    if (IsFbeEnabled()) {
         if (!FscryptSetDirectoryPolicy(ref_basename, options.fscrypt_action, options.target)) {
             return reboot_into_recovery(
                     {"--prompt_and_wipe_data", "--reason=set_policy_failed:"s + options.target});
@@ -1175,7 +1176,7 @@ static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
     auto reboot = [reboot_reason, should_reboot_into_recovery](const std::string& message) {
         // TODO (b/122850122): support this in gsi
         if (should_reboot_into_recovery) {
-            if (fscrypt_is_native() && !android::gsi::IsGsiRunning()) {
+            if (IsFbeEnabled() && !android::gsi::IsGsiRunning()) {
                 LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
                 if (auto result = reboot_into_recovery(
                             {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
@@ -1279,94 +1280,6 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
     return GenerateLinkerConfiguration();
 }
 
-static Result<void> parse_apex_configs() {
-    glob_t glob_result;
-    static constexpr char glob_pattern[] = "/apex/*/etc/*rc";
-    const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
-    if (ret != 0 && ret != GLOB_NOMATCH) {
-        globfree(&glob_result);
-        return Error() << "glob pattern '" << glob_pattern << "' failed";
-    }
-    std::vector<std::string> configs;
-    Parser parser = CreateServiceOnlyParser(ServiceList::GetInstance(), true);
-    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
-        std::string path = glob_result.gl_pathv[i];
-        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
-        // /apex/<name> paths, so unless we filter them out, we will parse the
-        // same file twice.
-        std::vector<std::string> paths = android::base::Split(path, "/");
-        if (paths.size() >= 3 && paths[2].find('@') != std::string::npos) {
-            continue;
-        }
-        // Filter directories
-        if (path.back() == '/') {
-            continue;
-        }
-        configs.push_back(path);
-    }
-    globfree(&glob_result);
-
-    // Compare all files /apex/path.#rc and /apex/path.rc with the same "/apex/path" prefix,
-    // choosing the one with the highest # that doesn't exceed the system's SDK.
-    // (.rc == .0rc for ranking purposes)
-    //
-    int active_sdk = android::base::GetIntProperty("ro.build.version.sdk", INT_MAX);
-
-    std::map<std::string, std::pair<std::string, int>> script_map;
-
-    for (const auto& c : configs) {
-        int sdk = 0;
-        const std::vector<std::string> parts = android::base::Split(c, ".");
-        std::string base;
-        if (parts.size() < 2) {
-            continue;
-        }
-
-        // parts[size()-1], aka the suffix, should be "rc" or "#rc"
-        // any other pattern gets discarded
-
-        const auto& suffix = parts[parts.size() - 1];
-        if (suffix == "rc") {
-            sdk = 0;
-        } else {
-            char trailer[9] = {0};
-            int r = sscanf(suffix.c_str(), "%d%8s", &sdk, trailer);
-            if (r != 2) {
-                continue;
-            }
-            if (strlen(trailer) > 2 || strcmp(trailer, "rc") != 0) {
-                continue;
-            }
-        }
-
-        if (sdk < 0 || sdk > active_sdk) {
-            continue;
-        }
-
-        base = parts[0];
-        for (unsigned int i = 1; i < parts.size() - 1; i++) {
-            base = base + "." + parts[i];
-        }
-
-        // is this preferred over what we already have
-        auto it = script_map.find(base);
-        if (it == script_map.end() || it->second.second < sdk) {
-            script_map[base] = std::make_pair(c, sdk);
-        }
-    }
-
-    bool success = true;
-    for (const auto& m : script_map) {
-        success &= parser.ParseConfigFile(m.second.first);
-    }
-    ServiceList::GetInstance().MarkServicesUpdate();
-    if (success) {
-        return {};
-    } else {
-        return Error() << "Could not parse apex configs";
-    }
-}
-
 /*
  * Creates a directory under /data/misc/apexdata/ for each APEX.
  */
@@ -1397,7 +1310,8 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     if (!create_dirs.ok()) {
         return create_dirs.error();
     }
-    auto parse_configs = parse_apex_configs();
+    auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
+    ServiceList::GetInstance().MarkServicesUpdate();
     if (!parse_configs.ok()) {
         return parse_configs.error();
     }

@@ -69,6 +69,7 @@ bool is_android_dt_value_expected(const std::string& sub_path, const std::string
 
 bool IsLegalPropertyName(const std::string& name);
 Result<void> IsLegalPropertyValue(const std::string& name, const std::string& value);
+std::string CleanDirPath(const std::string& path);
 
 struct MkdirOptions {
     std::string target;
@@ -105,5 +106,14 @@ bool IsDefaultMountNamespaceReady();
 void SetDefaultMountNamespaceReady();
 
 bool IsMicrodroid();
+bool Has32BitAbi();
+
+std::string GetApexNameFromFileName(const std::string& path);
+
+// Compare all files */path.#rc and */path.rc with the same path prefix.
+// Keep the one with the highest # that doesn't exceed the system's SDK.
+// (.rc == .0rc for ranking purposes)
+std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
+                                                  int active_sdk);
 }  // namespace init
 }  // namespace android

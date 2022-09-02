@@ -30,16 +30,16 @@
 
 // Forward delcaration
 namespace unwindstack {
-class Unwinder;
+class AndroidUnwinder;
 }
 
 // Dumps a backtrace using a format similar to what Dalvik uses so that the result
 // can be intermixed in a bug report.
-void dump_backtrace(android::base::unique_fd output_fd, unwindstack::Unwinder* unwinder,
+void dump_backtrace(android::base::unique_fd output_fd, unwindstack::AndroidUnwinder* unwinder,
                     const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread);
 
 void dump_backtrace_header(int output_fd);
-void dump_backtrace_thread(int output_fd, unwindstack::Unwinder* unwinder,
+void dump_backtrace_thread(int output_fd, unwindstack::AndroidUnwinder* unwinder,
                            const ThreadInfo& thread);
 void dump_backtrace_footer(int output_fd);
 

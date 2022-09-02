@@ -36,7 +36,6 @@
 using namespace android::fs_mgr;
 using namespace std::chrono_literals;
 using android::base::unique_fd;
-using android::hardware::boot::V1_0::Slot;
 
 namespace {
 
@@ -90,14 +89,7 @@ bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHan
         return false;
     }
 
-    flags |= (O_EXCL | O_CLOEXEC | O_BINARY);
-    unique_fd fd(TEMP_FAILURE_RETRY(open(handle->path().c_str(), flags)));
-    if (fd < 0) {
-        PLOG(ERROR) << "Failed to open block device: " << handle->path();
-        return false;
-    }
-    handle->set_fd(std::move(fd));
-    return true;
+    return handle->Open(flags);
 }
 
 std::optional<std::string> FindPhysicalPartition(const std::string& name) {
@@ -144,7 +136,7 @@ bool LogicalPartitionExists(FastbootDevice* device, const std::string& name, boo
     return true;
 }
 
-bool GetSlotNumber(const std::string& slot, Slot* number) {
+bool GetSlotNumber(const std::string& slot, int32_t* number) {
     if (slot.size() != 1) {
         return false;
     }
@@ -211,7 +203,7 @@ bool UpdateAllPartitionMetadata(FastbootDevice* device, const std::string& super
     size_t num_slots = 1;
     auto boot_control_hal = device->boot_control_hal();
     if (boot_control_hal) {
-        num_slots = boot_control_hal->getNumberSlots();
+        num_slots = boot_control_hal->GetNumSlots();
     }
 
     bool ok = true;

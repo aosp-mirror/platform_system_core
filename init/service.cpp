@@ -127,16 +127,17 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
+pid_t Service::exec_service_pid_ = -1;
 std::chrono::time_point<std::chrono::steady_clock> Service::exec_service_started_;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args, bool from_apex)
-    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args, from_apex) {}
+                 const std::string& filename, const std::vector<std::string>& args)
+    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, filename, args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args, bool from_apex)
+                 const std::string& filename, const std::vector<std::string>& args)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -156,7 +157,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
       start_order_(0),
       args_(args),
-      from_apex_(from_apex) {}
+      filename_(filename) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {
@@ -288,6 +289,10 @@ void Service::Reap(const siginfo_t& siginfo) {
 
     if (flags_ & SVC_EXEC) UnSetExec();
 
+    if (name_ == "zygote" || name_ == "zygote64") {
+        removeAllEmptyProcessGroups();
+    }
+
     if (flags_ & SVC_TEMPORARY) return;
 
     pid_ = 0;
@@ -311,7 +316,9 @@ void Service::Reap(const siginfo_t& siginfo) {
 #else
     static bool is_apex_updatable = false;
 #endif
-    const bool is_process_updatable = !use_bootstrap_ns_ && is_apex_updatable;
+    const bool use_default_mount_ns =
+            mount_namespace_.has_value() && *mount_namespace_ == NS_DEFAULT;
+    const bool is_process_updatable = use_default_mount_ns && is_apex_updatable;
 
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
@@ -389,6 +396,7 @@ Result<void> Service::ExecStart() {
 
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
+    exec_service_pid_ = pid_;
     exec_service_started_ = std::chrono::steady_clock::now();
 
     LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
@@ -470,10 +478,9 @@ void Service::ConfigureMemcg() {
 }
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
-void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
-                         const std::vector<Descriptor>& descriptors,
+void Service::RunService(const std::vector<Descriptor>& descriptors,
                          std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
-    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+    if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
 
@@ -491,10 +498,15 @@ void Service::RunService(const std::optional<MountNamespace>& override_mount_nam
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    if (std::byte byte; read((*pipefd)[0], &byte, 1) < 0) {
+    char byte = 0;
+    if (read((*pipefd)[0], &byte, 1) < 0) {
         PLOG(ERROR) << "failed to read from notification channel";
     }
     pipefd.reset();
+    if (!byte) {
+        LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
+        _exit(EXIT_FAILURE);
+    }
 
     if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
         LOG(ERROR) << "failed to set task profiles";
@@ -536,6 +548,10 @@ Result<void> Service::Start() {
         if ((flags_ & SVC_ONESHOT) && disabled) {
             flags_ |= SVC_RESTART;
         }
+
+        LOG(INFO) << "service '" << name_
+                  << "' requested start, but it is already running (flags: " << flags_ << ")";
+
         // It is not an error to try to start a service that is already running.
         reboot_on_failure.Disable();
         return {};
@@ -568,26 +584,9 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    // APEXd is always started in the "current" namespace because it is the process to set up
-    // the current namespace.
-    const bool is_apexd = args_[0] == "/system/bin/apexd";
-
-    if (!IsDefaultMountNamespaceReady() && !is_apexd) {
-        // If this service is started before APEXes and corresponding linker configuration
-        // get available, mark it as pre-apexd one. Note that this marking is
-        // permanent. So for example, if the service is re-launched (e.g., due
-        // to crash), it is still recognized as pre-apexd... for consistency.
-        use_bootstrap_ns_ = true;
-    }
-
-    // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
-    // Note: "ueventd" is supposed to be run in "default" mount namespace even if it's pre-apexd
-    // to support loading firmwares from APEXes.
-    std::optional<MountNamespace> override_mount_namespace;
-    if (name_ == "ueventd") {
-        override_mount_namespace = NS_DEFAULT;
-    } else if (use_bootstrap_ns_) {
-        override_mount_namespace = NS_BOOTSTRAP;
+    if (!mount_namespace_.has_value()) {
+        // remember from which mount namespace the service should start
+        SetMountNamespace();
     }
 
     post_data_ = ServiceList::GetInstance().IsPostData();
@@ -620,7 +619,7 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        RunService(override_mount_namespace, descriptors, std::move(pipefd));
+        RunService(descriptors, std::move(pipefd));
         _exit(127);
     }
 
@@ -647,9 +646,19 @@ Result<void> Service::Start() {
                       limit_percent_ != -1 || !limit_property_.empty();
     errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
     if (errno != 0) {
-        PLOG(ERROR) << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                    << ") failed for service '" << name_ << "'";
-    } else if (use_memcg) {
+        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
+            return ErrnoError() << "sending notification failed";
+        }
+        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                       << ") failed for service '" << name_ << "'";
+    }
+
+    // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+    // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+    // NormalIoPriority profile has to be applied explicitly.
+    SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+
+    if (use_memcg) {
         ConfigureMemcg();
     }
 
@@ -657,13 +666,40 @@ Result<void> Service::Start() {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (write((*pipefd)[1], "", 1) < 0) {
+    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
         return ErrnoError() << "sending notification failed";
     }
 
     NotifyStateChange("running");
     reboot_on_failure.Disable();
     return {};
+}
+
+// Set mount namespace for the service.
+// The reason why remember the mount namespace:
+//   If this service is started before APEXes and corresponding linker configuration
+//   get available, mark it as pre-apexd one. Note that this marking is
+//   permanent. So for example, if the service is re-launched (e.g., due
+//   to crash), it is still recognized as pre-apexd... for consistency.
+void Service::SetMountNamespace() {
+    // APEXd is always started in the "current" namespace because it is the process to set up
+    // the current namespace. So, leave mount_namespace_ as empty.
+    if (args_[0] == "/system/bin/apexd") {
+        return;
+    }
+    // Services in the following list start in the "default" mount namespace.
+    // Note that they should use bootstrap bionic if they start before APEXes are ready.
+    static const std::set<std::string> kUseDefaultMountNamespace = {
+            "ueventd",           // load firmwares from APEXes
+            "hwservicemanager",  // load VINTF fragments from APEXes
+            "servicemanager",    // load VINTF fragments from APEXes
+    };
+    if (kUseDefaultMountNamespace.find(name_) != kUseDefaultMountNamespace.end()) {
+        mount_namespace_ = NS_DEFAULT;
+        return;
+    }
+    // Use the "default" mount namespace only if it's ready
+    mount_namespace_ = IsDefaultMountNamespaceReady() ? NS_DEFAULT : NS_BOOTSTRAP;
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {
@@ -831,7 +867,7 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     }
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
-                                     nullptr, str_args, false);
+                                     nullptr, /*filename=*/"", str_args);
 }
 
 // This is used for snapuserd_proxy, which hands off a socket to snapuserd. It's
