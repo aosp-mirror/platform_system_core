@@ -213,15 +213,6 @@ get_property() {
   adb_sh getprop ${1} </dev/null
 }
 
-[ "USAGE: isDebuggable
-
-Returns: true if device is (likely) a debug build" ]
-isDebuggable() {
-  if inAdb && [ 1 != "`get_property ro.debuggable`" ]; then
-    false
-  fi
-}
-
 [ "USAGE: adb_su <commands> </dev/stdin >/dev/stdout 2>/dev/stderr
 
 Returns: true if the command running as root succeeded" ]
@@ -905,7 +896,13 @@ if ! inAdb; then
   adb_wait ${ADB_WAIT}
 fi
 inAdb || die "specified device not in adb mode"
-isDebuggable || die "device not a debug build"
+[ "1" = "$(get_property ro.debuggable)" ] || die "device not a debug build"
+[ "orange" = "$(get_property ro.boot.verifiedbootstate)" ] || die "device not bootloader unlocked"
+can_restore_verity=true
+if [ "2" != "$(get_property partition.system.verified)" ]; then
+  LOG WARNING "device might not support verity"
+  can_restore_verity=false
+fi
 enforcing=true
 if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
   LOG WARNING "device does not have sepolicy in enforcing mode"
@@ -985,8 +982,33 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
       LOG INFO "partition ${name} device ${device} size ${size}K"
   done
 
+LOG RUN "Checking kernel support for overlayfs"
+
 overlayfs_supported=true
-can_restore_verity=false
+adb_root || die "becoming root to mine kernel information"
+if ! adb_test -d /sys/module/overlay; then
+  if adb_sh grep -q "nodev${TAB}overlay" /proc/filesystems; then
+    LOG OK "overlay module present"
+  else
+    LOG WARNING "overlay module not present"
+    overlayfs_supported=false
+  fi
+fi >&2
+if ${overlayfs_supported}; then
+  if adb_test -f /sys/module/overlay/parameters/override_creds; then
+    LOG OK "overlay module supports override_creds"
+  else
+    case "$(adb_sh uname -r </dev/null)" in
+      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
+        LOG WARNING "overlay module does not support override_creds"
+        overlayfs_supported=false
+        ;;
+      *)
+        LOG OK "overlay module uses caller's creds"
+        ;;
+    esac
+  fi
+fi
 
 restore() {
   LOG INFO "restoring device"
@@ -1027,66 +1049,11 @@ if ! wait_for_screen && ${screen_wait}; then
   LOG WARNING "not healthy, no launcher, skipping wait for screen"
 fi
 
-# Can we test remount -R command?
-if [ "orange" = "$(get_property ro.boot.verifiedbootstate)" ] &&
-   [ "2" = "$(get_property partition.system.verified)" ]; then
-  can_restore_verity=true
-
-  LOG RUN "Testing adb shell su root remount -R command"
-
-  avc_check
-  T=`adb_date`
-  adb_su remount -R system </dev/null
-  err=${?}
-  if [ "${err}" != 0 ]; then
-    LOG WARNING "adb shell su root remount -R system = ${err}, likely did not reboot!"
-    T="-t ${T}"
-  else
-    # Rebooted, logcat will be meaningless, and last logcat will likely be clear
-    T=""
-  fi
-  sleep 2
-  adb_wait ${ADB_WAIT} ||
-    die "waiting for device after adb shell su root remount -R system `usb_status`"
-  if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
-       "2" = "`get_property partition.system.verified`" ]; then
-    die ${T} "remount -R command failed
-${INDENT}ro.boot.verifiedbootstate=\"`get_property ro.boot.verifiedbootstate`\"
-${INDENT}partition.system.verified=\"`get_property partition.system.verified`\""
-  fi
-
-  LOG OK "adb shell su root remount -R command"
-fi
-
-LOG RUN "Testing kernel support for overlayfs"
+################################################################################
+LOG RUN "Checking current overlayfs status"
 
 adb_wait || die "wait for device failed"
-adb_root ||
-  die "initial setup"
-
-adb_test -d /sys/module/overlay ||
-  adb_sh grep "nodev${TAB}overlay" /proc/filesystems </dev/null >/dev/null 2>/dev/null &&
-  LOG OK "overlay module present" ||
-  (
-    LOG WARNING "overlay module not present" &&
-      false
-  ) ||
-  overlayfs_supported=false
-if ${overlayfs_supported}; then
-  adb_test -f /sys/module/overlay/parameters/override_creds &&
-    LOG OK "overlay module supports override_creds" ||
-    case `adb_sh uname -r </dev/null` in
-      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
-        LOG WARNING "overlay module does not support override_creds" &&
-        overlayfs_supported=false
-        ;;
-      *)
-        LOG OK "overlay module uses caller's creds"
-        ;;
-    esac
-fi
-
-LOG RUN "Checking current overlayfs status"
+adb_root || die "adb root failed"
 
 # We can not universally use adb enable-verity to ensure device is
 # in a overlayfs disabled state since it can prevent reboot on
@@ -1097,13 +1064,12 @@ if surgically_wipe_overlayfs; then
   LOG WARNING "rebooting before test"
   adb_reboot &&
     adb_wait ${ADB_WAIT} ||
-    die "lost device after reboot after wipe `usb_status`"
+    die "lost device after reboot after overlay wipe $(usb_status)"
   adb_root ||
     die "lost device after elevation to root after wipe `usb_status`"
 fi
 is_overlayfs_mounted &&
   die "overlay takeover unexpected at this phase"
-LOG OK "no overlay present before setup"
 
 overlayfs_needed=true
 D=`adb_sh cat /proc/mounts </dev/null |
@@ -1129,33 +1095,59 @@ if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
 elif ! ${overlayfs_supported}; then
   die "need overlayfs, but do not have it"
 fi
+LOG OK "no overlay present before setup"
 
-LOG RUN "disable-verity -R"
+################################################################################
+# Precondition is overlayfs *not* setup.
+LOG RUN "Testing adb disable-verity -R"
 
-L=
 T=$(adb_date)
-H=$(adb_su disable-verity -R 2>&1)
-err="${?}"
-echo "${H}" >&2
+adb_su disable-verity -R >&2 ||
+  die -t "${T}" "disable-verity -R failed"
+sleep 2
+adb_wait "${ADB_WAIT}" ||
+  die "lost device after adb disable-verity -R $(usb_status)"
 
-if [ "${err}" != 0 ]; then
-  die -t "${T}" "disable-verity -R"
+if [ "2" = "$(get_property partition.system.verified)" ]; then
+  LOG ERROR "partition.system.verified=$(get_property partition.system.verified)"
+  die "verity not disabled after adb disable-verity -R"
 fi
-
-# Fuzzy search for a line that contains "overlay" and "fail". Informational only.
-if echo "${H}" | grep -i "overlay" | grep -iq "fail"; then
-  LOG WARNING "overlayfs setup whined"
-fi
-
-adb_wait "${ADB_WAIT}" &&
-  adb_root ||
-  die "lost device after adb shell su root disable-verity -R $(usb_status)"
-
 if ${overlayfs_needed}; then
-  if ! is_overlayfs_mounted; then
-    die "no overlay being setup after disable-verity -R"
-  fi
+  is_overlayfs_mounted ||
+    die "no overlay takeover after adb disable-verity -R"
+  LOG OK "overlay takeover after adb disable-verity -R"
 fi
+LOG OK "adb disable-verity -R"
+
+
+LOG RUN "Testing adb remount -R"
+
+if surgically_wipe_overlayfs; then
+  adb_reboot &&
+    adb_wait "${ADB_WAIT}" ||
+    die "lost device after reboot after overlay wipe $(usb_status)"
+fi
+is_overlayfs_mounted &&
+  die "overlay takeover unexpected at this phase"
+
+T=$(adb_date)
+adb_su remount -R </dev/null >&2 ||
+  die -t "${T}" "adb remount -R failed"
+sleep 2
+adb_wait "${ADB_WAIT}" ||
+  die "lost device after adb remount -R $(usb_status)"
+
+if [ "2" = "$(get_property partition.system.verified)" ]; then
+  LOG ERROR "partition.system.verified=$(get_property partition.system.verified)"
+  die "verity not disabled after adb remount -R"
+fi
+if ${overlayfs_needed}; then
+  is_overlayfs_mounted ||
+    die "no overlay takeover after adb remount -R"
+  LOG OK "overlay takeover after adb remount -R"
+fi
+LOG OK "adb remount -R"
+
 
 LOG RUN "remount"
 
@@ -1169,12 +1161,10 @@ ret=${?}
 echo "${D}" >&2
 [ ${ret} != 0 ] ||
   [ X"${D}" = X"${D##*remount failed}" ] ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
   die -t "${T}" "adb remount failed"
 D=`adb_sh df -k </dev/null` &&
   H=`echo "${D}" | head -1` &&
-  D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) >&2
+  D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "`
 ret=${?}
 uses_dynamic_scratch=false
 scratch_partition=
@@ -1314,7 +1304,6 @@ if ${overlayfs_needed}; then
   D=`adb_su df -k </dev/null` &&
     H=`echo "${D}" | head -1` &&
     D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
-    ( echo "${L}" && false ) >&2 ||
     die -d "overlay takeover failed after reboot"
 
   adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
@@ -1644,44 +1633,6 @@ if ! restore; then
   }
   die "failed to restore verity after remount from scratch test"
 fi
-
-err=0
-
-if ${overlayfs_supported}; then
-  LOG RUN "test 'adb remount -R'"
-  avc_check
-  adb_root ||
-    die "adb root in preparation for adb remount -R"
-  T=`adb_date`
-  adb remount -R
-  err=${?}
-  if [ "${err}" != 0 ]; then
-    die -t ${T} "adb remount -R = ${err}"
-  fi
-  sleep 2
-  adb_wait ${ADB_WAIT} ||
-    die "waiting for device after adb remount -R `usb_status`"
-  if [ "orange" != "`get_property ro.boot.verifiedbootstate`" -o \
-       "2" = "`get_property partition.system.verified`" ] &&
-     [ -n "`get_property ro.boot.verifiedbootstate`" -o \
-       -n "`get_property partition.system.verified`" ]; then
-    die "remount -R command failed to disable verity
-${INDENT}ro.boot.verifiedbootstate=\"`get_property ro.boot.verifiedbootstate`\"
-${INDENT}partition.system.verified=\"`get_property partition.system.verified`\""
-  fi
-
-  LOG OK "'adb remount -R' command"
-
-  restore
-  err=${?}
-fi
-
-restore() {
-  true
-}
-
-[ ${err} = 0 ] ||
-  die "failed to restore verity"
 
 LOG PASSED "adb remount test"
 
