@@ -55,7 +55,6 @@ RED="${ESCAPE}[31m"
 YELLOW="${ESCAPE}[33m"
 BLUE="${ESCAPE}[34m"
 NORMAL="${ESCAPE}[0m"
-TMPDIR=${TMPDIR:-/tmp}
 print_time=false
 start_time=`date +%s`
 ACTIVE_SLOT=
@@ -588,19 +587,10 @@ get_active_slot() {
 
 [ "USAGE: restore
 
-Do nothing: should be redefined when necessary.  Called after cleanup.
+Do nothing: should be redefined when necessary.
 
 Returns: reverses configurations" ]
 restore() {
-  true
-}
-
-[ "USAGE: cleanup
-
-Do nothing: should be redefined when necessary
-
-Returns: cleans up any latent resources" ]
-cleanup() {
   true
 }
 
@@ -874,8 +864,10 @@ if ! ${color}; then
   NORMAL=""
 fi
 
+TMPDIR=
+
 exit_handler() {
-  cleanup || true
+  [ -n "${TMPDIR}" ] && rm -rf "${TMPDIR}"
   local err=0
   if ! restore; then
     LOG ERROR "restore failed"
@@ -887,6 +879,8 @@ exit_handler() {
   fi
 }
 trap 'exit_handler' EXIT
+
+TMPDIR=$(mktemp -d)
 
 if ${print_time}; then
   LOG INFO "start $(date)"
@@ -1305,19 +1299,15 @@ check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
 
 # Download libc.so, append some garbage, push back, and check if the file
 # is updated.
-tempdir="`mktemp -d`"
-cleanup() {
-  rm -rf ${tempdir}
-}
-adb pull /system/lib/bootstrap/libc.so ${tempdir} >/dev/null ||
+adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so" >/dev/null ||
   die "pull libc.so from device"
 garbage="D105225BBFCB1EB8AB8EBDB7094646F0"
-echo "${garbage}" >> ${tempdir}/libc.so
-adb push ${tempdir}/libc.so /system/lib/bootstrap/libc.so >/dev/null ||
+echo "${garbage}" >>"${TMPDIR}/libc.so"
+adb push "${TMPDIR}/libc.so" /system/lib/bootstrap/libc.so >/dev/null ||
   die "push libc.so to device"
-adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice >/dev/null ||
+adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
   die "pull libc.so from device"
-diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null ||
+diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null ||
   die "libc.so differ"
 
 LOG RUN "reboot to confirm content persistent"
@@ -1379,87 +1369,85 @@ adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 
 # Check if the updated libc.so is persistent after reboot.
 adb_root &&
-  adb pull /system/lib/bootstrap/libc.so ${tempdir}/libc.so.fromdevice >/dev/null ||
+  adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
   die "pull libc.so from device"
-diff ${tempdir}/libc.so ${tempdir}/libc.so.fromdevice > /dev/null || die "libc.so differ"
-rm -rf ${tempdir}
-cleanup() {
-  true
-}
+diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null || die "libc.so differ"
 LOG OK "/system/lib/bootstrap/libc.so content remains after reboot"
 
-LOG RUN "flash vendor, confirm its content disappears"
+################################################################################
+LOG RUN "flash vendor, and confirm vendor override disappears"
 
-H=`adb_sh echo '${HOSTNAME}' </dev/null 2>/dev/null`
-is_bootloader_fastboot=false
+is_bootloader_fastboot=true
 # cuttlefish?
-[ X"${H}" != X"${H#vsoc}" ] || is_bootloader_fastboot=true
+[[ "$(get_property ro.product.device)" == vsoc* ]] &&
+  is_bootloader_fastboot=false
 is_userspace_fastboot=false
 
 if ! ${is_bootloader_fastboot}; then
-  LOG WARNING "does not support fastboot, skipping"
-elif [ -z "${ANDROID_PRODUCT_OUT}" ]; then
-  LOG WARNING "build tree not setup, skipping"
-elif [ ! -s "${ANDROID_PRODUCT_OUT}/vendor.img" ]; then
-  LOG WARNING "vendor image missing, skipping"
-elif [ "${ANDROID_PRODUCT_OUT}" = "${ANDROID_PRODUCT_OUT%*/${H}}" ]; then
-  LOG WARNING "wrong vendor image, skipping"
-elif [ -z "${ANDROID_HOST_OUT}" ]; then
-  LOG WARNING "please run lunch, skipping"
-elif ! (
-          adb_cat /vendor/build.prop |
-          cmp -s ${ANDROID_PRODUCT_OUT}/vendor/build.prop
-       ) >/dev/null 2>/dev/null; then
-  LOG WARNING "vendor image signature mismatch, skipping"
+  LOG WARNING "does not support fastboot flash, skipping"
 else
   wait_for_screen
+  adb_root || die "adb root"
+
+  VENDOR_DEVICE_CANDIDATES=(
+    "/dev/block/mapper/vendor"{_${ACTIVE_SLOT},}
+    "/dev/block/by-name/vendor"{_${ACTIVE_SLOT},}
+  )
+  for b in "${VENDOR_DEVICE_CANDIDATES[@]}"; do
+    if adb_test -e "${b}"; then
+      adb pull "${b}" "${TMPDIR}/vendor.img" || die "adb pull ${b}"
+      LOG INFO "pulled ${b} from device as vendor.img"
+      break
+    fi
+  done
+  [ -f "${TMPDIR}/vendor.img" ] ||
+    die "cannot find block device of vendor partition"
+
   avc_check
   adb reboot fastboot </dev/null ||
     die "fastbootd not supported (wrong adb in path?)"
   any_wait ${ADB_WAIT} &&
     inFastboot ||
     die "reboot into fastboot to flash vendor `usb_status` (bad bootloader?)"
-  fastboot flash vendor ||
+  fastboot flash vendor "${TMPDIR}/vendor.img" ||
     ( fastboot reboot && false) ||
     die "fastboot flash vendor"
+  LOG OK "flashed vendor"
+
   fastboot_getvar is-userspace yes &&
     is_userspace_fastboot=true
+  # check ${scratch_partition} via fastboot
   if [ -n "${scratch_partition}" ]; then
     fastboot_getvar partition-type:${scratch_partition} raw ||
       ( fastboot reboot && false) ||
       die "fastboot can not see ${scratch_partition} parameters"
     if ${uses_dynamic_scratch}; then
-      # check ${scratch_partition} via fastboot
       fastboot_getvar has-slot:${scratch_partition} no &&
         fastboot_getvar is-logical:${scratch_partition} yes ||
         ( fastboot reboot && false) ||
         die "fastboot can not see ${scratch_partition} parameters"
-    else
-      fastboot_getvar is-logical:${scratch_partition} no ||
-        ( fastboot reboot && false) ||
-        die "fastboot can not see ${scratch_partition} parameters"
-    fi
-    if ! ${uses_dynamic_scratch}; then
-      fastboot reboot-bootloader ||
-        die "Reboot into fastboot"
-    fi
-    if ${uses_dynamic_scratch}; then
       LOG INFO "expect fastboot erase ${scratch_partition} to fail"
       fastboot erase ${scratch_partition} &&
         ( fastboot reboot || true) &&
         die "fastboot can erase ${scratch_partition}"
+    else
+      fastboot_getvar is-logical:${scratch_partition} no ||
+        ( fastboot reboot && false) ||
+        die "fastboot can not see ${scratch_partition} parameters"
+      fastboot reboot-bootloader ||
+        die "fastboot reboot bootloader"
     fi
     LOG INFO "expect fastboot format ${scratch_partition} to fail"
     fastboot format ${scratch_partition} &&
       ( fastboot reboot || true) &&
       die "fastboot can format ${scratch_partition}"
   fi
-  fastboot reboot ||
-    die "can not reboot out of fastboot"
-  LOG WARNING "adb after fastboot"
+
+  fastboot reboot || die "cannot reboot out of fastboot"
+  LOG INFO "reboot from fastboot"
   adb_wait ${ADB_WAIT} ||
     fixup_from_recovery ||
-    die "did not reboot after formatting ${scratch_partition} `usb_status`"
+    die "cannot reboot after flash vendor $(usb_status)"
   if ${overlayfs_needed}; then
     adb_root &&
       D=`adb_sh df -k </dev/null` &&
@@ -1474,32 +1462,30 @@ else
       if ${is_userspace_fastboot}; then
         die  "overlay supposed to be minus /vendor takeover after flash vendor"
       else
-        LOG WARNING "user fastboot missing required to invalidate, ignoring a failure"
+        LOG WARNING "fastbootd missing required to invalidate, ignoring a failure"
         LOG WARNING "overlay supposed to be minus /vendor takeover after flash vendor"
       fi
   fi
-  B="`adb_cat /system/hello`"
-  check_eq "${A}" "${B}" system after flash vendor
+  check_eq "${A}" "$(adb_cat /system/hello)" "/system content after flash vendor"
+  check_eq "${SYSTEM_INO}" "$(adb_sh stat --format=%i /system/hello </dev/null)" "system inode after flash vendor"
   adb_sh ls /system >/dev/null || die "ls /system"
   adb_test -d /system/priv-app || die "[ -d /system/priv-app ]"
-  B="`adb_cat /system/priv-app/hello`"
-  check_eq "${A}" "${B}" system/priv-app after flash vendor
-  adb_root ||
-    die "adb root"
-  if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
-    adb_test -e /vendor/hello &&
+  check_eq "${A}" "$(adb_cat /system/priv-app/hello)" "/system/priv-app content after flash vendor"
+  adb_root || die "adb root"
+  if adb_test -e /vendor/hello; then
+    if ${is_userspace_fastboot} || ! ${overlayfs_needed}; then
       die "vendor content after flash vendor"
-  else
-    LOG WARNING "user fastboot missing required to invalidate, ignoring a failure"
-    adb_test -e /vendor/hello &&
+    else
+      LOG WARNING "fastbootd missing required to invalidate, ignoring a failure"
       LOG WARNING "vendor content after flash vendor"
+    fi
   fi
-
-  check_eq "${SYSTEM_INO}" "`adb_sh stat --format=%i /system/hello </dev/null`" system inode after reboot
-
-fi
+  LOG OK "vendor override destroyed after flash verdor"
+fi >&2
 
 wait_for_screen
+
+################################################################################
 LOG RUN "remove test content (cleanup)"
 
 T=`adb_date`
@@ -1541,19 +1527,12 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   avc_check
   adb reboot fastboot </dev/null ||
     die "Reboot into fastbootd"
-  img=${TMPDIR}/adb-remount-test-${$}.img
-  cleanup() {
-    rm ${img}
-  }
+  img="${TMPDIR}/adb-remount-test-${$}.img"
   dd if=/dev/zero of=${img} bs=4096 count=16 2>/dev/null &&
     fastboot_wait ${FASTBOOT_WAIT} ||
     die "reboot into fastboot to flash scratch `usb_status`"
   fastboot flash --force ${scratch_partition} ${img}
   err=${?}
-  cleanup
-  cleanup() {
-    true
-  }
   fastboot reboot ||
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
