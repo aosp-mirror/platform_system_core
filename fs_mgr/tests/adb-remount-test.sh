@@ -725,6 +725,7 @@ skip_administrative_mounts() {
   )
   local exclude_devices=(
     "\/sys\/kernel\/debug" "\/data\/media" "\/dev\/block\/loop[0-9]*"
+    "\/dev\/block\/vold\/[^ ]+"
     "${exclude_filesystems[@]}"
   )
   local exclude_mount_points=(
@@ -1162,80 +1163,110 @@ if ${overlayfs_needed}; then
 fi
 LOG OK "adb remount -R"
 
+################################################################################
+# Precondition is a verity-disabled device with overlayfs already setup.
+LOG RUN "Testing adb remount RW"
 
-LOG RUN "remount"
+if ! ${overlayfs_needed}; then
+  LOG WARNING "Reboot to RO (device doesn't use overlayfs)"
+  adb_reboot &&
+    adb_wait "${ADB_WAIT}" ||
+    die "lost device after reboot to RO $(usb_status)"
+fi
 
 # Feed log with selinux denials as baseline before overlays
 adb_unroot
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 adb_root
 
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
+  die "/vendor is not RO"
+T=$(adb_date)
+adb remount vendor >&2 ||
+  die -t "${T}" "adb remount vendor"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
+  die "/vendor is not RW"
+
+adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
+  die "/system is not RO"
+T=$(adb_date)
 adb remount >&2 ||
-  die -t "${T}" "adb remount failed"
-D=`adb_sh df -k </dev/null` &&
-  H=`echo "${D}" | head -1` &&
-  D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "`
-ret=${?}
+  die -t "${T}" "adb remount"
+adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null ||
+  die "/system is not RW"
+
+D=$(adb_sh df -k </dev/null)
+H=$(echo "${D}" | head -1)
+D=$(echo "${D}" | skip_unrelated_mounts | grep "^overlay ")
+if [ -n "${D}" ] && ! ${overlayfs_needed}; then
+  die -t "${T}" "unexpected overlay takeover"
+fi
+if [ -z "${D}" ] && ${overlayfs_needed}; then
+  die -t "${T}" "expected overlay takeover"
+fi
+
+# If scratch_partition && uses_dynamic_scratch, then scratch is on super.
+# If scratch_partition && !uses_dynamic_scratch, then scratch is super_other, system_other.
+# If !scratch_partition, then scratch is on /data via image_manager.
 uses_dynamic_scratch=false
 scratch_partition=
-virtual_ab=`get_property ro.virtual_ab.enabled`
+virtual_ab=$(get_property ro.virtual_ab.enabled)
 if ${overlayfs_needed}; then
-  if [ ${ret} != 0 ]; then
-    die -t ${T} "overlay takeover failed"
-  fi
-  echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
-   LOG WARNING "overlay takeover not complete"
-  if [ -z "${virtual_ab}" ]; then
+  M=$(adb_sh cat /proc/mounts </dev/null |
+      awk '$2 == "/mnt/scratch" { print $1, $3; exit }')
+  [ -z "${M}" ] && die "cannot find any scratch device mounted on /mnt/scratch"
+
+  scratch_device=$(echo "${M}" | awk '{ print $1 }')
+  scratch_filesystem=$(echo "${M}" | awk '{ print $2 }')
+  scratch_size=$(adb_sh df -k "${scratch_device}" </dev/null |
+                 tail +2 | head -1 | awk '{ print $2 }')
+  [ -z "${scratch_size}" ] && die "cannot get size of scratch device (${scratch_device})"
+
+  if [ -n "${virtual_ab}" ]; then
+    LOG INFO "using dynamic scratch partition on /data (VAB device)"
+  elif [[ "${scratch_device}" == /dev/block/by-name/* ]]; then
+    scratch_partition="${scratch_device##/dev/block/by-name/}"
+    LOG INFO "using physical scratch partition ${scratch_partition}"
+  else
+    uses_dynamic_scratch=true
     scratch_partition=scratch
+    LOG INFO "using dynamic scratch partition on super"
   fi
-  if echo "${D}" | grep " /mnt/scratch" >/dev/null; then
-    LOG INFO "using ${scratch_partition} dynamic partition for overrides"
-  fi
-  M=`adb_sh cat /proc/mounts </dev/null |
-     sed -n 's@\([^ ]*\) /mnt/scratch \([^ ]*\) .*@\2 on \1@p'`
-  [ -n "${M}" ] &&
-    LOG INFO "scratch filesystem ${M}"
-  uses_dynamic_scratch=true
-  if [ "${M}" != "${M##*/dev/block/by-name/}" ]; then
-    uses_dynamic_scratch=false
-    scratch_partition="${M##*/dev/block/by-name/}"
-  fi
-  scratch_size=`adb_sh df -k /mnt/scratch </dev/null 2>/dev/null |
-                while read device kblocks used available use mounted on; do
-                  if [ "/mnt/scratch" = "\${mounted}" ]; then
-                    echo \${kblocks}
-                  fi
-                done` &&
-    [ -n "${scratch_size}" ] ||
-    die "scratch size"
-  LOG INFO "scratch size ${scratch_size}KB"
+  LOG INFO "scratch device ${scratch_device} filesystem ${scratch_filesystem} size ${scratch_size}KiB"
+
   for d in ${OVERLAYFS_BACKING}; do
     if adb_test -d /${d}/overlay/system/upper; then
       LOG INFO "/${d}/overlay is setup"
     fi
   done
 
-  ( echo "${H}" &&
+  ( echo "${H}"
     echo "${D}"
-  ) >&2 &&
-    echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
-    die  "overlay takeover after remount"
-  !(adb_sh grep "^overlay " /proc/mounts </dev/null |
+  ) >&2
+  echo "${D}" | grep ' /system$' >/dev/null ||
+    die -t "${T}" "expected overlay to takeover /system after remount"
+  adb_sh grep "^overlay " /proc/mounts </dev/null |
     skip_unrelated_mounts |
-    grep " overlay ro,") ||
-    die "remount overlayfs missed a spot (ro)"
-  !(adb_sh grep -v noatime /proc/mounts </dev/null |
+    grep " overlay ro," &&
+    die "expected overlay to be RW after remount"
+  adb_sh grep -v noatime /proc/mounts </dev/null |
     skip_administrative_mounts data |
     skip_unrelated_mounts |
-    grep -v ' ro,') ||
+    grep -v ' ro,' &&
     die "mounts are not noatime"
-  D=`adb_sh grep " rw," /proc/mounts </dev/null |
-     skip_administrative_mounts data`
-  if echo "${D}" | grep /dev/root >/dev/null; then
-    D=`echo / /
-       echo "${D}" | grep -v /dev/root`
-  fi
-  D=`echo "${D}" | cut -s -d' ' -f1 | sort -u`
+
+  data_device=$(adb_sh cat /proc/mounts </dev/null | awk '$2 == "/data" { print $1; exit }')
+  D=$(adb_sh grep " rw," /proc/mounts </dev/null |
+      skip_administrative_mounts data |
+      skip_unrelated_mounts |
+      awk '{ print $1 }' |
+      grep -v "${data_device}" |
+      sed 's|/dev/root|/|' |
+      sort -u)
+  if [ -n "${D}" ]; then
+    adb_sh df -k ${D} </dev/null |
+      sed -e 's/^Filesystem      /Filesystem (rw) /'
+  fi >&2
   bad_rw=false
   for d in ${D}; do
     if adb_sh tune2fs -l $d </dev/null 2>&1 |
@@ -1248,17 +1279,10 @@ if ${overlayfs_needed}; then
         bad_rw=true
     fi
   done
-  [ -z "${D}" ] ||
-    D=`adb_sh df -k ${D} </dev/null |
-       sed -e 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@' \
-           -e 's/^Filesystem      /Filesystem (rw) /'`
-  [ -z "${D}" ] || echo "${D}" >&2
   ${bad_rw} && die "remount overlayfs missed a spot (rw)"
-else
-  if [ ${ret} = 0 ]; then
-    die -t ${T} "unexpected overlay takeover"
-  fi
 fi
+
+LOG OK "adb remount RW"
 
 # Check something.
 
@@ -1592,21 +1616,6 @@ adb_su mount -o rw,remount /vendor </dev/null ||
 adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
   die "/vendor is not read-write"
 LOG OK "mount -o rw,remount command works"
-
-# Prerequisite is a prepped device from above.
-adb_reboot &&
-  adb_wait ${ADB_WAIT} ||
-  fixup_from_fastboot ||
-  die "lost device after reboot to ro state `usb_status`"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
-  die "/vendor is not read-only"
-adb_su remount vendor </dev/null ||
-  die "remount command"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
-  die "/vendor is not read-write"
-adb_sh grep " /system .* rw," /proc/mounts >/dev/null </dev/null &&
-  die "/vendor is not read-only"
-LOG OK "remount command works from setup"
 
 # Prerequisite is an overlayfs deconstructed device but with verity disabled.
 # This also saves a lot of 'noise' from the command doing a mkfs on backing
