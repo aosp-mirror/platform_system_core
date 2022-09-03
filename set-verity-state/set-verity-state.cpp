@@ -80,17 +80,17 @@ bool is_using_avb() {
 }
 
 bool overlayfs_setup(bool enable) {
-  auto change = false;
+  auto want_reboot = false;
   errno = 0;
-  if (enable ? fs_mgr_overlayfs_setup(nullptr, &change)
-             : fs_mgr_overlayfs_teardown(nullptr, &change)) {
-    if (change) {
+  if (enable ? fs_mgr_overlayfs_setup(nullptr, &want_reboot)
+             : fs_mgr_overlayfs_teardown(nullptr, &want_reboot)) {
+    if (want_reboot) {
       LOG(INFO) << (enable ? "Enabled" : "Disabled") << " overlayfs";
     }
   } else {
     LOG(ERROR) << "Failed to " << (enable ? "enable" : "disable") << " overlayfs";
   }
-  return change;
+  return want_reboot;
 }
 
 struct SetVerityStateResult {
