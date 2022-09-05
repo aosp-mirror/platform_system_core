@@ -760,9 +760,11 @@ surgically_wipe_overlayfs() {
   ${wiped_anything}
 }
 
-[ "USAGE: is_overlayfs_mounted
+[ "USAGE: is_overlayfs_mounted [mountpoint]
 
-Returns: true if overlayfs is mounted" ]
+Diagnostic output of overlayfs df lines to stderr.
+
+Returns: true if overlayfs is mounted [on mountpoint]" ]
 is_overlayfs_mounted() {
   local df_output=$(adb_su df -k </dev/null)
   local df_header_line=$(echo "${df_output}" | head -1)
@@ -775,6 +777,9 @@ is_overlayfs_mounted() {
   ( echo "${df_header_line}"
     echo "${overlay_mounts}"
   ) >&2
+  if [ "${#}" -gt 0 ] && ! ( echo "${overlay_mounts}" | grep -qE " ${1}\$" ); then
+    return 1
+  fi >/dev/null 2>/dev/null
   return 0
 }
 
@@ -1123,14 +1128,47 @@ if [ "2" = "$(get_property partition.system.verified)" ]; then
 fi
 if ${overlayfs_needed}; then
   is_overlayfs_mounted ||
-    die "no overlay takeover after adb disable-verity -R"
+    die -d "no overlay takeover after adb disable-verity -R"
   LOG OK "overlay takeover after adb disable-verity -R"
 fi
 LOG OK "adb disable-verity -R"
 
+################################################################################
+# Precondition is a verity-disabled device with overlayfs already setup.
+LOG RUN "Testing raw remount commands"
 
-LOG RUN "Testing adb remount -R"
+adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
+  die "/system is not RO"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
+  die "/vendor is not RO"
 
+T=$(adb_date)
+adb_su mount -o remount,rw /vendor ||
+  die -t "${T}" "mount -o remount,rw /vendor"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
+  die "/vendor is not RW after mount -o remount,rw"
+LOG OK "mount -o remount,rw"
+
+T=$(adb_date)
+adb_su mount -o remount,ro /vendor ||
+  die -t "${T}" "mount -o remount,ro /vendor"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
+  die "/vendor is not RO after mount -o remount,ro"
+LOG OK "mount -o remount,ro"
+
+T=$(adb_date)
+adb_su remount vendor >&2 ||
+  die -t "${T}" "adb remount vendor"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
+  die -t "${T}" "/vendor is not RW after adb remount vendor"
+adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
+  die -t "${T}" "/system is not RO after adb remount vendor"
+LOG OK "adb remount vendor"
+
+LOG INFO "Restoring device RO state and destroying overlayfs"
+T=$(adb_date)
+adb_su mount -o remount,ro /vendor ||
+  die -t "${T}" "mount -o remount,ro /vendor"
 if surgically_wipe_overlayfs; then
   adb_reboot &&
     adb_wait "${ADB_WAIT}" ||
@@ -1138,6 +1176,31 @@ if surgically_wipe_overlayfs; then
 fi
 is_overlayfs_mounted &&
   die "overlay takeover unexpected at this phase"
+
+################################################################################
+# Precondition is a verity-disabled device with overlayfs *not* setup.
+LOG RUN "Testing adb remount performs overlayfs setup from scratch"
+
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
+  die "/vendor is not RO"
+T=$(adb_date)
+adb_su remount vendor >&2 ||
+  die -t "${T}" "adb remount vendor from scratch"
+if ${overlayfs_needed}; then
+  is_overlayfs_mounted /vendor ||
+    die -t "${T}" "expected overlay takeover /vendor"
+  is_overlayfs_mounted /system 2>/dev/null &&
+    die -t "${T}" "unexpected overlay takeover /system"
+fi
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
+  die -t "${T}" "/vendor is not RW after adb remount vendor"
+adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
+  die -t "${T}" "/system is not RO after adb remount vendor"
+LOG OK "adb remount from scratch"
+
+################################################################################
+# Precondition is overlayfs partially setup by previous test.
+LOG RUN "Testing adb remount -R"
 
 T=$(adb_date)
 adb_su remount -R </dev/null >&2 ||
@@ -1151,16 +1214,16 @@ if [ "2" = "$(get_property partition.system.verified)" ]; then
   die "verity not disabled after adb remount -R"
 fi
 if ${overlayfs_needed}; then
-  is_overlayfs_mounted ||
-    die "no overlay takeover after adb remount -R"
+  is_overlayfs_mounted /system ||
+    die -d "expected overlay takeover /system"
+  is_overlayfs_mounted /vendor 2>/dev/null ||
+    die -d "expected overlay takeover /vendor"
   LOG OK "overlay takeover after adb remount -R"
 fi
 LOG OK "adb remount -R"
 
-################################################################################
-# Precondition is a verity-disabled device with overlayfs already setup.
-LOG RUN "Testing adb remount RW"
-
+# For devices using overlayfs, remount -R should reboot after overlayfs setup.
+# For legacy device, manual reboot to ensure device clean state.
 if ! ${overlayfs_needed}; then
   LOG WARNING "Reboot to RO (device doesn't use overlayfs)"
   adb_reboot &&
@@ -1168,35 +1231,32 @@ if ! ${overlayfs_needed}; then
     die "lost device after reboot to RO $(usb_status)"
 fi
 
+################################################################################
+# Precondition is a verity-disabled device with overlayfs already setup.
+LOG RUN "Testing adb remount RW"
+
 # Feed log with selinux denials as baseline before overlays
 adb_unroot
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 adb_root
 
-adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
-  die "/vendor is not RO"
-T=$(adb_date)
-adb remount vendor >&2 ||
-  die -t "${T}" "adb remount vendor"
-adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
-  die "/vendor is not RW"
-
 adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
   die "/system is not RO"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
+  die "/vendor is not RO"
+
 T=$(adb_date)
 adb remount >&2 ||
   die -t "${T}" "adb remount"
 adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null ||
-  die "/system is not RW"
+  die -t "${T}" "/system is not RW"
+adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
+  die -t "${T}" "/vendor is not RW"
 
-D=$(adb_sh df -k </dev/null)
-H=$(echo "${D}" | head -1)
-D=$(echo "${D}" | skip_unrelated_mounts | grep "^overlay ")
-if [ -n "${D}" ] && ! ${overlayfs_needed}; then
-  die -t "${T}" "unexpected overlay takeover"
-fi
-if [ -z "${D}" ] && ${overlayfs_needed}; then
-  die -t "${T}" "expected overlay takeover"
+if ${overlayfs_needed}; then
+  is_overlayfs_mounted || die -t "${T}" "expected overlay takeover"
+else
+  is_overlayfs_mounted && die -t "${T}" "unexpected overlay takeover"
 fi
 
 # If scratch_partition && uses_dynamic_scratch, then scratch is on super.
@@ -1234,10 +1294,7 @@ if ${overlayfs_needed}; then
     fi
   done
 
-  ( echo "${H}"
-    echo "${D}"
-  ) >&2
-  echo "${D}" | grep ' /system$' >/dev/null ||
+  is_overlayfs_mounted /system 2>/dev/null ||
     die -t "${T}" "expected overlay to takeover /system after remount"
   adb_sh grep "^overlay " /proc/mounts </dev/null |
     skip_unrelated_mounts |
@@ -1325,9 +1382,7 @@ adb_reboot &&
   die "reboot after override content added failed `usb_status`"
 
 if ${overlayfs_needed}; then
-  D=`adb_su df -k </dev/null` &&
-    H=`echo "${D}" | head -1` &&
-    D=`echo "${D}" | grep -v " /vendor/..*$" | grep "^overlay "` ||
+  is_overlayfs_mounted ||
     die -d "overlay takeover failed after reboot"
 
   adb_su sed -n '1,/overlay \/system/p' /proc/mounts </dev/null |
@@ -1449,22 +1504,16 @@ else
     fixup_from_recovery ||
     die "cannot reboot after flash vendor $(usb_status)"
   if ${overlayfs_needed}; then
-    adb_root &&
-      D=`adb_sh df -k </dev/null` &&
-      H=`echo "${D}" | head -1` &&
-      D=`echo "${D}" | skip_unrelated_mounts | grep "^overlay "` &&
-      ( echo "${H}" &&
-        echo "${D}"
-      ) >&2 &&
-      echo "${D}" | grep "^overlay .* /system\$" >/dev/null ||
+    is_overlayfs_mounted /system ||
       die  "overlay /system takeover after flash vendor"
-    echo "${D}" | grep "^overlay .* /vendor\$" >/dev/null &&
+    if is_overlayfs_mounted /vendor 2>/dev/null; then
       if ${is_userspace_fastboot}; then
         die  "overlay supposed to be minus /vendor takeover after flash vendor"
       else
         LOG WARNING "fastbootd missing required to invalidate, ignoring a failure"
         LOG WARNING "overlay supposed to be minus /vendor takeover after flash vendor"
       fi
+    fi
   fi
   check_eq "${A}" "$(adb_cat /system/hello)" "/system content after flash vendor"
   check_eq "${SYSTEM_INO}" "$(adb_sh stat --format=%i /system/hello </dev/null)" "system inode after flash vendor"
@@ -1565,55 +1614,6 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   adb remount >&2 ||
     die -t ${T} "remount failed"
 fi
-
-LOG RUN "test raw remount commands"
-
-fixup_from_fastboot() {
-  inFastboot || return 1
-  if [ -n "${ACTIVE_SLOT}" ]; then
-    local active_slot=`get_active_slot`
-    if [ X"${ACTIVE_SLOT}" != X"${active_slot}" ]; then
-      LOG WARNING "Active slot changed from ${ACTIVE_SLOT} to ${active_slot}"
-    else
-      LOG WARNING "Active slot to be set to ${ACTIVE_SLOT}"
-    fi
-    fastboot --set-active=${ACTIVE_SLOT}
-  fi
-  fastboot reboot
-  adb_wait ${ADB_WAIT}
-}
-
-# Prerequisite is a prepped device from above.
-adb_reboot &&
-  adb_wait ${ADB_WAIT} ||
-  fixup_from_fastboot ||
-  die "lost device after reboot to ro state `usb_status`"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
-  die "/vendor is not read-only"
-adb_su mount -o rw,remount /vendor </dev/null ||
-  die "remount command"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
-  die "/vendor is not read-write"
-LOG OK "mount -o rw,remount command works"
-
-# Prerequisite is an overlayfs deconstructed device but with verity disabled.
-# This also saves a lot of 'noise' from the command doing a mkfs on backing
-# storage and all the related tuning and adjustment.
-surgically_wipe_overlayfs || true
-adb_reboot &&
-  adb_wait ${ADB_WAIT} ||
-  fixup_from_fastboot ||
-  die "lost device after reboot after wipe `usb_status`"
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null &&
-  die "/vendor is not read-only"
-adb_su remount vendor </dev/null ||
-  die "remount command"
-adb_su df -k </dev/null | skip_unrelated_mounts >&2
-adb_sh grep " /vendor .* rw," /proc/mounts >/dev/null </dev/null ||
-  die "/vendor is not read-write"
-adb_sh grep " \(/system\|/\) .* rw," /proc/mounts >/dev/null </dev/null &&
-  die "/system is not read-only"
-LOG OK "remount command works from scratch"
 
 
 LOG PASSED "adb remount test"
