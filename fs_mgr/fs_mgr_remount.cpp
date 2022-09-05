@@ -317,15 +317,15 @@ static RemountStatus CheckVerityAndOverlayfs(Fstab* partitions, RemountCheckResu
         }
 
         if (fs_mgr_wants_overlayfs(&entry)) {
-            bool change = false;
+            bool want_reboot = false;
             bool force = result->disabled_verity;
-            if (!fs_mgr_overlayfs_setup(mount_point.c_str(), &change, force)) {
+            if (!fs_mgr_overlayfs_setup(mount_point.c_str(), &want_reboot, force)) {
                 LOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
                 status = BAD_OVERLAY;
                 it = partitions->erase(it);
                 continue;
             }
-            if (change) {
+            if (want_reboot) {
                 LOG(INFO) << "Using overlayfs for " << mount_point;
                 result->reboot_later = true;
                 result->setup_overlayfs = true;
