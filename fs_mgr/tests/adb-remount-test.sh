@@ -50,12 +50,15 @@ TAB="`echo | tr '\n' '\t'`"
 ESCAPE="`echo | tr '\n' '\033'`"
 # A _real_ embedded carriage return character
 CR="`echo | tr '\n' '\r'`"
-GREEN="${ESCAPE}[32m"
-RED="${ESCAPE}[31m"
-YELLOW="${ESCAPE}[33m"
-BLUE="${ESCAPE}[34m"
-NORMAL="${ESCAPE}[0m"
-print_time=false
+RED=
+GREEN=
+YELLOW=
+BLUE=
+NORMAL=
+color=false
+# Assume support color if stdout is terminal.
+[ -t 1 ] && color=true
+print_time=true
 start_time=`date +%s`
 ACTIVE_SLOT=
 OVERLAYFS_BACKING="cache mnt/scratch"
@@ -70,6 +73,9 @@ screen_wait=true
 
 [ "USAGE: LOG [RUN|OK|PASSED|WARNING|ERROR|FAILED|INFO] [message]..." ]
 LOG() {
+  if ${print_time}; then
+    echo -n "$(date '+%m-%d %T') "
+  fi >&2
   case "${1}" in
     R*)
       shift
@@ -191,7 +197,7 @@ adb_logcat() {
 
 Returns: worrisome avc violations" ]
 avc_check() {
-  if ! ${overlayfs_supported:-false}; then
+  if ! ${overlayfs_needed:-false}; then
     return
   fi
   local L=`adb_logcat -b all -v brief -d \
@@ -793,7 +799,7 @@ GETOPTS="--alternative --unquoted
          --longoptions wait-adb:,wait-fastboot:
          --longoptions wait-screen,wait-display
          --longoptions no-wait-screen,no-wait-display
-         --longoptions gtest_print_time,print-time
+         --longoptions gtest_print_time,print-time,no-print-time
          --"
 if [ "Darwin" = "${HOSTOS}" ]; then
   GETOPTS=
@@ -808,12 +814,11 @@ if [ "Darwin" = "${HOSTOS}" ]; then
                  s/--wait-adb/          /g
                  s/--wait-fastboot/               /g'`"
 fi
-OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:t" ${*}` ||
+OPTIONS=`getopt ${GETOPTS} "?a:cCdDf:hs:tT" ${*}` ||
   ( echo "${USAGE}" >&2 ; false ) ||
   die "getopt failure"
 set -- ${OPTIONS}
 
-color=false
 while [ ${#} -gt 0 ]; do
   case ${1} in
     -h | --help | -\?)
@@ -839,6 +844,9 @@ while [ ${#} -gt 0 ]; do
     -t | --print-time | --gtest_print_time)
       print_time=true
       ;;
+    -T | --no-print-time)
+      print_time=false
+      ;;
     -a | --wait-adb)
       ADB_WAIT=${2}
       shift
@@ -861,12 +869,13 @@ while [ ${#} -gt 0 ]; do
   esac
   shift
 done
-if ! ${color}; then
-  GREEN=""
-  RED=""
-  YELLOW=""
-  BLUE=""
-  NORMAL=""
+
+if ${color}; then
+  RED="${ESCAPE}[31m"
+  GREEN="${ESCAPE}[32m"
+  YELLOW="${ESCAPE}[33m"
+  BLUE="${ESCAPE}[34m"
+  NORMAL="${ESCAPE}[0m"
 fi
 
 TMPDIR=
@@ -908,6 +917,9 @@ fi
 inAdb || die "specified device not in adb mode"
 [ "1" = "$(get_property ro.debuggable)" ] || die "device not a debug build"
 [ "orange" = "$(get_property ro.boot.verifiedbootstate)" ] || die "device not bootloader unlocked"
+
+################################################################################
+# Collect characteristics of the device and report.
 can_restore_verity=true
 if [ "2" != "$(get_property partition.system.verified)" ]; then
   LOG WARNING "device might not support verity"
@@ -918,10 +930,6 @@ if ! adb_su getenforce </dev/null | grep 'Enforcing' >/dev/null; then
   LOG WARNING "device does not have sepolicy in enforcing mode"
   enforcing=false
 fi
-
-# Do something.
-
-# Collect characteristics of the device and report.
 
 USB_SERIAL=
 if [ -n "${ANDROID_SERIAL}" -a "Darwin" != "${HOSTOS}" ]; then
@@ -961,18 +969,21 @@ FSTAB_FILE=$(adb_su ls -1 '/vendor/etc/fstab*' </dev/null |
              head -1)
 
 # KISS (assume system partition mount point is "/<partition name>")
-[ -n "${FSTAB_FILE}" ] &&
+if [ -n "${FSTAB_FILE}" ]; then
   PARTITIONS=$(adb_su grep -v "^[#${SPACE}${TAB}]" "${FSTAB_FILE}" |
                skip_administrative_mounts |
                awk '$1 ~ /^[^\/]+$/ && "/"$1 == $2 && $4 ~ /(^|,)ro(,|$)/ { print $1 }' |
                sort -u |
                tr '\n' ' ')
-PARTITIONS="${PARTITIONS:-system vendor}"
+else
+  PARTITIONS="system vendor"
+fi
+
 # KISS (we do not support sub-mounts for system partitions currently)
-MOUNTS="`for i in ${PARTITIONS}; do
-           echo /${i}
-         done |
-         tr '\n' ' '`"
+# Ensure /system and /vendor mountpoints are in mounts list
+MOUNTS=$(for i in system vendor ${PARTITIONS}; do
+           echo "/${i}"
+         done | sort -u | tr '\n' ' ')
 LOG INFO "System Partitions list: ${PARTITIONS}"
 
 # Report existing partition sizes
@@ -998,37 +1009,8 @@ adb_sh ls -l /dev/block/by-name/ /dev/block/mapper/ </dev/null 2>/dev/null |
       LOG INFO "partition ${name} device ${device} size ${size}K"
   done
 
-LOG RUN "Checking kernel support for overlayfs"
-
-overlayfs_supported=true
-adb_root || die "becoming root to mine kernel information"
-if ! adb_test -d /sys/module/overlay; then
-  if adb_sh grep -q "nodev${TAB}overlay" /proc/filesystems; then
-    LOG OK "overlay module present"
-  else
-    LOG WARNING "overlay module not present"
-    overlayfs_supported=false
-  fi
-fi >&2
-if ${overlayfs_supported}; then
-  if adb_test -f /sys/module/overlay/parameters/override_creds; then
-    LOG OK "overlay module supports override_creds"
-  else
-    case "$(adb_sh uname -r </dev/null)" in
-      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
-        LOG WARNING "overlay module does not support override_creds"
-        overlayfs_supported=false
-        ;;
-      *)
-        LOG OK "overlay module uses caller's creds"
-        ;;
-    esac
-  fi
-fi
-
 restore() {
   LOG INFO "restoring device"
-  ${overlayfs_supported} || return 0
   inFastboot &&
     fastboot reboot &&
     adb_wait "${ADB_WAIT}" ||
@@ -1106,8 +1088,6 @@ if [ X"${D}" = X"${D##* 100[%] }" ] && ${no_dedupe} ; then
   overlayfs_needed=false
   # if device does not need overlays, then adb enable-verity will brick device
   can_restore_verity=false
-elif ! ${overlayfs_supported}; then
-  die "need overlayfs, but do not have it"
 fi
 LOG OK "no overlay present before setup"
 
@@ -1132,6 +1112,31 @@ if ${overlayfs_needed}; then
   LOG OK "overlay takeover after adb disable-verity -R"
 fi
 LOG OK "adb disable-verity -R"
+
+################################################################################
+LOG RUN "Checking kernel has overlayfs required patches"
+
+adb_root || die "adb root"
+if adb_test -d /sys/module/overlay ||
+    adb_sh grep -q "nodev${TAB}overlay" /proc/filesystems; then
+  LOG OK "overlay module present"
+else
+  LOG INFO "overlay module not present"
+fi
+if is_overlayfs_mounted 2>/dev/null; then
+  if adb_test -f /sys/module/overlay/parameters/override_creds; then
+    LOG OK "overlay module supports override_creds"
+  else
+    case "$(adb_sh uname -r </dev/null)" in
+      4.[456789].* | 4.[1-9][0-9]* | [56789].*)
+        die "overlay module does not support override_creds"
+        ;;
+      *)
+        LOG OK "overlay module uses caller's creds"
+        ;;
+    esac
+  fi
+fi
 
 ################################################################################
 # Precondition is a verity-disabled device with overlayfs already setup.
@@ -1335,38 +1340,41 @@ fi
 
 LOG OK "adb remount RW"
 
-# Check something.
-
+################################################################################
 LOG RUN "push content to ${MOUNTS}"
 
+adb_root || die "adb root"
 A="Hello World! $(date)"
-for i in ${MOUNTS}; do
+for i in ${MOUNTS} /system/priv-app; do
   echo "${A}" | adb_sh cat - ">${i}/hello"
   B="`adb_cat ${i}/hello`" ||
     die "${i#/} hello"
   check_eq "${A}" "${B}" ${i} before reboot
 done
-echo "${A}" | adb_sh cat - ">/system/priv-app/hello"
-B="`adb_cat /system/priv-app/hello`" ||
-  die "system priv-app hello"
-check_eq "${A}" "${B}" /system/priv-app before reboot
 SYSTEM_INO=`adb_sh stat --format=%i /system/hello </dev/null`
 VENDOR_INO=`adb_sh stat --format=%i /vendor/hello </dev/null`
 check_ne "${SYSTEM_INO}" "${VENDOR_INO}" vendor and system inode
 
-# Download libc.so, append some garbage, push back, and check if the file
-# is updated.
-adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so" >/dev/null ||
-  die "pull libc.so from device"
-garbage="D105225BBFCB1EB8AB8EBDB7094646F0"
-echo "${garbage}" >>"${TMPDIR}/libc.so"
-adb push "${TMPDIR}/libc.so" /system/lib/bootstrap/libc.so >/dev/null ||
-  die "push libc.so to device"
-adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
-  die "pull libc.so from device"
-diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null ||
-  die "libc.so differ"
+# Edit build.prop and check if properties are updated.
+system_build_prop_original="${TMPDIR}/system_build.prop.original"
+system_build_prop_modified="${TMPDIR}/system_build.prop.modified"
+system_build_prop_fromdevice="${TMPDIR}/system_build.prop.fromdevice"
+adb pull /system/build.prop "${system_build_prop_original}" >/dev/null ||
+  die "adb pull /system/build.prop"
+# Prepend with extra newline in case the original file doesn't end with a newline.
+cat "${system_build_prop_original}" - <<EOF >"${system_build_prop_modified}"
 
+# Properties added by adb remount test
+test.adb.remount.system.build.prop=true
+EOF
+adb push "${system_build_prop_modified}" /system/build.prop >/dev/null ||
+  die "adb push /system/build.prop"
+adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
+  die "adb pull /system/build.prop"
+diff "${system_build_prop_modified}" "${system_build_prop_fromdevice}" >/dev/null ||
+  die "/system/build.prop differs from pushed content"
+
+################################################################################
 LOG RUN "reboot to confirm content persistent"
 
 fixup_from_recovery() {
@@ -1407,9 +1415,9 @@ adb_sh ls /system >/dev/null || die "ls /system"
 adb_test -d /system/priv-app || die "[ -d /system/priv-app ]"
 B="`adb_cat /system/priv-app/hello`"
 check_eq "${A}" "${B}" /system/priv-app after reboot
+
 # Only root can read vendor if sepolicy permissions are as expected.
-adb_root ||
-  die "adb root"
+adb_root || die "adb root"
 for i in ${MOUNTS}; do
   B="`adb_cat ${i}/hello`"
   check_eq "${A}" "${B}" ${i#/} after reboot
@@ -1422,12 +1430,13 @@ check_eq "${VENDOR_INO}" "`adb_sh stat --format=%i /vendor/hello </dev/null`" ve
 # Feed log with selinux denials as a result of overlays
 adb_sh find ${MOUNTS} </dev/null >/dev/null 2>/dev/null || true
 
-# Check if the updated libc.so is persistent after reboot.
-adb_root &&
-  adb pull /system/lib/bootstrap/libc.so "${TMPDIR}/libc.so.fromdevice" >/dev/null ||
-  die "pull libc.so from device"
-diff "${TMPDIR}/libc.so" "${TMPDIR}/libc.so.fromdevice" > /dev/null || die "libc.so differ"
-LOG OK "/system/lib/bootstrap/libc.so content remains after reboot"
+# Check if the updated build.prop is persistent after reboot.
+check_eq "true" "$(get_property 'test.adb.remount.system.build.prop')" "load modified build.prop"
+adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
+  die "adb pull /system/build.prop"
+diff "${system_build_prop_modified}" "${system_build_prop_fromdevice}" >/dev/null ||
+  die "/system/build.prop differs from pushed content"
+LOG OK "/system/build.prop content remains after reboot"
 
 ################################################################################
 LOG RUN "flash vendor, and confirm vendor override disappears"
@@ -1535,40 +1544,26 @@ fi >&2
 wait_for_screen
 
 ################################################################################
-LOG RUN "remove test content (cleanup)"
+LOG RUN "Clean up test content"
 
-T=`adb_date`
-H=`adb remount 2>&1`
-err=${?}
-L=
-D="${H%?Now reboot your device for settings to take effect*}"
-if [ X"${H}" != X"${D}" ]; then
-  LOG WARNING "adb remount requires a reboot after partial flash (legacy avb)"
-  L=`adb_logcat -b all -v nsec -t ${T} 2>&1`
-  adb_reboot &&
-    adb_wait ${ADB_WAIT} &&
-    adb_root ||
-    die "failed to reboot"
-  T=`adb_date`
-  H=`adb remount 2>&1`
-  err=${?}
+adb_root || die "adb root"
+T=$(adb_date)
+D=$(adb remount 2>&1) ||
+  die -t "${T}" "adb remount"
+echo "${D}" >&2
+if [[ "${D}" =~ [Rr]eboot ]]; then
+  LOG OK "adb remount calls for a reboot after partial flash"
+  # but we don't really want to, since rebooting just recreates the already tore
+  # down vendor overlay.
 fi
-echo "${H}" >&2
-[ ${err} = 0 ] &&
-  ( adb_sh rm /vendor/hello </dev/null 2>/dev/null || true ) &&
-  adb_sh rm /system/hello /system/priv-app/hello </dev/null ||
-  ( [ -n "${L}" ] && echo "${L}" && false ) >&2 ||
-  die -t ${T} "cleanup hello"
-adb_test -e /system/hello &&
-  die "/system/hello lingers after rm"
-adb_test -e /system/priv-app/hello &&
-  die "/system/priv-app/hello lingers after rm"
-adb_test -e /vendor/hello &&
-  die "/vendor/hello lingers after rm"
-for i in ${MOUNTS}; do
-  adb_sh rm ${i}/hello </dev/null 2>/dev/null || true
+
+for i in ${MOUNTS} /system/priv-app; do
+  adb_sh rm "${i}/hello" 2>/dev/null || true
+  adb_test -e "${i}/hello" &&
+    die -t "${T}" "/${i}/hello lingers after rm"
 done
 
+################################################################################
 if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
 
   LOG RUN "test fastboot flash to ${scratch_partition} recovery"
