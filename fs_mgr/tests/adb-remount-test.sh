@@ -250,6 +250,7 @@ adb_reboot() {
   avc_check
   adb reboot remount-test </dev/null || true
   sleep 2
+  adb_wait "${ADB_WAIT}"
 }
 
 [ "USAGE: format_duration [<seconds>|<seconds>s|<minutes>m|<hours>h|<days>d]
@@ -710,7 +711,7 @@ join_with() {
   echo "${result}"
 }
 
-[ "USAGE: skip_administrative_mounts [data] < /proc/mounts
+[ "USAGE: skip_administrative_mounts < /proc/mounts
 
 Filters out all administrative (eg: sysfs) mounts uninteresting to the test" ]
 skip_administrative_mounts() {
@@ -726,27 +727,11 @@ skip_administrative_mounts() {
   )
   local exclude_mount_points=(
     "\/cache" "\/mnt\/scratch" "\/mnt\/vendor\/persist" "\/persist"
-    "\/metadata"
+    "\/metadata" "\/apex\/[^ ]+"
   )
-  if [ "data" = "${1}" ]; then
-    exclude_mount_points+=("\/data")
-  fi
   awk '$1 !~ /^('"$(join_with "|" "${exclude_devices[@]}")"')$/ &&
       $2 !~ /^('"$(join_with "|" "${exclude_mount_points[@]}")"')$/ &&
       $3 !~ /^('"$(join_with "|" "${exclude_filesystems[@]}")"')$/'
-}
-
-[ "USAGE: skip_unrelated_mounts < /proc/mounts
-
-or output from df
-
-Filters out all apex and vendor override administrative overlay mounts
-uninteresting to the test" ]
-skip_unrelated_mounts() {
-  grep -vE \
-      -e "^overlay.* /(apex|bionic|system|vendor)/[^ ]" \
-      -e "^[^ ]+ /apex/[^ ]" \
-      -e "[%] /(data_mirror|apex|bionic|system|vendor)/[^ ]+$"
 }
 
 [ "USAGE: surgically_wipe_overlayfs
@@ -774,8 +759,9 @@ Returns: true if overlayfs is mounted [on mountpoint]" ]
 is_overlayfs_mounted() {
   local df_output=$(adb_su df -k </dev/null)
   local df_header_line=$(echo "${df_output}" | head -1)
+  # KISS (we do not support sub-mounts for system partitions currently)
   local overlay_mounts=$(echo "${df_output}" | tail +2 |
-                         skip_unrelated_mounts |
+                         grep -vE "[%] /(apex|system|vendor)/[^ ]+$" |
                          awk '$1 == "overlay" || $6 == "/mnt/scratch"')
   if ! echo "${overlay_mounts}" | grep -q '^overlay '; then
     return 1
@@ -1033,8 +1019,7 @@ restore() {
     reboot=true
   fi >&2
   if ${reboot}; then
-    adb_reboot &&
-      adb_wait "${ADB_WAIT}"
+    adb_reboot
   fi
 }
 
@@ -1060,8 +1045,7 @@ adb_root || die "adb root failed"
 # having to go through enable-verity transition.
 if surgically_wipe_overlayfs; then
   LOG WARNING "rebooting before test"
-  adb_reboot &&
-    adb_wait ${ADB_WAIT} ||
+  adb_reboot ||
     die "lost device after reboot after overlay wipe $(usb_status)"
   adb_root ||
     die "lost device after elevation to root after wipe `usb_status`"
@@ -1070,9 +1054,10 @@ is_overlayfs_mounted &&
   die "overlay takeover unexpected at this phase"
 
 overlayfs_needed=true
+data_device=$(adb_sh awk '$2 == "/data" { print $1; exit }' /proc/mounts)
 D=$(adb_sh grep " ro," /proc/mounts </dev/null |
-    skip_administrative_mounts data |
-    skip_unrelated_mounts |
+    grep -v "^${data_device}" |
+    skip_administrative_mounts |
     awk '{ print $1 }' |
     sed 's|/dev/root|/|' |
     sort -u)
@@ -1175,8 +1160,7 @@ T=$(adb_date)
 adb_su mount -o remount,ro /vendor ||
   die -t "${T}" "mount -o remount,ro /vendor"
 if surgically_wipe_overlayfs; then
-  adb_reboot &&
-    adb_wait "${ADB_WAIT}" ||
+  adb_reboot ||
     die "lost device after reboot after overlay wipe $(usb_status)"
 fi
 is_overlayfs_mounted &&
@@ -1231,8 +1215,7 @@ LOG OK "adb remount -R"
 # For legacy device, manual reboot to ensure device clean state.
 if ! ${overlayfs_needed}; then
   LOG WARNING "Reboot to RO (device doesn't use overlayfs)"
-  adb_reboot &&
-    adb_wait "${ADB_WAIT}" ||
+  adb_reboot ||
     die "lost device after reboot to RO $(usb_status)"
 fi
 
@@ -1299,43 +1282,36 @@ if ${overlayfs_needed}; then
     fi
   done
 
+  data_device=$(adb_sh awk '$2 == "/data" { print $1; exit }' /proc/mounts)
   is_overlayfs_mounted /system 2>/dev/null ||
     die -t "${T}" "expected overlay to takeover /system after remount"
+  # KISS (we do not support sub-mounts for system partitions currently)
   adb_sh grep "^overlay " /proc/mounts </dev/null |
-    skip_unrelated_mounts |
+    grep -vE "^overlay.* /(apex|system|vendor)/[^ ]" |
     grep " overlay ro," &&
     die "expected overlay to be RW after remount"
   adb_sh grep -v noatime /proc/mounts </dev/null |
-    skip_administrative_mounts data |
-    skip_unrelated_mounts |
+    grep -v "^${data_device}" |
+    skip_administrative_mounts |
     grep -v ' ro,' &&
     die "mounts are not noatime"
 
-  data_device=$(adb_sh cat /proc/mounts </dev/null | awk '$2 == "/data" { print $1; exit }')
   D=$(adb_sh grep " rw," /proc/mounts </dev/null |
-      skip_administrative_mounts data |
-      skip_unrelated_mounts |
+      grep -v "^${data_device}" |
+      skip_administrative_mounts |
       awk '{ print $1 }' |
-      grep -v "${data_device}" |
       sed 's|/dev/root|/|' |
       sort -u)
   if [ -n "${D}" ]; then
     adb_sh df -k ${D} </dev/null |
       sed -e 's/^Filesystem      /Filesystem (rw) /'
   fi >&2
-  bad_rw=false
   for d in ${D}; do
-    if adb_sh tune2fs -l $d </dev/null 2>&1 |
-       grep "Filesystem features:.*shared_blocks" >/dev/null; then
-      bad_rw=true
-    else
-      d=`adb_sh df -k ${D} </dev/null |
-       sed 's@\([%] /\)\(apex\|bionic\|system\|vendor\)/[^ ][^ ]*$@\1@'`
-      [ X"${d}" = X"${d##* 100[%] }" ] ||
-        bad_rw=true
+    if adb_sh tune2fs -l "${d}" </dev/null 2>&1 | grep -q "Filesystem features:.*shared_blocks" ||
+        adb_sh df -k "${d}" | grep -q " 100% "; then
+      die "remount overlayfs missed a spot (rw)"
     fi
   done
-  ${bad_rw} && die "remount overlayfs missed a spot (rw)"
 fi
 
 LOG OK "adb remount RW"
@@ -1384,8 +1360,7 @@ fixup_from_recovery() {
   adb_wait ${ADB_WAIT}
 }
 
-adb_reboot &&
-  adb_wait ${ADB_WAIT} ||
+adb_reboot ||
   fixup_from_recovery ||
   die "reboot after override content added failed `usb_status`"
 
@@ -1591,7 +1566,6 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   then
     LOG WARNING "adb disable-verity requires a reboot after partial flash"
     adb_reboot &&
-      adb_wait ${ADB_WAIT} &&
       adb_root ||
       die "failed to reboot"
     T=`adb_date`
