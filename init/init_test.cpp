@@ -280,6 +280,10 @@ void TestApexServicesInit(const std::vector<std::string>& apex_services,
 }
 
 TEST(init, StopServiceByApexName) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string_view script_template = R"init(
 service apex_test_service /system/bin/yes
     user shell
@@ -291,6 +295,10 @@ service apex_test_service /system/bin/yes
 }
 
 TEST(init, StopMultipleServicesByApexName) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string_view script_template = R"init(
 service apex_test_service_multiple_a /system/bin/yes
     user shell
@@ -307,6 +315,10 @@ service apex_test_service_multiple_b /system/bin/id
 }
 
 TEST(init, StopServicesFromMultipleApexes) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string_view apex_script_template = R"init(
 service apex_test_service_multi_apex_a /system/bin/yes
     user shell
@@ -332,6 +344,10 @@ service apex_test_service_multi_apex_c /system/bin/yes
 }
 
 TEST(init, StopServicesFromApexAndNonApex) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string_view apex_script_template = R"init(
 service apex_test_service_apex_a /system/bin/yes
     user shell
@@ -357,6 +373,10 @@ service apex_test_service_non_apex /system/bin/yes
 }
 
 TEST(init, StopServicesFromApexMixed) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string_view script_template = R"init(
 service apex_test_service_mixed_a /system/bin/yes
     user shell
