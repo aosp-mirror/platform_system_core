@@ -49,18 +49,28 @@ typedef struct native_handle
 typedef const native_handle_t* buffer_handle_t;
 
 /*
- * native_handle_close
- * 
- * closes the file descriptors contained in this native_handle_t
- * 
+ * Closes the file descriptors contained in this native_handle_t, which may
+ * either be untagged or tagged for ownership by this native_handle_t via
+ * native_handle_set_tag(). Mixing untagged and tagged fds in the same
+ * native_handle_t is not permitted and triggers an fdsan exception, but
+ * native_handle_set_fdsan_tag() can be used to bring consistency if this is
+ * intentional.
+ *
+ * If it's known that fds are tagged, prefer native_handle_close_with_tag() for
+ * better safety.
+ *
  * return 0 on success, or a negative error code on failure
- * 
  */
 int native_handle_close(const native_handle_t* h);
 
 /*
- * native_handle_init
- *
+ * Equivalent to native_handle_close(), but throws an fdsan exception if the fds
+ * are untagged. Use if it's known that the fds in this native_handle_t were
+ * previously tagged via native_handle_set_tag().
+ */
+int native_handle_close_with_tag(const native_handle_t* h);
+
+/*
  * Initializes a native_handle_t from storage.  storage must be declared with
  * NATIVE_HANDLE_DECLARE_STORAGE.  numFds and numInts must not respectively
  * exceed maxFds and maxInts used to declare the storage.
@@ -68,33 +78,42 @@ int native_handle_close(const native_handle_t* h);
 native_handle_t* native_handle_init(char* storage, int numFds, int numInts);
 
 /*
- * native_handle_create
- *
- * creates a native_handle_t and initializes it. must be destroyed with
+ * Creates a native_handle_t and initializes it. Must be destroyed with
  * native_handle_delete(). Note that numFds must be <= NATIVE_HANDLE_MAX_FDS,
  * numInts must be <= NATIVE_HANDLE_MAX_INTS, and both must be >= 0.
- *
  */
 native_handle_t* native_handle_create(int numFds, int numInts);
 
 /*
- * native_handle_clone
- *
- * creates a native_handle_t and initializes it from another native_handle_t.
+ * Updates the fdsan tag for any file descriptors contained in the supplied
+ * handle to indicate that they are owned by this handle and should only be
+ * closed via native_handle_close()/native_handle_close_with_tag(). Each fd in
+ * the handle must have a tag of either 0 (unset) or the tag associated with
+ * this handle, otherwise an fdsan exception will be triggered.
+ */
+void native_handle_set_fdsan_tag(const native_handle_t* handle);
+
+/*
+ * Clears the fdsan tag for any file descriptors contained in the supplied
+ * native_handle_t. Use if this native_handle_t is giving up ownership of its
+ * fds, but the fdsan tags were previously set. Each fd in the handle must have
+ * a tag of either 0 (unset) or the tag associated with this handle, otherwise
+ * an fdsan exception will be triggered.
+ */
+void native_handle_unset_fdsan_tag(const native_handle_t* handle);
+
+/*
+ * Creates a native_handle_t and initializes it from another native_handle_t.
  * Must be destroyed with native_handle_delete().
- *
  */
 native_handle_t* native_handle_clone(const native_handle_t* handle);
 
 /*
- * native_handle_delete
- * 
- * frees a native_handle_t allocated with native_handle_create().
+ * Frees a native_handle_t allocated with native_handle_create().
  * This ONLY frees the memory allocated for the native_handle_t, but doesn't
  * close the file descriptors; which can be achieved with native_handle_close().
- * 
+ *
  * return 0 on success, or a negative error code on failure
- * 
  */
 int native_handle_delete(native_handle_t* h);
 
