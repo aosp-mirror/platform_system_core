@@ -171,6 +171,7 @@ class Service {
     android::base::boot_clock::time_point time_started_;  // time of last start
     android::base::boot_clock::time_point time_crashed_;  // first crash within inspection window
     int crash_count_;                     // number of times crashed within window
+    bool upgraded_mte_ = false;           // whether we upgraded async MTE -> sync MTE before
     std::chrono::minutes fatal_crash_window_ = 4min;  // fatal() when more than 4 crashes in it
     std::optional<std::string> fatal_reboot_target_;  // reboot target of fatal handler
 
@@ -183,6 +184,8 @@ class Service {
     std::vector<SocketDescriptor> sockets_;
     std::vector<FileDescriptor> files_;
     std::vector<std::pair<std::string, std::string>> environment_vars_;
+    // Environment variables that only get applied to the next run.
+    std::vector<std::pair<std::string, std::string>> once_environment_vars_;
 
     Subcontext* subcontext_;
     Action onrestart_;  // Commands to execute on restart.
