@@ -237,9 +237,9 @@ Result<std::string> FindPrecompiledSplitPolicy() {
     // If there is an odm partition, precompiled_sepolicy will be in
     // odm/etc/selinux. Otherwise it will be in vendor/etc/selinux.
     static constexpr const char vendor_precompiled_sepolicy[] =
-        "/vendor/etc/selinux/precompiled_sepolicy";
+            "/vendor/etc/selinux/precompiled_sepolicy";
     static constexpr const char odm_precompiled_sepolicy[] =
-        "/odm/etc/selinux/precompiled_sepolicy";
+            "/odm/etc/selinux/precompiled_sepolicy";
     if (access(odm_precompiled_sepolicy, R_OK) == 0) {
         precompiled_sepolicy = odm_precompiled_sepolicy;
     } else if (access(vendor_precompiled_sepolicy, R_OK) == 0) {
@@ -525,6 +525,31 @@ const std::vector<std::string> kApexSepolicy{"apex_file_contexts", "apex_propert
                                              "apex_service_contexts", "apex_seapp_contexts",
                                              "apex_test"};
 
+Result<void> CreateTmpfsDirIfNeeded() {
+    mode_t mode = 0744;
+    struct stat stat_data;
+    if (stat(kTmpfsDir.c_str(), &stat_data) != 0) {
+        if (errno != ENOENT) {
+            return ErrnoError() << "Could not stat " << kTmpfsDir;
+        }
+        if (mkdir(kTmpfsDir.c_str(), mode) != 0) {
+            return ErrnoError() << "Could not mkdir " << kTmpfsDir;
+        }
+    } else {
+        if (!S_ISDIR(stat_data.st_mode)) {
+            return Error() << kTmpfsDir << " exists and is not a directory.";
+        }
+    }
+
+    // Need to manually call chmod because mkdir will create a folder with
+    // permissions mode & ~umask.
+    if (chmod(kTmpfsDir.c_str(), mode) != 0) {
+        return ErrnoError() << "Could not chmod " << kTmpfsDir;
+    }
+
+    return {};
+}
+
 Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileName) {
     ZipEntry entry;
     std::string dstPath = kTmpfsDir + fileName;
@@ -538,7 +563,7 @@ Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileNam
     unique_fd fd(TEMP_FAILURE_RETRY(
             open(dstPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR)));
     if (fd == -1) {
-        return Error() << "Failed to open " << dstPath;
+        return ErrnoError() << "Failed to open " << dstPath;
     }
 
     ret = ExtractEntryToFile(archive, &entry, fd);
@@ -567,6 +592,11 @@ Result<void> GetPolicyFromApex(const std::string& dir) {
     }
 
     auto handle_guard = android::base::make_scope_guard([&handle] { CloseArchive(handle); });
+
+    auto create = CreateTmpfsDirIfNeeded();
+    if (!create.ok()) {
+        return create.error();
+    }
 
     for (const auto& file : kApexSepolicy) {
         auto extract = PutFileInTmpfs(handle, file);
