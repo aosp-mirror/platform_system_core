@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    default_applicable_licenses: ["system_core_init_license"],
+}
+
 cc_binary {
   name: "mte_upgrade_test_helper",
   srcs: ["mte_upgrade_test_helper.cpp"],
