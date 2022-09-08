@@ -525,7 +525,7 @@ const std::vector<std::string> kApexSepolicy{"apex_file_contexts", "apex_propert
                                              "apex_service_contexts", "apex_seapp_contexts",
                                              "apex_test"};
 
-Result<void> CreateTmpfsDirIfNeeded() {
+Result<void> CreateTmpfsDir() {
     mode_t mode = 0744;
     struct stat stat_data;
     if (stat(kTmpfsDir.c_str(), &stat_data) != 0) {
@@ -539,6 +539,7 @@ Result<void> CreateTmpfsDirIfNeeded() {
         if (!S_ISDIR(stat_data.st_mode)) {
             return Error() << kTmpfsDir << " exists and is not a directory.";
         }
+        LOG(WARNING) << "Directory " << kTmpfsDir << " already exists";
     }
 
     // Need to manually call chmod because mkdir will create a folder with
@@ -593,7 +594,7 @@ Result<void> GetPolicyFromApex(const std::string& dir) {
 
     auto handle_guard = android::base::make_scope_guard([&handle] { CloseArchive(handle); });
 
-    auto create = CreateTmpfsDirIfNeeded();
+    auto create = CreateTmpfsDir();
     if (!create.ok()) {
         return create.error();
     }
