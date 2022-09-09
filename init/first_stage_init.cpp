@@ -295,9 +295,6 @@ int FirstStageMain(int argc, char** argv) {
     // stage init
     CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"))
-
-    // First stage init stores Mainline sepolicy here.
-    CHECKCALL(mkdir("/dev/selinux", 0744));
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
