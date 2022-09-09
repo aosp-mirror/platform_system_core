@@ -246,6 +246,27 @@ void InitApexService(const std::string_view& init_template) {
             &ServiceList::GetInstance());
 }
 
+void CleanupApexServices() {
+    std::vector<std::string> names;
+    for (const auto& s : ServiceList::GetInstance()) {
+        names.push_back(s->name());
+    }
+
+    for (const auto& name : names) {
+        auto s = ServiceList::GetInstance().FindService(name);
+        auto pid = s->pid();
+        ServiceList::GetInstance().RemoveService(*s);
+        if (pid > 0) {
+            kill(pid, SIGTERM);
+            kill(pid, SIGKILL);
+        }
+    }
+
+    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& s) -> bool {
+        return true;
+    });
+}
+
 void TestApexServicesInit(const std::vector<std::string>& apex_services,
             const std::vector<std::string>& other_apex_services,
             const std::vector<std::string> non_apex_services) {
@@ -270,13 +291,7 @@ void TestApexServicesInit(const std::vector<std::string>& apex_services,
     TestRemoveApexService(other_apex_services, /*exist*/ true);
     TestRemoveApexService(non_apex_services, /*exist*/ true);
 
-    ServiceList::GetInstance().RemoveServiceIf([&](const std::unique_ptr<Service>& s) -> bool {
-        return true;
-    });
-
-    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& s) -> bool {
-        return true;
-    });
+    CleanupApexServices();
 }
 
 TEST(init, StopServiceByApexName) {
