@@ -1498,7 +1498,6 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     if (UpdateUsesUserSnapshots(lock) && !device()->IsTestDevice()) {
         if (snapuserd_client_) {
             snapuserd_client_->DetachSnapuserd();
-            snapuserd_client_->CloseConnection();
             snapuserd_client_ = nullptr;
         }
     }
@@ -2794,7 +2793,6 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
     if (snapuserd_client_) {
         LOG(INFO) << "Shutdown snapuserd daemon";
         snapuserd_client_->DetachSnapuserd();
-        snapuserd_client_->CloseConnection();
         snapuserd_client_ = nullptr;
     }
 
@@ -3317,7 +3315,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
         if (snapuserd_client) {
             snapuserd_client->DetachSnapuserd();
-            snapuserd_client->CloseConnection();
+            snapuserd_client = nullptr;
         }
     }
 
