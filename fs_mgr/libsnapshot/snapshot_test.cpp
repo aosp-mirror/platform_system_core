@@ -107,6 +107,12 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
+        const testing::TestInfo* const test_info =
+                testing::UnitTest::GetInstance()->current_test_info();
+        test_name_ = test_info->test_suite_name() + "/"s + test_info->name();
+
+        LOG(INFO) << "Starting test: " << test_name_;
+
         SKIP_IF_NON_VIRTUAL_AB();
 
         SetupProperties();
@@ -152,10 +158,14 @@ class SnapshotTest : public ::testing::Test {
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
 
+        LOG(INFO) << "Tearing down SnapshotTest test: " << test_name_;
+
         lock_ = nullptr;
 
         CleanupTestArtifacts();
         SnapshotTestPropertyFetcher::TearDown();
+
+        LOG(INFO) << "Teardown complete for test: " << test_name_;
     }
 
     void InitializeState() {
@@ -487,6 +497,7 @@ class SnapshotTest : public ::testing::Test {
     android::fiemap::IImageManager* image_manager_ = nullptr;
     std::string fake_super_;
     bool snapuserd_required_ = false;
+    std::string test_name_;
 };
 
 TEST_F(SnapshotTest, CreateSnapshot) {
@@ -1002,6 +1013,8 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+
+        LOG(INFO) << "Tearing down SnapshotUpdateTest test: " << test_name_;
 
         Cleanup();
         SnapshotTest::TearDown();
@@ -2797,7 +2810,6 @@ void KillSnapuserd() {
         return;
     }
     snapuserd_client->DetachSnapuserd();
-    snapuserd_client->CloseConnection();
 }
 
 }  // namespace snapshot
