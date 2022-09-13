@@ -434,11 +434,14 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
                        << "' instead.";
     }
 
-    if (types.size() > 1) {
-        if (types.size() == 2 && types[1] == "passcred") {
+    for (size_t i = 1; i < types.size(); i++) {
+        if (types[i] == "passcred") {
             socket.passcred = true;
+        } else if (types[i] == "listen") {
+            socket.listen = true;
         } else {
-            return Error() << "Only 'passcred' may be used to modify the socket type";
+            return Error() << "Unknown socket type decoration '" << types[i]
+                           << "'. Known values are ['passcred', 'listen']";
         }
     }
 
