@@ -623,6 +623,18 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                           "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
     pthread_mutex_unlock(&crash_mutex);
+  } else if (info->si_signo == SIGSEGV && info->si_code == SEGV_MTEAERR && getppid() == 1) {
+    // Back channel to init (see system/core/init/service.cpp) to signal that
+    // this process crashed due to an ASYNC MTE fault and should be considered
+    // for upgrade to SYNC mode. We are re-using the ART profiler signal, which
+    // is always handled (ignored in native processes, handled for generating a
+    // dump in ART processes), so a process will never crash from this signal
+    // except from here.
+    // The kernel is not particularly receptive to adding this information:
+    // https://lore.kernel.org/all/20220909180617.374238-1-fmayer@google.com/, so we work around
+    // like this.
+    info->si_signo = BIONIC_SIGNAL_ART_PROFILER;
+    resend_signal(info);
   }
 #endif
   else {
