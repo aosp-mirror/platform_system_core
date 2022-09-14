@@ -200,6 +200,7 @@ libinit_cc_defaults {
         "libutils",
         "libziparchive",
     ],
+    header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
     visibility: [":__subpackages__"],
 }
@@ -529,6 +530,7 @@ cc_library_static {
         "libcap",
     ],
     export_include_dirs: ["test_utils/include"], // for tests
+    header_libs: ["bionic_libc_platform_headers"],
 }
 
 // Host Verifier
