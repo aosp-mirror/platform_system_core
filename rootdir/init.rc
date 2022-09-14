@@ -939,22 +939,28 @@ on post-fs-data
     restorecon /data/media
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
 
-    # A tmpfs directory, which will contain all apps CE DE data directory that
-    # bind mount from the original source.
+    # A tmpfs directory, which will contain all apps and sdk sandbox CE and DE
+    # data directory that bind mount from the original source.
     mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
+    mkdir /data_mirror/misc_ce 0700 root root
+    mkdir /data_mirror/misc_de 0700 root root
 
     # Create CE and DE data directory for default volume
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
+    mkdir /data_mirror/misc_ce/null 0700 root root
+    mkdir /data_mirror/misc_de/null 0700 root root
 
     # Bind mount CE and DE data directory to mirror's default volume directory.
     # The 'slave' option (MS_SLAVE) is needed to cause the later bind mount of
     # /data/data onto /data/user/0 to propagate to /data_mirror/data_ce/null/0.
     mount none /data/user /data_mirror/data_ce/null bind rec slave
     mount none /data/user_de /data_mirror/data_de/null bind rec
+    mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
+    mount none /data/misc_de /data_mirror/misc_de/null bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
