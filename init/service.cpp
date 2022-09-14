@@ -42,6 +42,10 @@
 #include "service_list.h"
 #include "util.h"
 
+#if defined(__BIONIC__)
+#include <bionic/reserved_signals.h>
+#endif
+
 #ifdef INIT_FULL_SOURCES
 #include <ApexProperties.sysprop.h>
 #include <android/api-level.h>
@@ -323,12 +327,17 @@ void Service::Reap(const siginfo_t& siginfo) {
             mount_namespace_.has_value() && *mount_namespace_ == NS_DEFAULT;
     const bool is_process_updatable = use_default_mount_ns && is_apex_updatable;
 
-#ifdef SEGV_MTEAERR
+#if defined(__BIONIC__) && defined(SEGV_MTEAERR)
     // As a precaution, we only upgrade a service once per reboot, to limit
     // the potential impact.
-    // TODO(b/244471804): Once we have a kernel API to get sicode, compare it to MTEAERR here.
-    bool should_upgrade_mte = siginfo.si_code != CLD_EXITED && siginfo.si_status == SIGSEGV &&
-                              !upgraded_mte_;
+    //
+    // BIONIC_SIGNAL_ART_PROFILER is a magic value used by deuggerd to signal
+    // that the process crashed with SIGSEGV and SEGV_MTEAERR. This signal will
+    // never be seen otherwise in a crash, because it always gets handled by the
+    // profiling signal handlers in bionic. See also
+    // debuggerd/handler/debuggerd_handler.cpp.
+    bool should_upgrade_mte = siginfo.si_code != CLD_EXITED &&
+                              siginfo.si_status == BIONIC_SIGNAL_ART_PROFILER && !upgraded_mte_;
 
     if (should_upgrade_mte) {
         LOG(INFO) << "Upgrading service " << name_ << " to sync MTE";
