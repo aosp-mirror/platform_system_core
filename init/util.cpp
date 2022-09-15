@@ -89,8 +89,8 @@ Result<uid_t> DecodeUid(const std::string& name) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
-                         gid_t gid, const std::string& socketcon) {
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, bool should_listen,
+                         mode_t perm, uid_t uid, gid_t gid, const std::string& socketcon) {
     if (!socketcon.empty()) {
         if (setsockcreatecon(socketcon.c_str()) == -1) {
             return ErrnoError() << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -144,6 +144,9 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
     }
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
         return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
+    }
+    if (should_listen && listen(fd, /* use OS maximum */ 1 << 30)) {
+        return ErrnoError() << "Failed to listen on socket '" << addr.sun_path << "'";
     }
 
     LOG(INFO) << "Created socket '" << addr.sun_path << "'"
