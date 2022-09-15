@@ -295,6 +295,7 @@ cc_test {
 
     srcs: [
         "BitSet_test.cpp",
+        "CallStack_test.cpp",
         "Errors_test.cpp",
         "FileMap_test.cpp",
         "LruCache_test.cpp",
@@ -315,11 +316,14 @@ cc_test {
                 "SystemClock_test.cpp",
             ],
             shared_libs: [
-                "libz",
-                "liblog",
-                "libcutils",
-                "libutils",
                 "libbase",
+                "libcutils",
+                "liblog",
+                "liblzma",
+                "libunwindstack",
+                "libutils",
+                "libutilscallstack",
+                "libz",
             ],
         },
         linux: {
@@ -330,9 +334,12 @@ cc_test {
         },
         host: {
             static_libs: [
-                "libutils",
-                "liblog",
                 "libbase",
+                "liblog",
+                "liblzma",
+                "libunwindstack_no_dex",
+                "libutils",
+                "libutilscallstack",
             ],
         },
     },
