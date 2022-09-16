@@ -331,9 +331,18 @@ void Service::Reap(const siginfo_t& siginfo) {
                               !upgraded_mte_;
 
     if (should_upgrade_mte) {
-        LOG(INFO) << "Upgrading service " << name_ << " to sync MTE";
-        once_environment_vars_.emplace_back("BIONIC_MEMTAG_UPGRADE_SECS", "60");
-        upgraded_mte_ = true;
+        constexpr int kDefaultUpgradeSecs = 60;
+        int secs = GetIntProperty("persist.device_config.memory_safety_native.upgrade_secs.default",
+                                  kDefaultUpgradeSecs);
+        secs = GetIntProperty(
+                "persist.device_config.memory_safety_native.upgrade_secs.service." + name_, secs);
+        if (secs > 0) {
+            LOG(INFO) << "Upgrading service " << name_ << " to sync MTE for " << secs << " seconds";
+            once_environment_vars_.emplace_back("BIONIC_MEMTAG_UPGRADE_SECS", std::to_string(secs));
+            upgraded_mte_ = true;
+        } else {
+            LOG(INFO) << "Not upgrading service " << name_ << " to sync MTE due to device config";
+        }
     }
 #endif
 
