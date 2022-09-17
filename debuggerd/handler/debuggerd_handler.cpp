@@ -24,6 +24,7 @@
 #include <sched.h>
 #include <signal.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +52,6 @@
 
 #include "handler/fallback.h"
 
-using ::android::base::GetBoolProperty;
 using ::android::base::ParseBool;
 using ::android::base::ParseBoolResult;
 using ::android::base::Pipe;
@@ -87,10 +87,25 @@ static pid_t __gettid() {
   return syscall(__NR_gettid);
 }
 
+static bool property_parse_bool(const char* name) {
+  const prop_info* pi = __system_property_find(name);
+  if (!pi) return false;
+  bool cookie = false;
+  __system_property_read_callback(
+      pi,
+      [](void* cookie, const char*, const char* value, uint32_t) {
+        *reinterpret_cast<bool*>(cookie) = ParseBool(value) == ParseBoolResult::kTrue;
+      },
+      &cookie);
+  return cookie;
+}
+
 static bool is_permissive_mte() {
   // Environment variable for testing or local use from shell.
   char* permissive_env = getenv("MTE_PERMISSIVE");
-  return GetBoolProperty("persist.sys.mte.permissive", false) ||
+  // DO NOT REPLACE this with GetBoolProperty. That uses std::string which allocates, so it is
+  // not async-safe (and this functiong gets used in a signal handler).
+  return property_parse_bool("persist.sys.mte.permissive") ||
          (permissive_env && ParseBool(permissive_env) == ParseBoolResult::kTrue);
 }
 
