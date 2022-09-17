@@ -97,4 +97,33 @@ public class PermissiveMteTest extends BaseHostJUnit4Test {
     }
     assertThat(numberTombstones).isEqualTo(1);
   }
+  @Test
+  public void testCrashProperty() throws Exception {
+    String prevValue = getDevice().getProperty("persist.sys.mte.permissive");
+    if (prevValue == null) {
+      prevValue = "";
+    }
+    assertThat(getDevice().setProperty("persist.sys.mte.permissive", "1")).isTrue();
+    CommandResult result =
+        getDevice().executeShellV2Command("/data/local/tmp/mte_crash testCrash " + mUUID);
+    assertThat(result.getExitCode()).isEqualTo(0);
+    int numberTombstones = 0;
+    String[] tombstones = getDevice().getChildren("/data/tombstones");
+    for (String tombstone : tombstones) {
+      if (!tombstone.endsWith(".pb")) {
+        continue;
+      }
+      String tombstonePath = "/data/tombstones/" + tombstone;
+      Tombstone tombstoneProto = parseTombstone(tombstonePath);
+      if (!tombstoneProto.getCommandLineList().stream().anyMatch(x -> x.contains(mUUID))) {
+        continue;
+      }
+      if (!tombstoneProto.getCommandLineList().stream().anyMatch(x -> x.contains("testCrash"))) {
+        continue;
+      }
+      numberTombstones++;
+    }
+    assertThat(numberTombstones).isEqualTo(1);
+    assertThat(getDevice().setProperty("persist.sys.mte.permissive", prevValue)).isTrue();
+  }
 }
