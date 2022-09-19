@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>
 #include <utils/CallStack.h>
 
-[[clang::noinline]] extern "C" void CurrentCaller(android::String8& backtrace) {
+__attribute__((__noinline__)) extern "C" void CurrentCaller(android::String8& backtrace) {
     android::CallStack cs;
     cs.update();
     backtrace = cs.toString();
@@ -35,7 +35,8 @@ TEST(CallStackTest, current_backtrace) {
     ASSERT_NE(-1, backtrace.find("(CurrentCaller")) << "Full backtrace:\n" << backtrace;
 }
 
-[[clang::noinline]] extern "C" void ThreadBusyWait(std::atomic<pid_t>* tid, volatile bool* done) {
+__attribute__((__noinline__)) extern "C" void ThreadBusyWait(std::atomic<pid_t>* tid,
+                                                             volatile bool* done) {
     *tid = android::base::GetThreadId();
     while (!*done) {
     }
