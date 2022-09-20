@@ -84,12 +84,8 @@ python_binary_host {
     main: "simg_dump.py",
     srcs: ["simg_dump.py"],
     version: {
-        py2: {
-            enabled: false,
-        },
         py3: {
             embedded_launcher: true,
-            enabled: true,
         },
     },
 }
