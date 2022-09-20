@@ -1403,7 +1403,7 @@ TEST_F(CrasherTest, seccomp_crash_oom) {
   // We can't actually generate a backtrace, just make sure that the process terminates.
 }
 
-__attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
+__attribute__((__noinline__)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
   siginfo_t siginfo;
   siginfo.si_code = SI_QUEUE;
   siginfo.si_pid = getpid();

@@ -36,9 +36,15 @@
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
 
+#include <string>
+
 #include "lmkd_service.h"
 #include "service_list.h"
 #include "util.h"
+
+#if defined(__BIONIC__)
+#include <bionic/reserved_signals.h>
+#endif
 
 #ifdef INIT_FULL_SOURCES
 #include <ApexProperties.sysprop.h>
@@ -53,6 +59,7 @@
 
 using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::make_scope_guard;
@@ -320,6 +327,25 @@ void Service::Reap(const siginfo_t& siginfo) {
             mount_namespace_.has_value() && *mount_namespace_ == NS_DEFAULT;
     const bool is_process_updatable = use_default_mount_ns && is_apex_updatable;
 
+#if defined(__BIONIC__) && defined(SEGV_MTEAERR)
+    // As a precaution, we only upgrade a service once per reboot, to limit
+    // the potential impact.
+    //
+    // BIONIC_SIGNAL_ART_PROFILER is a magic value used by deuggerd to signal
+    // that the process crashed with SIGSEGV and SEGV_MTEAERR. This signal will
+    // never be seen otherwise in a crash, because it always gets handled by the
+    // profiling signal handlers in bionic. See also
+    // debuggerd/handler/debuggerd_handler.cpp.
+    bool should_upgrade_mte = siginfo.si_code != CLD_EXITED &&
+                              siginfo.si_status == BIONIC_SIGNAL_ART_PROFILER && !upgraded_mte_;
+
+    if (should_upgrade_mte) {
+        LOG(INFO) << "Upgrading service " << name_ << " to sync MTE";
+        once_environment_vars_.emplace_back("BIONIC_MEMTAG_UPGRADE_SECS", "60");
+        upgraded_mte_ = true;
+    }
+#endif
+
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
@@ -484,6 +510,9 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
 
+    for (const auto& [key, value] : once_environment_vars_) {
+        setenv(key.c_str(), value.c_str(), 1);
+    }
     for (const auto& [key, value] : environment_vars_) {
         setenv(key.c_str(), value.c_str(), 1);
     }
@@ -627,6 +656,8 @@ Result<void> Service::Start() {
         pid_ = 0;
         return ErrnoError() << "Failed to fork";
     }
+
+    once_environment_vars_.clear();
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         std::string oom_str = std::to_string(oom_score_adjust_);

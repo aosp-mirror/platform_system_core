@@ -16,10 +16,14 @@
 
 #pragma once
 
+#include <iterator>
 #include <memory>
 #include <vector>
 
+#include <android-base/logging.h>
+
 #include "service.h"
+#include "util.h"
 
 namespace android {
 namespace init {
@@ -52,6 +56,17 @@ class ServiceList {
         return nullptr;
     }
 
+    std::vector<Service*> FindServicesByApexName(const std::string& apex_name) const {
+        CHECK(!apex_name.empty()) << "APEX name cannot be empty";
+        std::vector<Service*> matches;
+        for (const auto& svc : services_) {
+            if (GetApexNameFromFileName(svc->filename()) == apex_name) {
+                matches.emplace_back(svc.get());
+            }
+        }
+        return matches;
+    }
+
     Service* FindInterface(const std::string& interface_name) {
         for (const auto& svc : services_) {
             if (svc->interfaces().count(interface_name) > 0) {
@@ -78,6 +93,8 @@ class ServiceList {
         post_data_ = false;
         services_update_finished_ = false;
     }
+
+    auto size() const { return services_.size(); }
 
   private:
     std::vector<std::unique_ptr<Service>> services_;

@@ -168,7 +168,8 @@ void Descriptor::Publish() const {
 
 Result<Descriptor> SocketDescriptor::Create(const std::string& global_context) const {
     const auto& socket_context = context.empty() ? global_context : context;
-    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, perm, uid, gid, socket_context);
+    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, listen, perm, uid, gid,
+                               socket_context);
     if (!result.ok()) {
         return result.error();
     }

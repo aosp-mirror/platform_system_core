@@ -903,9 +903,9 @@ static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
         // Deal with alternate entries for the same point which are required to be all following
         // each other.
         if (mounted) {
-            LERROR << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
-                   << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
-                   << fstab[*attempted_idx].fs_type;
+            LINFO << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
+                  << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
+                  << fstab[*attempted_idx].fs_type;
             continue;
         }
 
@@ -933,9 +933,9 @@ static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
                 *attempted_idx = i;
                 mounted = true;
                 if (i != start_idx) {
-                    LERROR << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
-                           << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
-                           << " instead of " << fstab[start_idx].fs_type;
+                    LINFO << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
+                          << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
+                          << " instead of " << fstab[start_idx].fs_type;
                 }
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
                 mount_errno = 0;
