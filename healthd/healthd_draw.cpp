@@ -99,13 +99,18 @@ void HealthdDraw::blank_screen(bool blank, int drm) {
     gr_fb_blank(blank, drm);
 }
 
-/* support screen rotation for foldable phone */
+// support screen rotation for foldable phone
 void HealthdDraw::rotate_screen(int drm) {
     if (!graphics_available) return;
     if (drm == 0)
         gr_rotate(GRRotation::RIGHT /* landscape mode */);
     else
         gr_rotate(GRRotation::NONE /* Portrait mode */);
+}
+
+// detect dual display
+bool HealthdDraw::has_multiple_connectors() {
+    return graphics_available && gr_has_multiple_connectors();
 }
 
 void HealthdDraw::clear_screen(void) {
