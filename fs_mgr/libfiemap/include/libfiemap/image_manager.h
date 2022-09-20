@@ -112,9 +112,6 @@ class IImageManager {
 
     // Mark an image as disabled. This is useful for marking an image as
     // will-be-deleted in recovery, since recovery cannot mount /data.
-    //
-    // This is not available in binder, since it is intended for recovery.
-    // When binder is available, images can simply be removed.
     virtual bool DisableImage(const std::string& name) = 0;
 
     // Remove all images that been marked as disabled.

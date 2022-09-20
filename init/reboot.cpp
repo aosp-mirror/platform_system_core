@@ -491,7 +491,7 @@ static Result<void> KillZramBackingDevice() {
         return ErrnoError() << "zram_backing_dev: swapoff (" << backing_dev << ")"
                             << " failed";
     }
-    LOG(INFO) << "swapoff() took " << swap_timer;;
+    LOG(INFO) << "swapoff() took " << swap_timer;
 
     if (!WriteStringToFile("1", ZRAM_RESET)) {
         return Error() << "zram_backing_dev: reset (" << backing_dev << ")"

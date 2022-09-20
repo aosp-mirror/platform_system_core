@@ -462,13 +462,12 @@ void UserSnapshotServer::AcceptClient() {
 }
 
 bool UserSnapshotServer::HandleClient(android::base::borrowed_fd fd, int revents) {
-    if (revents & POLLHUP) {
-        LOG(DEBUG) << "Snapuserd client disconnected";
-        return false;
-    }
-
     std::string str;
     if (!Recv(fd, &str)) {
+        return false;
+    }
+    if (str.empty() && (revents & POLLHUP)) {
+        LOG(DEBUG) << "Snapuserd client disconnected";
         return false;
     }
     if (!Receivemsg(fd, str)) {
@@ -650,6 +649,12 @@ void UserSnapshotServer::MonitorMerge() {
             while (active_merge_threads_ < kMaxMergeThreads && merge_handlers_.size() > 0) {
                 auto handler = merge_handlers_.front();
                 merge_handlers_.pop();
+
+                if (!handler->snapuserd()) {
+                    LOG(INFO) << "MonitorMerge: skipping deleted handler: " << handler->misc_name();
+                    continue;
+                }
+
                 LOG(INFO) << "Starting merge for partition: "
                           << handler->snapuserd()->GetMiscName();
                 handler->snapuserd()->InitiateMerge();

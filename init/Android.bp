@@ -53,6 +53,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "apex_init_util.cpp",
     "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",
@@ -199,6 +200,7 @@ libinit_cc_defaults {
         "libutils",
         "libziparchive",
     ],
+    header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
     visibility: [":__subpackages__"],
 }
@@ -217,6 +219,7 @@ cc_library_static {
         "selinux_policy_version",
     ],
     srcs: init_common_sources + init_device_sources,
+    export_include_dirs: ["."],
     generated_sources: [
         "apex-info-list",
     ],
@@ -246,6 +249,10 @@ cc_library_static {
             ],
         },
     },
+    visibility: [
+        "//system/apex/apexd",
+        "//frameworks/native/cmds/installd",
+    ],
 }
 
 phony {
@@ -523,6 +530,7 @@ cc_library_static {
         "libcap",
     ],
     export_include_dirs: ["test_utils/include"], // for tests
+    header_libs: ["bionic_libc_platform_headers"],
 }
 
 // Host Verifier

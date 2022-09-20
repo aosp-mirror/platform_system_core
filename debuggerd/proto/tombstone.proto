@@ -1,3 +1,12 @@
+//
+// Protobuf definition for Android tombstones.
+//
+// An app can get hold of these for any `REASON_CRASH_NATIVE` instance of
+// `android.app.ApplicationExitInfo`.
+//
+// https://developer.android.com/reference/android/app/ApplicationExitInfo#getTraceInputStream()
+//
+
 syntax = "proto3";
 
 option java_package = "com.android.server.os";
