@@ -47,6 +47,33 @@ const bool kAllowDisableVerity = true;
 const bool kAllowDisableVerity = false;
 #endif
 
+static bool SetupOrTeardownOverlayfs(bool enable) {
+  bool want_reboot = false;
+  if (enable) {
+    if (!fs_mgr_overlayfs_setup(nullptr, &want_reboot)) {
+      LOG(ERROR) << "Overlayfs setup failed.";
+      return want_reboot;
+    }
+    if (want_reboot) {
+      printf("enabling overlayfs\n");
+    }
+  } else {
+    auto rv = fs_mgr_overlayfs_teardown(nullptr, &want_reboot);
+    if (rv == OverlayfsTeardownResult::Error) {
+      LOG(ERROR) << "Overlayfs teardown failed.";
+      return want_reboot;
+    }
+    if (rv == OverlayfsTeardownResult::Busy) {
+      LOG(ERROR) << "Overlayfs is still active until reboot.";
+      return true;
+    }
+    if (want_reboot) {
+      printf("disabling overlayfs\n");
+    }
+  }
+  return want_reboot;
+}
+
 /* Helper function to get A/B suffix, if any. If the device isn't
  * using A/B the empty string is returned. Otherwise either "_a",
  * "_b", ... is returned.
@@ -77,20 +104,6 @@ bool is_using_avb() {
   ::sleep(60);
   LOG(ERROR) << "Failed to reboot";
   ::exit(1);
-}
-
-bool overlayfs_setup(bool enable) {
-  auto want_reboot = false;
-  errno = 0;
-  if (enable ? fs_mgr_overlayfs_setup(nullptr, &want_reboot)
-             : fs_mgr_overlayfs_teardown(nullptr, &want_reboot)) {
-    if (want_reboot) {
-      LOG(INFO) << (enable ? "Enabled" : "Disabled") << " overlayfs";
-    }
-  } else {
-    LOG(ERROR) << "Failed to " << (enable ? "enable" : "disable") << " overlayfs";
-  }
-  return want_reboot;
 }
 
 struct SetVerityStateResult {
@@ -229,7 +242,7 @@ int main(int argc, char* argv[]) {
     // Start a threadpool to service waitForService() callbacks as
     // fs_mgr_overlayfs_* might call waitForService() to get the image service.
     android::ProcessState::self()->startThreadPool();
-    want_reboot |= overlayfs_setup(!enable_verity);
+    want_reboot |= SetupOrTeardownOverlayfs(!enable_verity);
   }
 
   if (want_reboot) {
