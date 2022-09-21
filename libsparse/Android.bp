@@ -80,7 +80,7 @@ cc_binary_host {
 }
 
 python_binary_host {
-    name: "simg_dump.py",
+    name: "simg_dump",
     main: "simg_dump.py",
     srcs: ["simg_dump.py"],
     version: {
