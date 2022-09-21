@@ -68,10 +68,7 @@ using android::fiemap::IImageManager;
 namespace {
 
 bool fs_mgr_access(const std::string& path) {
-    auto save_errno = errno;
-    auto ret = access(path.c_str(), F_OK) == 0;
-    errno = save_errno;
-    return ret;
+    return access(path.c_str(), F_OK) == 0;
 }
 
 // determine if a filesystem is available
@@ -147,10 +144,7 @@ bool fs_mgr_is_dsu_running() {
     // is not well-defined. In this case, just return false as being in recovery
     // implies not running a DSU system.
     if (fs_mgr_in_recovery()) return false;
-    auto saved_errno = errno;
-    auto ret = android::gsi::IsGsiRunning();
-    errno = saved_errno;
-    return ret;
+    return android::gsi::IsGsiRunning();
 }
 
 // list of acceptable overlayfs backing storage
@@ -193,9 +187,8 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
     // If we have access issues to find out space remaining, return true
     // to prevent us trying to override with overlayfs.
     struct statvfs vst;
-    auto save_errno = errno;
     if (statvfs(mount_point.c_str(), &vst)) {
-        errno = save_errno;
+        PLOG(ERROR) << "statvfs " << mount_point;
         return true;
     }
 
@@ -256,26 +249,21 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     }
 
     // check if ext4 de-dupe
-    auto save_errno = errno;
     auto has_shared_blocks = fs_mgr_has_shared_blocks(entry->mount_point, entry->blk_device);
     if (!has_shared_blocks && (entry->mount_point == "/system")) {
         has_shared_blocks = fs_mgr_has_shared_blocks("/", entry->blk_device);
     }
-    errno = save_errno;
     return has_shared_blocks;
 }
 
 bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr, int level = 0) {
-    auto save_errno = errno;
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(path.c_str()), closedir);
     if (!dir) {
         if (errno == ENOENT) {
-            errno = save_errno;
             return true;
         }
         PERROR << "opendir " << path << " depth=" << level;
         if ((errno == EPERM) && (level != 0)) {
-            errno = save_errno;
             return true;
         }
         return false;
@@ -287,9 +275,7 @@ bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr, int level = 
         auto file = path + "/" + entry->d_name;
         if (entry->d_type == DT_UNKNOWN) {
             struct stat st;
-            save_errno = errno;
             if (!lstat(file.c_str(), &st) && (st.st_mode & S_IFDIR)) entry->d_type = DT_DIR;
-            errno = save_errno;
         }
         if (entry->d_type == DT_DIR) {
             ret &= fs_mgr_rm_all(file, change, level + 1);
@@ -363,10 +349,7 @@ const std::string fs_mgr_mount_point(const std::string& mount_point) {
 
 bool fs_mgr_rw_access(const std::string& path) {
     if (path.empty()) return false;
-    auto save_errno = errno;
-    auto ret = access(path.c_str(), R_OK | W_OK) == 0;
-    errno = save_errno;
-    return ret;
+    return access(path.c_str(), R_OK | W_OK) == 0;
 }
 
 constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
@@ -506,8 +489,6 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& ove
         return OverlayfsTeardownResult::Error;
     }
 
-    auto save_errno = errno;
-
     bool was_mounted = fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false);
     if (was_mounted) {
         fs_mgr_overlayfs_umount_scratch();
@@ -545,11 +526,9 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& ove
 
     auto builder = MetadataBuilder::New(super_device, slot_number);
     if (!builder) {
-        errno = save_errno;
         return OverlayfsTeardownResult::Ok;
     }
     if (builder->FindPartition(partition_name) == nullptr) {
-        errno = save_errno;
         return OverlayfsTeardownResult::Ok;
     }
     builder->RemovePartition(partition_name);
@@ -563,7 +542,6 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& ove
         LERROR << "delete partition " << overlay;
         return OverlayfsTeardownResult::Error;
     }
-    errno = save_errno;
 
     if (was_mounted) {
         return OverlayfsTeardownResult::Busy;
@@ -586,27 +564,20 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     const auto newpath = cleanup_all ? overlay + "/." + kOverlayTopDir.substr(1) + ".teardown"
                                      : top + "/." + partition_name + ".teardown";
     auto ret = fs_mgr_rm_all(newpath);
-    auto save_errno = errno;
     if (!rename(oldpath.c_str(), newpath.c_str())) {
         if (change) *change = true;
     } else if (errno != ENOENT) {
         ret = false;
         PERROR << "mv " << oldpath << " " << newpath;
-    } else {
-        errno = save_errno;
     }
     ret &= fs_mgr_rm_all(newpath, change);
-    save_errno = errno;
     if (!rmdir(newpath.c_str())) {
         if (change) *change = true;
     } else if (errno != ENOENT) {
         ret = false;
         PERROR << "rmdir " << newpath;
-    } else {
-        errno = save_errno;
     }
     if (!cleanup_all) {
-        save_errno = errno;
         if (!rmdir(top.c_str())) {
             if (change) *change = true;
             cleanup_all = true;
@@ -625,10 +596,8 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
                     }
                 }
             }
-            errno = save_errno;
         } else if (errno == ENOENT) {
             cleanup_all = true;
-            errno = save_errno;
         } else {
             ret = false;
             PERROR << "rmdir " << top;
@@ -739,7 +708,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
     if (options.empty()) return false;
 
     auto retval = true;
-    auto save_errno = errno;
 
     struct move_entry {
         std::string mount_point;
@@ -782,7 +750,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
         }
         if (!target) {
             retval = false;
-            save_errno = errno;
             PERROR << "temporary directory for MS_BIND";
             continue;
         }
@@ -795,7 +762,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
         }
         if (!fs_mgr_overlayfs_move_mount(new_entry.mount_point, new_entry.dir)) {
             retval = false;
-            save_errno = errno;
             if (new_entry.shared_flag) {
                 fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, true);
             }
@@ -819,7 +785,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
                      options.c_str());
     if (ret) {
         retval = false;
-        save_errno = errno;
         PERROR << report << ret;
     } else {
         LINFO << report << ret;
@@ -833,11 +798,9 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
 
         if (!fs_mgr_overlayfs_move_mount(entry.dir, entry.mount_point)) {
             retval = false;
-            save_errno = errno;
         } else if (entry.shared_flag &&
                    !fs_mgr_overlayfs_set_shared_mount(entry.mount_point, true)) {
             retval = false;
-            save_errno = errno;
         }
         rmdir(entry.dir.c_str());
     }
@@ -848,7 +811,6 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
         fs_mgr_overlayfs_set_shared_mount(mount_point, true);
     }
 
-    errno = save_errno;
     return retval;
 }
 
@@ -1743,11 +1705,9 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only) {
     Fstab fstab;
-    auto save_errno = errno;
     if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
         return false;
     }
-    errno = save_errno;
     const auto lowerdir = kLowerdirOption + mount_point;
     for (const auto& entry : fstab) {
         if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
