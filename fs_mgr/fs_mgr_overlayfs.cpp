@@ -850,28 +850,6 @@ bool MountScratch(const std::string& device_path, bool readonly = false) {
 const std::string kMkF2fs("/system/bin/make_f2fs");
 const std::string kMkExt4("/system/bin/mke2fs");
 
-// Note: we do not check access() here except for the super partition, since
-// in first-stage init we wouldn't have registed by-name symlinks for "other"
-// partitions that won't be mounted.
-static std::string GetPhysicalScratchDevice() {
-    auto slot_number = fs_mgr_overlayfs_slot_number();
-    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-    auto path = fs_mgr_overlayfs_super_device(slot_number == 0);
-    if (super_device != path) {
-        return path;
-    }
-    if (fs_mgr_access(super_device)) {
-        // Do not try to use system_other on a DAP device.
-        return "";
-    }
-
-    auto other_slot = fs_mgr_get_other_slot_suffix();
-    if (!other_slot.empty()) {
-        return kPhysicalDevice + "system" + other_slot;
-    }
-    return "";
-}
-
 // Note: The scratch partition of DSU is managed by gsid, and should be initialized during
 // first-stage-mount. Just check if the DM device for DSU scratch partition is created or not.
 static std::string GetDsuScratchDevice() {
@@ -908,8 +886,7 @@ static std::string GetBootScratchDevice() {
         return device;
     }
 
-    // There is no dynamic scratch, so try and find a physical one.
-    return GetPhysicalScratchDevice();
+    return "";
 }
 
 bool MakeScratchFilesystem(const std::string& scratch_device) {
@@ -1112,7 +1089,7 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
     return true;
 }
 
-static bool CanUseSuperPartition(const Fstab& fstab, bool* is_virtual_ab) {
+static bool CanUseSuperPartition(const Fstab& fstab) {
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device) || !fs_mgr_overlayfs_has_logical(fstab)) {
@@ -1122,7 +1099,6 @@ static bool CanUseSuperPartition(const Fstab& fstab, bool* is_virtual_ab) {
     if (!metadata) {
         return false;
     }
-    *is_virtual_ab = !!(metadata->header.flags & LP_HEADER_FLAG_VIRTUAL_AB_DEVICE);
     return true;
 }
 
@@ -1135,23 +1111,15 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
         return *partition_exists;
     }
 
-    // Try a physical partition first.
-    *scratch_device = GetPhysicalScratchDevice();
-    if (!scratch_device->empty() && fs_mgr_rw_access(*scratch_device)) {
-        *partition_exists = true;
-        return true;
+    // Try ImageManager on /data first.
+    bool can_use_data = false;
+    if (FilesystemHasReliablePinning("/data", &can_use_data) && can_use_data) {
+        return CreateScratchOnData(scratch_device, partition_exists);
     }
-
     // If that fails, see if we can land on super.
-    bool is_virtual_ab;
-    if (CanUseSuperPartition(fstab, &is_virtual_ab)) {
-        bool can_use_data = false;
-        if (is_virtual_ab && FilesystemHasReliablePinning("/data", &can_use_data) && can_use_data) {
-            return CreateScratchOnData(scratch_device, partition_exists);
-        }
+    if (CanUseSuperPartition(fstab)) {
         return CreateDynamicScratch(scratch_device, partition_exists);
     }
-
     return false;
 }
 
