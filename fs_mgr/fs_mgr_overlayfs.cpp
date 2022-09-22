@@ -102,8 +102,8 @@ bool fs_mgr_overlayfs_setup(const char*, bool*, bool) {
     return false;
 }
 
-bool fs_mgr_overlayfs_teardown(const char*, bool*) {
-    return false;
+OverlayfsTeardownResult fs_mgr_overlayfs_teardown(const char*, bool*) {
+    return OverlayfsTeardownResult::Ok;
 }
 
 bool fs_mgr_overlayfs_is_setup() {
