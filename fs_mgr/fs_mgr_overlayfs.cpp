@@ -481,30 +481,35 @@ bool fs_mgr_overlayfs_has_logical(const Fstab& fstab) {
     return false;
 }
 
-void fs_mgr_overlayfs_umount_scratch() {
-    // Lazy umount will allow us to move on and possibly later
-    // establish a new fresh mount without requiring a reboot should
-    // the developer wish to restart.  Old references should melt
-    // away or have no data.  Main goal is to shut the door on the
-    // current overrides with an expectation of a subsequent reboot,
-    // thus any errors here are ignored.
-    umount2(kScratchMountPoint.c_str(), MNT_DETACH);
-    LINFO << "umount(" << kScratchMountPoint << ")";
-    rmdir(kScratchMountPoint.c_str());
+// Returns true if immediate unmount succeeded and the scratch mount point was
+// removed.
+bool fs_mgr_overlayfs_umount_scratch() {
+    if (umount(kScratchMountPoint.c_str()) != 0) {
+        return false;
+    }
+    if (rmdir(kScratchMountPoint.c_str()) != 0 && errno != ENOENT) {
+        PLOG(ERROR) << "rmdir " << kScratchMountPoint;
+    }
+    return true;
 }
 
-bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change) {
+OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& overlay,
+                                                          bool* change) {
     // umount and delete kScratchMountPoint storage if we have logical partitions
-    if (overlay != kScratchMountPoint) return true;
+    if (overlay != kScratchMountPoint) {
+        return OverlayfsTeardownResult::Ok;
+    }
 
     // Validation check.
     if (fs_mgr_is_dsu_running()) {
         LERROR << "Destroying DSU scratch is not allowed.";
-        return false;
+        return OverlayfsTeardownResult::Error;
     }
 
     auto save_errno = errno;
-    if (fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
+
+    bool was_mounted = fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false);
+    if (was_mounted) {
         fs_mgr_overlayfs_umount_scratch();
     }
 
@@ -512,42 +517,58 @@ bool fs_mgr_overlayfs_teardown_scratch(const std::string& overlay, bool* change)
 
     auto images = IImageManager::Open("remount", 10s);
     if (images && images->BackingImageExists(partition_name)) {
-#if defined __ANDROID_RECOVERY__
         if (!images->DisableImage(partition_name)) {
-            return false;
+            return OverlayfsTeardownResult::Error;
         }
-#else
-        if (!images->UnmapImageIfExists(partition_name) ||
-            !images->DeleteBackingImage(partition_name)) {
-            return false;
+        if (was_mounted) {
+            // If overlayfs was mounted, don't bother trying to unmap since
+            // it'll fail and create error spam.
+            return OverlayfsTeardownResult::Busy;
         }
-#endif
+        if (!images->UnmapImageIfExists(partition_name)) {
+            return OverlayfsTeardownResult::Busy;
+        }
+        if (!images->DeleteBackingImage(partition_name)) {
+            return OverlayfsTeardownResult::Busy;
+        }
+
+        // No need to check super partition, if we knew we had a scratch device
+        // in /data.
+        return OverlayfsTeardownResult::Ok;
     }
 
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-    if (!fs_mgr_rw_access(super_device)) return true;
+    if (!fs_mgr_rw_access(super_device)) {
+        return OverlayfsTeardownResult::Ok;
+    }
 
     auto builder = MetadataBuilder::New(super_device, slot_number);
     if (!builder) {
         errno = save_errno;
-        return true;
+        return OverlayfsTeardownResult::Ok;
     }
     if (builder->FindPartition(partition_name) == nullptr) {
         errno = save_errno;
-        return true;
+        return OverlayfsTeardownResult::Ok;
     }
     builder->RemovePartition(partition_name);
     auto metadata = builder->Export();
     if (metadata && UpdatePartitionTable(super_device, *metadata.get(), slot_number)) {
         if (change) *change = true;
-        if (!DestroyLogicalPartition(partition_name)) return false;
+        if (!DestroyLogicalPartition(partition_name)) {
+            return OverlayfsTeardownResult::Error;
+        }
     } else {
         LERROR << "delete partition " << overlay;
-        return false;
+        return OverlayfsTeardownResult::Error;
     }
     errno = save_errno;
-    return true;
+
+    if (was_mounted) {
+        return OverlayfsTeardownResult::Busy;
+    }
+    return OverlayfsTeardownResult::Ok;
 }
 
 bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string& mount_point,
@@ -869,17 +890,6 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     entry.flags = MS_NOATIME | MS_RDONLY;
     auto mounted = true;
     if (!readonly) {
-        if (entry.fs_type == "ext4") {
-            // check if ext4 de-dupe
-            entry.flags |= MS_RDONLY;
-            auto save_errno = errno;
-            mounted = fs_mgr_do_mount_one(entry) == 0;
-            if (mounted) {
-                mounted = !fs_mgr_has_shared_blocks(entry.mount_point, entry.blk_device);
-                fs_mgr_overlayfs_umount_scratch();
-            }
-            errno = save_errno;
-        }
         entry.flags &= ~MS_RDONLY;
         entry.flags |= MS_SYNCHRONOUS;
         entry.fs_options = "nodiscard";
@@ -1246,7 +1256,10 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab) {
                 return true;
             }
             // declare it useless, no overrides and no free space
-            fs_mgr_overlayfs_umount_scratch();
+            if (!fs_mgr_overlayfs_umount_scratch()) {
+                LOG(ERROR) << "Unable to unmount scratch partition";
+                return false;
+            }
         }
     }
 
@@ -1548,12 +1561,38 @@ static bool MapDsuScratchDevice(std::string* device) {
     return true;
 }
 
-// Returns false if teardown not permitted, errno set to last error.
-// If something is altered, set *change.
-bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
-    if (change) *change = false;
-    auto ret = true;
+OverlayfsTeardownResult TeardownMountsAndScratch(const char* mount_point, bool* want_reboot) {
+    bool should_destroy_scratch = false;
+    auto rv = OverlayfsTeardownResult::Ok;
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
+        auto ok = fs_mgr_overlayfs_teardown_one(
+                overlay_mount_point, mount_point ? fs_mgr_mount_point(mount_point) : "",
+                want_reboot,
+                overlay_mount_point == kScratchMountPoint ? &should_destroy_scratch : nullptr);
+        if (!ok) {
+            rv = OverlayfsTeardownResult::Error;
+        }
+    }
 
+    // Do not attempt to destroy DSU scratch if within a DSU system,
+    // because DSU scratch partition is managed by gsid.
+    if (should_destroy_scratch && !fs_mgr_is_dsu_running()) {
+        auto rv = fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, want_reboot);
+        if (rv != OverlayfsTeardownResult::Ok) {
+            return rv;
+        }
+    }
+    // And now that we did what we could, lets inform
+    // caller that there may still be more to do.
+    if (!fs_mgr_boot_completed()) {
+        LOG(ERROR) << "Cannot teardown overlayfs before persistent properties are ready";
+        return OverlayfsTeardownResult::Error;
+    }
+    return rv;
+}
+
+// Returns false if teardown not permitted. If something is altered, set *want_reboot.
+OverlayfsTeardownResult fs_mgr_overlayfs_teardown(const char* mount_point, bool* want_reboot) {
     // If scratch exists, but is not mounted, lets gain access to clean
     // specific override entries.
     auto mount_scratch = false;
@@ -1564,34 +1603,15 @@ bool fs_mgr_overlayfs_teardown(const char* mount_point, bool* change) {
                                                            fs_mgr_overlayfs_scratch_mount_type());
         }
     }
-    bool should_destroy_scratch = false;
-    for (const auto& overlay_mount_point : OverlayMountPoints()) {
-        ret &= fs_mgr_overlayfs_teardown_one(
-                overlay_mount_point, mount_point ? fs_mgr_mount_point(mount_point) : "", change,
-                overlay_mount_point == kScratchMountPoint ? &should_destroy_scratch : nullptr);
-    }
-    // Do not attempt to destroy DSU scratch if within a DSU system,
-    // because DSU scratch partition is managed by gsid.
-    if (should_destroy_scratch && !fs_mgr_is_dsu_running()) {
-        ret &= fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, change);
-    }
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
-        // After obligatory teardown to make sure everything is clean, but if
-        // we didn't want overlayfs in the first place, we do not want to
-        // waste time on a reboot (or reboot request message).
-        if (change) *change = false;
-    }
-    // And now that we did what we could, lets inform
-    // caller that there may still be more to do.
-    if (!fs_mgr_boot_completed()) {
-        errno = EBUSY;
-        PERROR << "teardown";
-        ret = false;
-    }
+
+    auto rv = TeardownMountsAndScratch(mount_point, want_reboot);
+
     if (mount_scratch) {
-        fs_mgr_overlayfs_umount_scratch();
+        if (!fs_mgr_overlayfs_umount_scratch()) {
+            return OverlayfsTeardownResult::Busy;
+        }
     }
-    return ret;
+    return rv;
 }
 
 bool fs_mgr_overlayfs_is_setup() {
@@ -1689,6 +1709,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
         }
     }
 
+    // Note if we just disabled scratch, this mount will fail.
     if (auto info = EnsureScratchMapped(); info.has_value()) {
         // Map scratch device, mount kScratchMountPoint and teardown kScratchMountPoint.
         fs_mgr_overlayfs_umount_scratch();
