@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <memory>
 
+#include <KeyMintUtils.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android/binder_ibinder.h>
@@ -38,6 +39,7 @@
 #include <log/log.h>
 #include <utils/String16.h>
 
+#include <aidl/android/hardware/gatekeeper/IGatekeeper.h>
 #include <aidl/android/hardware/security/keymint/HardwareAuthToken.h>
 #include <aidl/android/security/authorization/IKeystoreAuthorization.h>
 #include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
@@ -49,27 +51,35 @@ using android::hardware::gatekeeper::V1_0::GatekeeperResponse;
 using android::hardware::gatekeeper::V1_0::GatekeeperStatusCode;
 using android::hardware::gatekeeper::V1_0::IGatekeeper;
 
+using AidlGatekeeperEnrollResp = aidl::android::hardware::gatekeeper::GatekeeperEnrollResponse;
+using AidlGatekeeperVerifyResp = aidl::android::hardware::gatekeeper::GatekeeperVerifyResponse;
+using AidlIGatekeeper = aidl::android::hardware::gatekeeper::IGatekeeper;
+
 using ::android::binder::Status;
 using ::android::service::gatekeeper::BnGateKeeperService;
 using GKResponse = ::android::service::gatekeeper::GateKeeperResponse;
 using GKResponseCode = ::android::service::gatekeeper::ResponseCode;
 using ::aidl::android::hardware::security::keymint::HardwareAuthenticatorType;
 using ::aidl::android::hardware::security::keymint::HardwareAuthToken;
+using ::aidl::android::hardware::security::keymint::km_utils::authToken2AidlVec;
 using ::aidl::android::security::authorization::IKeystoreAuthorization;
 
 namespace android {
 
 static const String16 KEYGUARD_PERMISSION("android.permission.ACCESS_KEYGUARD_SECURE_STORAGE");
 static const String16 DUMP_PERMISSION("android.permission.DUMP");
+constexpr const char gatekeeperServiceName[] = "android.hardware.gatekeeper.IGatekeeper/default";
 
 class GateKeeperProxy : public BnGateKeeperService {
   public:
     GateKeeperProxy() {
         clear_state_if_needed_done = false;
         hw_device = IGatekeeper::getService();
+        ::ndk::SpAIBinder ks2Binder(AServiceManager_getService(gatekeeperServiceName));
+        aidl_hw_device = AidlIGatekeeper::fromBinder(ks2Binder);
         is_running_gsi = android::base::GetBoolProperty(android::gsi::kGsiBootedProp, false);
 
-        if (!hw_device) {
+        if (!aidl_hw_device && !hw_device) {
             LOG(ERROR) << "Could not find Gatekeeper device, which makes me very sad.";
         }
     }
@@ -95,7 +105,9 @@ class GateKeeperProxy : public BnGateKeeperService {
 
         if (mark_cold_boot() && !is_running_gsi) {
             ALOGI("cold boot: clearing state");
-            if (hw_device) {
+            if (aidl_hw_device) {
+                aidl_hw_device->deleteAllUsers();
+            } else if (hw_device) {
                 hw_device->deleteAllUsers([](const GatekeeperResponse&) {});
             }
         }
@@ -150,7 +162,7 @@ class GateKeeperProxy : public BnGateKeeperService {
     uint32_t adjust_userId(uint32_t userId) {
         static constexpr uint32_t kGsiOffset = 1000000;
         CHECK(userId < kGsiOffset);
-        CHECK(hw_device != nullptr);
+        CHECK((aidl_hw_device != nullptr) || (hw_device != nullptr));
         if (is_running_gsi) {
             return userId + kGsiOffset;
         }
@@ -176,7 +188,7 @@ class GateKeeperProxy : public BnGateKeeperService {
         // need a desired password to enroll
         if (desiredPassword.size() == 0) return GK_ERROR;
 
-        if (!hw_device) {
+        if (!aidl_hw_device && !hw_device) {
             LOG(ERROR) << "has no HAL to talk to";
             return GK_ERROR;
         }
@@ -185,9 +197,13 @@ class GateKeeperProxy : public BnGateKeeperService {
         android::hardware::hidl_vec<uint8_t> curPwd;
 
         if (currentPasswordHandle && currentPassword) {
-            if (currentPasswordHandle->size() != sizeof(gatekeeper::password_handle_t)) {
-                LOG(INFO) << "Password handle has wrong length";
-                return GK_ERROR;
+            if (hw_device) {
+                // Hidl Implementations expects passwordHandle to be in
+                // gatekeeper::password_handle_t format.
+                if (currentPasswordHandle->size() != sizeof(gatekeeper::password_handle_t)) {
+                    LOG(INFO) << "Password handle has wrong length";
+                    return GK_ERROR;
+                }
             }
             curPwdHandle.setToExternal(const_cast<uint8_t*>(currentPasswordHandle->data()),
                                        currentPasswordHandle->size());
@@ -199,7 +215,27 @@ class GateKeeperProxy : public BnGateKeeperService {
         newPwd.setToExternal(const_cast<uint8_t*>(desiredPassword.data()), desiredPassword.size());
 
         uint32_t hw_userId = adjust_userId(userId);
-        Return<void> hwRes = hw_device->enroll(
+        uint64_t secureUserId = 0;
+        if (aidl_hw_device) {
+            // AIDL gatekeeper service
+            AidlGatekeeperEnrollResp rsp;
+            auto result = aidl_hw_device->enroll(hw_userId, curPwdHandle, curPwd, newPwd, &rsp);
+            if (!result.isOk()) {
+                LOG(ERROR) << "enroll transaction failed";
+                return GK_ERROR;
+            }
+            if (rsp.statusCode >= AidlIGatekeeper::STATUS_OK) {
+                *gkResponse = GKResponse::ok({rsp.data.begin(), rsp.data.end()});
+                secureUserId = static_cast<uint64_t>(rsp.secureUserId);
+            } else if (rsp.statusCode == AidlIGatekeeper::ERROR_RETRY_TIMEOUT &&
+                       rsp.timeoutMs > 0) {
+                *gkResponse = GKResponse::retry(rsp.timeoutMs);
+            } else {
+                *gkResponse = GKResponse::error();
+            }
+        } else if (hw_device) {
+            // HIDL gatekeeper service
+            Return<void> hwRes = hw_device->enroll(
                 hw_userId, curPwdHandle, curPwd, newPwd,
                 [&gkResponse](const GatekeeperResponse& rsp) {
                     if (rsp.code >= GatekeeperStatusCode::STATUS_OK) {
@@ -211,22 +247,26 @@ class GateKeeperProxy : public BnGateKeeperService {
                         *gkResponse = GKResponse::error();
                     }
                 });
-        if (!hwRes.isOk()) {
-            LOG(ERROR) << "enroll transaction failed";
-            return GK_ERROR;
+            if (!hwRes.isOk()) {
+                LOG(ERROR) << "enroll transaction failed";
+                return GK_ERROR;
+            }
+            if (gkResponse->response_code() == GKResponseCode::OK) {
+                if (gkResponse->payload().size() != sizeof(gatekeeper::password_handle_t)) {
+                    LOG(ERROR) << "HAL returned password handle of invalid length "
+                               << gkResponse->payload().size();
+                    return GK_ERROR;
+                }
+
+                const gatekeeper::password_handle_t* handle =
+                    reinterpret_cast<const gatekeeper::password_handle_t*>(
+                        gkResponse->payload().data());
+                secureUserId = handle->user_id;
+            }
         }
 
         if (gkResponse->response_code() == GKResponseCode::OK && !gkResponse->should_reenroll()) {
-            if (gkResponse->payload().size() != sizeof(gatekeeper::password_handle_t)) {
-                LOG(ERROR) << "HAL returned password handle of invalid length "
-                           << gkResponse->payload().size();
-                return GK_ERROR;
-            }
-
-            const gatekeeper::password_handle_t* handle =
-                    reinterpret_cast<const gatekeeper::password_handle_t*>(
-                            gkResponse->payload().data());
-            store_sid(userId, handle->user_id);
+            store_sid(userId, secureUserId);
 
             GKResponse verifyResponse;
             // immediately verify this password so we don't ask the user to enter it again
@@ -260,15 +300,18 @@ class GateKeeperProxy : public BnGateKeeperService {
         // can't verify if we're missing either param
         if (enrolledPasswordHandle.size() == 0 || providedPassword.size() == 0) return GK_ERROR;
 
-        if (!hw_device) return GK_ERROR;
-
-        if (enrolledPasswordHandle.size() != sizeof(gatekeeper::password_handle_t)) {
-            LOG(INFO) << "Password handle has wrong length";
+        if (!aidl_hw_device && !hw_device) {
+            LOG(ERROR) << "has no HAL to talk to";
             return GK_ERROR;
         }
-        const gatekeeper::password_handle_t* handle =
-                reinterpret_cast<const gatekeeper::password_handle_t*>(
-                        enrolledPasswordHandle.data());
+
+        if (hw_device) {
+            // Hidl Implementations expects passwordHandle to be in gatekeeper::password_handle_t
+            if (enrolledPasswordHandle.size() != sizeof(gatekeeper::password_handle_t)) {
+                LOG(INFO) << "Password handle has wrong length";
+                return GK_ERROR;
+            }
+        }
 
         uint32_t hw_userId = adjust_userId(userId);
         android::hardware::hidl_vec<uint8_t> curPwdHandle;
@@ -278,13 +321,36 @@ class GateKeeperProxy : public BnGateKeeperService {
         enteredPwd.setToExternal(const_cast<uint8_t*>(providedPassword.data()),
                                  providedPassword.size());
 
-        Return<void> hwRes = hw_device->verify(
+        uint64_t secureUserId = 0;
+        if (aidl_hw_device) {
+            // AIDL gatekeeper service
+            AidlGatekeeperVerifyResp rsp;
+            auto result =
+                aidl_hw_device->verify(hw_userId, challenge, curPwdHandle, enteredPwd, &rsp);
+            if (!result.isOk()) {
+                LOG(ERROR) << "verify transaction failed";
+                return GK_ERROR;
+            }
+            if (rsp.statusCode >= AidlIGatekeeper::STATUS_OK) {
+                secureUserId = rsp.hardwareAuthToken.userId;
+                // Serialize HardwareAuthToken to a vector as hw_auth_token_t.
+                *gkResponse = GKResponse::ok(authToken2AidlVec(rsp.hardwareAuthToken),
+                                             rsp.statusCode ==
+                                                 AidlIGatekeeper::STATUS_REENROLL /* reenroll */);
+            } else if (rsp.statusCode == AidlIGatekeeper::ERROR_RETRY_TIMEOUT) {
+                *gkResponse = GKResponse::retry(rsp.timeoutMs);
+            } else {
+                *gkResponse = GKResponse::error();
+            }
+        } else if (hw_device) {
+            // HIDL gatekeeper service
+            Return<void> hwRes = hw_device->verify(
                 hw_userId, challenge, curPwdHandle, enteredPwd,
                 [&gkResponse](const GatekeeperResponse& rsp) {
                     if (rsp.code >= GatekeeperStatusCode::STATUS_OK) {
                         *gkResponse = GKResponse::ok(
-                                {rsp.data.begin(), rsp.data.end()},
-                                rsp.code == GatekeeperStatusCode::STATUS_REENROLL /* reenroll */);
+                            {rsp.data.begin(), rsp.data.end()},
+                            rsp.code == GatekeeperStatusCode::STATUS_REENROLL /* reenroll */);
                     } else if (rsp.code == GatekeeperStatusCode::ERROR_RETRY_TIMEOUT) {
                         *gkResponse = GKResponse::retry(rsp.timeout);
                     } else {
@@ -292,9 +358,14 @@ class GateKeeperProxy : public BnGateKeeperService {
                     }
                 });
 
-        if (!hwRes.isOk()) {
-            LOG(ERROR) << "verify transaction failed";
-            return GK_ERROR;
+            if (!hwRes.isOk()) {
+                LOG(ERROR) << "verify transaction failed";
+                return GK_ERROR;
+            }
+            const gatekeeper::password_handle_t* handle =
+                reinterpret_cast<const gatekeeper::password_handle_t*>(
+                    enrolledPasswordHandle.data());
+            secureUserId = handle->user_id;
         }
 
         if (gkResponse->response_code() == GKResponseCode::OK) {
@@ -333,7 +404,7 @@ class GateKeeperProxy : public BnGateKeeperService {
                 }
             }
 
-            maybe_store_sid(userId, handle->user_id);
+            maybe_store_sid(userId, secureUserId);
         }
 
         return Status::ok();
@@ -354,8 +425,10 @@ class GateKeeperProxy : public BnGateKeeperService {
         }
         clear_sid(userId);
 
-        if (hw_device) {
-            uint32_t hw_userId = adjust_userId(userId);
+        uint32_t hw_userId = adjust_userId(userId);
+        if (aidl_hw_device) {
+            aidl_hw_device->deleteUser(hw_userId);
+        } else if (hw_device) {
             hw_device->deleteUser(hw_userId, [](const GatekeeperResponse&) {});
         }
         return Status::ok();
@@ -382,7 +455,7 @@ class GateKeeperProxy : public BnGateKeeperService {
             return PERMISSION_DENIED;
         }
 
-        if (hw_device == NULL) {
+        if (aidl_hw_device == nullptr && hw_device == nullptr) {
             const char* result = "Device not available";
             write(fd, result, strlen(result) + 1);
         } else {
@@ -394,6 +467,9 @@ class GateKeeperProxy : public BnGateKeeperService {
     }
 
   private:
+    // AIDL gatekeeper service.
+    std::shared_ptr<AidlIGatekeeper> aidl_hw_device;
+    // HIDL gatekeeper service.
     sp<IGatekeeper> hw_device;
 
     bool clear_state_if_needed_done;
@@ -414,8 +490,8 @@ int main(int argc, char* argv[]) {
 
     android::sp<android::IServiceManager> sm = android::defaultServiceManager();
     android::sp<android::GateKeeperProxy> proxy = new android::GateKeeperProxy();
-    android::status_t ret = sm->addService(
-            android::String16("android.service.gatekeeper.IGateKeeperService"), proxy);
+    android::status_t ret =
+        sm->addService(android::String16("android.service.gatekeeper.IGateKeeperService"), proxy);
     if (ret != android::OK) {
         ALOGE("Couldn't register binder service!");
         return -1;
