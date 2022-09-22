@@ -17,9 +17,11 @@
 #ifndef ANDROID_HARDWARE_CONFIRMATIONUI_V1_0_TRUSTY_CONFIRMATIONUI_H
 #define ANDROID_HARDWARE_CONFIRMATIONUI_V1_0_TRUSTY_CONFIRMATIONUI_H
 
-#include <android/hardware/confirmationui/1.0/IConfirmationUI.h>
-#include <android/hardware/keymaster/4.0/types.h>
-#include <hidl/Status.h>
+#include <aidl/android/hardware/confirmationui/BnConfirmationUI.h>
+#include <aidl/android/hardware/confirmationui/IConfirmationResultCallback.h>
+#include <aidl/android/hardware/confirmationui/UIOption.h>
+#include <aidl/android/hardware/security/keymint/HardwareAuthToken.h>
+#include <android/binder_manager.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -30,35 +32,29 @@
 
 #include "TrustyApp.h"
 
-namespace android {
-namespace hardware {
-namespace confirmationui {
-namespace V1_0 {
-namespace implementation {
+namespace aidl::android::hardware::confirmationui {
 
-using ::android::sp;
-using ::android::hardware::hidl_array;
-using ::android::hardware::hidl_string;
-using ::android::hardware::hidl_vec;
-using ::android::hardware::Return;
-using ::android::hardware::Void;
+using std::shared_ptr;
+using std::string;
+using std::vector;
 
+using ::aidl::android::hardware::security::keymint::HardwareAuthToken;
 using ::android::trusty::confirmationui::TrustyApp;
 
-class TrustyConfirmationUI : public IConfirmationUI {
+class TrustyConfirmationUI : public BnConfirmationUI {
   public:
     TrustyConfirmationUI();
     virtual ~TrustyConfirmationUI();
-    // Methods from ::android::hardware::confirmationui::V1_0::IConfirmationUI
+    // Methods from ::aidl::android::hardware::confirmationui::IConfirmationUI
     // follow.
-    Return<ResponseCode> promptUserConfirmation(const sp<IConfirmationResultCallback>& resultCB,
-                                                const hidl_string& promptText,
-                                                const hidl_vec<uint8_t>& extraData,
-                                                const hidl_string& locale,
-                                                const hidl_vec<UIOption>& uiOptions) override;
-    Return<ResponseCode> deliverSecureInputEvent(
-        const ::android::hardware::keymaster::V4_0::HardwareAuthToken& secureInputToken) override;
-    Return<void> abort() override;
+    ::ndk::ScopedAStatus
+    promptUserConfirmation(const shared_ptr<IConfirmationResultCallback>& resultCB,
+                           const vector<uint8_t>& promptText, const vector<uint8_t>& extraData,
+                           const string& locale, const vector<UIOption>& uiOptions) override;
+    ::ndk::ScopedAStatus
+    deliverSecureInputEvent(const HardwareAuthToken& secureInputToken) override;
+
+    ::ndk::ScopedAStatus abort() override;
 
   private:
     std::weak_ptr<TrustyApp> app_;
@@ -85,7 +81,7 @@ class TrustyConfirmationUI : public IConfirmationUI {
     bool abort_called_;
     std::mutex listener_state_lock_;
     std::condition_variable listener_state_condv_;
-    ResponseCode prompt_result_;
+    int prompt_result_;
     bool secureInputDelivered_;
 
     std::tuple<teeui::ResponseCode, teeui::MsgVector<uint8_t>, teeui::MsgVector<uint8_t>>
@@ -95,10 +91,6 @@ class TrustyConfirmationUI : public IConfirmationUI {
                             const teeui::MsgVector<teeui::UIOption>& uiOptions);
 };
 
-}  // namespace implementation
-}  // namespace V1_0
-}  // namespace confirmationui
-}  // namespace hardware
-}  // namespace android
+}  // namespace aidl::android::hardware::confirmationui
 
 #endif  // ANDROID_HARDWARE_CONFIRMATIONUI_V1_0_TRUSTY_CONFIRMATIONUI_H
