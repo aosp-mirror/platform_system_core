@@ -18,8 +18,6 @@
 #include "TrustyConfirmationUI.h"
 
 #include <android-base/logging.h>
-#include <android/hardware/confirmationui/1.0/types.h>
-#include <android/hardware/keymaster/4.0/types.h>
 #include <fcntl.h>
 #include <linux/input.h>
 #include <poll.h>
@@ -42,12 +40,7 @@
 #include <tuple>
 #include <vector>
 
-namespace android {
-namespace hardware {
-namespace confirmationui {
-namespace V1_0 {
-namespace implementation {
-
+namespace aidl::android::hardware::confirmationui {
 using namespace secure_input;
 
 using ::android::trusty::confirmationui::TrustyAppError;
@@ -63,8 +56,6 @@ using ::teeui::PromptUserConfirmationResponse;
 using ::teeui::ResultMsg;
 
 using ::secure_input::createSecureInput;
-
-using ::android::hardware::keymaster::V4_0::HardwareAuthToken;
 
 using ::std::tie;
 
@@ -87,46 +78,47 @@ class Finalize {
     void release() { f_ = {}; }
 };
 
-ResponseCode convertRc(TeeuiRc trc) {
+int convertRc(TeeuiRc trc) {
     static_assert(
-        uint32_t(TeeuiRc::OK) == uint32_t(ResponseCode::OK) &&
-            uint32_t(TeeuiRc::Canceled) == uint32_t(ResponseCode::Canceled) &&
-            uint32_t(TeeuiRc::Aborted) == uint32_t(ResponseCode::Aborted) &&
-            uint32_t(TeeuiRc::OperationPending) == uint32_t(ResponseCode::OperationPending) &&
-            uint32_t(TeeuiRc::Ignored) == uint32_t(ResponseCode::Ignored) &&
-            uint32_t(TeeuiRc::SystemError) == uint32_t(ResponseCode::SystemError) &&
-            uint32_t(TeeuiRc::Unimplemented) == uint32_t(ResponseCode::Unimplemented) &&
-            uint32_t(TeeuiRc::Unexpected) == uint32_t(ResponseCode::Unexpected) &&
-            uint32_t(TeeuiRc::UIError) == uint32_t(ResponseCode::UIError) &&
-            uint32_t(TeeuiRc::UIErrorMissingGlyph) == uint32_t(ResponseCode::UIErrorMissingGlyph) &&
+        uint32_t(TeeuiRc::OK) == uint32_t(IConfirmationUI::OK) &&
+            uint32_t(TeeuiRc::Canceled) == uint32_t(IConfirmationUI::CANCELED) &&
+            uint32_t(TeeuiRc::Aborted) == uint32_t(IConfirmationUI::ABORTED) &&
+            uint32_t(TeeuiRc::OperationPending) == uint32_t(IConfirmationUI::OPERATION_PENDING) &&
+            uint32_t(TeeuiRc::Ignored) == uint32_t(IConfirmationUI::IGNORED) &&
+            uint32_t(TeeuiRc::SystemError) == uint32_t(IConfirmationUI::SYSTEM_ERROR) &&
+            uint32_t(TeeuiRc::Unimplemented) == uint32_t(IConfirmationUI::UNIMPLEMENTED) &&
+            uint32_t(TeeuiRc::Unexpected) == uint32_t(IConfirmationUI::UNEXPECTED) &&
+            uint32_t(TeeuiRc::UIError) == uint32_t(IConfirmationUI::UI_ERROR) &&
+            uint32_t(TeeuiRc::UIErrorMissingGlyph) ==
+                uint32_t(IConfirmationUI::UI_ERROR_MISSING_GLYPH) &&
             uint32_t(TeeuiRc::UIErrorMessageTooLong) ==
-                uint32_t(ResponseCode::UIErrorMessageTooLong) &&
+                uint32_t(IConfirmationUI::UI_ERROR_MESSAGE_TOO_LONG) &&
             uint32_t(TeeuiRc::UIErrorMalformedUTF8Encoding) ==
-                uint32_t(ResponseCode::UIErrorMalformedUTF8Encoding),
+                uint32_t(IConfirmationUI::UI_ERROR_MALFORMED_UTF8ENCODING),
         "teeui::ResponseCode and "
         "::android::hardware::confirmationui::V1_0::Responsecude are out of "
         "sync");
-    return ResponseCode(trc);
+    return static_cast<int>(trc);
 }
 
 teeui::UIOption convertUIOption(UIOption uio) {
-    static_assert(uint32_t(UIOption::AccessibilityInverted) ==
+    static_assert(uint32_t(UIOption::ACCESSIBILITY_INVERTED) ==
                           uint32_t(teeui::UIOption::AccessibilityInverted) &&
-                      uint32_t(UIOption::AccessibilityMagnified) ==
+                      uint32_t(UIOption::ACCESSIBILITY_MAGNIFIED) ==
                           uint32_t(teeui::UIOption::AccessibilityMagnified),
                   "teeui::UIOPtion and ::android::hardware::confirmationui::V1_0::UIOption "
-                  "anre out of sync");
+                  "are out of sync");
     return teeui::UIOption(uio);
 }
 
-inline MsgString hidl2MsgString(const hidl_string& s) {
+inline MsgString stdString2MsgString(const string& s) {
     return {s.c_str(), s.c_str() + s.size()};
 }
-template <typename T> inline MsgVector<T> hidl2MsgVector(const hidl_vec<T>& v) {
+template <typename T> inline MsgVector<T> stdVector2MsgVector(const vector<T>& v) {
     return {v};
 }
 
-inline MsgVector<teeui::UIOption> hidl2MsgVector(const hidl_vec<UIOption>& v) {
+inline MsgVector<teeui::UIOption> stdVector2MsgVector(const vector<UIOption>& v) {
     MsgVector<teeui::UIOption> result(v.size());
     for (unsigned int i = 0; i < v.size(); ++i) {
         result[i] = convertUIOption(v[i]);
@@ -137,7 +129,7 @@ inline MsgVector<teeui::UIOption> hidl2MsgVector(const hidl_vec<UIOption>& v) {
 }  // namespace
 
 TrustyConfirmationUI::TrustyConfirmationUI()
-    : listener_state_(ListenerState::None), prompt_result_(ResponseCode::Ignored) {}
+    : listener_state_(ListenerState::None), prompt_result_(IConfirmationUI::IGNORED) {}
 
 TrustyConfirmationUI::~TrustyConfirmationUI() {
     ListenerState state = listener_state_;
@@ -385,15 +377,16 @@ TrustyConfirmationUI::promptUserConfirmation_(const MsgString& promptText,
     //  ############################## Start 4th Phase - cleanup ##################################
 }
 
-// Methods from ::android::hardware::confirmationui::V1_0::IConfirmationUI
+// Methods from ::aidl::android::hardware::confirmationui::IConfirmationUI
 // follow.
-Return<ResponseCode> TrustyConfirmationUI::promptUserConfirmation(
-    const sp<IConfirmationResultCallback>& resultCB, const hidl_string& promptText,
-    const hidl_vec<uint8_t>& extraData, const hidl_string& locale,
-    const hidl_vec<UIOption>& uiOptions) {
+::ndk::ScopedAStatus TrustyConfirmationUI::promptUserConfirmation(
+    const shared_ptr<IConfirmationResultCallback>& resultCB, const vector<uint8_t>& promptTextBytes,
+    const vector<uint8_t>& extraData, const string& locale, const vector<UIOption>& uiOptions) {
     std::unique_lock<std::mutex> stateLock(listener_state_lock_, std::defer_lock);
+    string promptText(promptTextBytes.begin(), promptTextBytes.end());
     if (!stateLock.try_lock()) {
-        return ResponseCode::OperationPending;
+        return ndk::ScopedAStatus(
+            AStatus_fromServiceSpecificError(IConfirmationUI::OPERATION_PENDING));
     }
     switch (listener_state_) {
     case ListenerState::None:
@@ -401,23 +394,25 @@ Return<ResponseCode> TrustyConfirmationUI::promptUserConfirmation(
     case ListenerState::Starting:
     case ListenerState::SetupDone:
     case ListenerState::Interactive:
-        return ResponseCode::OperationPending;
+        return ndk::ScopedAStatus(
+            AStatus_fromServiceSpecificError(IConfirmationUI::OPERATION_PENDING));
     case ListenerState::Terminating:
         callback_thread_.join();
         listener_state_ = ListenerState::None;
         break;
     default:
-        return ResponseCode::Unexpected;
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(IConfirmationUI::UNEXPECTED));
     }
 
     assert(listener_state_ == ListenerState::None);
 
     callback_thread_ = std::thread(
-        [this](sp<IConfirmationResultCallback> resultCB, hidl_string promptText,
-               hidl_vec<uint8_t> extraData, hidl_string locale, hidl_vec<UIOption> uiOptions) {
-            auto [trc, msg, token] =
-                promptUserConfirmation_(hidl2MsgString(promptText), hidl2MsgVector(extraData),
-                                        hidl2MsgString(locale), hidl2MsgVector(uiOptions));
+        [this](const shared_ptr<IConfirmationResultCallback>& resultCB, const string& promptText,
+               const vector<uint8_t>& extraData, const string& locale,
+               const vector<UIOption>& uiOptions) {
+            auto [trc, msg, token] = promptUserConfirmation_(
+                stdString2MsgString(promptText), stdVector2MsgVector(extraData),
+                stdString2MsgString(locale), stdVector2MsgVector(uiOptions));
             bool do_callback = (listener_state_ == ListenerState::Interactive ||
                                 listener_state_ == ListenerState::SetupDone) &&
                                resultCB;
@@ -426,7 +421,7 @@ Return<ResponseCode> TrustyConfirmationUI::promptUserConfirmation(
             if (do_callback) {
                 auto error = resultCB->result(prompt_result_, msg, token);
                 if (!error.isOk()) {
-                    LOG(ERROR) << "Result callback failed " << error.description();
+                    LOG(ERROR) << "Result callback failed " << error.getDescription();
                 }
             } else {
                 listener_state_condv_.notify_all();
@@ -442,14 +437,14 @@ Return<ResponseCode> TrustyConfirmationUI::promptUserConfirmation(
     if (listener_state_ == ListenerState::Terminating) {
         callback_thread_.join();
         listener_state_ = ListenerState::None;
-        return prompt_result_;
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(prompt_result_));
     }
-    return ResponseCode::OK;
+    return ndk::ScopedAStatus::ok();
 }
 
-Return<ResponseCode>
+::ndk::ScopedAStatus
 TrustyConfirmationUI::deliverSecureInputEvent(const HardwareAuthToken& secureInputToken) {
-    ResponseCode rc = ResponseCode::Ignored;
+    int rc = IConfirmationUI::IGNORED;
     {
         /*
          * deliverSecureInputEvent is only used by the VTS test to mock human input. A correct
@@ -467,13 +462,17 @@ TrustyConfirmationUI::deliverSecureInputEvent(const HardwareAuthToken& secureInp
         listener_state_condv_.wait(stateLock,
                                    [this] { return listener_state_ != ListenerState::SetupDone; });
 
-        if (listener_state_ != ListenerState::Interactive) return ResponseCode::Ignored;
+        if (listener_state_ != ListenerState::Interactive)
+            return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(IConfirmationUI::IGNORED));
         auto sapp = app_.lock();
-        if (!sapp) return ResponseCode::Ignored;
+        if (!sapp)
+            return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(IConfirmationUI::IGNORED));
         auto [error, response] =
             sapp->issueCmd<DeliverTestCommandMessage, DeliverTestCommandResponse>(
                 static_cast<teeui::TestModeCommands>(secureInputToken.challenge));
-        if (error != TrustyAppError::OK) return ResponseCode::SystemError;
+        if (error != TrustyAppError::OK)
+            return ndk::ScopedAStatus(
+                AStatus_fromServiceSpecificError(IConfirmationUI::SYSTEM_ERROR));
         auto& [trc] = response;
         if (trc != TeeuiRc::Ignored) secureInputDelivered_ = true;
         rc = convertRc(trc);
@@ -484,11 +483,14 @@ TrustyConfirmationUI::deliverSecureInputEvent(const HardwareAuthToken& secureInp
     // Canceled into OK. Canceled is only returned if the delivered event canceled
     // the operation, which means that the event was successfully delivered. Thus
     // we return OK.
-    if (rc == ResponseCode::Canceled) return ResponseCode::OK;
-    return rc;
+    if (rc == IConfirmationUI::CANCELED) return ndk::ScopedAStatus::ok();
+    if (rc != IConfirmationUI::OK) {
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(rc));
+    }
+    return ndk::ScopedAStatus::ok();
 }
 
-Return<void> TrustyConfirmationUI::abort() {
+::ndk::ScopedAStatus TrustyConfirmationUI::abort() {
     {
         std::unique_lock<std::mutex> stateLock(listener_state_lock_);
         if (listener_state_ == ListenerState::SetupDone ||
@@ -499,15 +501,11 @@ Return<void> TrustyConfirmationUI::abort() {
         }
     }
     listener_state_condv_.notify_all();
-    return Void();
+    return ndk::ScopedAStatus::ok();
 }
 
-android::sp<IConfirmationUI> createTrustyConfirmationUI() {
-    return new TrustyConfirmationUI();
+std::shared_ptr<IConfirmationUI> createTrustyConfirmationUI() {
+    return ndk::SharedRefBase::make<TrustyConfirmationUI>();
 }
 
-}  // namespace implementation
-}  // namespace V1_0
-}  // namespace confirmationui
-}  // namespace hardware
-}  // namespace android
+}  // namespace aidl::android::hardware::confirmationui
