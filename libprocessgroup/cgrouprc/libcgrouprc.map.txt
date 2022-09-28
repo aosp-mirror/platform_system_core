@@ -1,18 +1,18 @@
 LIBCGROUPRC { # introduced=29
   global:
-    ACgroupFile_getVersion;
-    ACgroupFile_getControllerCount;
-    ACgroupFile_getController;
-    ACgroupController_getVersion;
-    ACgroupController_getName;
-    ACgroupController_getPath;
+    ACgroupFile_getVersion; # llndk systemapi
+    ACgroupFile_getControllerCount; # llndk systemapi
+    ACgroupFile_getController; # llndk systemapi
+    ACgroupController_getVersion; # llndk systemapi
+    ACgroupController_getName; # llndk systemapi
+    ACgroupController_getPath; # llndk systemapi
   local:
     *;
 };
 
 LIBCGROUPRC_30 { # introduced=30
   global:
-    ACgroupController_getFlags;
+    ACgroupController_getFlags; # llndk systemapi
   local:
     *;
 };
