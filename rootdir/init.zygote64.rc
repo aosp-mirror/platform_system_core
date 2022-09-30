@@ -1,4 +1,4 @@
-service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-system-server
+service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-system-server --socket-name=zygote
     class main
     priority -20
     user root
@@ -13,5 +13,5 @@ service zygote /system/bin/app_process64 -Xzygote /system/bin --zygote --start-s
     onrestart restart media.tuner
     onrestart restart netd
     onrestart restart wificond
-    task_profiles ProcessCapacityHigh
+    task_profiles ProcessCapacityHigh MaxPerformance
     critical window=${zygote.critical_window.minute:-off} target=zygote-fatal
