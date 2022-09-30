@@ -27,6 +27,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <aidl/android/hardware/health/BnHealthInfoCallback.h>
 #include <android-base/file.h>
@@ -62,7 +63,7 @@ constexpr int USER_SYSTEM = 0;
 
 constexpr ssize_t benchmark_unit_size = 16 * 1024;  // 16KB
 
-constexpr ssize_t min_benchmark_size = 128 * 1024;  // 128KB
+constexpr size_t min_benchmark_size = 128 * 1024;  // 128KB
 
 }  // namespace
 
@@ -244,9 +245,10 @@ void storaged_t::load_proto(userid_t user_id) {
     proto.ParseFromString(ss.str());
 
     const UidIOUsage& uid_io_usage = proto.uid_io_usage();
-    uint32_t computed_crc = crc32(current_version,
-        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
-        uid_io_usage.ByteSize());
+    uint32_t computed_crc =
+            crc32(current_version,
+                  reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+                  uid_io_usage.ByteSizeLong());
     if (proto.crc() != computed_crc) {
         LOG(WARNING) << "CRC mismatch in " << proto_file;
         return;
@@ -264,31 +266,29 @@ char* storaged_t:: prepare_proto(userid_t user_id, StoragedProto* proto) {
 
     const UidIOUsage& uid_io_usage = proto->uid_io_usage();
     proto->set_crc(crc32(current_version,
-        reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
-        uid_io_usage.ByteSize()));
+                         reinterpret_cast<const Bytef*>(uid_io_usage.SerializeAsString().c_str()),
+                         uid_io_usage.ByteSizeLong()));
 
     uint32_t pagesize = sysconf(_SC_PAGESIZE);
     if (user_id == USER_SYSTEM) {
         proto->set_padding("", 1);
         vector<char> padding;
-        ssize_t size = ROUND_UP(MAX(min_benchmark_size, proto->ByteSize()),
-                                pagesize);
-        padding = vector<char>(size - proto->ByteSize(), 0xFD);
+        ssize_t size = ROUND_UP(std::max(min_benchmark_size, proto->ByteSizeLong()), pagesize);
+        padding = vector<char>(size - proto->ByteSizeLong(), 0xFD);
         proto->set_padding(padding.data(), padding.size());
-        while (!IS_ALIGNED(proto->ByteSize(), pagesize)) {
+        while (!IS_ALIGNED(proto->ByteSizeLong(), pagesize)) {
             padding.push_back(0xFD);
             proto->set_padding(padding.data(), padding.size());
         }
     }
 
     char* data = nullptr;
-    if (posix_memalign(reinterpret_cast<void**>(&data),
-                       pagesize, proto->ByteSize())) {
-        PLOG(ERROR) << "Faied to alloc aligned buffer (size: " << proto->ByteSize() << ")";
+    if (posix_memalign(reinterpret_cast<void**>(&data), pagesize, proto->ByteSizeLong())) {
+        PLOG(ERROR) << "Faied to alloc aligned buffer (size: " << proto->ByteSizeLong() << ")";
         return data;
     }
 
-    proto->SerializeToArray(data, proto->ByteSize());
+    proto->SerializeToArray(data, proto->ByteSizeLong());
     return data;
 }
 
@@ -314,7 +314,7 @@ void storaged_t::flush_proto_data(userid_t user_id,
 
         while (size > 0) {
             start = steady_clock::now();
-            ret = write(fd, data, MIN(benchmark_unit_size, size));
+            ret = write(fd, data, std::min(benchmark_unit_size, size));
             if (ret <= 0) {
                 PLOG(ERROR) << "Faied to write tmp file: " << tmp_file;
                 return;
@@ -352,7 +352,7 @@ void storaged_t::flush_proto(userid_t user_id, StoragedProto* proto) {
     unique_ptr<char> proto_data(prepare_proto(user_id, proto));
     if (proto_data == nullptr) return;
 
-    flush_proto_data(user_id, proto_data.get(), proto->ByteSize());
+    flush_proto_data(user_id, proto_data.get(), proto->ByteSizeLong());
 }
 
 void storaged_t::flush_protos(unordered_map<int, StoragedProto>* protos) {
