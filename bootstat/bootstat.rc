@@ -33,7 +33,6 @@ on post-fs-data
     chown system log /data/misc/bootstat/last_boot_time_utc
     chown system log /data/misc/bootstat/ota_boot_complete
     chown system log /data/misc/bootstat/ota_boot_complete_no_encryption
-    chown system log /data/misc/bootstat/post_decrypt_time_elapsed
     chown system log /data/misc/bootstat/ro.boottime.init
     chown system log /data/misc/bootstat/ro.boottime.init.cold_boot_wait
     chown system log /data/misc/bootstat/ro.boottime.init.selinux
