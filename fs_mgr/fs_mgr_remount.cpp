@@ -451,10 +451,9 @@ static int do_remount(Fstab& fstab, const std::vector<std::string>& partition_ar
     }
 
     // Mount overlayfs.
-    errno = 0;
-    if (!fs_mgr_overlayfs_mount_all(&partitions) && errno) {
-        PLOG(ERROR) << "Can not mount overlayfs for partitions";
-        return BAD_OVERLAY;
+    if (!fs_mgr_overlayfs_mount_all(&partitions)) {
+        LOG(WARNING) << "Cannot mount overlayfs for some partitions";
+        // Continue regardless to handle raw remount case.
     }
 
     // Get actual mounts _after_ overlayfs has been added.
