@@ -289,6 +289,18 @@ static void reset_animation(animation* anim) {
     anim->run = false;
 }
 
+void Charger::BlankSecScreen() {
+    int drm = drm_ == DRM_INNER ? 1 : 0;
+
+    if (!init_screen_) {
+        /* blank the secondary screen */
+        healthd_draw_->blank_screen(false, drm);
+        healthd_draw_->redraw_screen(&batt_anim_, surf_unknown_);
+        healthd_draw_->blank_screen(true, drm);
+        init_screen_ = true;
+    }
+}
+
 void Charger::UpdateScreenState(int64_t now) {
     int disp_time;
 
@@ -338,6 +350,9 @@ void Charger::UpdateScreenState(int64_t now) {
         reset_animation(&batt_anim_);
         next_screen_transition_ = -1;
         healthd_draw_->blank_screen(true, static_cast<int>(drm_));
+        if (healthd_draw_->has_multiple_connectors()) {
+            BlankSecScreen();
+        }
         screen_blanked_ = true;
         LOGV("[%" PRId64 "] animation done\n", now);
         if (configuration_->ChargerIsOnline()) {
