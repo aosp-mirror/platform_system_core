@@ -29,7 +29,8 @@ void SetFatalRebootTarget(const std::optional<std::string>& reboot_target = std:
 // so if any of the attempts to determine this fail, it will still return true.
 bool IsRebootCapable();
 // This is a wrapper around the actual reboot calls.
-void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target);
+void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& reboot_target,
+                                            const std::string& reboot_reason = "");
 void __attribute__((noreturn)) InitFatalReboot(int signal_number);
 void InstallRebootSignalHandlers();
 
