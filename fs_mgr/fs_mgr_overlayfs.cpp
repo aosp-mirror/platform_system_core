@@ -785,8 +785,7 @@ bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
 }
 
 // Mount kScratchMountPoint
-bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::string mnt_type,
-                                    bool readonly = false) {
+bool MountScratch(const std::string& device_path, bool readonly = false) {
     if (readonly) {
         if (!fs_mgr_access(device_path)) {
             LOG(ERROR) << "Path does not exist: " << device_path;
@@ -797,9 +796,12 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
         return false;
     }
 
-    auto f2fs = fs_mgr_is_f2fs(device_path);
-    auto ext4 = fs_mgr_is_ext4(device_path);
-    if (!f2fs && !ext4) {
+    std::vector<const char*> filesystem_candidates;
+    if (fs_mgr_is_f2fs(device_path)) {
+        filesystem_candidates = {"f2fs", "ext4"};
+    } else if (fs_mgr_is_ext4(device_path)) {
+        filesystem_candidates = {"ext4", "f2fs"};
+    } else {
         LOG(ERROR) << "Scratch partition is not f2fs or ext4";
         return false;
     }
@@ -816,11 +818,7 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     FstabEntry entry;
     entry.blk_device = device_path;
     entry.mount_point = kScratchMountPoint;
-    entry.fs_type = mnt_type;
-    if ((mnt_type == "f2fs") && !f2fs) entry.fs_type = "ext4";
-    if ((mnt_type == "ext4") && !ext4) entry.fs_type = "f2fs";
     entry.flags = MS_NOATIME | MS_RDONLY;
-    auto mounted = true;
     if (!readonly) {
         entry.flags &= ~MS_RDONLY;
         entry.flags |= MS_SYNCHRONOUS;
@@ -831,14 +829,12 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
     if (fs_mgr_overlayfs_already_mounted("/data", false)) {
         entry.fs_mgr_flags.check = true;
     }
-    if (mounted) mounted = fs_mgr_do_mount_one(entry) == 0;
-    if (!mounted) {
-        if ((entry.fs_type == "f2fs") && ext4) {
-            entry.fs_type = "ext4";
-            mounted = fs_mgr_do_mount_one(entry) == 0;
-        } else if ((entry.fs_type == "ext4") && f2fs) {
-            entry.fs_type = "f2fs";
-            mounted = fs_mgr_do_mount_one(entry) == 0;
+    bool mounted = false;
+    for (auto fs_type : filesystem_candidates) {
+        entry.fs_type = fs_type;
+        if (fs_mgr_do_mount_one(entry) == 0) {
+            mounted = true;
+            break;
         }
     }
     if (!createcon.Restore()) {
@@ -853,17 +849,6 @@ bool fs_mgr_overlayfs_mount_scratch(const std::string& device_path, const std::s
 
 const std::string kMkF2fs("/system/bin/make_f2fs");
 const std::string kMkExt4("/system/bin/mke2fs");
-
-// Only a suggestion for _first_ try during mounting
-std::string fs_mgr_overlayfs_scratch_mount_type() {
-    if (!access(kMkF2fs.c_str(), X_OK) && fs_mgr_filesystem_available("f2fs")) {
-        return "f2fs";
-    }
-    if (!access(kMkExt4.c_str(), X_OK) && fs_mgr_filesystem_available("ext4")) {
-        return "ext4";
-    }
-    return "auto";
-}
 
 // Note: we do not check access() here except for the super partition, since
 // in first-stage init we wouldn't have registed by-name symlinks for "other"
@@ -927,23 +912,27 @@ static std::string GetBootScratchDevice() {
     return GetPhysicalScratchDevice();
 }
 
-bool fs_mgr_overlayfs_make_scratch(const std::string& scratch_device, const std::string& mnt_type) {
+bool MakeScratchFilesystem(const std::string& scratch_device) {
     // Force mkfs by design for overlay support of adb remount, simplify and
     // thus do not rely on fsck to correct problems that could creep in.
+    auto fs_type = ""s;
     auto command = ""s;
-    if (mnt_type == "f2fs") {
+    if (!access(kMkF2fs.c_str(), X_OK) && fs_mgr_filesystem_available("f2fs")) {
+        fs_type = "f2fs";
         command = kMkF2fs + " -w 4096 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
-    } else if (mnt_type == "ext4") {
+    } else if (!access(kMkExt4.c_str(), X_OK) && fs_mgr_filesystem_available("ext4")) {
+        fs_type = "ext4";
         command = kMkExt4 + " -F -b 4096 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
     } else {
-        LERROR << mnt_type << " has no mkfs cookbook";
+        LERROR << "No supported mkfs command or filesystem driver available, supported filesystems "
+                  "are: f2fs, ext4";
         return false;
     }
     command += " " + scratch_device + " >/dev/null 2>/dev/null </dev/null";
     fs_mgr_set_blk_ro(scratch_device, false);
     auto ret = system(command.c_str());
     if (ret) {
-        LERROR << "make " << mnt_type << " filesystem on " << scratch_device << " return=" << ret;
+        LERROR << "make " << fs_type << " filesystem on " << scratch_device << " return=" << ret;
         return false;
     }
     return true;
@@ -1180,9 +1169,8 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab) {
     }
 
     // If the partition exists, assume first that it can be mounted.
-    auto mnt_type = fs_mgr_overlayfs_scratch_mount_type();
     if (partition_exists) {
-        if (fs_mgr_overlayfs_mount_scratch(scratch_device, mnt_type)) {
+        if (MountScratch(scratch_device)) {
             if (fs_mgr_access(kScratchMountPoint + kOverlayTopDir) ||
                 fs_mgr_filesystem_has_space(kScratchMountPoint)) {
                 return true;
@@ -1195,12 +1183,12 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab) {
         }
     }
 
-    if (!fs_mgr_overlayfs_make_scratch(scratch_device, mnt_type)) {
+    if (!MakeScratchFilesystem(scratch_device)) {
         LOG(ERROR) << "Failed to format scratch partition";
         return false;
     }
 
-    return fs_mgr_overlayfs_mount_scratch(scratch_device, mnt_type);
+    return MountScratch(scratch_device);
 }
 
 #if ALLOW_ADBD_DISABLE_VERITY
@@ -1319,14 +1307,13 @@ static void TryMountScratch() {
     if (!WaitForFile(scratch_device, 10s)) {
         return;
     }
-    const auto mount_type = fs_mgr_overlayfs_scratch_mount_type();
-    if (!fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type, true /* readonly */)) {
+    if (!MountScratch(scratch_device, true /* readonly */)) {
         return;
     }
     auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + kOverlayTopDir);
     fs_mgr_overlayfs_umount_scratch();
     if (has_overlayfs_dir) {
-        fs_mgr_overlayfs_mount_scratch(scratch_device, mount_type);
+        MountScratch(scratch_device);
     }
 }
 
@@ -1565,8 +1552,7 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown(const char* mount_point, bool*
     if ((mount_point != nullptr) && !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
         std::string scratch_device = GetBootScratchDevice();
         if (!scratch_device.empty()) {
-            mount_scratch = fs_mgr_overlayfs_mount_scratch(scratch_device,
-                                                           fs_mgr_overlayfs_scratch_mount_type());
+            mount_scratch = MountScratch(scratch_device);
         }
     }
 
@@ -1687,7 +1673,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
     if (auto info = EnsureScratchMapped(); info.has_value()) {
         // Map scratch device, mount kScratchMountPoint and teardown kScratchMountPoint.
         fs_mgr_overlayfs_umount_scratch();
-        if (fs_mgr_overlayfs_mount_scratch(info->device, fs_mgr_overlayfs_scratch_mount_type())) {
+        if (MountScratch(info->device)) {
             bool should_destroy_scratch = false;
             fs_mgr_overlayfs_teardown_one(kScratchMountPoint, teardown_dir, ignore_change,
                                           &should_destroy_scratch);
@@ -1702,7 +1688,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
     std::string scratch_device;
     if (MapDsuScratchDevice(&scratch_device)) {
         fs_mgr_overlayfs_umount_scratch();
-        if (fs_mgr_overlayfs_mount_scratch(scratch_device, fs_mgr_overlayfs_scratch_mount_type())) {
+        if (MountScratch(scratch_device)) {
             fs_mgr_overlayfs_teardown_one(kScratchMountPoint, teardown_dir, ignore_change);
             fs_mgr_overlayfs_umount_scratch();
         }
