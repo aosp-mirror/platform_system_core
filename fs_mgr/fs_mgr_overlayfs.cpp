@@ -1331,22 +1331,22 @@ static void TryMountScratch() {
 }
 
 bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
-    auto ret = false;
-    if (fs_mgr_overlayfs_invalid()) return ret;
-
+    if (fs_mgr_overlayfs_invalid()) {
+        return false;
+    }
+    auto ret = true;
     auto scratch_can_be_mounted = true;
     for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
         if (fs_mgr_is_verity_enabled(entry)) continue;
         auto mount_point = fs_mgr_mount_point(entry.mount_point);
         if (fs_mgr_overlayfs_already_mounted(mount_point)) {
-            ret = true;
             continue;
         }
         if (scratch_can_be_mounted) {
             scratch_can_be_mounted = false;
             TryMountScratch();
         }
-        if (fs_mgr_overlayfs_mount(mount_point)) ret = true;
+        ret &= fs_mgr_overlayfs_mount(mount_point);
     }
     return ret;
 }
