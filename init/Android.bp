@@ -161,6 +161,7 @@ libinit_cc_defaults {
     },
     static_libs: [
         "libavb",
+        "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
         "libfsverity_init",
@@ -181,7 +182,6 @@ libinit_cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libbootloader_message",
         "libcrypto",
         "libcutils",
         "libdl",
