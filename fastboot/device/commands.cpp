@@ -40,6 +40,8 @@
 #include <storage_literals/storage_literals.h>
 #include <uuid/uuid.h>
 
+#include <bootloader_message/bootloader_message.h>
+
 #include "BootControlClient.h"
 #include "constants.h"
 #include "fastboot_device.h"
@@ -154,6 +156,14 @@ static bool GetVarAll(FastbootDevice* device) {
     return true;
 }
 
+static void PostWipeData() {
+    std::string err;
+    // Reset mte state of device.
+    if (!WriteMiscMemtagMessage({}, &err)) {
+        LOG(ERROR) << "Failed to reset MTE state: " << err;
+    }
+}
+
 const std::unordered_map<std::string, std::function<bool(FastbootDevice*)>> kSpecialVars = {
         {"all", GetVarAll},
         {"dmesg", GetDmesg},
@@ -232,6 +242,7 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         //Perform oem PostWipeData if Android userdata partition has been erased
         bool support_oem_postwipedata = false;
         if (partition_name == "userdata") {
+            PostWipeData();
             support_oem_postwipedata = OemPostWipeData(device);
         }
 
@@ -610,6 +621,10 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     if (ret < 0) {
         return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
     }
+    if (partition_name == "userdata") {
+        PostWipeData();
+    }
+
     return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
