@@ -352,9 +352,10 @@ runs the service.
 
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
 > Create a UNIX domain socket named /dev/socket/_name_ and pass its fd to the
-  launched process.  _type_ must be "dgram", "stream" or "seqpacket".  _type_
-  may end with "+passcred" to enable SO_PASSCRED on the socket. User and
-  group default to 0.  'seclabel' is the SELinux security context for the
+  launched process.  The socket is created synchronously when the service starts.
+  _type_ must be "dgram", "stream" or "seqpacket".  _type_ may end with "+passcred"
+  to enable SO_PASSCRED on the socket or "+listen" to synchronously make it a listening socket.
+  User and group default to 0.  'seclabel' is the SELinux security context for the
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
