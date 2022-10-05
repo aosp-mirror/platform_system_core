@@ -17,51 +17,21 @@
 #pragma once
 
 #include <functional>
+#include <set>
+#include <string>
 
 #include <fstab/fstab.h>
 
-#include <set>
-#include <string>
-#include <vector>
+// Keep the list short and only add interfaces that must be exported public.
 
-android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
-
-bool fs_mgr_wants_overlayfs(android::fs_mgr::FstabEntry* entry);
 bool fs_mgr_overlayfs_mount_all(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_overlayfs_is_setup();
-bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev);
-bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
-std::string fs_mgr_get_context(const std::string& mount_point);
-
-// If "mount_point" is non-null, set up exactly one overlay.
-// If "mount_point" is null, setup any overlays.
-//
-// If |want_reboot| is non-null, and a reboot is needed to apply overlays, then
-// it will be true on return. The caller is responsible for initializing it.
-bool fs_mgr_overlayfs_setup(const char* mount_point = nullptr, bool* want_reboot = nullptr,
-                            bool just_disabled_verity = true);
-
-enum class OverlayfsTeardownResult {
-    Ok,
-    Busy,  // Indicates that overlays are still in use.
-    Error
-};
-OverlayfsTeardownResult fs_mgr_overlayfs_teardown(const char* mount_point = nullptr,
-                                                  bool* want_reboot = nullptr);
-
-enum class OverlayfsValidResult {
-    kNotSupported = 0,
-    kOk,
-    kOverrideCredsRequired,
-};
-OverlayfsValidResult fs_mgr_overlayfs_valid();
 
 namespace android {
 namespace fs_mgr {
 
 void MapScratchPartitionIfNeeded(Fstab* fstab,
                                  const std::function<bool(const std::set<std::string>&)>& init);
-void CleanupOldScratchFiles();
 
 // Teardown overlays of all sources (cache dir, scratch device, DSU) for |mount_point|.
 // Teardown all overlays if |mount_point| is empty.
