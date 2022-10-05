@@ -103,9 +103,15 @@ static bool property_parse_bool(const char* name) {
 static bool is_permissive_mte() {
   // Environment variable for testing or local use from shell.
   char* permissive_env = getenv("MTE_PERMISSIVE");
+  char process_sysprop_name[512];
+  async_safe_format_buffer(process_sysprop_name, sizeof(process_sysprop_name),
+                           "persist.device_config.memory_safety_native.permissive.process.%s",
+                           getprogname());
   // DO NOT REPLACE this with GetBoolProperty. That uses std::string which allocates, so it is
   // not async-safe (and this functiong gets used in a signal handler).
   return property_parse_bool("persist.sys.mte.permissive") ||
+         property_parse_bool("persist.device_config.memory_safety_native.permissive.default") ||
+         property_parse_bool(process_sysprop_name) ||
          (permissive_env && ParseBool(permissive_env) == ParseBoolResult::kTrue);
 }
 
