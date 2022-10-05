@@ -42,6 +42,8 @@
 #include <libavb_user/libavb_user.h>
 #include <libgsi/libgsid.h>
 
+#include "fs_mgr_priv_overlayfs.h"
+
 using namespace std::literals;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::FstabEntry;
