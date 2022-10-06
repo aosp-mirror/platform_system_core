@@ -121,6 +121,10 @@ class ProfileAttributeMock : public IProfileAttribute {
         return true;
     };
 
+    bool GetPathForUID(uid_t, std::string*) const override {
+        return false;
+    }
+
   private:
     const std::string file_name_;
 };
