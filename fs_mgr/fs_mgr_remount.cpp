@@ -35,7 +35,6 @@
 #include <binder/IServiceManager.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
-#include <fec/io.h>
 #include <fs_mgr_overlayfs.h>
 #include <fs_mgr_priv.h>
 #include <fstab/fstab.h>
@@ -50,7 +49,7 @@ using android::fs_mgr::FstabEntry;
 
 namespace {
 
-[[noreturn]] void usage(int exit_status) {
+void usage() {
     LOG(INFO) << getprogname()
               << " [-h] [-R] [-T fstab_file] [partition]...\n"
                  "\t-h --help\tthis help\n"
@@ -62,8 +61,6 @@ namespace {
                  "-R notwithstanding, verity must be disabled on partition(s).\n"
                  "-R within a DSU guest system reboots into the DSU instead of the host system,\n"
                  "this command would enable DSU (one-shot) if not already enabled.";
-
-    ::exit(exit_status);
 }
 
 const std::string system_mount_point(const android::fs_mgr::FstabEntry& entry) {
@@ -116,15 +113,9 @@ static android::sp<android::os::IVold> GetVold() {
 
 }  // namespace
 
-using namespace std::chrono_literals;
-
 enum RemountStatus {
     REMOUNT_SUCCESS = 0,
-    NOT_USERDEBUG,
-    BADARG,
-    NOT_ROOT,
-    NO_FSTAB,
-    UNKNOWN_PARTITION,
+    UNKNOWN_PARTITION = 5,
     INVALID_PARTITION,
     VERITY_PARTITION,
     BAD_OVERLAY,
@@ -281,23 +272,13 @@ static RemountStatus CheckVerity(const FstabEntry& entry, RemountCheckResult* re
     if (!fs_mgr_is_verity_enabled(entry)) {
         return REMOUNT_SUCCESS;
     }
-    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
-        return VERITY_PARTITION;
-    }
-
-    bool ok = false;
 
     std::unique_ptr<AvbOps, decltype(&::avb_ops_user_free)> ops(avb_ops_user_new(),
                                                                 &::avb_ops_user_free);
-    if (ops) {
-        auto suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
-        ok = avb_user_verity_set(ops.get(), suffix.c_str(), false);
+    if (!ops) {
+        return VERITY_PARTITION;
     }
-    if (!ok && fs_mgr_set_blk_ro(entry.blk_device, false)) {
-        fec::io fh(entry.blk_device.c_str(), O_RDWR);
-        ok = fh && fh.set_verity_status(false);
-    }
-    if (!ok) {
+    if (!avb_user_verity_set(ops.get(), fs_mgr_get_slot_suffix().c_str(), false)) {
         return VERITY_PARTITION;
     }
     result->disabled_verity = true;
@@ -489,15 +470,20 @@ int main(int argc, char* argv[]) {
     // Make sure we are root.
     if (::getuid() != 0) {
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
-        return NOT_ROOT;
+        return 1;
     }
 
     // If somehow this executable is delivered on a "user" build, it can
     // not function, so providing a clear message to the caller rather than
     // letting if fall through and provide a lot of confusing failure messages.
-    if (!ALLOW_ADBD_DISABLE_VERITY || (android::base::GetProperty("ro.debuggable", "0") != "1")) {
-        LOG(ERROR) << "only functions on userdebug or eng builds";
-        return NOT_USERDEBUG;
+    if (!ALLOW_ADBD_DISABLE_VERITY || !android::base::GetBoolProperty("ro.debuggable", false)) {
+        LOG(ERROR) << "Device must be userdebug build";
+        return 1;
+    }
+
+    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
+        LOG(ERROR) << "Device must be bootloader unlocked";
+        return 1;
     }
 
     const char* fstab_file = nullptr;
@@ -514,15 +500,16 @@ int main(int argc, char* argv[]) {
     for (int opt; (opt = ::getopt_long(argc, argv, "hRT:v", longopts, nullptr)) != -1;) {
         switch (opt) {
             case 'h':
-                usage(SUCCESS);
-                break;
+                usage();
+                return 0;
             case 'R':
                 auto_reboot = true;
                 break;
             case 'T':
                 if (fstab_file) {
                     LOG(ERROR) << "Cannot supply two fstabs: -T " << fstab_file << " -T" << optarg;
-                    usage(BADARG);
+                    usage();
+                    return 1;
                 }
                 fstab_file = optarg;
                 break;
@@ -531,8 +518,8 @@ int main(int argc, char* argv[]) {
                 break;
             default:
                 LOG(ERROR) << "Bad Argument -" << char(opt);
-                usage(BADARG);
-                break;
+                usage();
+                return 1;
         }
     }
 
@@ -549,7 +536,7 @@ int main(int argc, char* argv[]) {
     Fstab fstab;
     if (!ReadFstab(fstab_file, &fstab) || fstab.empty()) {
         PLOG(ERROR) << "Failed to read fstab";
-        return NO_FSTAB;
+        return 1;
     }
 
     RemountCheckResult check_result;
