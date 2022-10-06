@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <selinux/selinux.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/swap.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -2358,4 +2360,50 @@ bool fs_mgr_load_verity_state(int* mode) {
     }
 
     return true;
+}
+
+bool fs_mgr_filesystem_available(const std::string& filesystem) {
+    std::string filesystems;
+    if (!android::base::ReadFileToString("/proc/filesystems", &filesystems)) return false;
+    return filesystems.find("\t" + filesystem + "\n") != std::string::npos;
+}
+
+std::string fs_mgr_get_context(const std::string& mount_point) {
+    char* ctx = nullptr;
+    if (getfilecon(mount_point.c_str(), &ctx) == -1) {
+        PERROR << "getfilecon " << mount_point;
+        return "";
+    }
+
+    std::string context(ctx);
+    free(ctx);
+    return context;
+}
+
+OverlayfsValidResult fs_mgr_overlayfs_valid() {
+    // Overlayfs available in the kernel, and patched for override_creds?
+    if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
+        return OverlayfsValidResult::kOverrideCredsRequired;
+    }
+    if (!fs_mgr_filesystem_available("overlay")) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    struct utsname uts;
+    if (uname(&uts) == -1) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    int major, minor;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (major < 4) {
+        return OverlayfsValidResult::kOk;
+    }
+    if (major > 4) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (minor > 3) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    return OverlayfsValidResult::kOk;
 }
