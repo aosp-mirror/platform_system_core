@@ -308,7 +308,7 @@ soong_config_module_type {
     name: "init_first_stage_cc_defaults",
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
-    bool_variables: ["BOARD_BUILD_SYSTEM_ROOT_IMAGE", "BOARD_USES_RECOVERY_AS_BOOT"],
+    bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
     properties: ["installable"],
 }
 
@@ -317,9 +317,6 @@ soong_config_module_type {
 init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
-        BOARD_BUILD_SYSTEM_ROOT_IMAGE: {
-            installable: false,
-        },
         BOARD_USES_RECOVERY_AS_BOOT: {
             installable: false,
         },
