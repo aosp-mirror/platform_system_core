@@ -1,4 +1,0 @@
-service confirmationui-1-0 /vendor/bin/hw/android.hardware.confirmationui@1.0-service.trusty
-    class hal
-    user system
-    group drmrpc input system
