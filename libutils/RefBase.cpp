@@ -21,9 +21,11 @@
 
 #include <android-base/macros.h>
 
+#include <fcntl.h>
 #include <log/log.h>
 
 #include <utils/RefBase.h>
+#include <utils/String8.h>
 
 #include <utils/Mutex.h>
 
@@ -32,7 +34,9 @@
 #endif
 
 // Compile with refcounting debugging enabled.
+#ifndef DEBUG_REFS
 #define DEBUG_REFS 0
+#endif
 
 // The following three are ignored unless DEBUG_REFS is set.
 
