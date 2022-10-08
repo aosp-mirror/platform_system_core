@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package {
+    default_applicable_licenses: ["system_core_init_license"],
+}
+
 cc_defaults {
     name: "libinit_defaults",
     static_libs: [

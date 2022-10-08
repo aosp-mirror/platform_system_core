@@ -223,7 +223,6 @@ cc_binary {
         "libcutils",
         "libcrypto",
         "libext4_utils",
-        "libfec",
         "libfs_mgr_binder",
         "liblog",
         "liblp",
