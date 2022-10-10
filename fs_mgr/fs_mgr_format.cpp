@@ -68,9 +68,9 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
 
     /* Format the partition using the calculated length */
 
-    std::string size_str = std::to_string(dev_sz / 4096);
+    std::string size_str = std::to_string(dev_sz / 16384);
 
-    std::vector<const char*> mke2fs_args = {"/system/bin/mke2fs", "-t", "ext4", "-b", "4096"};
+    std::vector<const char*> mke2fs_args = {"/system/bin/mke2fs", "-t", "ext4", "-b", "16384"};
 
     // Project ID's require wider inodes. The Quotas themselves are enabled by tune2fs during boot.
     if (needs_projid) {
@@ -127,7 +127,7 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs
 
     /* Format the partition using the calculated length */
 
-    std::string size_str = std::to_string(dev_sz / 4096);
+    std::string size_str = std::to_string(dev_sz / 16384);
 
     std::vector<const char*> args = {"/system/bin/make_f2fs", "-g", "android"};
     if (needs_projid) {
