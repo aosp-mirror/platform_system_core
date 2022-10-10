@@ -58,10 +58,6 @@ cc_defaults {
     vendor_available: true,
     product_available: true,
     recovery_available: true,
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
     host_supported: true,
 
     cflags: [
@@ -126,8 +122,8 @@ cc_defaults {
     },
 }
 
-cc_library {
-    name: "libutils",
+cc_defaults {
+    name: "libutils_impl_defaults",
     defaults: ["libutils_defaults"],
     native_bridge_supported: true,
 
@@ -177,11 +173,39 @@ cc_library {
 }
 
 cc_library {
+    name: "libutils",
+    defaults: ["libutils_impl_defaults"],
+
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
+}
+
+cc_library {
+    name: "libutils_test_compile",
+    defaults: ["libutils_impl_defaults"],
+
+    cflags: [
+        "-DCALLSTACKS=1",
+        "-DDEBUG_POLL_AND_WAKE=1",
+        "-DDEBUG_REFS=1",
+        "-DDEBUG_TOKENIZER=1",
+    ],
+
+    visibility: [":__subpackages__"],
+}
+
+cc_library {
     name: "libutilscallstack",
     defaults: ["libutils_defaults"],
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
     min_sdk_version: "29",
+    vndk: {
+        enabled: true,
+        support_system_process: true,
+    },
 
     srcs: [
         "CallStack.cpp",
