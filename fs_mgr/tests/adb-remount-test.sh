@@ -1241,40 +1241,45 @@ adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null ||
 adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
   die -t "${T}" "/vendor is not RW"
 
+scratch_on_super=false
 if ${overlayfs_needed}; then
-  is_overlayfs_mounted || die -t "${T}" "expected overlay takeover"
-else
-  is_overlayfs_mounted && die -t "${T}" "unexpected overlay takeover"
-fi
+  is_overlayfs_mounted /system ||
+    die -t "${T}" "expected overlay to takeover /system after remount"
 
-# If scratch_partition && uses_dynamic_scratch, then scratch is on super.
-# If scratch_partition && !uses_dynamic_scratch, then scratch is super_other, system_other.
-# If !scratch_partition, then scratch is on /data via image_manager.
-uses_dynamic_scratch=false
-scratch_partition=
-virtual_ab=$(get_property ro.virtual_ab.enabled)
-if ${overlayfs_needed}; then
+  # Collect information about the scratch device if we have one
   M=$(adb_sh cat /proc/mounts </dev/null |
       awk '$2 == "/mnt/scratch" { print $1, $3; exit }')
-  [ -z "${M}" ] && die "cannot find any scratch device mounted on /mnt/scratch"
+  if [ -n "${M}" ]; then
+    scratch_device=$(echo "${M}" | awk '{ print $1 }')
+    scratch_filesystem=$(echo "${M}" | awk '{ print $2 }')
+    scratch_size=$(adb_sh df -k "${scratch_device}" </dev/null |
+                  tail +2 | head -1 | awk '{ print $2 }')
+    [ -z "${scratch_size}" ] && die "cannot get size of scratch device (${scratch_device})"
 
-  scratch_device=$(echo "${M}" | awk '{ print $1 }')
-  scratch_filesystem=$(echo "${M}" | awk '{ print $2 }')
-  scratch_size=$(adb_sh df -k "${scratch_device}" </dev/null |
-                 tail +2 | head -1 | awk '{ print $2 }')
-  [ -z "${scratch_size}" ] && die "cannot get size of scratch device (${scratch_device})"
+    # Detect scratch partition backed by super?
+    for b in "/dev/block/by-name/super"{,_${ACTIVE_SLOT}}; do
+      if adb_test -e "${b}"; then
+        device=$(adb_su realpath "${b}")
+        D=$(adb_su stat -c '0x%t 0x%T' "${device}")
+        major=$(echo "${D}" | awk '{ print $1 }')
+        minor=$(echo "${D}" | awk '{ print $2 }')
+        super_devt=$(( major )):$(( minor ))
+        if adb_su dmctl table scratch | tail +2 | grep -q -w "${super_devt}"; then
+          scratch_on_super=true
+        fi
+        break
+      fi
+    done
 
-  if [ -n "${virtual_ab}" ]; then
-    LOG INFO "using dynamic scratch partition on /data (VAB device)"
-  elif [[ "${scratch_device}" == /dev/block/by-name/* ]]; then
-    scratch_partition="${scratch_device##/dev/block/by-name/}"
-    LOG INFO "using physical scratch partition ${scratch_partition}"
+    if ${scratch_on_super}; then
+      LOG INFO "using dynamic scratch partition on super"
+    else
+      LOG INFO "using dynamic scratch partition on /data (VAB device)"
+    fi
+    LOG INFO "scratch device ${scratch_device} filesystem ${scratch_filesystem} size ${scratch_size}KiB"
   else
-    uses_dynamic_scratch=true
-    scratch_partition=scratch
-    LOG INFO "using dynamic scratch partition on super"
+    LOG INFO "cannot find any scratch device mounted on /mnt/scratch, using scratch on /cache"
   fi
-  LOG INFO "scratch device ${scratch_device} filesystem ${scratch_filesystem} size ${scratch_size}KiB"
 
   for d in ${OVERLAYFS_BACKING}; do
     if adb_test -d /${d}/overlay/system/upper; then
@@ -1283,8 +1288,6 @@ if ${overlayfs_needed}; then
   done
 
   data_device=$(adb_sh awk '$2 == "/data" { print $1; exit }' /proc/mounts)
-  is_overlayfs_mounted /system 2>/dev/null ||
-    die -t "${T}" "expected overlay to takeover /system after remount"
   # KISS (we do not support sub-mounts for system partitions currently)
   adb_sh grep "^overlay " /proc/mounts </dev/null |
     grep -vE "^overlay.* /(apex|system|vendor)/[^ ]" |
@@ -1312,6 +1315,8 @@ if ${overlayfs_needed}; then
       die "remount overlayfs missed a spot (rw)"
     fi
   done
+else
+  is_overlayfs_mounted && die -t "${T}" "unexpected overlay takeover"
 fi
 
 LOG OK "adb remount RW"
@@ -1455,31 +1460,18 @@ else
 
   fastboot_getvar is-userspace yes &&
     is_userspace_fastboot=true
-  # check ${scratch_partition} via fastboot
-  if [ -n "${scratch_partition}" ]; then
-    fastboot_getvar partition-type:${scratch_partition} raw ||
-      ( fastboot reboot && false) ||
-      die "fastboot can not see ${scratch_partition} parameters"
-    if ${uses_dynamic_scratch}; then
-      fastboot_getvar has-slot:${scratch_partition} no &&
-        fastboot_getvar is-logical:${scratch_partition} yes ||
-        ( fastboot reboot && false) ||
-        die "fastboot can not see ${scratch_partition} parameters"
-      LOG INFO "expect fastboot erase ${scratch_partition} to fail"
-      fastboot erase ${scratch_partition} &&
-        ( fastboot reboot || true) &&
-        die "fastboot can erase ${scratch_partition}"
-    else
-      fastboot_getvar is-logical:${scratch_partition} no ||
-        ( fastboot reboot && false) ||
-        die "fastboot can not see ${scratch_partition} parameters"
-      fastboot reboot-bootloader ||
-        die "fastboot reboot bootloader"
-    fi
-    LOG INFO "expect fastboot format ${scratch_partition} to fail"
-    fastboot format ${scratch_partition} &&
-      ( fastboot reboot || true) &&
-      die "fastboot can format ${scratch_partition}"
+
+  if ${scratch_on_super}; then
+    fastboot_getvar partition-type:scratch raw ||
+      die "fastboot cannot see parameter partition-type:scratch"
+    fastboot_getvar has-slot:scratch no ||
+      die "fastboot cannot see parameter has-slot:scratch"
+    fastboot_getvar is-logical:scratch yes ||
+      die "fastboot cannot see parameter is-logical:scratch"
+    LOG INFO "expect fastboot erase scratch to fail"
+    fastboot erase scratch && die "fastboot can erase scratch"
+    LOG INFO "expect fastboot format scratch to fail"
+    fastboot format scratch && die "fastboot can format scratch"
   fi
 
   fastboot reboot || die "cannot reboot out of fastboot"
@@ -1539,9 +1531,9 @@ for i in ${MOUNTS} /system/priv-app; do
 done
 
 ################################################################################
-if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
+if ${is_bootloader_fastboot} && ${scratch_on_super}; then
 
-  LOG RUN "test fastboot flash to ${scratch_partition} recovery"
+  LOG RUN "test fastboot flash to scratch recovery"
 
   avc_check
   adb reboot fastboot </dev/null ||
@@ -1550,15 +1542,15 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   dd if=/dev/zero of=${img} bs=4096 count=16 2>/dev/null &&
     fastboot_wait ${FASTBOOT_WAIT} ||
     die "reboot into fastboot to flash scratch `usb_status`"
-  fastboot flash --force ${scratch_partition} ${img}
+  fastboot flash --force scratch ${img}
   err=${?}
   fastboot reboot ||
     die "can not reboot out of fastboot"
   [ 0 -eq ${err} ] ||
-    die "fastboot flash ${scratch_partition}"
+    die "fastboot flash scratch"
   adb_wait ${ADB_WAIT} &&
     adb_root ||
-    die "did not reboot after flashing empty ${scratch_partition} `usb_status`"
+    die "did not reboot after flashing empty scratch $(usb_status)"
   T=`adb_date`
   D=`adb disable-verity 2>&1`
   err=${?}
@@ -1578,7 +1570,7 @@ if ${is_bootloader_fastboot} && [ -n "${scratch_partition}" ]; then
   [ ${err} = 0 ] &&
     [ X"${D}" = X"${D##*setup failed}" ] &&
     [ X"${D}" != X"${D##*[Uu]sing overlayfs}" ] &&
-    LOG OK "${scratch_partition} recreated" ||
+    LOG OK "recreated scratch" ||
     die -t ${T} "setup for overlayfs"
   adb remount >&2 ||
     die -t ${T} "remount failed"
