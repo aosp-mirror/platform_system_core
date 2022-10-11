@@ -1089,7 +1089,7 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
     return true;
 }
 
-static bool CanUseSuperPartition(const Fstab& fstab, bool* is_virtual_ab) {
+static bool CanUseSuperPartition(const Fstab& fstab) {
     auto slot_number = fs_mgr_overlayfs_slot_number();
     auto super_device = fs_mgr_overlayfs_super_device(slot_number);
     if (!fs_mgr_rw_access(super_device) || !fs_mgr_overlayfs_has_logical(fstab)) {
@@ -1099,7 +1099,6 @@ static bool CanUseSuperPartition(const Fstab& fstab, bool* is_virtual_ab) {
     if (!metadata) {
         return false;
     }
-    *is_virtual_ab = !!(metadata->header.flags & LP_HEADER_FLAG_VIRTUAL_AB_DEVICE);
     return true;
 }
 
@@ -1112,12 +1111,13 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
         return *partition_exists;
     }
 
-    bool is_virtual_ab = false;
-    if (CanUseSuperPartition(fstab, &is_virtual_ab)) {
-        bool can_use_data = false;
-        if (is_virtual_ab && FilesystemHasReliablePinning("/data", &can_use_data) && can_use_data) {
-            return CreateScratchOnData(scratch_device, partition_exists);
-        }
+    // Try ImageManager on /data first.
+    bool can_use_data = false;
+    if (FilesystemHasReliablePinning("/data", &can_use_data) && can_use_data) {
+        return CreateScratchOnData(scratch_device, partition_exists);
+    }
+    // If that fails, see if we can land on super.
+    if (CanUseSuperPartition(fstab)) {
         return CreateDynamicScratch(scratch_device, partition_exists);
     }
     return false;
