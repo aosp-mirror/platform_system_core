@@ -10,6 +10,7 @@ libEGL.so
 libGLESv1_CM.so
 libGLESv2.so
 libGLESv3.so
+libicu.so
 libicui18n.so
 libicuuc.so
 libjnigraphics.so
