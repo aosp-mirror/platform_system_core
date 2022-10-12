@@ -24,6 +24,14 @@ prebuilt_etc {
                 },
             },
         },
+        riscv64: {
+            src: "empty_policy/code_coverage.riscv64.policy",
+            product_variables: {
+                native_coverage: {
+                    src: "seccomp_policy/code_coverage.riscv64.policy",
+                },
+            },
+        },
         x86: {
             src: "empty_policy/code_coverage.x86.policy",
             product_variables: {
@@ -64,6 +72,14 @@ prebuilt_etc {
             product_variables: {
                 native_coverage: {
                     src: "seccomp_policy/code_coverage.arm.policy",
+                },
+            },
+        },
+        riscv64: {
+            src: "empty_policy/code_coverage.riscv64.policy",
+            product_variables: {
+                native_coverage: {
+                    src: "seccomp_policy/code_coverage.riscv64.policy",
                 },
             },
         },
