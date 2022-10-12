@@ -48,8 +48,9 @@ enum Architecture {
   ARM64 = 1;
   X86 = 2;
   X86_64 = 3;
+  RISCV64 = 4;
 
-  reserved 4 to 999;
+  reserved 5 to 999;
 }
 
 message Signal {
