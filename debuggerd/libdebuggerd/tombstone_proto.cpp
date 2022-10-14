@@ -82,6 +82,8 @@ static Architecture get_arch() {
   return Architecture::X86;
 #elif defined(__x86_64__)
   return Architecture::X86_64;
+#elif defined(__riscv) && (__riscv_xlen == 64)
+  return Architecture::RISCV64;
 #else
 #error Unknown architecture!
 #endif
