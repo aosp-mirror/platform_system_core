@@ -69,9 +69,11 @@ Result<void> Epoll::UnregisterHandler(int fd) {
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
         return ErrnoError() << "epoll_ctl failed to remove fd";
     }
-    if (epoll_handlers_.erase(fd) != 1) {
+    auto it = epoll_handlers_.find(fd);
+    if (it == epoll_handlers_.end()) {
         return Error() << "Attempting to remove epoll handler for FD without an existing handler";
     }
+    to_remove_.insert(it->first);
     return {};
 }
 
@@ -79,8 +81,7 @@ void Epoll::SetFirstCallback(std::function<void()> first_callback) {
     first_callback_ = std::move(first_callback);
 }
 
-Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
-        std::optional<std::chrono::milliseconds> timeout) {
+Result<int> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
     if (timeout && timeout->count() < INT_MAX) {
         timeout_ms = timeout->count();
@@ -94,7 +95,6 @@ Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
     if (num_events > 0 && first_callback_) {
         first_callback_();
     }
-    std::vector<std::shared_ptr<Handler>> pending_functions;
     for (int i = 0; i < num_events; ++i) {
         const auto it = epoll_handlers_.find(ev[i].data.fd);
         if (it == epoll_handlers_.end()) {
@@ -107,10 +107,13 @@ Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
             // Log something informational.
             LOG(ERROR) << "Received unexpected epoll event set: " << ev[i].events;
         }
-        pending_functions.emplace_back(info.handler);
+        (*info.handler)();
+        for (auto fd : to_remove_) {
+            epoll_handlers_.erase(fd);
+        }
+        to_remove_.clear();
     }
-
-    return pending_functions;
+    return num_events;
 }
 
 }  // namespace init
