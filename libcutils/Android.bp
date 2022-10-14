@@ -219,6 +219,11 @@ cc_library {
                 misc_undefined: ["integer"],
             },
         },
+        android_riscv64: {
+            sanitize: {
+                misc_undefined: ["integer"],
+            },
+        },
 
         android_x86: {
             // TODO: This is to work around b/29412086.
