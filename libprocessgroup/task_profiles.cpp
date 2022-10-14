@@ -321,7 +321,7 @@ ProfileAction::CacheUseResult SetCgroupAction::UseCachedFd(ResourceCacheType cac
     if (cache_type == ResourceCacheType::RCT_TASK &&
         fd_[cache_type] == FdCacheHelper::FDS_APP_DEPENDENT) {
         // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        LOG(ERROR) << Name() << ": application profile can't be applied to a thread";
         return ProfileAction::FAIL;
     }
 
@@ -338,7 +338,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << procs_path;
+        PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << procs_path;
         return false;
     }
     if (!AddTidToCgroup(pid, tmp_fd, controller()->name())) {
@@ -359,7 +359,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << tasks_path;
+        PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << tasks_path;
         return false;
     }
     if (!AddTidToCgroup(tid, tmp_fd, controller()->name())) {
@@ -428,7 +428,7 @@ bool WriteFileAction::WriteValueToFile(const std::string& value_, ResourceCacheT
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_WRONLY | O_CLOEXEC)));
 
     if (tmp_fd < 0) {
-        if (logfailures) PLOG(WARNING) << "Failed to open " << path;
+        if (logfailures) PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << path;
         return false;
     }
 
@@ -465,7 +465,7 @@ ProfileAction::CacheUseResult WriteFileAction::UseCachedFd(ResourceCacheType cac
     if (cache_type == ResourceCacheType::RCT_TASK &&
         fd_[cache_type] == FdCacheHelper::FDS_APP_DEPENDENT) {
         // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        LOG(ERROR) << Name() << ": application profile can't be applied to a thread";
         return ProfileAction::FAIL;
     }
     return ProfileAction::UNUSED;
