@@ -47,6 +47,8 @@ static const char* abi_string(const Tombstone& tombstone) {
       return "arm";
     case Architecture::ARM64:
       return "arm64";
+    case Architecture::RISCV64:
+      return "riscv64";
     case Architecture::X86:
       return "x86";
     case Architecture::X86_64:
@@ -61,6 +63,8 @@ static int pointer_width(const Tombstone& tombstone) {
     case Architecture::ARM32:
       return 4;
     case Architecture::ARM64:
+      return 8;
+    case Architecture::RISCV64:
       return 8;
     case Architecture::X86:
       return 4;
@@ -117,6 +121,10 @@ static void print_thread_registers(CallbackType callback, const Tombstone& tombs
 
     case Architecture::ARM64:
       special_registers = {"ip", "lr", "sp", "pc", "pst"};
+      break;
+
+    case Architecture::RISCV64:
+      special_registers = {"ra", "sp", "pc"};
       break;
 
     case Architecture::X86:
