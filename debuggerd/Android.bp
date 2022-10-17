@@ -490,9 +490,6 @@ prebuilt_etc {
         arm64: {
             src: "seccomp_policy/crash_dump.arm.policy",
         },
-        riscv64: {
-            src: "seccomp_policy/crash_dump.riscv64.policy",
-        },
         x86: {
             src: "seccomp_policy/crash_dump.x86_64.policy",
         },
