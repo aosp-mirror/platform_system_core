@@ -76,12 +76,8 @@ prebuilt_etc {
             },
         },
         riscv64: {
-            src: "empty_policy/code_coverage.riscv64.policy",
-            product_variables: {
-                native_coverage: {
-                    src: "seccomp_policy/code_coverage.riscv64.policy",
-                },
-            },
+            // riscv64 doesn't have a secondary architecture.
+            enabled: false,
         },
         x86: {
             src: "empty_policy/code_coverage.x86_64.policy",
