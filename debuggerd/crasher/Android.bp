@@ -27,6 +27,9 @@ cc_defaults {
         arm64: {
             srcs: ["arm64/crashglue.S"],
         },
+        riscv64: {
+            srcs: ["riscv64/crashglue.S"],
+        },
         x86: {
             srcs: ["x86/crashglue.S"],
         },
