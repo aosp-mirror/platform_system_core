@@ -1423,7 +1423,7 @@ LOG RUN "flash vendor, and confirm vendor override disappears"
 
 is_bootloader_fastboot=true
 # cuttlefish?
-[[ "$(get_property ro.product.device)" == vsoc* ]] &&
+[[ "$(get_property ro.product.vendor.device)" == vsoc_* ]] &&
   is_bootloader_fastboot=false
 is_userspace_fastboot=false
 
