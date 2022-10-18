@@ -406,10 +406,10 @@ TEST_F(CrasherTest, tagged_fault_addr) {
       result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x[01]00000000000dead)");
 }
 
-// Marked as weak to prevent the compiler from removing the malloc in the caller. In theory, the
-// compiler could still clobber the argument register before trapping, but that's unlikely.
-__attribute__((weak)) void CrasherTest::Trap(void* ptr ATTRIBUTE_UNUSED) {
-  __builtin_trap();
+void CrasherTest::Trap(void* ptr) {
+  void (*volatile f)(void*) = nullptr;
+  __asm__ __volatile__("" : : "r"(f) : "memory");
+  f(ptr);
 }
 
 TEST_F(CrasherTest, heap_addr_in_register) {
@@ -828,7 +828,7 @@ TEST_F(CrasherTest, mte_register_tag_dump) {
 
   StartIntercept(&output_fd);
   FinishCrasher();
-  AssertDeath(SIGTRAP);
+  AssertDeath(SIGSEGV);
   FinishIntercept(&intercept_result);
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";

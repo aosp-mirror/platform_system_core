@@ -200,6 +200,24 @@ bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string&
     return (info.feat_ro_compat & EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS) != 0;
 }
 
+#define F2FS_SUPER_OFFSET 1024
+#define F2FS_FEATURE_OFFSET 2180
+#define F2FS_FEATURE_RO 0x4000
+bool fs_mgr_is_read_only_f2fs(const std::string& dev) {
+    if (!fs_mgr_is_f2fs(dev)) return false;
+
+    android::base::unique_fd fd(open(dev.c_str(), O_RDONLY | O_CLOEXEC));
+    if (fd < 0) return false;
+
+    __le32 feat;
+    if ((TEMP_FAILURE_RETRY(lseek64(fd, F2FS_SUPER_OFFSET + F2FS_FEATURE_OFFSET, SEEK_SET)) < 0) ||
+        (TEMP_FAILURE_RETRY(read(fd, &feat, sizeof(feat))) < 0)) {
+        return false;
+    }
+
+    return (feat & cpu_to_le32(F2FS_FEATURE_RO)) != 0;
+}
+
 bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // readonly filesystem, can not be mount -o remount,rw
     // for squashfs, erofs or if free space is (near) zero making such a remount
@@ -211,6 +229,11 @@ bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     // blk_device needs to be setup so we can check superblock.
     // If we fail here, because during init first stage and have doubts.
     if (!fs_mgr_update_blk_device(entry)) {
+        return true;
+    }
+
+    // f2fs read-only mode doesn't support remount,rw
+    if (fs_mgr_is_read_only_f2fs(entry->blk_device)) {
         return true;
     }
 
