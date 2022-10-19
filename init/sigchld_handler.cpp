@@ -53,8 +53,13 @@ static pid_t ReapOneProcess() {
         return 0;
     }
 
-    auto pid = siginfo.si_pid;
-    if (pid == 0) return 0;
+    const pid_t pid = siginfo.si_pid;
+    if (pid == 0) {
+        DCHECK_EQ(siginfo.si_signo, 0);
+        return 0;
+    }
+
+    DCHECK_EQ(siginfo.si_signo, SIGCHLD);
 
     // At this point we know we have a zombie pid, so we use this scopeguard to reap the pid
     // whenever the function returns from this point forward.
