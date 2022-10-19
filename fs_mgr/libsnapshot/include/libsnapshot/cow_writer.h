@@ -52,8 +52,9 @@ class ICowWriter {
     virtual ~ICowWriter() {}
 
     // Encode an operation that copies the contents of |old_block| to the
-    // location of |new_block|.
-    bool AddCopy(uint64_t new_block, uint64_t old_block);
+    // location of |new_block|. 'num_blocks' is the number of contiguous
+    // COPY operations from |old_block| to |new_block|.
+    bool AddCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1);
 
     // Encode a sequence of raw blocks. |size| must be a multiple of the block size.
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size);
@@ -84,7 +85,7 @@ class ICowWriter {
     const CowOptions& options() { return options_; }
 
   protected:
-    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) = 0;
+    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) = 0;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) = 0;
     virtual bool EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                uint32_t old_block, uint16_t offset) = 0;
@@ -122,7 +123,7 @@ class CowWriter : public ICowWriter {
     uint32_t GetCowVersion() { return header_.major_version; }
 
   protected:
-    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block) override;
+    virtual bool EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) override;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     virtual bool EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                uint32_t old_block, uint16_t offset) override;
