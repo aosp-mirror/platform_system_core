@@ -62,6 +62,48 @@ class StringSink : public IByteSink {
     std::string stream_;
 };
 
+TEST_F(CowTest, CopyContiguous) {
+    CowOptions options;
+    options.cluster_ops = 0;
+    CowWriter writer(options);
+
+    ASSERT_TRUE(writer.Initialize(cow_->fd));
+
+    ASSERT_TRUE(writer.AddCopy(10, 1000, 100));
+    ASSERT_TRUE(writer.Finalize());
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    CowHeader header;
+    CowFooter footer;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_TRUE(reader.GetHeader(&header));
+    ASSERT_TRUE(reader.GetFooter(&footer));
+    ASSERT_EQ(header.magic, kCowMagicNumber);
+    ASSERT_EQ(header.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.block_size, options.block_size);
+    ASSERT_EQ(footer.op.num_ops, 100);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->Done());
+
+    size_t i = 0;
+    while (!iter->Done()) {
+        auto op = &iter->Get();
+        ASSERT_EQ(op->type, kCowCopyOp);
+        ASSERT_EQ(op->compression, kCowCompressNone);
+        ASSERT_EQ(op->data_length, 0);
+        ASSERT_EQ(op->new_block, 10 + i);
+        ASSERT_EQ(op->source, 1000 + i);
+        iter->Next();
+        i += 1;
+    }
+
+    ASSERT_EQ(i, 100);
+}
+
 TEST_F(CowTest, ReadWrite) {
     CowOptions options;
     options.cluster_ops = 0;

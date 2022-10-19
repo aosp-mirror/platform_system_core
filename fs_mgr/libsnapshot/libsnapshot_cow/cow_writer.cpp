@@ -38,11 +38,16 @@ static_assert(sizeof(off_t) == sizeof(uint64_t));
 using android::base::borrowed_fd;
 using android::base::unique_fd;
 
-bool ICowWriter::AddCopy(uint64_t new_block, uint64_t old_block) {
-    if (!ValidateNewBlock(new_block)) {
-        return false;
+bool ICowWriter::AddCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
+    CHECK(num_blocks != 0);
+
+    for (size_t i = 0; i < num_blocks; i++) {
+        if (!ValidateNewBlock(new_block + i)) {
+            return false;
+        }
     }
-    return EmitCopy(new_block, old_block);
+
+    return EmitCopy(new_block, old_block, num_blocks);
 }
 
 bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
@@ -286,13 +291,20 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     return EmitClusterIfNeeded();
 }
 
-bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
     CHECK(!merge_in_progress_);
-    CowOperation op = {};
-    op.type = kCowCopyOp;
-    op.new_block = new_block;
-    op.source = old_block;
-    return WriteOperation(op);
+
+    for (size_t i = 0; i < num_blocks; i++) {
+        CowOperation op = {};
+        op.type = kCowCopyOp;
+        op.new_block = new_block + i;
+        op.source = old_block + i;
+        if (!WriteOperation(op)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
