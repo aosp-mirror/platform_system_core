@@ -21,9 +21,11 @@
 
 #include <android-base/macros.h>
 
+#include <fcntl.h>
 #include <log/log.h>
 
 #include <utils/RefBase.h>
+#include <utils/String8.h>
 
 #include <utils/Mutex.h>
 
@@ -32,7 +34,9 @@
 #endif
 
 // Compile with refcounting debugging enabled.
+#ifndef DEBUG_REFS
 #define DEBUG_REFS 0
+#endif
 
 // The following three are ignored unless DEBUG_REFS is set.
 
@@ -45,7 +49,11 @@
 
 // folder where stack traces are saved when DEBUG_REFS is enabled
 // this folder needs to exist and be writable
+#ifdef __ANDROID__
 #define DEBUG_REFS_CALLSTACK_PATH "/data/debug"
+#else
+#define DEBUG_REFS_CALLSTACK_PATH "."
+#endif
 
 // log all reference counting operations
 #define PRINT_REFS 0
@@ -320,11 +328,11 @@ public:
             char name[100];
             snprintf(name, sizeof(name), DEBUG_REFS_CALLSTACK_PATH "/%p.stack",
                      this);
-            int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 644);
+            int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 0644);
             if (rc >= 0) {
                 (void)write(rc, text.string(), text.length());
                 close(rc);
-                ALOGD("STACK TRACE for %p saved in %s", this, name);
+                ALOGI("STACK TRACE for %p saved in %s", this, name);
             }
             else ALOGE("FAILED TO PRINT STACK TRACE for %p in %s: %s", this,
                       name, strerror(errno));
