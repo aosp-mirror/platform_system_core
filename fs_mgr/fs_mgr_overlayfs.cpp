@@ -68,6 +68,8 @@ using android::fiemap::IImageManager;
 
 namespace {
 
+constexpr char kDataScratchSizeMbProp[] = "fs_mgr.overlayfs.data_scratch_size_mb";
+
 bool fs_mgr_access(const std::string& path) {
     return access(path.c_str(), F_OK) == 0;
 }
@@ -1084,7 +1086,10 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
         return false;
     }
     if (!images->BackingImageExists(partition_name)) {
-        uint64_t size = GetIdealDataScratchSize();
+        auto size = android::base::GetUintProperty<uint64_t>(kDataScratchSizeMbProp, 0) * 1_MiB;
+        if (!size) {
+            size = GetIdealDataScratchSize();
+        }
         if (!size) {
             size = 2_GiB;
         }
