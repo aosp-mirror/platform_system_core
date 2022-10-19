@@ -30,6 +30,8 @@ using keymaster::GenerateCsrRequest;
 using keymaster::GenerateCsrResponse;
 using keymaster::GenerateRkpKeyRequest;
 using keymaster::GenerateRkpKeyResponse;
+using keymaster::GetHwInfoRequest;
+using keymaster::GetHwInfoResponse;
 using keymaster::KeymasterBlob;
 using ::std::string;
 using ::std::unique_ptr;
@@ -71,10 +73,15 @@ class Status {
 }  // namespace
 
 ScopedAStatus TrustyRemotelyProvisionedComponentDevice::getHardwareInfo(RpcHardwareInfo* info) {
-    info->versionNumber = 2;
-    info->rpcAuthorName = "Google";
-    info->supportedEekCurve = RpcHardwareInfo::CURVE_25519;
-    info->uniqueId = "Trusty: My password is ******";
+    GetHwInfoResponse response = impl_->GetHwInfo();
+    if (response.error != KM_ERROR_OK) {
+        return Status(-static_cast<int32_t>(response.error), "Failed to get hardware info.");
+    }
+
+    info->versionNumber = response.version;
+    info->rpcAuthorName = std::move(response.rpcAuthorName);
+    info->supportedEekCurve = response.supportedEekCurve;
+    info->uniqueId = std::move(response.uniqueId);
     return ScopedAStatus::ok();
 }
 

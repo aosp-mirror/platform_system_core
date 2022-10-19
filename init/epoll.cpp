@@ -75,6 +75,10 @@ Result<void> Epoll::UnregisterHandler(int fd) {
     return {};
 }
 
+void Epoll::SetFirstCallback(std::function<void()> first_callback) {
+    first_callback_ = std::move(first_callback);
+}
+
 Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
         std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
@@ -86,6 +90,9 @@ Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
     auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_, ev, max_events, timeout_ms));
     if (num_events == -1) {
         return ErrnoError() << "epoll_wait failed";
+    }
+    if (num_events > 0 && first_callback_) {
+        first_callback_();
     }
     std::vector<std::shared_ptr<Handler>> pending_functions;
     for (int i = 0; i < num_events; ++i) {
