@@ -42,6 +42,7 @@ class Epoll {
     Result<void> Open();
     Result<void> RegisterHandler(int fd, Handler handler, uint32_t events = EPOLLIN);
     Result<void> UnregisterHandler(int fd);
+    void SetFirstCallback(std::function<void()> first_callback);
     Result<std::vector<std::shared_ptr<Handler>>> Wait(
             std::optional<std::chrono::milliseconds> timeout);
 
@@ -53,6 +54,7 @@ class Epoll {
 
     android::base::unique_fd epoll_fd_;
     std::map<int, Info> epoll_handlers_;
+    std::function<void()> first_callback_;
 };
 
 }  // namespace init
