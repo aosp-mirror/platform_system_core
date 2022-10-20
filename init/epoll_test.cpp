@@ -21,6 +21,7 @@
 #include <unordered_set>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <gtest/gtest.h>
 
 namespace android {
@@ -30,14 +31,10 @@ std::unordered_set<void*> sValidObjects;
 
 class CatchDtor final {
   public:
-    CatchDtor() { sValidObjects.emplace(this); }
-    CatchDtor(const CatchDtor&) { sValidObjects.emplace(this); }
-    ~CatchDtor() {
-        auto iter = sValidObjects.find(this);
-        if (iter != sValidObjects.end()) {
-            sValidObjects.erase(iter);
-        }
-    }
+    CatchDtor() { CHECK(sValidObjects.emplace(this).second); }
+    CatchDtor(const CatchDtor&) { CHECK(sValidObjects.emplace(this).second); }
+    CatchDtor(const CatchDtor&&) { CHECK(sValidObjects.emplace(this).second); }
+    ~CatchDtor() { CHECK_EQ(sValidObjects.erase(this), size_t{1}); }
 };
 
 TEST(epoll, UnregisterHandler) {
@@ -48,11 +45,13 @@ TEST(epoll, UnregisterHandler) {
     ASSERT_EQ(pipe(fds), 0);
 
     CatchDtor catch_dtor;
-    bool handler_invoked;
+    bool handler_invoked = false;
     auto handler = [&, catch_dtor]() -> void {
         auto result = epoll.UnregisterHandler(fds[0]);
         ASSERT_EQ(result.ok(), !handler_invoked);
         handler_invoked = true;
+        // The assert statement below verifies that the UnregisterHandler() call
+        // above did not destroy the current std::function<> instance.
         ASSERT_NE(sValidObjects.find((void*)&catch_dtor), sValidObjects.end());
     };
 
