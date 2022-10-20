@@ -682,24 +682,28 @@ Result<void> Service::Start() {
     start_order_ = next_start_order_++;
     process_cgroup_empty_ = false;
 
-    bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
-                      limit_percent_ != -1 || !limit_property_.empty();
-    errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
-    if (errno != 0) {
-        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
-            return ErrnoError() << "sending notification failed";
+    if (CgroupsAvailable()) {
+        bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
+                         limit_percent_ != -1 || !limit_property_.empty();
+        errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
+        if (errno != 0) {
+            if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
+                return ErrnoError() << "sending notification failed";
+            }
+            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                           << ") failed for service '" << name_ << "'";
         }
-        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                       << ") failed for service '" << name_ << "'";
-    }
 
-    // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
-    // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
-    // NormalIoPriority profile has to be applied explicitly.
-    SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+        // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+        // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+        // NormalIoPriority profile has to be applied explicitly.
+        SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
 
-    if (use_memcg) {
-        ConfigureMemcg();
+        if (use_memcg) {
+            ConfigureMemcg();
+        }
+    } else {
+        process_cgroup_empty_ = true;
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
