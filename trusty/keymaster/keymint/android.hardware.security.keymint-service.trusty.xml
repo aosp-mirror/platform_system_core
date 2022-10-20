@@ -14,7 +14,7 @@
     </hal>
     <hal format="aidl">
         <name>android.hardware.security.keymint</name>
-        <version>2</version>
+        <version>3</version>
         <fqname>IRemotelyProvisionedComponent/default</fqname>
     </hal>
 </manifest>
