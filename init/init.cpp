@@ -1148,7 +1148,7 @@ int SecondStageMain(int argc, char** argv) {
     setpriority(PRIO_PROCESS, 0, 0);
     while (true) {
         // By default, sleep until something happens.
-        auto epoll_timeout = std::optional<std::chrono::milliseconds>{kDiagnosticTimeout};
+        std::chrono::milliseconds epoll_timeout{kDiagnosticTimeout};
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
@@ -1168,7 +1168,7 @@ int SecondStageMain(int argc, char** argv) {
             if (next_process_action_time) {
                 epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
                         *next_process_action_time - boot_clock::now());
-                if (*epoll_timeout < 0ms) epoll_timeout = 0ms;
+                if (epoll_timeout < 0ms) epoll_timeout = 0ms;
             }
         }
 
