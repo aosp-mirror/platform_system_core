@@ -54,9 +54,7 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
     }
     epoll_event ev;
     ev.events = events;
-    // std::map's iterators do not get invalidated until erased, so we use the
-    // pointer to the std::function in the map directly for epoll_ctl.
-    ev.data.ptr = reinterpret_cast<void*>(&it->second);
+    ev.data.fd = fd;
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
         Result<void> result = ErrnoError() << "epoll_ctl failed to add fd";
         epoll_handlers_.erase(fd);
@@ -96,7 +94,11 @@ Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
     }
     std::vector<std::shared_ptr<Handler>> pending_functions;
     for (int i = 0; i < num_events; ++i) {
-        auto& info = *reinterpret_cast<Info*>(ev[i].data.ptr);
+        const auto it = epoll_handlers_.find(ev[i].data.fd);
+        if (it == epoll_handlers_.end()) {
+            continue;
+        }
+        const Info& info = it->second;
         if ((info.events & (EPOLLIN | EPOLLPRI)) == (EPOLLIN | EPOLLPRI) &&
             (ev[i].events & EPOLLIN) != ev[i].events) {
             // This handler wants to know about exception events, and just got one.
