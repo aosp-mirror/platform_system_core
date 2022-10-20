@@ -48,7 +48,7 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
     auto [it, inserted] = epoll_handlers_.emplace(
             fd, Info{
                         .events = events,
-                        .handler = std::make_shared<Handler>(std::move(handler)),
+                        .handler = std::move(handler),
                 });
     if (!inserted) {
         return Error() << "Cannot specify two epoll handlers for a given FD";
@@ -107,7 +107,7 @@ Result<int> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
             // Log something informational.
             LOG(ERROR) << "Received unexpected epoll event set: " << ev[i].events;
         }
-        (*info.handler)();
+        info.handler();
         for (auto fd : to_remove_) {
             epoll_handlers_.erase(fd);
         }
