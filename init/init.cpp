@@ -1177,14 +1177,10 @@ int SecondStageMain(int argc, char** argv) {
             if (am.HasMoreCommands()) epoll_timeout = 0ms;
         }
 
-        auto pending_functions = epoll.Wait(epoll_timeout);
-        if (!pending_functions.ok()) {
-            LOG(ERROR) << pending_functions.error();
-        } else if (!pending_functions->empty()) {
-            for (const auto& function : *pending_functions) {
-                (*function)();
-            }
-        } else if (Service::is_exec_service_running()) {
+        auto epoll_result = epoll.Wait(epoll_timeout);
+        if (!epoll_result.ok()) {
+            LOG(ERROR) << epoll_result.error();
+        } else if (*epoll_result <= 0 && Service::is_exec_service_running()) {
             static bool dumped_diagnostics = false;
             std::chrono::duration<double> waited =
                     std::chrono::steady_clock::now() - Service::exec_service_started();
