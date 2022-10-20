@@ -178,6 +178,11 @@ void TrustyKeymaster::GenerateCsr(const GenerateCsrRequest& request,
     ForwardCommand(KM_GENERATE_CSR, request, response);
 }
 
+void TrustyKeymaster::GenerateCsrV2(const GenerateCsrV2Request& request,
+                                    GenerateCsrV2Response* response) {
+    ForwardCommand(KM_GENERATE_CSR_V2, request, response);
+}
+
 void TrustyKeymaster::GetKeyCharacteristics(const GetKeyCharacteristicsRequest& request,
                                             GetKeyCharacteristicsResponse* response) {
     ForwardCommand(KM_GET_KEY_CHARACTERISTICS, request, response);
