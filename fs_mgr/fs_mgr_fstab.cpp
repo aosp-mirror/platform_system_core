@@ -754,10 +754,11 @@ bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
 }
 
 #ifdef NO_SKIP_MOUNT
-bool SkipMountingPartitions(Fstab*, bool) {
-    return true;
-}
+static constexpr bool kNoSkipMount = true;
 #else
+static constexpr bool kNoSkipMount = false;
+#endif
+
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
@@ -765,17 +766,24 @@ bool SkipMountingPartitions(Fstab*, bool) {
 // /system/system_ext because GSI is a single system.img that includes the contents of system_ext
 // partition and product partition under /system/system_ext and /system/product, respectively.
 bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
-    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
-
-    std::string skip_config;
-    auto save_errno = errno;
-    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
-        errno = save_errno;  // missing file is expected
+    if (kNoSkipMount) {
         return true;
     }
 
+    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
+
+    std::string skip_mount_config;
+    auto save_errno = errno;
+    if (!ReadFileToString(kSkipMountConfig, &skip_mount_config)) {
+        errno = save_errno;  // missing file is expected
+        return true;
+    }
+    return SkipMountWithConfig(skip_mount_config, fstab, verbose);
+}
+
+bool SkipMountWithConfig(const std::string& skip_mount_config, Fstab* fstab, bool verbose) {
     std::vector<std::string> skip_mount_patterns;
-    for (const auto& line : Split(skip_config, "\n")) {
+    for (const auto& line : Split(skip_mount_config, "\n")) {
         if (line.empty() || StartsWith(line, "#")) {
             continue;
         }
@@ -801,7 +809,6 @@ bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
     fstab->erase(remove_from, fstab->end());
     return true;
 }
-#endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
