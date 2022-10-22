@@ -368,8 +368,9 @@ runs the service.
   given console.
 
 `task_profiles <profile> [ <profile>\* ]`
-> Set task profiles for the process when it forks. This is designed to replace the use of
-  writepid option for moving a process into a cgroup.
+> Set task profiles. Before Android U, the profiles are applied to the main thread of the service.
+  For Android U and later, the profiles are applied to the entire service process. This is designed
+  to replace the use of writepid option for moving a process into a cgroup.
 
 `timeout_period <seconds>`
 > Provide a timeout after which point the service will be killed. The oneshot keyword is respected
