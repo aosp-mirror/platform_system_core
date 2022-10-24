@@ -28,6 +28,7 @@ __BEGIN_DECLS
 
 static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
 
+bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
