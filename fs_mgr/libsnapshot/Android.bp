@@ -324,6 +324,22 @@ cc_binary {
         "libstatslog",
         "libutils",
     ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    product_variables: {
+        debuggable: {
+            cppflags: [
+                "-DSNAPSHOTCTL_USERDEBUG_OR_ENG",
+            ],
+            shared_libs: [
+                "android.hardware.boot@1.0",
+                "android.hardware.boot@1.1",
+                "android.hardware.boot-V1-ndk",
+                "libboot_control_client",
+            ],
+        },
+    },
 }
 
 cc_test {
