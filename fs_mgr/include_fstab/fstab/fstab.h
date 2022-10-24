@@ -97,6 +97,8 @@ using Fstab = std::vector<FstabEntry>;
 bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
 // Exported for testability. Regular users should use ReadDefaultFstab().
 std::string GetFstabPath();
+// Exported for testability.
+bool SkipMountWithConfig(const std::string& skip_config, Fstab* fstab, bool verbose);
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);
