@@ -280,6 +280,15 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 }
 
 Result<void> WritePidToFiles(std::vector<std::string>* files) {
+    if (files->empty()) {
+        // No files to write pid to, exit early.
+        return {};
+    }
+
+    if (!CgroupsAvailable()) {
+        return Error() << "cgroups are not available";
+    }
+
     // See if there were "writepid" instructions to write to files under cpuset path.
     std::string cpuset_path;
     if (CgroupGetControllerPath("cpuset", &cpuset_path)) {
