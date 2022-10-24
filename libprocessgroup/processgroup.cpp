@@ -55,6 +55,11 @@ using namespace std::chrono_literals;
 
 #define PROCESSGROUP_CGROUP_PROCS_FILE "/cgroup.procs"
 
+bool CgroupsAvailable() {
+    static bool cgroups_available = access("/proc/cgroups", F_OK) == 0;
+    return cgroups_available;
+}
+
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) {
     auto controller = CgroupMap::GetInstance().FindController(cgroup_name);
 
