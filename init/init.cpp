@@ -662,6 +662,10 @@ static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) 
 }
 
 static Result<void> SetupCgroupsAction(const BuiltinArguments&) {
+    if (!CgroupsAvailable()) {
+        LOG(INFO) << "Cgroups support in kernel is not enabled";
+        return {};
+    }
     // Have to create <CGROUPS_RC_DIR> using make_dir function
     // for appropriate sepolicy to be set for it
     make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
