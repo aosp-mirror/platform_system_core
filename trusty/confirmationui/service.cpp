@@ -31,12 +31,8 @@ int main() {
     const auto instance = std::string(IConfirmationUI::descriptor) + "/default";
     binder_status_t status =
         AServiceManager_addService(confirmationui->asBinder().get(), instance.c_str());
-
-    if (status != STATUS_OK) {
-        LOG(FATAL) << "Could not register service for " << instance.c_str() << "(" << status << ")";
-        return -1;
-    }
+    CHECK_EQ(status, STATUS_OK) << "Could not register " << instance;
 
     ABinderProcess_joinThreadPool();
-    return -1;
+    return EXIT_FAILURE;
 }
