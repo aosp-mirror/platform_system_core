@@ -207,7 +207,6 @@ void CowWriter::InitPos() {
     } else {
         next_data_pos_ = next_op_pos_ + sizeof(CowOperation);
     }
-    ops_.clear();
     current_cluster_size_ = 0;
     current_data_size_ = 0;
 }
@@ -432,7 +431,6 @@ bool CowWriter::Finalize() {
     auto continue_data_size = current_data_size_;
     auto continue_data_pos = next_data_pos_;
     auto continue_op_pos = next_op_pos_;
-    auto continue_size = ops_.size();
     auto continue_num_ops = footer_.op.num_ops;
     bool extra_cluster = false;
 
@@ -458,7 +456,7 @@ bool CowWriter::Finalize() {
         extra_cluster = true;
     }
 
-    footer_.op.ops_size = ops_.size();
+    footer_.op.ops_size = footer_.op.num_ops * sizeof(CowOperation);
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "Failed to seek to footer position.";
         return false;
@@ -466,7 +464,6 @@ bool CowWriter::Finalize() {
     memset(&footer_.data.ops_checksum, 0, sizeof(uint8_t) * 32);
     memset(&footer_.data.footer_checksum, 0, sizeof(uint8_t) * 32);
 
-    SHA256(ops_.data(), ops_.size(), footer_.data.ops_checksum);
     SHA256(&footer_.op, sizeof(footer_.op), footer_.data.footer_checksum);
     // Write out footer at end of file
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&footer_),
@@ -493,7 +490,6 @@ bool CowWriter::Finalize() {
         next_data_pos_ = continue_data_pos;
         next_op_pos_ = continue_op_pos;
         footer_.op.num_ops = continue_num_ops;
-        ops_.resize(continue_size);
     }
     return Sync();
 }
@@ -544,7 +540,6 @@ void CowWriter::AddOperation(const CowOperation& op) {
 
     next_data_pos_ += op.data_length + GetNextDataOffset(op, header_.cluster_ops);
     next_op_pos_ += sizeof(CowOperation) + GetNextOpOffset(op, header_.cluster_ops);
-    ops_.insert(ops_.size(), reinterpret_cast<const uint8_t*>(&op), sizeof(op));
 }
 
 bool CowWriter::WriteRawData(const void* data, size_t size) {
