@@ -1133,7 +1133,9 @@ bool fs_mgr_overlayfs_create_scratch(const Fstab& fstab, std::string* scratch_de
     // Try ImageManager on /data first.
     bool can_use_data = false;
     if (FilesystemHasReliablePinning("/data", &can_use_data) && can_use_data) {
-        return CreateScratchOnData(scratch_device, partition_exists);
+        if (CreateScratchOnData(scratch_device, partition_exists)) {
+            return true;
+        }
     }
     // If that fails, see if we can land on super.
     if (CanUseSuperPartition(fstab)) {
