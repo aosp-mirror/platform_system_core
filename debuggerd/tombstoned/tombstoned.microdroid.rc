@@ -1,0 +1,7 @@
+service tombstoned /system/bin/tombstoned.microdroid
+    user tombstoned
+    group system
+
+    socket tombstoned_crash seqpacket 0666 system system
+    socket tombstoned_intercept seqpacket 0666 system system
+    socket tombstoned_java_trace seqpacket 0666 system system

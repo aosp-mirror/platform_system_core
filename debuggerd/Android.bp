@@ -426,8 +426,8 @@ cc_binary {
     local_include_dirs: ["include"],
 }
 
-cc_binary {
-    name: "tombstoned",
+cc_defaults {
+    name: "tombstoned_defaults",
     srcs: [
         "util.cpp",
         "tombstoned/intercept_manager.cpp",
@@ -446,8 +446,18 @@ cc_binary {
         "libevent",
         "liblog",
     ],
+}
 
+cc_binary {
+    name: "tombstoned",
+    defaults: ["tombstoned_defaults"],
     init_rc: ["tombstoned/tombstoned.rc"],
+}
+
+cc_binary {
+    name: "tombstoned.microdroid",
+    defaults: ["tombstoned_defaults"],
+    init_rc: ["tombstoned/tombstoned.microdroid.rc"],
 }
 
 prebuilt_etc {
