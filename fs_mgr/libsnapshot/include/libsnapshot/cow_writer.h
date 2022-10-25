@@ -165,10 +165,6 @@ class CowWriter : public ICowWriter {
     bool is_dev_null_ = false;
     bool merge_in_progress_ = false;
     bool is_block_device_ = false;
-
-    // :TODO: this is not efficient, but stringstream ubsan aborts because some
-    // bytes overflow a signed char.
-    std::basic_string<uint8_t> ops_;
 };
 
 }  // namespace snapshot
