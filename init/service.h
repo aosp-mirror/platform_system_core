@@ -31,6 +31,7 @@
 
 #include "action.h"
 #include "capabilities.h"
+#include "interprocess_fifo.h"
 #include "keyword_map.h"
 #include "mount_namespace.h"
 #include "parser.h"
@@ -154,9 +155,7 @@ class Service {
     void ResetFlagsForStart();
     Result<void> CheckConsole();
     void ConfigureMemcg();
-    void RunService(
-            const std::vector<Descriptor>& descriptors,
-            std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
+    void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated);
     void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
