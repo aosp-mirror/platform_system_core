@@ -39,6 +39,7 @@ init_common_sources = [
     "epoll.cpp",
     "import_parser.cpp",
     "interface_utils.cpp",
+    "interprocess_fifo.cpp",
     "keychords.cpp",
     "parser.cpp",
     "property_type.cpp",
@@ -467,6 +468,7 @@ cc_test {
         "epoll_test.cpp",
         "firmware_handler_test.cpp",
         "init_test.cpp",
+        "interprocess_fifo_test.cpp",
         "keychords_test.cpp",
         "oneshot_on_test.cpp",
         "persistent_properties_test.cpp",
@@ -481,7 +483,10 @@ cc_test {
         "ueventd_test.cpp",
         "util_test.cpp",
     ],
-    static_libs: ["libinit"],
+    static_libs: [
+        "libgmock",
+        "libinit",
+    ],
 
     test_suites: [
         "cts",
