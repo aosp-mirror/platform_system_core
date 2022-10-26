@@ -38,6 +38,7 @@
 
 #include <string>
 
+#include "interprocess_fifo.h"
 #include "lmkd_service.h"
 #include "service_list.h"
 #include "util.h"
@@ -442,14 +443,6 @@ Result<void> Service::ExecStart() {
     return {};
 }
 
-static void ClosePipe(const std::array<int, 2>* pipe) {
-    for (const auto fd : *pipe) {
-        if (fd >= 0) {
-            close(fd);
-        }
-    }
-}
-
 Result<void> Service::CheckConsole() {
     if (!(flags_ & SVC_CONSOLE)) {
         return {};
@@ -514,7 +507,7 @@ void Service::ConfigureMemcg() {
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
 void Service::RunService(const std::vector<Descriptor>& descriptors,
-                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
+                         InterprocessFifo cgroups_activated) {
     if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
@@ -536,12 +529,12 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    char byte = 0;
-    if (read((*pipefd)[0], &byte, 1) < 0) {
-        PLOG(ERROR) << "failed to read from notification channel";
+    Result<uint8_t> byte = cgroups_activated.Read();
+    if (!byte.ok()) {
+        LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
-    pipefd.reset();
-    if (!byte) {
+    cgroups_activated.Close();
+    if (!*byte) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
     }
@@ -605,10 +598,10 @@ Result<void> Service::Start() {
         return {};
     }
 
-    std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd(new std::array<int, 2>{-1, -1},
-                                                                     ClosePipe);
-    if (pipe(pipefd->data()) < 0) {
-        return ErrnoError() << "pipe()";
+    InterprocessFifo cgroups_activated;
+
+    if (Result<void> result = cgroups_activated.Initialize(); !result.ok()) {
+        return result;
     }
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
@@ -667,8 +660,11 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        RunService(descriptors, std::move(pipefd));
+        cgroups_activated.CloseWriteFd();
+        RunService(descriptors, std::move(cgroups_activated));
         _exit(127);
+    } else {
+        cgroups_activated.CloseReadFd();
     }
 
     if (pid < 0) {
@@ -697,8 +693,9 @@ Result<void> Service::Start() {
                          limit_percent_ != -1 || !limit_property_.empty();
         errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
         if (errno != 0) {
-            if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
-                return ErrnoError() << "sending notification failed";
+            Result<void> result = cgroups_activated.Write(0);
+            if (!result.ok()) {
+                return Error() << "Sending notification failed: " << result.error();
             }
             return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
                            << ") failed for service '" << name_ << "'";
@@ -720,8 +717,8 @@ Result<void> Service::Start() {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
-        return ErrnoError() << "sending notification failed";
+    if (Result<void> result = cgroups_activated.Write(1); !result.ok()) {
+        return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
 
     NotifyStateChange("running");
