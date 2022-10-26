@@ -69,6 +69,7 @@ using android::fiemap::IImageManager;
 namespace {
 
 constexpr char kDataScratchSizeMbProp[] = "fs_mgr.overlayfs.data_scratch_size_mb";
+constexpr char kPreferCacheBackingStorageProp[] = "fs_mgr.overlayfs.prefer_cache_backing_storage";
 
 bool fs_mgr_access(const std::string& path) {
     return access(path.c_str(), F_OK) == 0;
@@ -101,6 +102,10 @@ bool fs_mgr_is_dsu_running() {
 const auto kScratchMountPoint = "/mnt/scratch"s;
 const auto kCacheMountPoint = "/cache"s;
 
+bool IsABDevice() {
+    return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
+}
+
 std::vector<const std::string> OverlayMountPoints() {
     // Never fallback to legacy cache mount point if within a DSU system,
     // because running a DSU system implies the device supports dynamic
@@ -108,6 +113,15 @@ std::vector<const std::string> OverlayMountPoints() {
     if (fs_mgr_is_dsu_running()) {
         return {kScratchMountPoint};
     }
+
+    // For non-A/B devices prefer cache backing storage if
+    // kPreferCacheBackingStorageProp property set.
+    if (!IsABDevice() &&
+        android::base::GetBoolProperty(kPreferCacheBackingStorageProp, false) &&
+        android::base::GetIntProperty("ro.vendor.api_level", -1) < __ANDROID_API_T__) {
+        return {kCacheMountPoint, kScratchMountPoint};
+    }
+
     return {kScratchMountPoint, kCacheMountPoint};
 }
 
