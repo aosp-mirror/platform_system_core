@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <android-base/chrono_utils.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
@@ -36,6 +37,7 @@
 
 using android::base::boot_clock;
 using android::base::make_scope_guard;
+using android::base::ReadFileToString;
 using android::base::StringPrintf;
 using android::base::Timer;
 
@@ -132,6 +134,11 @@ void WaitToBeReaped(const std::vector<pid_t>& pids, std::chrono::milliseconds ti
     }
     LOG(INFO) << "Waiting for " << pids.size() << " pids to be reaped took " << t << " with "
               << alive_pids.size() << " of them still running";
+    for (pid_t pid : pids) {
+        std::string status = "(no-such-pid)";
+        ReadFileToString(StringPrintf("/proc/%d/status", pid), &status);
+        LOG(INFO) << "Still running: " << pid << ' ' << status;
+    }
 }
 
 }  // namespace init
