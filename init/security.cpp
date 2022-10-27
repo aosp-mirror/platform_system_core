@@ -116,6 +116,13 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     if (SetMmapRndBitsMin(33, 24, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
+#elif defined(__riscv)
+    // TODO: sv48 and sv57 were both added to the kernel this year, so we
+    // probably just need some kernel fixes to enable higher ASLR randomization,
+    // but for now 24 is the maximum that the kernel supports.
+    if (SetMmapRndBitsMin(24, 18, false)) {
+        return {};
+    }
 #elif defined(__x86_64__)
     // x86_64 supports 28 - 32 rnd bits, but Android wants to ensure that the
     // theoretical maximum of 32 bits is always supported and used.
