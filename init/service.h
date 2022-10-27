@@ -155,7 +155,8 @@ class Service {
     void ResetFlagsForStart();
     Result<void> CheckConsole();
     void ConfigureMemcg();
-    void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated);
+    void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated,
+                    InterprocessFifo setsid_finished);
     void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
