@@ -2191,36 +2191,22 @@ std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::Fsta
         std::vector<std::string> tokens = android::base::Split(target.data, " \t\r\n");
         if (tokens[0] != "0" && tokens[0] != "1") {
             LOG(WARNING) << "Unrecognized device mapper version in " << target.data;
-            return {};
         }
 
         // Hashtree algorithm & root digest are the 8th & 9th token in the output.
-        return HashtreeInfo{.algorithm = android::base::Trim(tokens[7]),
-                            .root_digest = android::base::Trim(tokens[8])};
+        return HashtreeInfo{
+                .algorithm = android::base::Trim(tokens[7]),
+                .root_digest = android::base::Trim(tokens[8]),
+                .check_at_most_once = target.data.find("check_at_most_once") != std::string::npos};
     }
 
     return {};
 }
 
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.avb) {
-        return false;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    std::string device = GetVerityDeviceName(entry);
-
-    std::vector<DeviceMapper::TargetInfo> table;
-    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
-        return false;
-    }
-    for (const auto& target : table) {
-        if (strcmp(target.spec.target_type, "verity") == 0 &&
-            target.data.find("check_at_most_once") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
+    auto hashtree_info = fs_mgr_get_hashtree_info(entry);
+    if (!hashtree_info) return false;
+    return hashtree_info->check_at_most_once;
 }
 
 std::string fs_mgr_get_super_partition_name(int slot) {
