@@ -36,8 +36,10 @@ static constexpr const char kTestContext[] = "test-test-test";
 
 class Subcontext {
   public:
-    Subcontext(std::vector<std::string> path_prefixes, std::string context, bool host = false)
-        : path_prefixes_(std::move(path_prefixes)), context_(std::move(context)), pid_(0) {
+    Subcontext(std::vector<std::string> path_prefixes, std::string_view context, bool host = false)
+        : path_prefixes_(std::move(path_prefixes)),
+          context_(context.begin(), context.end()),
+          pid_(0) {
         if (!host) {
             Fork();
         }
