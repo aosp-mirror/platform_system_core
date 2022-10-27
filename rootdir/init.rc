@@ -956,9 +956,10 @@ on post-fs-data
     mkdir /data_mirror/misc_de/null 0700 root root
 
     # Bind mount CE and DE data directory to mirror's default volume directory.
-    # The 'slave' option (MS_SLAVE) is needed to cause the later bind mount of
-    # /data/data onto /data/user/0 to propagate to /data_mirror/data_ce/null/0.
-    mount none /data/user /data_mirror/data_ce/null bind rec slave
+    # Note that because the /data mount has the "shared" propagation type, the
+    # later bind mount of /data/data onto /data/user/0 will automatically
+    # propagate to /data_mirror/data_ce/null/0 as well.
+    mount none /data/user /data_mirror/data_ce/null bind rec
     mount none /data/user_de /data_mirror/data_de/null bind rec
     mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
     mount none /data/misc_de /data_mirror/misc_de/null bind rec
