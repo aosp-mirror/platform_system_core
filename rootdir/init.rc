@@ -1037,6 +1037,9 @@ on post-fs-data
     # Enable FUSE by default
     setprop persist.sys.fuse true
 
+    # Update dm-verity state and set partition.*.verified properties.
+    verity_update_state
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start && property:ro.crypto.state=unencrypted
@@ -1174,9 +1177,6 @@ on boot
 
     # Define default initial receive window size in segments.
     setprop net.tcp_def_init_rwnd 60
-
-    # Update dm-verity state and set partition.*.verified properties.
-    verity_update_state
 
     # Start standard binderized HAL daemons
     class_start hal
