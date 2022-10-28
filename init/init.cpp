@@ -747,6 +747,9 @@ static void HandleSignalFd(bool one_off) {
     do {
         ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
         if (bytes_read < 0 && errno == EAGAIN) {
+            if (one_off) {
+                return;
+            }
             auto now = std::chrono::steady_clock::now();
             std::chrono::duration<double> waited = now - started;
             if (waited >= kDiagnosticTimeout) {
@@ -772,7 +775,7 @@ static void HandleSignalFd(bool one_off) {
             HandleSigtermSignal(siginfo);
             break;
         default:
-            PLOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
+            LOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
             break;
     }
 }
