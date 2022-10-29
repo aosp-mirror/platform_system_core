@@ -77,9 +77,9 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
     .registers = std::move(regs), .uid = uid, .tid = target_tid,
     .thread_name = std::move(thread_name), .pid = pid, .command_line = std::move(command_line),
     .selinux_label = std::move(selinux_label), .siginfo = siginfo,
-#if defined(__aarch64__)
     // Only supported on aarch64 for now.
-        .tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0),
+#if defined(__aarch64__)
+    .tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0),
     .pac_enabled_keys = prctl(PR_PAC_GET_ENABLED_KEYS, 0, 0, 0, 0),
 #endif
   };
@@ -88,7 +88,6 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
         if (target_tid == tid) {
           return;
         }
-        async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "Adding thread %d", tid);
         threads[tid] = ThreadInfo{
             .uid = thread.uid,
             .tid = tid,
