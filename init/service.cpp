@@ -507,7 +507,7 @@ void Service::ConfigureMemcg() {
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
 void Service::RunService(const std::vector<Descriptor>& descriptors,
-                         InterprocessFifo cgroups_activated) {
+                         InterprocessFifo cgroups_activated, InterprocessFifo setsid_finished) {
     if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
@@ -557,6 +557,12 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
     // priority. Aborts on failure.
     SetProcessAttributesAndCaps();
 
+    // If SetProcessAttributes() called setsid(), report this to the parent.
+    if (!proc_attr_.console.empty()) {
+        setsid_finished.Write(2);
+    }
+    setsid_finished.Close();
+
     if (!ExpandArgsAndExecv(args_, sigstop_)) {
         PLOG(ERROR) << "cannot execv('" << args_[0]
                     << "'). See the 'Debugging init' section of init's README.md for tips";
@@ -598,7 +604,7 @@ Result<void> Service::Start() {
         return {};
     }
 
-    InterprocessFifo cgroups_activated;
+    InterprocessFifo cgroups_activated, setsid_finished;
 
     if (Result<void> result = cgroups_activated.Initialize(); !result.ok()) {
         return result;
@@ -606,6 +612,13 @@ Result<void> Service::Start() {
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
         return result;
+    }
+
+    // Only check proc_attr_.console after the CheckConsole() call.
+    if (!proc_attr_.console.empty()) {
+        if (Result<void> result = setsid_finished.Initialize(); !result.ok()) {
+            return result;
+        }
     }
 
     struct stat sb;
@@ -661,10 +674,12 @@ Result<void> Service::Start() {
     if (pid == 0) {
         umask(077);
         cgroups_activated.CloseWriteFd();
-        RunService(descriptors, std::move(cgroups_activated));
+        setsid_finished.CloseReadFd();
+        RunService(descriptors, std::move(cgroups_activated), std::move(setsid_finished));
         _exit(127);
     } else {
         cgroups_activated.CloseReadFd();
+        setsid_finished.CloseWriteFd();
     }
 
     if (pid < 0) {
@@ -719,6 +734,23 @@ Result<void> Service::Start() {
 
     if (Result<void> result = cgroups_activated.Write(1); !result.ok()) {
         return Error() << "Sending cgroups activated notification failed: " << result.error();
+    }
+
+    // Call setpgid() from the parent process to make sure that this call has
+    // finished before the parent process calls kill(-pgid, ...).
+    if (proc_attr_.console.empty()) {
+        if (setpgid(pid, pid) == -1) {
+            return ErrnoError() << "setpgid failed";
+        }
+    } else {
+        // The Read() call below will return an error if the child is killed.
+        if (Result<uint8_t> result = setsid_finished.Read(); !result.ok() || *result != 2) {
+            if (!result.ok()) {
+                return Error() << "Waiting for setsid() failed: " << result.error();
+            } else {
+                return Error() << "Waiting for setsid() failed: " << *result << " <> 2";
+            }
+        }
     }
 
     NotifyStateChange("running");
