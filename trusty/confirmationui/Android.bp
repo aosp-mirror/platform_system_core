@@ -24,21 +24,23 @@ package {
 }
 
 cc_binary {
-    name: "android.hardware.confirmationui@1.0-service.trusty",
+    name: "android.hardware.confirmationui-service.trusty",
     relative_install_path: "hw",
     vendor: true,
     shared_libs: [
-        "android.hardware.confirmationui@1.0",
+        "android.hardware.confirmationui-V1-ndk",
         "android.hardware.confirmationui.not-so-secure-input",
-        "android.hardware.confirmationui@1.0-lib.trusty",
+        "android.hardware.confirmationui-lib.trusty",
+        "libbinder_ndk",
+        "libteeui_hal_support",
         "libbase",
         "libhidlbase",
         "libutils",
     ],
 
-    init_rc: ["android.hardware.confirmationui@1.0-service.trusty.rc"],
+    init_rc: ["android.hardware.confirmationui-service.trusty.rc"],
 
-    vintf_fragments: ["android.hardware.confirmationui@1.0-service.trusty.xml"],
+    vintf_fragments: ["android.hardware.confirmationui-service.trusty.xml"],
 
     srcs: [
         "service.cpp",
@@ -52,17 +54,20 @@ cc_binary {
 }
 
 cc_library {
-    name: "android.hardware.confirmationui@1.0-lib.trusty",
+    name: "android.hardware.confirmationui-lib.trusty",
+    defaults: [
+        "keymint_use_latest_hal_aidl_ndk_shared",
+    ],
     vendor: true,
     shared_libs: [
-        "android.hardware.confirmationui@1.0",
-        "android.hardware.keymaster@4.0",
+        "android.hardware.confirmationui-V1-ndk",
         "libbase",
+        "libcutils",
         "libdmabufheap",
-        "libhidlbase",
         "libteeui_hal_support",
         "libtrusty",
         "libutils",
+        "libbinder_ndk",
     ],
 
     export_include_dirs: ["include"],

@@ -1381,13 +1381,9 @@ static void PropertyServiceThread() {
     }
 
     while (true) {
-        auto pending_functions = epoll.Wait(std::nullopt);
-        if (!pending_functions.ok()) {
-            LOG(ERROR) << pending_functions.error();
-        } else {
-            for (const auto& function : *pending_functions) {
-                (*function)();
-            }
+        auto epoll_result = epoll.Wait(std::nullopt);
+        if (!epoll_result.ok()) {
+            LOG(ERROR) << epoll_result.error();
         }
     }
 }

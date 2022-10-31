@@ -1,0 +1,5 @@
+service vendor.confirmationui_default /vendor/bin/hw/android.hardware.confirmationui-service.trusty
+    interface aidl android.hardware.confirmationui.IConfirmationUI/default
+    class hal
+    user system
+    group drmrpc input system
