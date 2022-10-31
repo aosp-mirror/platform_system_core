@@ -38,6 +38,7 @@
 
 #include <string>
 
+#include "interprocess_fifo.h"
 #include "lmkd_service.h"
 #include "service_list.h"
 #include "util.h"
@@ -442,14 +443,6 @@ Result<void> Service::ExecStart() {
     return {};
 }
 
-static void ClosePipe(const std::array<int, 2>* pipe) {
-    for (const auto fd : *pipe) {
-        if (fd >= 0) {
-            close(fd);
-        }
-    }
-}
-
 Result<void> Service::CheckConsole() {
     if (!(flags_ & SVC_CONSOLE)) {
         return {};
@@ -514,7 +507,7 @@ void Service::ConfigureMemcg() {
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
 void Service::RunService(const std::vector<Descriptor>& descriptors,
-                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
+                         InterprocessFifo cgroups_activated, InterprocessFifo setsid_finished) {
     if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
@@ -536,23 +529,39 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    char byte = 0;
-    if (read((*pipefd)[0], &byte, 1) < 0) {
-        PLOG(ERROR) << "failed to read from notification channel";
+    Result<uint8_t> byte = cgroups_activated.Read();
+    if (!byte.ok()) {
+        LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
-    pipefd.reset();
-    if (!byte) {
+    cgroups_activated.Close();
+    if (!*byte) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
     }
 
-    if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
-        LOG(ERROR) << "failed to set task profiles";
+    if (task_profiles_.size() > 0) {
+        bool succeeded = SelinuxGetVendorAndroidVersion() < __ANDROID_API_U__
+                                 ?
+                                 // Compatibility mode: apply the task profiles to the current
+                                 // thread.
+                                 SetTaskProfiles(getpid(), task_profiles_)
+                                 :
+                                 // Apply the task profiles to the current process.
+                                 SetProcessProfiles(getuid(), getpid(), task_profiles_);
+        if (!succeeded) {
+            LOG(ERROR) << "failed to set task profiles";
+        }
     }
 
     // As requested, set our gid, supplemental gids, uid, context, and
     // priority. Aborts on failure.
     SetProcessAttributesAndCaps();
+
+    // If SetProcessAttributes() called setsid(), report this to the parent.
+    if (!proc_attr_.console.empty()) {
+        setsid_finished.Write(2);
+    }
+    setsid_finished.Close();
 
     if (!ExpandArgsAndExecv(args_, sigstop_)) {
         PLOG(ERROR) << "cannot execv('" << args_[0]
@@ -595,14 +604,21 @@ Result<void> Service::Start() {
         return {};
     }
 
-    std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd(new std::array<int, 2>{-1, -1},
-                                                                     ClosePipe);
-    if (pipe(pipefd->data()) < 0) {
-        return ErrnoError() << "pipe()";
+    InterprocessFifo cgroups_activated, setsid_finished;
+
+    if (Result<void> result = cgroups_activated.Initialize(); !result.ok()) {
+        return result;
     }
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
         return result;
+    }
+
+    // Only check proc_attr_.console after the CheckConsole() call.
+    if (!proc_attr_.console.empty()) {
+        if (Result<void> result = setsid_finished.Initialize(); !result.ok()) {
+            return result;
+        }
     }
 
     struct stat sb;
@@ -657,8 +673,13 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        RunService(descriptors, std::move(pipefd));
+        cgroups_activated.CloseWriteFd();
+        setsid_finished.CloseReadFd();
+        RunService(descriptors, std::move(cgroups_activated), std::move(setsid_finished));
         _exit(127);
+    } else {
+        cgroups_activated.CloseReadFd();
+        setsid_finished.CloseWriteFd();
     }
 
     if (pid < 0) {
@@ -682,32 +703,54 @@ Result<void> Service::Start() {
     start_order_ = next_start_order_++;
     process_cgroup_empty_ = false;
 
-    bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
-                      limit_percent_ != -1 || !limit_property_.empty();
-    errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
-    if (errno != 0) {
-        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
-            return ErrnoError() << "sending notification failed";
+    if (CgroupsAvailable()) {
+        bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
+                         limit_percent_ != -1 || !limit_property_.empty();
+        errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
+        if (errno != 0) {
+            Result<void> result = cgroups_activated.Write(0);
+            if (!result.ok()) {
+                return Error() << "Sending notification failed: " << result.error();
+            }
+            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
+                           << ") failed for service '" << name_ << "'";
         }
-        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                       << ") failed for service '" << name_ << "'";
-    }
 
-    // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
-    // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
-    // NormalIoPriority profile has to be applied explicitly.
-    SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+        // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+        // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+        // NormalIoPriority profile has to be applied explicitly.
+        SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
 
-    if (use_memcg) {
-        ConfigureMemcg();
+        if (use_memcg) {
+            ConfigureMemcg();
+        }
+    } else {
+        process_cgroup_empty_ = true;
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
-        return ErrnoError() << "sending notification failed";
+    if (Result<void> result = cgroups_activated.Write(1); !result.ok()) {
+        return Error() << "Sending cgroups activated notification failed: " << result.error();
+    }
+
+    // Call setpgid() from the parent process to make sure that this call has
+    // finished before the parent process calls kill(-pgid, ...).
+    if (proc_attr_.console.empty()) {
+        if (setpgid(pid, pid) == -1) {
+            return ErrnoError() << "setpgid failed";
+        }
+    } else {
+        // The Read() call below will return an error if the child is killed.
+        if (Result<uint8_t> result = setsid_finished.Read(); !result.ok() || *result != 2) {
+            if (!result.ok()) {
+                return Error() << "Waiting for setsid() failed: " << result.error();
+            } else {
+                return Error() << "Waiting for setsid() failed: " << *result << " <> 2";
+            }
+        }
     }
 
     NotifyStateChange("running");

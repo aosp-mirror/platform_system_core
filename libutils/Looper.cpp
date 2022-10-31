@@ -8,10 +8,14 @@
 //#define LOG_NDEBUG 0
 
 // Debugs poll and wake interactions.
+#ifndef DEBUG_POLL_AND_WAKE
 #define DEBUG_POLL_AND_WAKE 0
+#endif
 
 // Debugs callback registration and invocation.
+#ifndef DEBUG_CALLBACKS
 #define DEBUG_CALLBACKS 0
+#endif
 
 #include <utils/Looper.h>
 

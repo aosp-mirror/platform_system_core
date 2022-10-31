@@ -19,13 +19,12 @@ cc_defaults {
     arch: {
         arm: {
             srcs: ["arm/crashglue.S"],
-
-            neon: {
-                asflags: ["-DHAS_VFP_D32"],
-            },
         },
         arm64: {
             srcs: ["arm64/crashglue.S"],
+        },
+        riscv64: {
+            srcs: ["riscv64/crashglue.S"],
         },
         x86: {
             srcs: ["x86/crashglue.S"],

@@ -662,6 +662,10 @@ static Result<void> wait_for_coldboot_done_action(const BuiltinArguments& args) 
 }
 
 static Result<void> SetupCgroupsAction(const BuiltinArguments&) {
+    if (!CgroupsAvailable()) {
+        LOG(INFO) << "Cgroups support in kernel is not enabled";
+        return {};
+    }
     // Have to create <CGROUPS_RC_DIR> using make_dir function
     // for appropriate sepolicy to be set for it
     make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
@@ -743,6 +747,9 @@ static void HandleSignalFd(bool one_off) {
     do {
         ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
         if (bytes_read < 0 && errno == EAGAIN) {
+            if (one_off) {
+                return;
+            }
             auto now = std::chrono::steady_clock::now();
             std::chrono::duration<double> waited = now - started;
             if (waited >= kDiagnosticTimeout) {
@@ -768,7 +775,7 @@ static void HandleSignalFd(bool one_off) {
             HandleSigtermSignal(siginfo);
             break;
         default:
-            PLOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
+            LOG(ERROR) << "signal_fd: received unexpected signal " << siginfo.ssi_signo;
             break;
     }
 }
@@ -1061,6 +1068,11 @@ int SecondStageMain(int argc, char** argv) {
         PLOG(FATAL) << result.error();
     }
 
+    // We always reap children before responding to the other pending functions. This is to
+    // prevent a race where other daemons see that a service has exited and ask init to
+    // start it again via ctl.start before init has reaped it.
+    epoll.SetFirstCallback(ReapAnyOutstandingChildren);
+
     InstallSignalFdHandler(&epoll);
     InstallInitNotifier(&epoll);
     StartPropertyService(&property_fd);
@@ -1143,7 +1155,7 @@ int SecondStageMain(int argc, char** argv) {
     setpriority(PRIO_PROCESS, 0, 0);
     while (true) {
         // By default, sleep until something happens.
-        auto epoll_timeout = std::optional<std::chrono::milliseconds>{kDiagnosticTimeout};
+        std::chrono::milliseconds epoll_timeout{kDiagnosticTimeout};
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
@@ -1163,7 +1175,7 @@ int SecondStageMain(int argc, char** argv) {
             if (next_process_action_time) {
                 epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
                         *next_process_action_time - boot_clock::now());
-                if (*epoll_timeout < 0ms) epoll_timeout = 0ms;
+                if (epoll_timeout < 0ms) epoll_timeout = 0ms;
             }
         }
 
@@ -1172,18 +1184,10 @@ int SecondStageMain(int argc, char** argv) {
             if (am.HasMoreCommands()) epoll_timeout = 0ms;
         }
 
-        auto pending_functions = epoll.Wait(epoll_timeout);
-        if (!pending_functions.ok()) {
-            LOG(ERROR) << pending_functions.error();
-        } else if (!pending_functions->empty()) {
-            // We always reap children before responding to the other pending functions. This is to
-            // prevent a race where other daemons see that a service has exited and ask init to
-            // start it again via ctl.start before init has reaped it.
-            ReapAnyOutstandingChildren();
-            for (const auto& function : *pending_functions) {
-                (*function)();
-            }
-        } else if (Service::is_exec_service_running()) {
+        auto epoll_result = epoll.Wait(epoll_timeout);
+        if (!epoll_result.ok()) {
+            LOG(ERROR) << epoll_result.error();
+        } else if (*epoll_result <= 0 && Service::is_exec_service_running()) {
             static bool dumped_diagnostics = false;
             std::chrono::duration<double> waited =
                     std::chrono::steady_clock::now() - Service::exec_service_started();

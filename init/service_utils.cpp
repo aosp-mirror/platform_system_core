@@ -244,7 +244,11 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         setsid();
         OpenConsole(attr.console);
     } else {
-        if (setpgid(0, getpid()) == -1) {
+        // Without PID namespaces, this call duplicates the setpgid() call from
+        // the parent process. With PID namespaces, this setpgid() call sets the
+        // process group ID for a child of the init process in the PID
+        // namespace.
+        if (setpgid(0, 0) == -1) {
             return ErrnoError() << "setpgid failed";
         }
         SetupStdio(attr.stdio_to_kmsg);
@@ -280,6 +284,15 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 }
 
 Result<void> WritePidToFiles(std::vector<std::string>* files) {
+    if (files->empty()) {
+        // No files to write pid to, exit early.
+        return {};
+    }
+
+    if (!CgroupsAvailable()) {
+        return Error() << "cgroups are not available";
+    }
+
     // See if there were "writepid" instructions to write to files under cpuset path.
     std::string cpuset_path;
     if (CgroupGetControllerPath("cpuset", &cpuset_path)) {
