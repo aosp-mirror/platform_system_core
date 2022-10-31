@@ -22,6 +22,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
+#include <iostream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -33,6 +34,7 @@
 #include <android-base/strings.h>
 #include <android/os/IVold.h>
 #include <binder/IServiceManager.h>
+#include <binder/ProcessState.h>
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <fs_mgr_overlayfs.h>
@@ -50,17 +52,34 @@ using android::fs_mgr::FstabEntry;
 namespace {
 
 void usage() {
-    LOG(INFO) << getprogname()
-              << " [-h] [-R] [-T fstab_file] [partition]...\n"
-                 "\t-h --help\tthis help\n"
-                 "\t-R --reboot\tdisable verity & reboot to facilitate remount\n"
-                 "\t-T --fstab\tcustom fstab file location\n"
-                 "\tpartition\tspecific partition(s) (empty does all)\n"
-                 "\n"
-                 "Remount specified partition(s) read-write, by name or mount point.\n"
-                 "-R notwithstanding, verity must be disabled on partition(s).\n"
-                 "-R within a DSU guest system reboots into the DSU instead of the host system,\n"
-                 "this command would enable DSU (one-shot) if not already enabled.";
+    const std::string progname = getprogname();
+    if (progname == "disable-verity" || progname == "enable-verity" ||
+        progname == "set-verity-state") {
+        std::cout << "Usage: disable-verity\n"
+                  << "       enable-verity\n"
+                  << "       set-verity-state [0|1]\n"
+                  << R"(
+Options:
+    -h --help       this help
+    -R --reboot     automatic reboot if needed for new settings to take effect
+    -v --verbose    be noisy)"
+                  << std::endl;
+    } else {
+        std::cout << "Usage: " << progname << " [-h] [-R] [-T fstab_file] [partition]...\n"
+                  << R"(
+Options:
+    -h --help       this help
+    -R --reboot     disable verity & reboot to facilitate remount
+    -v --verbose    be noisy
+    -T --fstab      custom fstab file location
+    partition       specific partition(s) (empty does all)
+
+Remount specified partition(s) read-write, by name or mount point.
+-R notwithstanding, verity must be disabled on partition(s).
+-R within a DSU guest system reboots into the DSU instead of the host system,
+this command would enable DSU (one-shot) if not already enabled.)"
+                  << std::endl;
+    }
 }
 
 const std::string system_mount_point(const android::fs_mgr::FstabEntry& entry) {
@@ -119,8 +138,6 @@ static android::sp<android::os::IVold> GetVold() {
         std::this_thread::sleep_for(2s);
     }
 }
-
-}  // namespace
 
 enum RemountStatus {
     REMOUNT_SUCCESS = 0,
@@ -421,6 +438,68 @@ static RemountStatus RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& e
     return REMOUNT_FAILED;
 }
 
+struct SetVerityStateResult {
+    bool success = false;
+    bool want_reboot = false;
+};
+
+SetVerityStateResult SetVerityState(bool enable_verity) {
+    const auto ab_suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
+    bool verity_enabled = false;
+
+    std::unique_ptr<AvbOps, decltype(&avb_ops_user_free)> ops(avb_ops_user_new(),
+                                                              &avb_ops_user_free);
+    if (!ops) {
+        LOG(ERROR) << "Error getting AVB ops";
+        return {};
+    }
+
+    if (!avb_user_verity_get(ops.get(), ab_suffix.c_str(), &verity_enabled)) {
+        LOG(ERROR) << "Error getting verity state";
+        return {};
+    }
+
+    if ((verity_enabled && enable_verity) || (!verity_enabled && !enable_verity)) {
+        LOG(INFO) << "Verity is already " << (verity_enabled ? "enabled" : "disabled");
+        return {.success = true, .want_reboot = false};
+    }
+
+    if (!avb_user_verity_set(ops.get(), ab_suffix.c_str(), enable_verity)) {
+        LOG(ERROR) << "Error setting verity state";
+        return {};
+    }
+
+    LOG(INFO) << "Successfully " << (enable_verity ? "enabled" : "disabled") << " verity";
+    return {.success = true, .want_reboot = true};
+}
+
+bool SetupOrTeardownOverlayfs(bool enable) {
+    bool want_reboot = false;
+    if (enable) {
+        if (!fs_mgr_overlayfs_setup(nullptr, &want_reboot)) {
+            LOG(ERROR) << "Overlayfs setup failed.";
+            return want_reboot;
+        }
+        if (want_reboot) {
+            printf("enabling overlayfs\n");
+        }
+    } else {
+        auto rv = fs_mgr_overlayfs_teardown(nullptr, &want_reboot);
+        if (rv == OverlayfsTeardownResult::Error) {
+            LOG(ERROR) << "Overlayfs teardown failed.";
+            return want_reboot;
+        }
+        if (rv == OverlayfsTeardownResult::Busy) {
+            LOG(ERROR) << "Overlayfs is still active until reboot.";
+            return true;
+        }
+        if (want_reboot) {
+            printf("disabling overlayfs\n");
+        }
+    }
+    return want_reboot;
+}
+
 static int do_remount(Fstab& fstab, const std::vector<std::string>& partition_args,
                       RemountCheckResult* check_result) {
     Fstab partitions;
@@ -465,6 +544,8 @@ static int do_remount(Fstab& fstab, const std::vector<std::string>& partition_ar
     }
     return retval;
 }
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     // Do not use MyLogger() when running as clean_scratch_files, as stdout/stderr of daemon process
@@ -518,8 +599,25 @@ int main(int argc, char* argv[]) {
         android::base::SetLogger(MyLogger(verbose));
     }
 
-    for (; argc > optind; ++optind) {
-        partition_args.emplace_back(argv[optind]);
+    bool remount = false;
+    bool enable_verity = false;
+    const std::string progname = getprogname();
+    if (progname == "enable-verity") {
+        enable_verity = true;
+    } else if (progname == "disable-verity") {
+        enable_verity = false;
+    } else if (progname == "set-verity-state") {
+        if (optind < argc && (argv[optind] == "1"s || argv[optind] == "0"s)) {
+            enable_verity = (argv[optind] == "1"s);
+        } else {
+            usage();
+            return 1;
+        }
+    } else {
+        remount = true;
+        for (; optind < argc; ++optind) {
+            partition_args.emplace_back(argv[optind]);
+        }
     }
 
     // Make sure we are root.
@@ -539,6 +637,36 @@ int main(int argc, char* argv[]) {
     if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
         LOG(ERROR) << "Device must be bootloader unlocked";
         return 1;
+    }
+
+    // Start a threadpool to service waitForService() callbacks as
+    // fs_mgr_overlayfs_* might call waitForService() to get the image service.
+    android::ProcessState::self()->startThreadPool();
+
+    if (!remount) {
+        // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
+        // contract, androidboot.vbmeta.digest is set by the bootloader
+        // when using AVB).
+        if (android::base::GetProperty("ro.boot.vbmeta.digest", "").empty()) {
+            LOG(ERROR) << "Expected AVB device, VB1.0 is no longer supported";
+            return 1;
+        }
+
+        auto ret = SetVerityState(enable_verity);
+
+        // Disable any overlayfs unconditionally if we want verity enabled.
+        // Enable overlayfs only if verity is successfully disabled or is already disabled.
+        if (enable_verity || ret.success) {
+            ret.want_reboot |= SetupOrTeardownOverlayfs(!enable_verity);
+        }
+
+        if (ret.want_reboot) {
+            if (auto_reboot) {
+                reboot(progname);
+            }
+            std::cout << "Reboot the device for new settings to take effect" << std::endl;
+        }
+        return ret.success ? 0 : 1;
     }
 
     // Make sure checkpointing is disabled if necessary.
