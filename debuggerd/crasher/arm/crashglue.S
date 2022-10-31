@@ -32,7 +32,6 @@ crash1:
 	fconstd   d13, #13
 	fconstd   d14, #14
 	fconstd   d15, #15
-#if defined(HAS_VFP_D32)
 	fconstd   d16, #16
 	fconstd   d17, #17
 	fconstd   d18, #18
@@ -49,7 +48,6 @@ crash1:
 	fconstd   d29, #29
 	fconstd   d30, #30
 	fconstd   d31, #31
-#endif
 
 	mov lr, #0
 	ldr lr, [lr]
