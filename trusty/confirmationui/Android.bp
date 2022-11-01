@@ -53,6 +53,24 @@ cc_binary {
     ],
 }
 
+cc_fuzz {
+    name: "android.hardware.confirmationui-service.trusty_fuzzer",
+    defaults: ["service_fuzzer_defaults"],
+    vendor: true,
+    shared_libs: [
+        "android.hardware.confirmationui-V1-ndk",
+        "android.hardware.confirmationui.not-so-secure-input",
+        "android.hardware.confirmationui-lib.trusty",
+        "liblog",
+    ],
+    srcs: ["fuzzer.cpp"],
+    fuzz_config: {
+        cc: [
+            "nyamagoud@google.com",
+        ],
+    },
+}
+
 cc_library {
     name: "android.hardware.confirmationui-lib.trusty",
     defaults: [
