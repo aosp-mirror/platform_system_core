@@ -165,6 +165,13 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
+void SnapshotHandler::MonitorMerge() {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        merge_monitored_ = true;
+    }
+}
+
 // This is invoked once primarily by update-engine to initiate
 // the merge
 void SnapshotHandler::InitiateMerge() {
@@ -361,10 +368,16 @@ void SnapshotHandler::WaitForMergeComplete() {
 
 std::string SnapshotHandler::GetMergeStatus() {
     bool merge_not_initiated = false;
+    bool merge_monitored = false;
     bool merge_failed = false;
 
     {
         std::lock_guard<std::mutex> lock(lock_);
+
+        if (MergeMonitored()) {
+            merge_monitored = true;
+        }
+
         if (!MergeInitiated()) {
             merge_not_initiated = true;
         }
@@ -385,6 +398,12 @@ std::string SnapshotHandler::GetMergeStatus() {
         // file will be deleted
         if (merge_complete) {
             return "snapshot-merge-complete";
+        }
+
+        // Merge monitor thread is tracking the merge but the merge thread
+        // is not started yet.
+        if (merge_monitored) {
+            return "snapshot-merge";
         }
 
         // Return the state as "snapshot". If the device was rebooted during

@@ -463,6 +463,11 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"watchdog,gsa,hard", 215},
     {"watchdog,gsa,soft", 216},
     {"watchdog,pmucal", 217},
+    {"reboot,early,bl", 218},
+    {"watchdog,apc,gsa,crashed", 219},
+    {"watchdog,apc,bl31,crashed", 220},
+    {"watchdog,apc,pbl,crashed", 221},
+    {"reboot,memory_protect,hyp", 222},
 };
 
 // Converts a string value representing the reason the system booted to an

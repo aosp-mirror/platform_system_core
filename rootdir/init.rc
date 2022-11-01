@@ -720,9 +720,13 @@ on post-fs-data
     # Multi-installed APEXes are selected using persist props.
     # Load persist properties and override properties (if enabled) from /data,
     # before starting apexd.
+    # /data/property should be created before `load_persist_props`
+    mkdir /data/property 0700 root root encryption=Require
     load_persist_props
+
     start logd
     start logd-reinit
+
     # Some existing vendor rc files use 'on load_persist_props_action' to know
     # when persist props are ready. These are difficult to change due to GRF,
     # so continue triggering this action here even though props are already loaded
@@ -842,7 +846,6 @@ on post-fs-data
     mkdir /data/app-asec 0700 root root encryption=Require
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
-    mkdir /data/property 0700 root root encryption=Require
 
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
