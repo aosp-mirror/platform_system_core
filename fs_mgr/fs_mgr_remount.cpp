@@ -622,7 +622,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
+    if (android::base::GetProperty("ro.boot.verifiedbootstate", "") != "orange") {
         LOG(ERROR) << "Device must be bootloader unlocked";
         return 1;
     }
@@ -632,14 +632,6 @@ int main(int argc, char* argv[]) {
     android::ProcessState::self()->startThreadPool();
 
     if (!remount) {
-        // Figure out if we're using VB1.0 or VB2.0 (aka AVB) - by
-        // contract, androidboot.vbmeta.digest is set by the bootloader
-        // when using AVB).
-        if (android::base::GetProperty("ro.boot.vbmeta.digest", "").empty()) {
-            LOG(ERROR) << "Expected AVB device, VB1.0 is no longer supported";
-            return 1;
-        }
-
         auto ret = SetVerityState(enable_verity);
 
         // Disable any overlayfs unconditionally if we want verity enabled.
