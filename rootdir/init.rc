@@ -1223,7 +1223,7 @@ on property:net.tcp_def_init_rwnd=*
 # controlling access. On older kernels, the paranoid value is the only means of
 # controlling access. It is normally 3 (allow only root), but the shell user
 # can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
-on property:sys.init.perf_lsm_hooks=1
+on load_bpf_programs && property:sys.init.perf_lsm_hooks=1
     write /proc/sys/kernel/perf_event_paranoid -1
 on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
