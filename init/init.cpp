@@ -513,7 +513,7 @@ static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
 }
 
 static Result<void> DoLoadApex(const std::string& apex_name) {
-    if(auto result = ParseApexConfigs(apex_name); !result.ok()) {
+    if (auto result = ParseApexConfigs(apex_name); !result.ok()) {
         return result.error();
     }
 
