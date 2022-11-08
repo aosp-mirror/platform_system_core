@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <time.h>
 
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 
@@ -152,6 +153,24 @@ AutoUnmountDevice::~AutoUnmountDevice() {
     }
 }
 
+bool FsyncDirectory(const char* dirname) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(dirname, O_RDONLY | O_CLOEXEC)));
+    if (fd == -1) {
+        PLOG(ERROR) << "Failed to open " << dirname;
+        return false;
+    }
+    if (fsync(fd) == -1) {
+        if (errno == EROFS || errno == EINVAL) {
+            PLOG(WARNING) << "Skip fsync " << dirname
+                          << " on a file system does not support synchronization";
+        } else {
+            PLOG(ERROR) << "Failed to fsync " << dirname;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool WriteStringToFileAtomic(const std::string& content, const std::string& path) {
     const std::string tmp_path = path + ".tmp";
     {
@@ -175,11 +194,11 @@ bool WriteStringToFileAtomic(const std::string& content, const std::string& path
         PLOG(ERROR) << "rename failed from " << tmp_path << " to " << path;
         return false;
     }
-    return true;
+    return FsyncDirectory(std::filesystem::path(path).parent_path().c_str());
 }
 
 std::ostream& operator<<(std::ostream& os, const Now&) {
-    struct tm now;
+    struct tm now {};
     time_t t = time(nullptr);
     localtime_r(&t, &now);
     return os << std::put_time(&now, "%Y%m%d-%H%M%S");
