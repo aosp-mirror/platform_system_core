@@ -117,6 +117,7 @@ Return InitializeKernelCow(const std::string& device);
 // Note that rename() is an atomic operation. This function may not work properly if there
 // is an open fd to |path|, because that fd has an old view of the file.
 bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+bool FsyncDirectory(const char* dirname);
 
 // Writes current time to a given stream.
 struct Now {};
