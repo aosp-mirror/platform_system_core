@@ -506,8 +506,7 @@ void Service::ConfigureMemcg() {
 }
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
-void Service::RunService(const std::vector<Descriptor>& descriptors,
-                         InterprocessFifo cgroups_activated) {
+void Service::RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo fifo) {
     if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
@@ -529,11 +528,11 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    Result<uint8_t> byte = cgroups_activated.Read();
+    Result<uint8_t> byte = fifo.Read();
     if (!byte.ok()) {
         LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
-    cgroups_activated.Close();
+    fifo.Close();
     if (!*byte) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
@@ -598,11 +597,8 @@ Result<void> Service::Start() {
         return {};
     }
 
-    InterprocessFifo cgroups_activated;
-
-    if (Result<void> result = cgroups_activated.Initialize(); !result.ok()) {
-        return result;
-    }
+    InterprocessFifo fifo;
+    OR_RETURN(fifo.Initialize());
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
         return result;
@@ -660,11 +656,11 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        cgroups_activated.CloseWriteFd();
-        RunService(descriptors, std::move(cgroups_activated));
+        fifo.CloseWriteFd();
+        RunService(descriptors, std::move(fifo));
         _exit(127);
     } else {
-        cgroups_activated.CloseReadFd();
+        fifo.CloseReadFd();
     }
 
     if (pid < 0) {
@@ -693,7 +689,7 @@ Result<void> Service::Start() {
                          limit_percent_ != -1 || !limit_property_.empty();
         errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
         if (errno != 0) {
-            Result<void> result = cgroups_activated.Write(0);
+            Result<void> result = fifo.Write(0);
             if (!result.ok()) {
                 return Error() << "Sending notification failed: " << result.error();
             }
@@ -717,7 +713,7 @@ Result<void> Service::Start() {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (Result<void> result = cgroups_activated.Write(1); !result.ok()) {
+    if (Result<void> result = fifo.Write(1); !result.ok()) {
         return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
 
