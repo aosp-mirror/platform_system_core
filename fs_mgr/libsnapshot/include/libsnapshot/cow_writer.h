@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -150,6 +151,7 @@ class CowWriter : public ICowWriter {
     bool SetFd(android::base::borrowed_fd fd);
     bool Sync();
     bool Truncate(off_t length);
+    bool EnsureSpaceAvailable(const uint64_t bytes_needed) const;
 
   private:
     android::base::unique_fd owned_fd_;
@@ -165,6 +167,7 @@ class CowWriter : public ICowWriter {
     bool is_dev_null_ = false;
     bool merge_in_progress_ = false;
     bool is_block_device_ = false;
+    uint64_t cow_image_size_ = INT64_MAX;
 };
 
 }  // namespace snapshot
