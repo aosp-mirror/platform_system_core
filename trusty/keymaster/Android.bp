@@ -109,6 +109,7 @@ cc_binary {
         "keymint_use_latest_hal_aidl_ndk_shared",
     ],
     shared_libs: [
+        "android.hardware.security.rkp-V3-ndk",
         "android.hardware.security.secureclock-V1-ndk",
         "android.hardware.security.sharedsecret-V1-ndk",
         "lib_android_keymaster_keymint_utils",
