@@ -273,6 +273,18 @@ class Lz4Decompressor final : public IDecompressor {
                        << actual_buffer_size << " bytes";
             return false;
         }
+        // If input size is same as output size, then input is uncompressed.
+        if (stream_->Size() == output_size) {
+            size_t bytes_read = 0;
+            stream_->Read(output_buffer, output_size, &bytes_read);
+            if (bytes_read != output_size) {
+                LOG(ERROR) << "Failed to read all input at once. Expected: " << output_size
+                           << " actual: " << bytes_read;
+                return false;
+            }
+            sink_->ReturnData(output_buffer, output_size);
+            return true;
+        }
         std::string input_buffer;
         input_buffer.resize(stream_->Size());
         size_t bytes_read = 0;
