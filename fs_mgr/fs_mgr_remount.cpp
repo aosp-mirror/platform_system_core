@@ -79,23 +79,32 @@ const FstabEntry* GetWrappedEntry(const Fstab& overlayfs_candidates, const Fstab
     return &(*it);
 }
 
-auto verbose = false;
+class MyLogger {
+  public:
+    explicit MyLogger(bool verbose) : verbose_(verbose) {}
 
-void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
-              const char* file, unsigned int line, const char* message) {
-    if (verbose || severity == android::base::ERROR || message[0] != '[') {
-        fprintf(stderr, "%s\n", message);
+    void operator()(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
+                    const char* file, unsigned int line, const char* message) {
+        // By default, print ERROR logs and logs of this program (does not start with '[')
+        // Print [libfs_mgr] INFO logs only if -v is given.
+        if (verbose_ || severity >= android::base::ERROR || message[0] != '[') {
+            fprintf(stderr, "%s\n", message);
+        }
+        logd_(id, severity, tag, file, line, message);
     }
-    static auto logd = android::base::LogdLogger();
-    logd(id, severity, tag, file, line, message);
-}
 
-[[noreturn]] void reboot() {
+  private:
+    android::base::LogdLogger logd_;
+    bool verbose_;
+};
+
+[[noreturn]] void reboot(const std::string& name) {
     LOG(INFO) << "Rebooting device for new settings to take effect";
     ::sync();
-    android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot,remount");
+    android::base::SetProperty(ANDROID_RB_PROPERTY, "reboot," + name);
     ::sleep(60);
-    ::exit(0);  // SUCCESS
+    LOG(ERROR) << "Failed to reboot";
+    ::exit(1);
 }
 
 static android::sp<android::os::IVold> GetVold() {
@@ -465,29 +474,11 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    android::base::InitLogging(argv, MyLogger);
-
-    // Make sure we are root.
-    if (::getuid() != 0) {
-        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
-        return 1;
-    }
-
-    // If somehow this executable is delivered on a "user" build, it can
-    // not function, so providing a clear message to the caller rather than
-    // letting if fall through and provide a lot of confusing failure messages.
-    if (!ALLOW_ADBD_DISABLE_VERITY || !android::base::GetBoolProperty("ro.debuggable", false)) {
-        LOG(ERROR) << "Device must be userdebug build";
-        return 1;
-    }
-
-    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
-        LOG(ERROR) << "Device must be bootloader unlocked";
-        return 1;
-    }
+    android::base::InitLogging(argv, MyLogger(false /* verbose */));
 
     const char* fstab_file = nullptr;
-    auto auto_reboot = false;
+    bool auto_reboot = false;
+    bool verbose = false;
     std::vector<std::string> partition_args;
 
     struct option longopts[] = {
@@ -507,7 +498,7 @@ int main(int argc, char* argv[]) {
                 break;
             case 'T':
                 if (fstab_file) {
-                    LOG(ERROR) << "Cannot supply two fstabs: -T " << fstab_file << " -T" << optarg;
+                    LOG(ERROR) << "Cannot supply two fstabs: -T " << fstab_file << " -T " << optarg;
                     usage();
                     return 1;
                 }
@@ -517,14 +508,37 @@ int main(int argc, char* argv[]) {
                 verbose = true;
                 break;
             default:
-                LOG(ERROR) << "Bad Argument -" << char(opt);
+                LOG(ERROR) << "Bad argument -" << char(opt);
                 usage();
                 return 1;
         }
     }
 
+    if (verbose) {
+        android::base::SetLogger(MyLogger(verbose));
+    }
+
     for (; argc > optind; ++optind) {
         partition_args.emplace_back(argv[optind]);
+    }
+
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return 1;
+    }
+
+    // If somehow this executable is delivered on a "user" build, it can
+    // not function, so providing a clear message to the caller rather than
+    // letting if fall through and provide a lot of confusing failure messages.
+    if (!ALLOW_ADBD_DISABLE_VERITY || !android::base::GetBoolProperty("ro.debuggable", false)) {
+        LOG(ERROR) << "Device must be userdebug build";
+        return 1;
+    }
+
+    if (android::base::GetProperty("ro.boot.vbmeta.device_state", "") == "locked") {
+        LOG(ERROR) << "Device must be bootloader unlocked";
+        return 1;
     }
 
     // Make sure checkpointing is disabled if necessary.
@@ -549,7 +563,11 @@ int main(int argc, char* argv[]) {
     } else if (check_result.setup_overlayfs) {
         LOG(INFO) << "Overlayfs enabled.";
     }
-
+    if (result == REMOUNT_SUCCESS) {
+        LOG(INFO) << "remount succeeded";
+    } else {
+        LOG(ERROR) << "remount failed";
+    }
     if (check_result.reboot_later) {
         if (auto_reboot) {
             // If (1) remount requires a reboot to take effect, (2) system is currently
@@ -560,16 +578,11 @@ int main(int argc, char* argv[]) {
                 LOG(ERROR) << "Unable to automatically enable DSU";
                 return rv;
             }
-            reboot();
+            reboot("remount");
         } else {
             LOG(INFO) << "Now reboot your device for settings to take effect";
         }
         return REMOUNT_SUCCESS;
-    }
-    if (result == REMOUNT_SUCCESS) {
-        printf("remount succeeded\n");
-    } else {
-        printf("remount failed\n");
     }
     return result;
 }
