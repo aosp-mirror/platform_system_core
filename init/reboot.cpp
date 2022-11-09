@@ -567,6 +567,11 @@ int StopServicesAndLogViolations(const std::set<std::string>& services,
 }
 
 static Result<void> UnmountAllApexes() {
+    // don't need to unmount because apexd doesn't use /data in Microdroid
+    if (IsMicrodroid()) {
+        return {};
+    }
+
     const char* args[] = {"/system/bin/apexd", "--unmount-all"};
     int status;
     if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
