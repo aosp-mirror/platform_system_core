@@ -30,8 +30,28 @@
 #include <lz4.h>
 #include <zlib.h>
 
+#include <fcntl.h>
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
 namespace android {
 namespace snapshot {
+
+namespace {
+std::string GetFdPath(int fd) {
+    const auto fd_path = "/proc/self/fd/" + std::to_string(fd);
+    std::string file_path(512, '\0');
+    const auto err = readlink(fd_path.c_str(), file_path.data(), file_path.size());
+    if (err <= 0) {
+        PLOG(ERROR) << "Failed to determine path for fd " << fd;
+        file_path.clear();
+    } else {
+        file_path.resize(err);
+    }
+    return file_path;
+}
+}  // namespace
 
 static_assert(sizeof(off_t) == sizeof(uint64_t));
 
@@ -163,12 +183,25 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     } else {
         fd_ = fd;
 
-        struct stat stat;
+        struct stat stat {};
         if (fstat(fd.get(), &stat) < 0) {
             PLOG(ERROR) << "fstat failed";
             return false;
         }
+        const auto file_path = GetFdPath(fd.get());
         is_block_device_ = S_ISBLK(stat.st_mode);
+        if (is_block_device_) {
+            uint64_t size_in_bytes = 0;
+            if (ioctl(fd.get(), BLKGETSIZE64, &size_in_bytes)) {
+                PLOG(ERROR) << "Failed to get total size for: " << fd.get();
+                return false;
+            }
+            cow_image_size_ = size_in_bytes;
+            LOG(INFO) << "COW image " << file_path << " has size " << size_in_bytes;
+        } else {
+            LOG(INFO) << "COW image " << file_path
+                      << " is not a block device, assuming unlimited space.";
+        }
     }
     return true;
 }
@@ -343,7 +376,8 @@ bool CowWriter::EmitBlocks(uint64_t new_block_start, const void* data, size_t si
             op.data_length = static_cast<uint16_t>(data.size());
 
             if (!WriteOperation(op, data.data(), data.size())) {
-                PLOG(ERROR) << "AddRawBlocks: write failed";
+                PLOG(ERROR) << "AddRawBlocks: write failed, bytes requested: " << size
+                            << ", bytes written: " << i * header_.block_size;
                 return false;
             }
         } else {
@@ -512,12 +546,26 @@ bool CowWriter::GetDataPos(uint64_t* pos) {
     return true;
 }
 
-bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t size) {
-    if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed for writing operation.";
+bool CowWriter::EnsureSpaceAvailable(const uint64_t bytes_needed) const {
+    if (bytes_needed > cow_image_size_) {
+        LOG(ERROR) << "No space left on COW device. Required: " << bytes_needed
+                   << ", available: " << cow_image_size_;
+        errno = ENOSPC;
         return false;
     }
-    if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op))) {
+    return true;
+}
+
+bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t size) {
+    if (!EnsureSpaceAvailable(next_op_pos_ + sizeof(op))) {
+        return false;
+    }
+    if (!EnsureSpaceAvailable(next_data_pos_ + size)) {
+        return false;
+    }
+
+    if (!android::base::WriteFullyAtOffset(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op),
+                                           next_op_pos_)) {
         return false;
     }
     if (data != nullptr && size > 0) {
@@ -542,13 +590,8 @@ void CowWriter::AddOperation(const CowOperation& op) {
     next_op_pos_ += sizeof(CowOperation) + GetNextOpOffset(op, header_.cluster_ops);
 }
 
-bool CowWriter::WriteRawData(const void* data, size_t size) {
-    if (lseek(fd_.get(), next_data_pos_, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed for writing data.";
-        return false;
-    }
-
-    if (!android::base::WriteFully(fd_, data, size)) {
+bool CowWriter::WriteRawData(const void* data, const size_t size) {
+    if (!android::base::WriteFullyAtOffset(fd_, data, size, next_data_pos_)) {
         return false;
     }
     return true;
