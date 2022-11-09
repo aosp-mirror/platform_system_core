@@ -31,7 +31,7 @@
 using android::base::ErrnoError;
 using android::base::Result;
 
-#define FS_AVB_TAG "[libfs_avb]"
+#define FS_AVB_TAG "[libfs_avb] "
 
 // Logs a message to kernel
 #define LINFO LOG(INFO) << FS_AVB_TAG
