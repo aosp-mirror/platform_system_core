@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
 
-  out_s = calloc(sizeof(struct sparse_file*), files);
+  out_s = (struct sparse_file**)calloc(sizeof(struct sparse_file*), files);
   if (!out_s) {
     fprintf(stderr, "Failed to allocate sparse file array\n");
     exit(-1);
