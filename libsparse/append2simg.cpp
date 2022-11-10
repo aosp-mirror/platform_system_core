@@ -64,60 +64,60 @@ int main(int argc, char* argv[]) {
     input_path = argv[2];
   } else {
     usage();
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   ret = asprintf(&tmp_path, "%s.append2simg", output_path);
   if (ret < 0) {
     fprintf(stderr, "Couldn't allocate filename\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   output = open(output_path, O_RDWR | O_BINARY);
   if (output < 0) {
     fprintf(stderr, "Couldn't open output file (%s)\n", strerror(errno));
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   sparse_output = sparse_file_import_auto(output, false, true);
   if (!sparse_output) {
     fprintf(stderr, "Couldn't import output file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   input = open(input_path, O_RDONLY | O_BINARY);
   if (input < 0) {
     fprintf(stderr, "Couldn't open input file (%s)\n", strerror(errno));
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   input_len = lseek64(input, 0, SEEK_END);
   if (input_len < 0) {
     fprintf(stderr, "Couldn't get input file length (%s)\n", strerror(errno));
-    exit(-1);
+    exit(EXIT_FAILURE);
   } else if (input_len % sparse_output->block_size) {
     fprintf(stderr, "Input file is not a multiple of the output file's block size");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
   lseek64(input, 0, SEEK_SET);
 
   output_block = sparse_output->len / sparse_output->block_size;
   if (sparse_file_add_fd(sparse_output, input, 0, input_len, output_block) < 0) {
     fprintf(stderr, "Couldn't add input file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
   sparse_output->len += input_len;
 
   tmp_fd = open(tmp_path, O_WRONLY | O_CREAT | O_BINARY, 0664);
   if (tmp_fd < 0) {
     fprintf(stderr, "Couldn't open temporary file (%s)\n", strerror(errno));
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   lseek64(output, 0, SEEK_SET);
   if (sparse_file_write(sparse_output, tmp_fd, false, true, false) < 0) {
     fprintf(stderr, "Failed to write sparse file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   sparse_file_destroy(sparse_output);
@@ -128,10 +128,10 @@ int main(int argc, char* argv[]) {
   ret = rename(tmp_path, output_path);
   if (ret < 0) {
     fprintf(stderr, "Failed to rename temporary file (%s)\n", strerror(errno));
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   free(tmp_path);
 
-  exit(0);
+  exit(EXIT_SUCCESS);
 }
