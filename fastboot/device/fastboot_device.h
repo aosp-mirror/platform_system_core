@@ -23,8 +23,8 @@
 #include <vector>
 
 #include <BootControlClient.h>
+#include <aidl/android/hardware/fastboot/IFastboot.h>
 #include <aidl/android/hardware/health/IHealth.h>
-#include <android/hardware/fastboot/1.1/IFastboot.h>
 
 #include "commands.h"
 #include "transport.h"
@@ -52,7 +52,7 @@ class FastbootDevice {
     Transport* get_transport() { return transport_.get(); }
     BootControlClient* boot_control_hal() const { return boot_control_hal_.get(); }
     BootControlClient* boot1_1() const;
-    android::sp<android::hardware::fastboot::V1_1::IFastboot> fastboot_hal() {
+    std::shared_ptr<aidl::android::hardware::fastboot::IFastboot> fastboot_hal() {
         return fastboot_hal_;
     }
     std::shared_ptr<aidl::android::hardware::health::IHealth> health_hal() { return health_hal_; }
@@ -65,7 +65,7 @@ class FastbootDevice {
     std::unique_ptr<Transport> transport_;
     std::unique_ptr<BootControlClient> boot_control_hal_;
     std::shared_ptr<aidl::android::hardware::health::IHealth> health_hal_;
-    android::sp<android::hardware::fastboot::V1_1::IFastboot> fastboot_hal_;
+    std::shared_ptr<aidl::android::hardware::fastboot::IFastboot> fastboot_hal_;
     std::vector<char> download_data_;
     std::string active_slot_;
 };
