@@ -41,9 +41,7 @@ static constexpr bool kEnableFetch = false;
 #endif
 
 using MergeStatus = android::hal::BootControlClient::MergeStatus;
-using ::android::hardware::fastboot::V1_0::FileSystemType;
-using ::android::hardware::fastboot::V1_0::Result;
-using ::android::hardware::fastboot::V1_0::Status;
+using aidl::android::hardware::fastboot::FileSystemType;
 using namespace android::fs_mgr;
 using namespace std::string_literals;
 
@@ -104,17 +102,16 @@ bool GetVariant(FastbootDevice* device, const std::vector<std::string>& /* args 
         *message = "Fastboot HAL not found";
         return false;
     }
+    std::string device_variant = "";
+    auto status = fastboot_hal->getVariant(&device_variant);
 
-    Result ret;
-    auto ret_val = fastboot_hal->getVariant([&](std::string device_variant, Result result) {
-        *message = device_variant;
-        ret = result;
-    });
-    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+    if (!status.isOk()) {
         *message = "Unable to get device variant";
+        LOG(ERROR) << message->c_str() << status.getDescription();
         return false;
     }
 
+    *message = device_variant;
     return true;
 }
 
@@ -147,17 +144,14 @@ bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& /* 
         return false;
     }
 
-    Result ret;
-    auto ret_val = fastboot_hal->getBatteryVoltageFlashingThreshold(
-            [&](int32_t voltage_threshold, Result result) {
-                *message = battery_voltage >= voltage_threshold ? "yes" : "no";
-                ret = result;
-            });
-
-    if (!ret_val.isOk() || ret.status != Status::SUCCESS) {
+    auto voltage_threshold = 0;
+    auto status = fastboot_hal->getBatteryVoltageFlashingThreshold(&voltage_threshold);
+    if (!status.isOk()) {
         *message = "Unable to get battery voltage flashing threshold";
+        LOG(ERROR) << message->c_str() << status.getDescription();
         return false;
     }
+    *message = battery_voltage >= voltage_threshold ? "yes" : "no";
 
     return true;
 }
@@ -169,18 +163,14 @@ bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string
         *message = "Fastboot HAL not found";
         return false;
     }
-
-    Result ret;
-    auto ret_val =
-            fastboot_hal->getOffModeChargeState([&](bool off_mode_charging_state, Result result) {
-                *message = off_mode_charging_state ? "1" : "0";
-                ret = result;
-            });
-    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+    bool off_mode_charging_state = false;
+    auto status = fastboot_hal->getOffModeChargeState(&off_mode_charging_state);
+    if (!status.isOk()) {
         *message = "Unable to get off mode charge state";
+        LOG(ERROR) << message->c_str() << status.getDescription();
         return false;
     }
-
+    *message = off_mode_charging_state ? "1" : "0";
     return true;
 }
 
@@ -337,14 +327,11 @@ bool GetPartitionType(FastbootDevice* device, const std::vector<std::string>& ar
     }
 
     FileSystemType type;
-    Result ret;
-    auto ret_val =
-            fastboot_hal->getPartitionType(args[0], [&](FileSystemType fs_type, Result result) {
-                type = fs_type;
-                ret = result;
-            });
-    if (!ret_val.isOk() || (ret.status != Status::SUCCESS)) {
+    auto status = fastboot_hal->getPartitionType(args[0], &type);
+
+    if (!status.isOk()) {
         *message = "Unable to retrieve partition type";
+        LOG(ERROR) << message->c_str() << status.getDescription();
     } else {
         switch (type) {
             case FileSystemType::RAW:
