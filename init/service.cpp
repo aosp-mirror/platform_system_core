@@ -16,6 +16,7 @@
 
 #include "service.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <linux/securebits.h>
@@ -532,7 +533,6 @@ void Service::RunService(const std::vector<Descriptor>& descriptors, Interproces
     if (!byte.ok()) {
         LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
-    fifo.Close();
     if (!*byte) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
@@ -555,6 +555,12 @@ void Service::RunService(const std::vector<Descriptor>& descriptors, Interproces
     // As requested, set our gid, supplemental gids, uid, context, and
     // priority. Aborts on failure.
     SetProcessAttributesAndCaps();
+
+    // If SetProcessAttributes() called setsid(), report this to the parent.
+    if (RequiresConsole(proc_attr_)) {
+        fifo.Write(2);
+    }
+    fifo.Close();
 
     if (!ExpandArgsAndExecv(args_, sigstop_)) {
         PLOG(ERROR) << "cannot execv('" << args_[0]
@@ -656,11 +662,8 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        fifo.CloseWriteFd();
         RunService(descriptors, std::move(fifo));
         _exit(127);
-    } else {
-        fifo.CloseReadFd();
     }
 
     if (pid < 0) {
@@ -716,6 +719,31 @@ Result<void> Service::Start() {
     if (Result<void> result = fifo.Write(1); !result.ok()) {
         return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
+
+    // Call setpgid() from the parent process to make sure that this call has
+    // finished before the parent process calls kill(-pgid, ...).
+    if (proc_attr_.console.empty()) {
+        if (setpgid(pid, pid) < 0) {
+            switch (errno) {
+                case EACCES:   // Child has already performed execve().
+                case ESRCH:    // Child process no longer exists.
+                    break;
+                default:
+                    PLOG(ERROR) << "setpgid() from parent failed";
+            }
+        }
+    } else {
+        // The Read() call below will return an error if the child is killed.
+        if (Result<uint8_t> result = fifo.Read(); !result.ok() || *result != 2) {
+            if (!result.ok()) {
+                return Error() << "Waiting for setsid() failed: " << result.error();
+            } else {
+                return Error() << "Waiting for setsid() failed: " << *result << " <> 2";
+            }
+        }
+    }
+
+    fifo.Close();
 
     NotifyStateChange("running");
     reboot_on_failure.Disable();
