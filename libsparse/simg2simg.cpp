@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 
   if (argc != 4) {
     usage();
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   max_size = atoll(argv[3]);
@@ -57,55 +57,55 @@ int main(int argc, char* argv[]) {
   in = open(argv[1], O_RDONLY | O_BINARY);
   if (in < 0) {
     fprintf(stderr, "Cannot open input file %s\n", argv[1]);
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   s = sparse_file_import(in, true, false);
   if (!s) {
     fprintf(stderr, "Failed to import sparse file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   files = sparse_file_resparse(s, max_size, nullptr, 0);
   if (files < 0) {
     fprintf(stderr, "Failed to resparse\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
-  out_s = calloc(sizeof(struct sparse_file*), files);
+  out_s = (struct sparse_file**)calloc(sizeof(struct sparse_file*), files);
   if (!out_s) {
     fprintf(stderr, "Failed to allocate sparse file array\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   files = sparse_file_resparse(s, max_size, out_s, files);
   if (files < 0) {
     fprintf(stderr, "Failed to resparse\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   for (i = 0; i < files; i++) {
     ret = snprintf(filename, sizeof(filename), "%s.%d", argv[2], i);
     if (ret >= (int)sizeof(filename)) {
       fprintf(stderr, "Filename too long\n");
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
 
     out = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0664);
     if (out < 0) {
       fprintf(stderr, "Cannot open output file %s\n", argv[2]);
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
 
     ret = sparse_file_write(out_s[i], out, false, true, false);
     if (ret) {
       fprintf(stderr, "Failed to write sparse file\n");
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
     close(out);
   }
 
   close(in);
 
-  exit(0);
+  exit(EXIT_SUCCESS);
 }
