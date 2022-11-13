@@ -106,7 +106,8 @@ bool IsRebootCapable() {
     return value == CAP_SET;
 }
 
-void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
+void __attribute__((noreturn))
+RebootSystem(unsigned int cmd, const std::string& rebootTarget, const std::string& reboot_reason) {
     LOG(INFO) << "Reboot ending, jumping to kernel";
 
     if (!IsRebootCapable()) {
@@ -127,10 +128,12 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
 
         case ANDROID_RB_THERMOFF:
             if (android::base::GetBoolProperty("ro.thermal_warmreset", false)) {
+                std::string reason = "shutdown,thermal";
+                if (!reboot_reason.empty()) reason = reboot_reason;
+
                 LOG(INFO) << "Try to trigger a warm reset for thermal shutdown";
-                static constexpr const char kThermalShutdownTarget[] = "shutdown,thermal";
                 syscall(__NR_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                        LINUX_REBOOT_CMD_RESTART2, kThermalShutdownTarget);
+                        LINUX_REBOOT_CMD_RESTART2, reason.c_str());
             } else {
                 reboot(RB_POWER_OFF);
             }
