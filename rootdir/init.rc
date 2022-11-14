@@ -535,10 +535,6 @@ on late-init
     # /data, which in turn can only be loaded when system properties are present.
     trigger post-fs-data
 
-    # APEXes are ready to use. apex-ready is a public trigger similar to apexd.status=ready which
-    # is a system-private property.
-    trigger apex-ready
-
     # Should be before netd, but after apex, properties and logging is available.
     trigger load_bpf_programs
 
@@ -1315,7 +1311,6 @@ on userspace-reboot-fs-remount
 on userspace-reboot-resume
   trigger userspace-reboot-fs-remount
   trigger post-fs-data
-  trigger apex-ready
   trigger zygote-start
   trigger early-boot
   trigger boot
