@@ -445,30 +445,33 @@ struct SetVerityStateResult {
 
 SetVerityStateResult SetVerityState(bool enable_verity) {
     const auto ab_suffix = android::base::GetProperty("ro.boot.slot_suffix", "");
-    bool verity_enabled = false;
-
     std::unique_ptr<AvbOps, decltype(&avb_ops_user_free)> ops(avb_ops_user_new(),
                                                               &avb_ops_user_free);
     if (!ops) {
         LOG(ERROR) << "Error getting AVB ops";
         return {};
     }
-
-    if (!avb_user_verity_get(ops.get(), ab_suffix.c_str(), &verity_enabled)) {
-        LOG(ERROR) << "Error getting verity state";
-        return {};
-    }
-
-    if ((verity_enabled && enable_verity) || (!verity_enabled && !enable_verity)) {
-        LOG(INFO) << "Verity is already " << (verity_enabled ? "enabled" : "disabled");
-        return {.success = true, .want_reboot = false};
-    }
-
     if (!avb_user_verity_set(ops.get(), ab_suffix.c_str(), enable_verity)) {
         LOG(ERROR) << "Error setting verity state";
         return {};
     }
-
+    bool verification_enabled = false;
+    if (!avb_user_verification_get(ops.get(), ab_suffix.c_str(), &verification_enabled)) {
+        LOG(ERROR) << "Error getting verification state";
+        return {};
+    }
+    if (!verification_enabled) {
+        LOG(WARNING) << "AVB verification is disabled, "
+                     << (enable_verity ? "enabling" : "disabling")
+                     << " verity state may have no effect";
+        return {.success = true, .want_reboot = false};
+    }
+    const auto verity_mode = android::base::GetProperty("ro.boot.veritymode", "");
+    const bool was_enabled = (verity_mode != "disabled");
+    if ((was_enabled && enable_verity) || (!was_enabled && !enable_verity)) {
+        LOG(INFO) << "Verity is already " << (enable_verity ? "enabled" : "disabled");
+        return {.success = true, .want_reboot = false};
+    }
     LOG(INFO) << "Successfully " << (enable_verity ? "enabled" : "disabled") << " verity";
     return {.success = true, .want_reboot = true};
 }
