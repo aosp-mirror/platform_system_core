@@ -294,36 +294,11 @@ struct RemountCheckResult {
     bool remounted_anything = false;
 };
 
-static RemountStatus CheckVerity(const FstabEntry& entry, RemountCheckResult* result) {
-    if (!fs_mgr_is_verity_enabled(entry)) {
-        return REMOUNT_SUCCESS;
-    }
-
-    std::unique_ptr<AvbOps, decltype(&::avb_ops_user_free)> ops(avb_ops_user_new(),
-                                                                &::avb_ops_user_free);
-    if (!ops) {
-        return VERITY_PARTITION;
-    }
-    if (!avb_user_verity_set(ops.get(), fs_mgr_get_slot_suffix().c_str(), false)) {
-        return VERITY_PARTITION;
-    }
-    result->disabled_verity = true;
-    result->reboot_later = true;
-    return REMOUNT_SUCCESS;
-}
-
-static RemountStatus CheckVerityAndOverlayfs(Fstab* partitions, RemountCheckResult* result) {
+RemountStatus CheckOverlayfs(Fstab* partitions, RemountCheckResult* result) {
     RemountStatus status = REMOUNT_SUCCESS;
     for (auto it = partitions->begin(); it != partitions->end();) {
         auto& entry = *it;
         const auto& mount_point = entry.mount_point;
-
-        if (auto rv = CheckVerity(entry, result); rv != REMOUNT_SUCCESS) {
-            LOG(ERROR) << "Skipping verified partition " << mount_point << " for remount";
-            status = rv;
-            it = partitions->erase(it);
-            continue;
-        }
 
         if (fs_mgr_wants_overlayfs(&entry)) {
             bool want_reboot = false;
@@ -514,8 +489,18 @@ static int do_remount(Fstab& fstab, const std::vector<std::string>& partition_ar
         }
     }
 
-    // Check verity and optionally setup overlayfs backing.
-    auto retval = CheckVerityAndOverlayfs(&partitions, check_result);
+    // Disable verity.
+    auto verity_result = SetVerityState(false /* enable_verity */);
+    if (!verity_result.success) {
+        return VERITY_PARTITION;
+    }
+    if (verity_result.want_reboot) {
+        check_result->reboot_later = true;
+        check_result->disabled_verity = true;
+    }
+
+    // Optionally setup overlayfs backing.
+    auto retval = CheckOverlayfs(&partitions, check_result);
 
     if (partitions.empty() || check_result->disabled_verity) {
         if (partitions.empty()) {
