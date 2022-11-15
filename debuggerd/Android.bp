@@ -467,28 +467,36 @@ prebuilt_etc {
     arch: {
         arm: {
             src: "seccomp_policy/crash_dump.arm.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
         arm64: {
             src: "seccomp_policy/crash_dump.arm64.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
         riscv64: {
             src: "seccomp_policy/crash_dump.riscv64.policy",
         },
         x86: {
             src: "seccomp_policy/crash_dump.x86.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
         x86_64: {
             src: "seccomp_policy/crash_dump.x86_64.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
     },
-    required: [
-        "crash_dump.policy_other",
-    ],
 }
 
 
-// NB -- this installs "the other" architecture. (puts 32 bit config in on 64 bit device)
-// or at least that is the intention so that we get both of them populated
+// This installs the "other" architecture (so 32-bit on 64-bit device).
 prebuilt_etc {
     name: "crash_dump.policy_other",
     sub_dir: "seccomp_policy",
