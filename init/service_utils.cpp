@@ -232,7 +232,7 @@ Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
     return {};
 }
 
-Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
+Result<void> SetProcessAttributes(const ProcessAttributes& attr, InterprocessFifo setsid_finished) {
     if (attr.ioprio_class != IoSchedClass_NONE) {
         if (android_set_ioprio(getpid(), attr.ioprio_class, attr.ioprio_pri)) {
             PLOG(ERROR) << "failed to set pid " << getpid() << " ioprio=" << attr.ioprio_class
@@ -242,8 +242,14 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 
     if (RequiresConsole(attr)) {
         setsid();
+        setsid_finished.Write(kSetSidFinished);
+        setsid_finished.Close();
         OpenConsole(attr.console);
     } else {
+        // Without PID namespaces, this call duplicates the setpgid() call from
+        // the parent process. With PID namespaces, this setpgid() call sets the
+        // process group ID for a child of the init process in the PID
+        // namespace.
         if (setpgid(0, 0) == -1) {
             return ErrnoError() << "setpgid failed";
         }
