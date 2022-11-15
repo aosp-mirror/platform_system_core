@@ -240,15 +240,11 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         }
     }
 
-    if (RequiresConsole(attr)) {
+    if (!attr.console.empty()) {
         setsid();
         OpenConsole(attr.console);
     } else {
-        // Without PID namespaces, this call duplicates the setpgid() call from
-        // the parent process. With PID namespaces, this setpgid() call sets the
-        // process group ID for a child of the init process in the PID
-        // namespace.
-        if (setpgid(0, 0) == -1) {
+        if (setpgid(0, getpid()) == -1) {
             return ErrnoError() << "setpgid failed";
         }
         SetupStdio(attr.stdio_to_kmsg);
