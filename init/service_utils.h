@@ -89,11 +89,6 @@ struct ProcessAttributes {
     int priority;
     bool stdio_to_kmsg;
 };
-
-inline bool RequiresConsole(const ProcessAttributes& attr) {
-    return !attr.console.empty();
-}
-
 Result<void> SetProcessAttributes(const ProcessAttributes& attr);
 
 Result<void> WritePidToFiles(std::vector<std::string>* files);
