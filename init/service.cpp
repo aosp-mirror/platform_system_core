@@ -711,8 +711,6 @@ Result<void> Service::Start() {
         if (use_memcg) {
             ConfigureMemcg();
         }
-    } else {
-        process_cgroup_empty_ = true;
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
