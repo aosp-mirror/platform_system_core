@@ -386,15 +386,14 @@ bool RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& entry) {
     }
 
     // Now remount!
-    if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                nullptr) == 0) {
-        return true;
-    }
-    if ((errno == EINVAL) && (mount_point != entry.mount_point)) {
-        mount_point = entry.mount_point;
-        if (::mount(blk_device.c_str(), mount_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
+    for (const auto& mnt_point : {mount_point, entry.mount_point}) {
+        if (::mount(blk_device.c_str(), mnt_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
                     nullptr) == 0) {
+            LOG(INFO) << "Remounted " << mnt_point << " as RW";
             return true;
+        }
+        if (errno != EINVAL || mount_point == entry.mount_point) {
+            break;
         }
     }
 
@@ -484,8 +483,16 @@ bool do_remount(Fstab& fstab, const std::vector<std::string>& partition_args,
         return false;
     }
     if (verity_result.want_reboot) {
-        check_result->reboot_later = true;
-        check_result->disabled_verity = true;
+        // TODO(b/259207493): emulator has incorrect androidboot.veritymode value, causing
+        // .want_reboot to always be true. In order to workaround this, double check device mapper
+        // to see if verity is already disabled.
+        for (const auto& partition : partitions) {
+            if (fs_mgr_is_verity_enabled(partition)) {
+                check_result->reboot_later = true;
+                check_result->disabled_verity = true;
+                break;
+            }
+        }
     }
 
     // Optionally setup overlayfs backing.
@@ -660,10 +667,10 @@ int main(int argc, char* argv[]) {
     } else if (check_result.setup_overlayfs) {
         LOG(INFO) << "Overlayfs enabled.";
     }
-    if (remount_success) {
-        LOG(INFO) << "remount succeeded";
-    } else {
-        LOG(ERROR) << "remount failed";
+    if (remount_success && check_result.remounted_anything) {
+        LOG(INFO) << "Remount succeeded";
+    } else if (!remount_success) {
+        LOG(ERROR) << "Remount failed";
     }
     if (check_result.reboot_later) {
         if (auto_reboot) {
