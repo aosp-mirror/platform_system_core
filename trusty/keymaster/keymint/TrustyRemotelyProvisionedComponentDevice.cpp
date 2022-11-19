@@ -85,6 +85,7 @@ ScopedAStatus TrustyRemotelyProvisionedComponentDevice::getHardwareInfo(RpcHardw
     info->rpcAuthorName = std::move(response.rpcAuthorName);
     info->supportedEekCurve = response.supportedEekCurve;
     info->uniqueId = std::move(response.uniqueId);
+    info->supportedNumKeysInCsr = response.supportedNumKeysInCsr;
     return ScopedAStatus::ok();
 }
 
