@@ -244,7 +244,7 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         setsid();
         OpenConsole(attr.console);
     } else {
-        if (setpgid(0, getpid()) == -1) {
+        if (setpgid(0, 0) == -1) {
             return ErrnoError() << "setpgid failed";
         }
         SetupStdio(attr.stdio_to_kmsg);
