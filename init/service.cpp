@@ -534,7 +534,7 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
         LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
     cgroups_activated.Close();
-    if (!*byte) {
+    if (*byte != kCgroupsActivated) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
     }
@@ -693,7 +693,7 @@ Result<void> Service::Start() {
                          limit_percent_ != -1 || !limit_property_.empty();
         errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
         if (errno != 0) {
-            Result<void> result = cgroups_activated.Write(0);
+            Result<void> result = cgroups_activated.Write(kActivatingCgroupsFailed);
             if (!result.ok()) {
                 return Error() << "Sending notification failed: " << result.error();
             }
@@ -717,7 +717,7 @@ Result<void> Service::Start() {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (Result<void> result = cgroups_activated.Write(1); !result.ok()) {
+    if (Result<void> result = cgroups_activated.Write(kCgroupsActivated); !result.ok()) {
         return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
 
