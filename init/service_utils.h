@@ -32,6 +32,12 @@
 namespace android {
 namespace init {
 
+// Constants used by Service::Start() for communication between parent and child.
+enum ServiceCode : uint8_t {
+    kActivatingCgroupsFailed,
+    kCgroupsActivated,
+};
+
 class Descriptor {
   public:
     Descriptor(const std::string& name, android::base::unique_fd fd)
