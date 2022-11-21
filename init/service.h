@@ -143,7 +143,7 @@ class Service {
             flags_ &= ~SVC_ONESHOT;
         }
     }
-    Subcontext* subcontext() const { return subcontext_; }
+    const Subcontext* subcontext() const { return subcontext_; }
     const std::string& filename() const { return filename_; }
     void set_filename(const std::string& name) { filename_ = name; }
 
@@ -162,7 +162,7 @@ class Service {
     static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
     static pid_t exec_service_pid_;
 
-    std::string name_;
+    const std::string name_;
     std::set<std::string> classnames_;
 
     unsigned flags_;
@@ -186,7 +186,7 @@ class Service {
     // Environment variables that only get applied to the next run.
     std::vector<std::pair<std::string, std::string>> once_environment_vars_;
 
-    Subcontext* subcontext_;
+    const Subcontext* const subcontext_;
     Action onrestart_;  // Commands to execute on restart.
 
     std::vector<std::string> writepid_files_;
@@ -220,7 +220,7 @@ class Service {
 
     bool updatable_ = false;
 
-    std::vector<std::string> args_;
+    const std::vector<std::string> args_;
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
