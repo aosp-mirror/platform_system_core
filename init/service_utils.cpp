@@ -240,7 +240,7 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         }
     }
 
-    if (!attr.console.empty()) {
+    if (RequiresConsole(attr)) {
         setsid();
         OpenConsole(attr.console);
     } else {
