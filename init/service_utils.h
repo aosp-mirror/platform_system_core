@@ -32,6 +32,12 @@
 namespace android {
 namespace init {
 
+// Constants used by Service::Start() for communication between parent and child.
+enum ServiceCode : uint8_t {
+    kActivatingCgroupsFailed,
+    kCgroupsActivated,
+};
+
 class Descriptor {
   public:
     Descriptor(const std::string& name, android::base::unique_fd fd)
@@ -89,6 +95,11 @@ struct ProcessAttributes {
     int priority;
     bool stdio_to_kmsg;
 };
+
+inline bool RequiresConsole(const ProcessAttributes& attr) {
+    return !attr.console.empty();
+}
+
 Result<void> SetProcessAttributes(const ProcessAttributes& attr);
 
 Result<void> WritePidToFiles(std::vector<std::string>* files);
