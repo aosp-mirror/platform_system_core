@@ -479,19 +479,24 @@ bool do_remount(Fstab& fstab, const std::vector<std::string>& partition_args,
 
     // Disable verity.
     auto verity_result = SetVerityState(false /* enable_verity */);
-    if (!verity_result.success) {
-        return false;
+
+    // Treat error as fatal and suggest reboot only if verity is enabled.
+    // TODO(b/260041315): We check the device mapper for any "<partition>-verity" device present
+    // instead of checking ro.boot.veritymode because emulator has incorrect property value.
+    bool must_disable_verity = false;
+    for (const auto& partition : partitions) {
+        if (fs_mgr_is_verity_enabled(partition)) {
+            must_disable_verity = true;
+            break;
+        }
     }
-    if (verity_result.want_reboot) {
-        // TODO(b/259207493): emulator has incorrect androidboot.veritymode value, causing
-        // .want_reboot to always be true. In order to workaround this, double check device mapper
-        // to see if verity is already disabled.
-        for (const auto& partition : partitions) {
-            if (fs_mgr_is_verity_enabled(partition)) {
-                check_result->reboot_later = true;
-                check_result->disabled_verity = true;
-                break;
-            }
+    if (must_disable_verity) {
+        if (!verity_result.success) {
+            return false;
+        }
+        if (verity_result.want_reboot) {
+            check_result->reboot_later = true;
+            check_result->disabled_verity = true;
         }
     }
 
