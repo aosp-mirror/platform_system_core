@@ -379,6 +379,12 @@ bool GetIsUserspace(FastbootDevice* /* device */, const std::vector<std::string>
     return true;
 }
 
+bool GetIsForceDebuggable(FastbootDevice* /* device */, const std::vector<std::string>& /* args */,
+                          std::string* message) {
+    *message = android::base::GetBoolProperty("ro.force.debuggable", false) ? "yes" : "no";
+    return true;
+}
+
 std::vector<std::vector<std::string>> GetAllPartitionArgsWithSlot(FastbootDevice* device) {
     std::vector<std::vector<std::string>> args;
     auto partitions = ListPartitions(device);
