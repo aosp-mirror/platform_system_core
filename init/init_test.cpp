@@ -193,6 +193,32 @@ service A something
     EXPECT_TRUE(service->is_override());
 }
 
+TEST(init, StartConsole) {
+    std::string init_script = R"init(
+service console /system/bin/sh
+    class core
+    console console
+    disabled
+    user root
+    group root shell log readproc
+    seclabel u:r:su:s0
+    setenv HOSTNAME console
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_EQ(getsid(pid), pid);
+    service->Stop();
+}
+
 static std::string GetSecurityContext() {
     char* ctx;
     if (getcon(&ctx) == -1) {
