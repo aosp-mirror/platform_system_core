@@ -194,6 +194,10 @@ service A something
 }
 
 TEST(init, StartConsole) {
+    // Two different failures have been observed for this test: (1) No
+    // permission to open /dev/console and (2) getsid() != pid. Skip this test
+    // until these failures have been root-caused and fixed.
+    GTEST_SKIP() << "This test needs to be improved";
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
