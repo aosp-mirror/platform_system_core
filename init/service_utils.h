@@ -26,6 +26,7 @@
 #include <android-base/unique_fd.h>
 #include <cutils/iosched_policy.h>
 
+#include "interprocess_fifo.h"
 #include "mount_namespace.h"
 #include "result.h"
 
@@ -36,6 +37,7 @@ namespace init {
 enum ServiceCode : uint8_t {
     kActivatingCgroupsFailed,
     kCgroupsActivated,
+    kSetSidFinished,
 };
 
 class Descriptor {
@@ -100,7 +102,7 @@ inline bool RequiresConsole(const ProcessAttributes& attr) {
     return !attr.console.empty();
 }
 
-Result<void> SetProcessAttributes(const ProcessAttributes& attr);
+Result<void> SetProcessAttributes(const ProcessAttributes& attr, InterprocessFifo setsid_finished);
 
 Result<void> WritePidToFiles(std::vector<std::string>* files);
 

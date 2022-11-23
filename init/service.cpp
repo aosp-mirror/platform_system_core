@@ -16,6 +16,7 @@
 
 #include "service.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <linux/securebits.h>
@@ -226,7 +227,7 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
     }
 }
 
-void Service::SetProcessAttributesAndCaps() {
+void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
     // Keep capabilites on uid change.
     if (capabilities_ && proc_attr_.uid) {
         // If Android is running in a container, some securebits might already
@@ -241,7 +242,7 @@ void Service::SetProcessAttributesAndCaps() {
         }
     }
 
-    if (auto result = SetProcessAttributes(proc_attr_); !result.ok()) {
+    if (auto result = SetProcessAttributes(proc_attr_, std::move(setsid_finished)); !result.ok()) {
         LOG(FATAL) << "cannot set attribute for " << name_ << ": " << result.error();
     }
 
@@ -507,7 +508,7 @@ void Service::ConfigureMemcg() {
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
 void Service::RunService(const std::vector<Descriptor>& descriptors,
-                         InterprocessFifo cgroups_activated) {
+                         InterprocessFifo cgroups_activated, InterprocessFifo setsid_finished) {
     if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
@@ -555,7 +556,7 @@ void Service::RunService(const std::vector<Descriptor>& descriptors,
 
     // As requested, set our gid, supplemental gids, uid, context, and
     // priority. Aborts on failure.
-    SetProcessAttributesAndCaps();
+    SetProcessAttributesAndCaps(std::move(setsid_finished));
 
     if (!ExpandArgsAndExecv(args_, sigstop_)) {
         PLOG(ERROR) << "cannot execv('" << args_[0]
@@ -598,11 +599,14 @@ Result<void> Service::Start() {
         return {};
     }
 
-    InterprocessFifo cgroups_activated;
-
-    if (Result<void> result = cgroups_activated.Initialize(); !result.ok()) {
-        return result;
-    }
+    // cgroups_activated is used for communication from the parent to the child
+    // while setsid_finished is used for communication from the child process to
+    // the parent process. These two communication channels are separate because
+    // combining these into a single communication channel would introduce a
+    // race between the Write() calls by the parent and by the child.
+    InterprocessFifo cgroups_activated, setsid_finished;
+    OR_RETURN(cgroups_activated.Initialize());
+    OR_RETURN(setsid_finished.Initialize());
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
         return result;
@@ -661,10 +665,12 @@ Result<void> Service::Start() {
     if (pid == 0) {
         umask(077);
         cgroups_activated.CloseWriteFd();
-        RunService(descriptors, std::move(cgroups_activated));
+        setsid_finished.CloseReadFd();
+        RunService(descriptors, std::move(cgroups_activated), std::move(setsid_finished));
         _exit(127);
     } else {
         cgroups_activated.CloseReadFd();
+        setsid_finished.CloseWriteFd();
     }
 
     if (pid < 0) {
@@ -720,6 +726,35 @@ Result<void> Service::Start() {
     if (Result<void> result = cgroups_activated.Write(kCgroupsActivated); !result.ok()) {
         return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
+
+    cgroups_activated.Close();
+
+    // Call setpgid() from the parent process to make sure that this call has
+    // finished before the parent process calls kill(-pgid, ...).
+    if (!RequiresConsole(proc_attr_)) {
+        if (setpgid(pid, pid) < 0) {
+            switch (errno) {
+                case EACCES:  // Child has already performed setpgid() followed by execve().
+                case ESRCH:   // Child process no longer exists.
+                    break;
+                default:
+                    PLOG(ERROR) << "setpgid() from parent failed";
+            }
+        }
+    } else {
+        // The Read() call below will return an error if the child is killed.
+        if (Result<uint8_t> result = setsid_finished.Read();
+            !result.ok() || *result != kSetSidFinished) {
+            if (!result.ok()) {
+                return Error() << "Waiting for setsid() failed: " << result.error();
+            } else {
+                return Error() << "Waiting for setsid() failed: " << static_cast<uint32_t>(*result)
+                               << " <> " << static_cast<uint32_t>(kSetSidFinished);
+            }
+        }
+    }
+
+    setsid_finished.Close();
 
     NotifyStateChange("running");
     reboot_on_failure.Disable();
