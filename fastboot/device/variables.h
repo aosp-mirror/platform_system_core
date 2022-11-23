@@ -54,6 +54,8 @@ bool GetPartitionIsLogical(FastbootDevice* device, const std::vector<std::string
                            std::string* message);
 bool GetIsUserspace(FastbootDevice* device, const std::vector<std::string>& args,
                     std::string* message);
+bool GetIsForceDebuggable(FastbootDevice* device, const std::vector<std::string>& args,
+                          std::string* message);
 bool GetHardwareRevision(FastbootDevice* device, const std::vector<std::string>& args,
                          std::string* message);
 bool GetVariant(FastbootDevice* device, const std::vector<std::string>& args, std::string* message);
