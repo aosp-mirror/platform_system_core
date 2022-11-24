@@ -76,7 +76,7 @@ cc_library_static {
     name: "libbatterymonitor",
     defaults: ["libbatterymonitor_defaults"],
     static_libs: [
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
     ],
     whole_static_libs: [
         // Need to translate HIDL to AIDL to support legacy APIs in
@@ -202,12 +202,12 @@ cc_library_static {
     defaults: ["libhealthd_charger_ui_defaults"],
 
     static_libs: [
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
         "android.hardware.health-translate-ndk",
     ],
 
     export_static_lib_headers: [
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
     ],
 }
 
@@ -279,7 +279,7 @@ cc_defaults {
     static_libs: [
         // common
         "android.hardware.health@1.0-convert",
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
         "libbatterymonitor",
         "libcharger_sysprop",
         "libhealthd_charger_nops",
