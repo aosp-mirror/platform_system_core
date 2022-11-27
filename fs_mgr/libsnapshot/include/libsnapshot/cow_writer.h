@@ -52,6 +52,9 @@ struct CowOptions {
 
     // Number of threads for compression
     int num_compress_threads = 0;
+
+    // Batch write cluster ops
+    bool batch_write = false;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -188,7 +191,9 @@ class CowWriter : public ICowWriter {
     bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
     void AddOperation(const CowOperation& op);
     void InitPos();
+    void InitBatchWrites();
     void InitWorkers();
+    bool FlushCluster();
 
     bool CompressBlocks(size_t num_blocks, const void* data);
     bool SetFd(android::base::borrowed_fd fd);
@@ -202,8 +207,11 @@ class CowWriter : public ICowWriter {
     CowHeader header_{};
     CowFooter footer_{};
     CowCompressionAlgorithm compression_ = kCowCompressNone;
+    uint64_t current_op_pos_ = 0;
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
+    uint64_t current_data_pos_ = 0;
+    ssize_t total_data_written_ = 0;
     uint32_t cluster_size_ = 0;
     uint32_t current_cluster_size_ = 0;
     uint64_t current_data_size_ = 0;
@@ -217,6 +225,15 @@ class CowWriter : public ICowWriter {
     std::vector<std::future<bool>> threads_;
     std::vector<std::basic_string<uint8_t>> compressed_buf_;
     std::vector<std::basic_string<uint8_t>>::iterator buf_iter_;
+
+    std::vector<std::unique_ptr<CowOperation>> opbuffer_vec_;
+    std::vector<std::unique_ptr<uint8_t[]>> databuffer_vec_;
+    std::unique_ptr<struct iovec[]> cowop_vec_;
+    int op_vec_index_ = 0;
+
+    std::unique_ptr<struct iovec[]> data_vec_;
+    int data_vec_index_ = 0;
+    bool batch_write_ = false;
 };
 
 }  // namespace snapshot

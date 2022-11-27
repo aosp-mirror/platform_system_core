@@ -15,6 +15,7 @@
 //
 
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <limits>
@@ -162,9 +163,16 @@ void CowWriter::SetupWriteOptions() {
         num_compress_threads_ = 1;
         // We prefer not to have more than two threads as the overhead of additional
         // threads is far greater than cutting down compression time.
-        if (android::base::GetBoolProperty("ro.virtual_ab.compression.threads", false)) {
+        if (header_.cluster_ops &&
+            android::base::GetBoolProperty("ro.virtual_ab.compression.threads", false)) {
             num_compress_threads_ = 2;
         }
+    }
+
+    if (header_.cluster_ops &&
+        (android::base::GetBoolProperty("ro.virtual_ab.batch_writes", false) ||
+         options_.batch_write)) {
+        batch_write_ = true;
     }
 }
 
@@ -240,12 +248,40 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
     return true;
 }
 
+void CowWriter::InitBatchWrites() {
+    if (batch_write_) {
+        cowop_vec_ = std::make_unique<struct iovec[]>(header_.cluster_ops);
+        data_vec_ = std::make_unique<struct iovec[]>(header_.cluster_ops);
+        struct iovec* cowop_ptr = cowop_vec_.get();
+        struct iovec* data_ptr = data_vec_.get();
+        for (size_t i = 0; i < header_.cluster_ops; i++) {
+            std::unique_ptr<CowOperation> op = std::make_unique<CowOperation>();
+            cowop_ptr[i].iov_base = op.get();
+            cowop_ptr[i].iov_len = sizeof(CowOperation);
+            opbuffer_vec_.push_back(std::move(op));
+
+            std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(header_.block_size * 2);
+            data_ptr[i].iov_base = buffer.get();
+            data_ptr[i].iov_len = header_.block_size * 2;
+            databuffer_vec_.push_back(std::move(buffer));
+        }
+
+        current_op_pos_ = next_op_pos_;
+        current_data_pos_ = next_data_pos_;
+    }
+
+    std::string batch_write = batch_write_ ? "enabled" : "disabled";
+    LOG(INFO) << "Batch writes: " << batch_write;
+}
+
 void CowWriter::InitWorkers() {
     for (int i = 0; i < num_compress_threads_; i++) {
         auto wt = std::make_unique<CompressWorker>(compression_, header_.block_size);
         threads_.emplace_back(std::async(std::launch::async, &CompressWorker::RunThread, wt.get()));
         compress_threads_.push_back(std::move(wt));
     }
+
+    LOG(INFO) << num_compress_threads_ << " thread used for compression";
 }
 
 bool CowWriter::Initialize(unique_fd&& fd) {
@@ -341,6 +377,7 @@ bool CowWriter::OpenForWrite() {
     }
 
     InitPos();
+    InitBatchWrites();
 
     return true;
 }
@@ -374,6 +411,9 @@ bool CowWriter::OpenForAppend(uint64_t label) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
+
+    InitBatchWrites();
+
     return EmitClusterIfNeeded();
 }
 
@@ -522,7 +562,7 @@ bool CowWriter::EmitLabel(uint64_t label) {
 bool CowWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     CHECK(!merge_in_progress_);
     size_t to_add = 0;
-    size_t max_ops = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t);
+    size_t max_ops = (header_.block_size * 2) / sizeof(uint32_t);
     while (num_ops > 0) {
         CowOperation op = {};
         op.type = kCowSequenceOp;
@@ -567,6 +607,11 @@ static void SHA256(const void*, size_t, uint8_t[]) {
 }
 
 bool CowWriter::Finalize() {
+    if (!FlushCluster()) {
+        LOG(ERROR) << "Finalize: FlushCluster() failed";
+        return false;
+    }
+
     auto continue_cluster_size = current_cluster_size_;
     auto continue_data_size = current_data_size_;
     auto continue_data_pos = next_data_pos_;
@@ -631,6 +676,9 @@ bool CowWriter::Finalize() {
         next_op_pos_ = continue_op_pos;
         footer_.op.num_ops = continue_num_ops;
     }
+
+    FlushCluster();
+
     return Sync();
 }
 
@@ -662,6 +710,35 @@ bool CowWriter::EnsureSpaceAvailable(const uint64_t bytes_needed) const {
     return true;
 }
 
+bool CowWriter::FlushCluster() {
+    ssize_t ret;
+
+    if (op_vec_index_) {
+        ret = pwritev(fd_.get(), cowop_vec_.get(), op_vec_index_, current_op_pos_);
+        if (ret != (op_vec_index_ * sizeof(CowOperation))) {
+            PLOG(ERROR) << "pwritev failed for CowOperation. Expected: "
+                        << (op_vec_index_ * sizeof(CowOperation));
+            return false;
+        }
+    }
+
+    if (data_vec_index_) {
+        ret = pwritev(fd_.get(), data_vec_.get(), data_vec_index_, current_data_pos_);
+        if (ret != total_data_written_) {
+            PLOG(ERROR) << "pwritev failed for data. Expected: " << total_data_written_;
+            return false;
+        }
+    }
+
+    total_data_written_ = 0;
+    op_vec_index_ = 0;
+    data_vec_index_ = 0;
+    current_op_pos_ = next_op_pos_;
+    current_data_pos_ = next_data_pos_;
+
+    return true;
+}
+
 bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t size) {
     if (!EnsureSpaceAvailable(next_op_pos_ + sizeof(op))) {
         return false;
@@ -670,14 +747,43 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
         return false;
     }
 
-    if (!android::base::WriteFullyAtOffset(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op),
-                                           next_op_pos_)) {
-        return false;
+    if (batch_write_) {
+        CowOperation* cow_op = reinterpret_cast<CowOperation*>(cowop_vec_[op_vec_index_].iov_base);
+        std::memcpy(cow_op, &op, sizeof(CowOperation));
+        op_vec_index_ += 1;
+
+        if (data != nullptr && size > 0) {
+            struct iovec* data_ptr = data_vec_.get();
+            std::memcpy(data_ptr[data_vec_index_].iov_base, data, size);
+            data_ptr[data_vec_index_].iov_len = size;
+            data_vec_index_ += 1;
+            total_data_written_ += size;
+        }
+    } else {
+        if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
+            PLOG(ERROR) << "lseek failed for writing operation.";
+            return false;
+        }
+        if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&op), sizeof(op))) {
+            return false;
+        }
+        if (data != nullptr && size > 0) {
+            if (!WriteRawData(data, size)) return false;
+        }
     }
-    if (data != nullptr && size > 0) {
-        if (!WriteRawData(data, size)) return false;
-    }
+
     AddOperation(op);
+
+    if (batch_write_) {
+        if (op_vec_index_ == header_.cluster_ops || data_vec_index_ == header_.cluster_ops ||
+            op.type == kCowLabelOp || op.type == kCowClusterOp) {
+            if (!FlushCluster()) {
+                LOG(ERROR) << "Failed to flush cluster data";
+                return false;
+            }
+        }
+    }
+
     return EmitClusterIfNeeded();
 }
 
