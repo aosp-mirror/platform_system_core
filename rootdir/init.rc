@@ -1108,6 +1108,7 @@ on boot
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /dev/sys/fs/by-name/userdata/cp_interval 200
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
+    write /dev/sys/fs/by-name/userdata/iostat_period_ms 1000
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
     # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
