@@ -399,7 +399,6 @@ TEST(propertyinfoserializer, RealProperties) {
       {"dalvik.vm.lockprof.threshold", "u:object_r:dalvik_prop:s0"},
       {"dalvik.vm.stack-trace-file", "u:object_r:dalvik_prop:s0"},
       {"dalvik.vm.usejit", "u:object_r:dalvik_prop:s0"},
-      {"dalvik.vm.usejitprofiles", "u:object_r:dalvik_prop:s0"},
       {"debug.atrace.tags.enableflags", "u:object_r:debug_prop:s0"},
       {"debug.force_rtl", "u:object_r:debug_prop:s0"},
       {"dev.bootcomplete", "u:object_r:system_prop:s0"},
