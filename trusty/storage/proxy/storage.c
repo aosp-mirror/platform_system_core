@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <cutils/properties.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -42,6 +43,22 @@ enum sync_state {
 };
 
 static const char *ssdir_name;
+
+/*
+ * Property set to 1 after we have opened a file under ssdir_name. The backing
+ * files for both TD and TDP are currently located under /data/vendor/ss and can
+ * only be opened once userdata is mounted. This storageproxyd service is
+ * restarted when userdata is available, which causes the Trusty storage service
+ * to reconnect and attempt to open the backing files for TD and TDP. Once we
+ * set this property, other users can expect that the Trusty storage service
+ * ports will be available (although they may block if still being initialized),
+ * and connections will not be reset after this point (assuming the
+ * storageproxyd service stays running).
+ */
+#define FS_READY_PROPERTY "ro.vendor.trusty.storage.fs_ready"
+
+/* has FS_READY_PROPERTY been set? */
+static bool fs_ready_initialized = false;
 
 static enum sync_state fs_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
@@ -335,6 +352,16 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len) {
     resp.handle = insert_fd(open_flags, rc);
     ALOGV("%s: \"%s\": fd = %u: handle = %d\n",
           __func__, path, rc, resp.handle);
+
+    /* a backing file has been opened, notify any waiting init steps */
+    if (!fs_ready_initialized) {
+        rc = property_set(FS_READY_PROPERTY, "1");
+        if (rc == 0) {
+            fs_ready_initialized = true;
+        } else {
+            ALOGE("Could not set property %s, rc: %d\n", FS_READY_PROPERTY, rc);
+        }
+    }
 
     return ipc_respond(msg, &resp, sizeof(resp));
 
