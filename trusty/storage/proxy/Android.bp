@@ -32,11 +32,11 @@ cc_binary {
 
     shared_libs: [
         "libbase",
+        "libcutils",
         "liblog",
         "libhardware_legacy",
     ],
     header_libs: [
-        "libcutils_headers",
         "libgsi_headers",
     ],
 
