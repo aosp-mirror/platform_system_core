@@ -1422,9 +1422,12 @@ LOG OK "/system/build.prop content remains after reboot"
 LOG RUN "flash vendor, and confirm vendor override disappears"
 
 is_bootloader_fastboot=true
-# cuttlefish?
-[[ "$(get_property ro.product.vendor.device)" == vsoc_* ]] &&
-  is_bootloader_fastboot=false
+# virtual device?
+case "$(get_property ro.product.vendor.device)" in
+  vsoc_* | emulator_* | emulator64_*)
+    is_bootloader_fastboot=false
+    ;;
+esac
 is_userspace_fastboot=false
 
 if ! ${is_bootloader_fastboot}; then
