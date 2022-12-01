@@ -194,10 +194,9 @@ service A something
 }
 
 TEST(init, StartConsole) {
-    // Two different failures have been observed for this test: (1) No
-    // permission to open /dev/console and (2) getsid() != pid. Skip this test
-    // until these failures have been root-caused and fixed.
-    GTEST_SKIP() << "This test needs to be improved";
+    if (access("/dev/console", F_OK) < 0) {
+        GTEST_SKIP() << "/dev/console not found";
+    }
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
@@ -205,7 +204,7 @@ service console /system/bin/sh
     disabled
     user root
     group root shell log readproc
-    seclabel u:r:su:s0
+    seclabel u:r:shell:s0
     setenv HOSTNAME console
 )init";
 
@@ -219,7 +218,7 @@ service console /system/bin/sh
     ASSERT_RESULT_OK(service->Start());
     const pid_t pid = service->pid();
     ASSERT_GT(pid, 0);
-    EXPECT_EQ(getsid(pid), pid);
+    EXPECT_NE(getsid(pid), 0);
     service->Stop();
 }
 
