@@ -136,8 +136,6 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
-pid_t Service::exec_service_pid_ = -1;
-std::chrono::time_point<std::chrono::steady_clock> Service::exec_service_started_;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)
@@ -433,8 +431,6 @@ Result<void> Service::ExecStart() {
 
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
-    exec_service_pid_ = pid_;
-    exec_service_started_ = std::chrono::steady_clock::now();
 
     LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
               << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
