@@ -104,10 +104,6 @@ class Service {
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
-    static pid_t exec_service_pid() { return exec_service_pid_; }
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started() {
-        return exec_service_started_;
-    }
 
     const std::string& name() const { return name_; }
     const std::set<std::string>& classnames() const { return classnames_; }
@@ -160,8 +156,6 @@ class Service {
     void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
-    static pid_t exec_service_pid_;
 
     const std::string name_;
     std::set<std::string> classnames_;
