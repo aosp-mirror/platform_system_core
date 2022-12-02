@@ -293,23 +293,23 @@ TEST(SocketMockTest, TestSendSuccess) {
 }
 
 TEST(SocketMockTest, TestSendFailure) {
-    SocketMock* mock = new SocketMock;
+    std::unique_ptr<SocketMock> mock(new SocketMock);
 
     mock->ExpectSendFailure("foo");
-    EXPECT_FALSE(SendString(mock, "foo"));
+    EXPECT_FALSE(SendString(mock.get(), "foo"));
 
-    EXPECT_NONFATAL_FAILURE(SendString(mock, "foo"), "no message was expected");
+    EXPECT_NONFATAL_FAILURE(SendString(mock.get(), "foo"), "no message was expected");
 
     mock->ExpectSend("foo");
-    EXPECT_NONFATAL_FAILURE(SendString(mock, "bar"), "expected foo, but got bar");
-    EXPECT_TRUE(SendString(mock, "foo"));
+    EXPECT_NONFATAL_FAILURE(SendString(mock.get(), "bar"), "expected foo, but got bar");
+    EXPECT_TRUE(SendString(mock.get(), "foo"));
 
     mock->AddReceive("foo");
-    EXPECT_NONFATAL_FAILURE(SendString(mock, "foo"), "called out-of-order");
-    EXPECT_TRUE(ReceiveString(mock, "foo"));
+    EXPECT_NONFATAL_FAILURE(SendString(mock.get(), "foo"), "called out-of-order");
+    EXPECT_TRUE(ReceiveString(mock.get(), "foo"));
 
     mock->ExpectSend("foo");
-    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
+    EXPECT_NONFATAL_FAILURE(mock.reset(), "1 event(s) were not handled");
 }
 
 TEST(SocketMockTest, TestReceiveSuccess) {
@@ -331,33 +331,33 @@ TEST(SocketMockTest, TestReceiveSuccess) {
 }
 
 TEST(SocketMockTest, TestReceiveFailure) {
-    SocketMock* mock = new SocketMock;
+    std::unique_ptr<SocketMock> mock(new SocketMock);
 
     mock->AddReceiveFailure();
-    EXPECT_FALSE(ReceiveString(mock, "foo"));
+    EXPECT_FALSE(ReceiveString(mock.get(), "foo"));
     EXPECT_FALSE(mock->ReceiveTimedOut());
 
     mock->AddReceiveTimeout();
-    EXPECT_FALSE(ReceiveString(mock, "foo"));
+    EXPECT_FALSE(ReceiveString(mock.get(), "foo"));
     EXPECT_TRUE(mock->ReceiveTimedOut());
 
     mock->AddReceive("foo");
     mock->AddReceiveFailure();
-    EXPECT_FALSE(ReceiveString(mock, "foobar"));
+    EXPECT_FALSE(ReceiveString(mock.get(), "foobar"));
 
-    EXPECT_NONFATAL_FAILURE(ReceiveString(mock, "foo"), "no message was ready");
+    EXPECT_NONFATAL_FAILURE(ReceiveString(mock.get(), "foo"), "no message was ready");
 
     mock->ExpectSend("foo");
-    EXPECT_NONFATAL_FAILURE(ReceiveString(mock, "foo"), "called out-of-order");
-    EXPECT_TRUE(SendString(mock, "foo"));
+    EXPECT_NONFATAL_FAILURE(ReceiveString(mock.get(), "foo"), "called out-of-order");
+    EXPECT_TRUE(SendString(mock.get(), "foo"));
 
     char c;
     mock->AddReceive("foo");
     EXPECT_NONFATAL_FAILURE(mock->Receive(&c, 1, 0), "not enough bytes (1) for foo");
-    EXPECT_TRUE(ReceiveString(mock, "foo"));
+    EXPECT_TRUE(ReceiveString(mock.get(), "foo"));
 
     mock->AddReceive("foo");
-    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
+    EXPECT_NONFATAL_FAILURE(mock.reset(), "1 event(s) were not handled");
 }
 
 TEST(SocketMockTest, TestAcceptSuccess) {
@@ -372,14 +372,14 @@ TEST(SocketMockTest, TestAcceptSuccess) {
 }
 
 TEST(SocketMockTest, TestAcceptFailure) {
-    SocketMock* mock = new SocketMock;
+    std::unique_ptr<SocketMock> mock(new SocketMock);
 
     EXPECT_NONFATAL_FAILURE(mock->Accept(), "no socket was ready");
 
     mock->ExpectSend("foo");
     EXPECT_NONFATAL_FAILURE(mock->Accept(), "called out-of-order");
-    EXPECT_TRUE(SendString(mock, "foo"));
+    EXPECT_TRUE(SendString(mock.get(), "foo"));
 
     mock->AddAccept(nullptr);
-    EXPECT_NONFATAL_FAILURE(delete mock, "1 event(s) were not handled");
+    EXPECT_NONFATAL_FAILURE(mock.reset(), "1 event(s) were not handled");
 }
