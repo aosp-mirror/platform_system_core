@@ -17,10 +17,12 @@ LOCAL_DIR := $(GET_LOCAL_DIR)
 
 MODULE := $(LOCAL_DIR)
 
+MODULE_AIDL_PACKAGE := com/android/trusty/binder/test
+
 MODULE_AIDLS := \
-	$(LOCAL_DIR)/ByteEnum.aidl \
-	$(LOCAL_DIR)/IntEnum.aidl \
-	$(LOCAL_DIR)/ITestService.aidl \
-	$(LOCAL_DIR)/LongEnum.aidl \
+	$(LOCAL_DIR)/$(MODULE_AIDL_PACKAGE)/ByteEnum.aidl \
+	$(LOCAL_DIR)/$(MODULE_AIDL_PACKAGE)/IntEnum.aidl \
+	$(LOCAL_DIR)/$(MODULE_AIDL_PACKAGE)/ITestService.aidl \
+	$(LOCAL_DIR)/$(MODULE_AIDL_PACKAGE)/LongEnum.aidl \
 
 include make/aidl.mk
