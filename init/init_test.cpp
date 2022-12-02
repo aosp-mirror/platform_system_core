@@ -193,6 +193,35 @@ service A something
     EXPECT_TRUE(service->is_override());
 }
 
+TEST(init, StartConsole) {
+    if (access("/dev/console", F_OK) < 0) {
+        GTEST_SKIP() << "/dev/console not found";
+    }
+    std::string init_script = R"init(
+service console /system/bin/sh
+    class core
+    console console
+    disabled
+    user root
+    group root shell log readproc
+    seclabel u:r:shell:s0
+    setenv HOSTNAME console
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_NE(getsid(pid), 0);
+    service->Stop();
+}
+
 static std::string GetSecurityContext() {
     char* ctx;
     if (getcon(&ctx) == -1) {
@@ -246,6 +275,27 @@ void InitApexService(const std::string_view& init_template) {
             &ServiceList::GetInstance());
 }
 
+void CleanupApexServices() {
+    std::vector<std::string> names;
+    for (const auto& s : ServiceList::GetInstance()) {
+        names.push_back(s->name());
+    }
+
+    for (const auto& name : names) {
+        auto s = ServiceList::GetInstance().FindService(name);
+        auto pid = s->pid();
+        ServiceList::GetInstance().RemoveService(*s);
+        if (pid > 0) {
+            kill(pid, SIGTERM);
+            kill(pid, SIGKILL);
+        }
+    }
+
+    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& s) -> bool {
+        return true;
+    });
+}
+
 void TestApexServicesInit(const std::vector<std::string>& apex_services,
             const std::vector<std::string>& other_apex_services,
             const std::vector<std::string> non_apex_services) {
@@ -270,13 +320,7 @@ void TestApexServicesInit(const std::vector<std::string>& apex_services,
     TestRemoveApexService(other_apex_services, /*exist*/ true);
     TestRemoveApexService(non_apex_services, /*exist*/ true);
 
-    ServiceList::GetInstance().RemoveServiceIf([&](const std::unique_ptr<Service>& s) -> bool {
-        return true;
-    });
-
-    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& s) -> bool {
-        return true;
-    });
+    CleanupApexServices();
 }
 
 TEST(init, StopServiceByApexName) {

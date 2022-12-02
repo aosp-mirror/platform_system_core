@@ -25,6 +25,7 @@
 #include <android/binder_manager.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.1/IFastboot.h>
+#include <fastbootshim.h>
 #include <fs_mgr.h>
 #include <fs_mgr/roots.h>
 #include <health-shim/shim.h>
@@ -64,6 +65,27 @@ std::shared_ptr<aidl::android::hardware::health::IHealth> get_health_service() {
     return nullptr;
 }
 
+std::shared_ptr<aidl::android::hardware::fastboot::IFastboot> get_fastboot_service() {
+    using aidl::android::hardware::fastboot::IFastboot;
+    using HidlFastboot = android::hardware::fastboot::V1_1::IFastboot;
+    using aidl::android::hardware::fastboot::FastbootShim;
+    auto service_name = IFastboot::descriptor + "/default"s;
+    ndk::SpAIBinder binder(AServiceManager_getService(service_name.c_str()));
+    std::shared_ptr<IFastboot> fastboot = IFastboot::fromBinder(binder);
+    if (fastboot != nullptr) {
+        LOG(INFO) << "Using AIDL fastboot service";
+        return fastboot;
+    }
+    LOG(INFO) << "Unable to get AIDL fastboot service, trying HIDL...";
+    android::sp<HidlFastboot> hidl_fastboot = HidlFastboot::getService();
+    if (hidl_fastboot != nullptr) {
+        LOG(INFO) << "Found and now using fastboot HIDL implementation";
+        return ndk::SharedRefBase::make<FastbootShim>(hidl_fastboot);
+    }
+    LOG(WARNING) << "No fastboot implementation is found.";
+    return nullptr;
+}
+
 FastbootDevice::FastbootDevice()
     : kCommandMap({
               {FB_CMD_SET_ACTIVE, SetActiveHandler},
@@ -87,7 +109,7 @@ FastbootDevice::FastbootDevice()
       }),
       boot_control_hal_(BootControlClient::WaitForService()),
       health_hal_(get_health_service()),
-      fastboot_hal_(IFastboot::getService()),
+      fastboot_hal_(get_fastboot_service()),
       active_slot_("") {
     if (android::base::GetProperty("fastbootd.protocol", "usb") == "tcp") {
         transport_ = std::make_unique<ClientTcpTransport>();

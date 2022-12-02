@@ -71,6 +71,8 @@ struct HashtreeInfo {
     std::string algorithm;
     // The root digest of the merkle tree.
     std::string root_digest;
+    // If check_at_most_once is enabled.
+    bool check_at_most_once;
 };
 
 // fs_mgr_mount_all() updates fstab entries that reference device-mapper.

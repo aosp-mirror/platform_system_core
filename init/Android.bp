@@ -39,6 +39,7 @@ init_common_sources = [
     "epoll.cpp",
     "import_parser.cpp",
     "interface_utils.cpp",
+    "interprocess_fifo.cpp",
     "keychords.cpp",
     "parser.cpp",
     "property_type.cpp",
@@ -161,6 +162,7 @@ libinit_cc_defaults {
     },
     static_libs: [
         "libavb",
+        "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
         "libfsverity_init",
@@ -181,7 +183,6 @@ libinit_cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libbootloader_message",
         "libcrypto",
         "libcutils",
         "libdl",
@@ -200,6 +201,7 @@ libinit_cc_defaults {
         "libutils",
         "libziparchive",
     ],
+    header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
     visibility: [":__subpackages__"],
 }
@@ -275,7 +277,7 @@ cc_binary {
                 "init.rc",
                 "ueventd.rc",
                 "e2fsdroid",
-                "extra_free_kbytes.sh",
+                "extra_free_kbytes",
                 "make_f2fs",
                 "mke2fs",
                 "sload_f2fs",
@@ -307,7 +309,7 @@ soong_config_module_type {
     name: "init_first_stage_cc_defaults",
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
-    bool_variables: ["BOARD_BUILD_SYSTEM_ROOT_IMAGE", "BOARD_USES_RECOVERY_AS_BOOT"],
+    bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
     properties: ["installable"],
 }
 
@@ -316,9 +318,6 @@ soong_config_module_type {
 init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
-        BOARD_BUILD_SYSTEM_ROOT_IMAGE: {
-            installable: false,
-        },
         BOARD_USES_RECOVERY_AS_BOOT: {
             installable: false,
         },
@@ -469,6 +468,7 @@ cc_test {
         "epoll_test.cpp",
         "firmware_handler_test.cpp",
         "init_test.cpp",
+        "interprocess_fifo_test.cpp",
         "keychords_test.cpp",
         "oneshot_on_test.cpp",
         "persistent_properties_test.cpp",
@@ -483,7 +483,10 @@ cc_test {
         "ueventd_test.cpp",
         "util_test.cpp",
     ],
-    static_libs: ["libinit"],
+    static_libs: [
+        "libgmock",
+        "libinit",
+    ],
 
     test_suites: [
         "cts",
@@ -529,6 +532,7 @@ cc_library_static {
         "libcap",
     ],
     export_include_dirs: ["test_utils/include"], // for tests
+    header_libs: ["bionic_libc_platform_headers"],
 }
 
 // Host Verifier
@@ -607,6 +611,7 @@ cc_library_host_static {
 }
 
 sh_binary {
-    name: "extra_free_kbytes.sh",
+    name: "extra_free_kbytes",
     src: "extra_free_kbytes.sh",
+    filename_from_src: true,
 }

@@ -367,8 +367,6 @@ bootstat: Canonical boot reason: ${i}"
   adb logcat -b all ${timestamp} |
   grep bootstat[^e] |
   grep -v -F "bootstat: Service started: /system/bin/bootstat --record_boot_complete${match}
-bootstat: Failed to read /data/misc/bootstat/post_decrypt_time_elapsed: No such file or directory
-bootstat: Failed to parse boot time record: /data/misc/bootstat/post_decrypt_time_elapsed
 bootstat: Service started: /system/bin/bootstat --record_boot_reason
 bootstat: Service started: /system/bin/bootstat --set_system_boot_reason
 bootstat: Service started: /system/bin/bootstat --record_time_since_factory_reset
@@ -388,7 +386,6 @@ init    : processing action (sys.bootstat.first_zygote_start=0 && zygote-start) 
 init    : processing action (sys.boot_completed=1 && sys.bootstat.first_boot_completed=0) from (/system/etc/init/bootstat.rc
  (/system/bin/bootstat --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
  (/system/bin/bootstat --set_system_boot_reason --record_boot_complete --record_boot_reason --record_time_since_factory_reset -l)'
- (/system/bin/bootstat -r post_decrypt_time_elapsed)'
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_complete' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_boot_reason' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:
 init    : Command 'exec - system log -- /system/bin/bootstat --record_time_since_factory_reset' action=sys.boot_completed=1 && sys.bootstat.first_boot_completed=0 (/system/etc/init/bootstat.rc:

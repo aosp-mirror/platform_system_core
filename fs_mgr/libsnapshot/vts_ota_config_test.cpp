@@ -22,6 +22,9 @@ static int GetVsrLevel() {
 }
 
 TEST(VAB, Enabled) {
+    if (!android::base::GetBoolProperty("ro.build.ab_update", false) && (GetVsrLevel() < __ANDROID_API_T__)) {
+        GTEST_SKIP();
+    }
     ASSERT_TRUE(android::base::GetBoolProperty("ro.virtual_ab.enabled", false));
     if (GetVsrLevel() < __ANDROID_API_T__) {
         GTEST_SKIP();

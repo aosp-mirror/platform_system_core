@@ -168,7 +168,8 @@ void Descriptor::Publish() const {
 
 Result<Descriptor> SocketDescriptor::Create(const std::string& global_context) const {
     const auto& socket_context = context.empty() ? global_context : context;
-    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, perm, uid, gid, socket_context);
+    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, listen, perm, uid, gid,
+                               socket_context);
     if (!result.ok()) {
         return result.error();
     }
@@ -231,7 +232,7 @@ Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
     return {};
 }
 
-Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
+Result<void> SetProcessAttributes(const ProcessAttributes& attr, InterprocessFifo setsid_finished) {
     if (attr.ioprio_class != IoSchedClass_NONE) {
         if (android_set_ioprio(getpid(), attr.ioprio_class, attr.ioprio_pri)) {
             PLOG(ERROR) << "failed to set pid " << getpid() << " ioprio=" << attr.ioprio_class
@@ -239,11 +240,17 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         }
     }
 
-    if (!attr.console.empty()) {
+    if (RequiresConsole(attr)) {
         setsid();
+        setsid_finished.Write(kSetSidFinished);
+        setsid_finished.Close();
         OpenConsole(attr.console);
     } else {
-        if (setpgid(0, getpid()) == -1) {
+        // Without PID namespaces, this call duplicates the setpgid() call from
+        // the parent process. With PID namespaces, this setpgid() call sets the
+        // process group ID for a child of the init process in the PID
+        // namespace.
+        if (setpgid(0, 0) == -1) {
             return ErrnoError() << "setpgid failed";
         }
         SetupStdio(attr.stdio_to_kmsg);
@@ -279,6 +286,15 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 }
 
 Result<void> WritePidToFiles(std::vector<std::string>* files) {
+    if (files->empty()) {
+        // No files to write pid to, exit early.
+        return {};
+    }
+
+    if (!CgroupsAvailable()) {
+        return Error() << "cgroups are not available";
+    }
+
     // See if there were "writepid" instructions to write to files under cpuset path.
     std::string cpuset_path;
     if (CgroupGetControllerPath("cpuset", &cpuset_path)) {

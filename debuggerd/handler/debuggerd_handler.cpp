@@ -24,6 +24,7 @@
 #include <sched.h>
 #include <signal.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +52,6 @@
 
 #include "handler/fallback.h"
 
-using ::android::base::GetBoolProperty;
 using ::android::base::ParseBool;
 using ::android::base::ParseBoolResult;
 using ::android::base::Pipe;
@@ -87,10 +87,31 @@ static pid_t __gettid() {
   return syscall(__NR_gettid);
 }
 
+static bool property_parse_bool(const char* name) {
+  const prop_info* pi = __system_property_find(name);
+  if (!pi) return false;
+  bool cookie = false;
+  __system_property_read_callback(
+      pi,
+      [](void* cookie, const char*, const char* value, uint32_t) {
+        *reinterpret_cast<bool*>(cookie) = ParseBool(value) == ParseBoolResult::kTrue;
+      },
+      &cookie);
+  return cookie;
+}
+
 static bool is_permissive_mte() {
   // Environment variable for testing or local use from shell.
   char* permissive_env = getenv("MTE_PERMISSIVE");
-  return GetBoolProperty("persist.sys.mte.permissive", false) ||
+  char process_sysprop_name[512];
+  async_safe_format_buffer(process_sysprop_name, sizeof(process_sysprop_name),
+                           "persist.device_config.memory_safety_native.permissive.process.%s",
+                           getprogname());
+  // DO NOT REPLACE this with GetBoolProperty. That uses std::string which allocates, so it is
+  // not async-safe (and this functiong gets used in a signal handler).
+  return property_parse_bool("persist.sys.mte.permissive") ||
+         property_parse_bool("persist.device_config.memory_safety_native.permissive.default") ||
+         property_parse_bool(process_sysprop_name) ||
          (permissive_env && ParseBool(permissive_env) == ParseBoolResult::kTrue);
 }
 
@@ -623,6 +644,18 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     async_safe_format_log(ANDROID_LOG_ERROR, "libc",
                           "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
     pthread_mutex_unlock(&crash_mutex);
+  } else if (info->si_signo == SIGSEGV && info->si_code == SEGV_MTEAERR && getppid() == 1) {
+    // Back channel to init (see system/core/init/service.cpp) to signal that
+    // this process crashed due to an ASYNC MTE fault and should be considered
+    // for upgrade to SYNC mode. We are re-using the ART profiler signal, which
+    // is always handled (ignored in native processes, handled for generating a
+    // dump in ART processes), so a process will never crash from this signal
+    // except from here.
+    // The kernel is not particularly receptive to adding this information:
+    // https://lore.kernel.org/all/20220909180617.374238-1-fmayer@google.com/, so we work around
+    // like this.
+    info->si_signo = BIONIC_SIGNAL_ART_PROFILER;
+    resend_signal(info);
   }
 #endif
   else {

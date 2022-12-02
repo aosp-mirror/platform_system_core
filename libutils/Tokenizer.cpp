@@ -21,9 +21,10 @@
 #include <sys/stat.h>
 #include <utils/Log.h>
 
+#ifndef DEBUG_TOKENIZER
 // Enables debug output for the tokenizer.
 #define DEBUG_TOKENIZER 0
-
+#endif
 
 namespace android {
 
