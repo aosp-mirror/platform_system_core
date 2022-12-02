@@ -879,6 +879,8 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
             SetProperty("partition." + partition + ".verified.hash_alg", hashtree_info->algorithm);
             SetProperty("partition." + partition + ".verified.root_digest",
                         hashtree_info->root_digest);
+            SetProperty("partition." + partition + ".verified.check_at_most_once",
+                        hashtree_info->check_at_most_once ? "1" : "0");
         }
     }
 

@@ -1381,13 +1381,9 @@ static void PropertyServiceThread() {
     }
 
     while (true) {
-        auto pending_functions = epoll.Wait(std::nullopt);
-        if (!pending_functions.ok()) {
-            LOG(ERROR) << pending_functions.error();
-        } else {
-            for (const auto& function : *pending_functions) {
-                (*function)();
-            }
+        auto epoll_result = epoll.Wait(std::nullopt);
+        if (!epoll_result.ok()) {
+            LOG(ERROR) << epoll_result.error();
         }
     }
 }
@@ -1404,7 +1400,8 @@ void StartPropertyService(int* epoll_socket) {
     StartSendingMessages();
 
     if (auto result = CreateSocket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-                                   false, 0666, 0, 0, {});
+                                   /*passcred=*/false, /*should_listen=*/false, 0666, /*uid=*/0,
+                                   /*gid=*/0, /*socketcon=*/{});
         result.ok()) {
         property_set_fd = *result;
     } else {

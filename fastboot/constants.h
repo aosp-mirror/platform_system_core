@@ -42,7 +42,7 @@
 #define RESPONSE_DATA "DATA"
 #define RESPONSE_INFO "INFO"
 
-#define FB_COMMAND_SZ 64
+#define FB_COMMAND_SZ 4096
 #define FB_RESPONSE_SZ 256
 
 #define FB_VAR_VERSION "version"
@@ -64,6 +64,7 @@
 #define FB_VAR_SLOT_UNBOOTABLE "slot-unbootable"
 #define FB_VAR_IS_LOGICAL "is-logical"
 #define FB_VAR_IS_USERSPACE "is-userspace"
+#define FB_VAR_IS_FORCE_DEBUGGABLE "is-force-debuggable"
 #define FB_VAR_HW_REVISION "hw-revision"
 #define FB_VAR_VARIANT "variant"
 #define FB_VAR_OFF_MODE_CHARGE_STATE "off-mode-charge"

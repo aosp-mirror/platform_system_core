@@ -406,10 +406,10 @@ TEST_F(CrasherTest, tagged_fault_addr) {
       result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x[01]00000000000dead)");
 }
 
-// Marked as weak to prevent the compiler from removing the malloc in the caller. In theory, the
-// compiler could still clobber the argument register before trapping, but that's unlikely.
-__attribute__((weak)) void CrasherTest::Trap(void* ptr ATTRIBUTE_UNUSED) {
-  __builtin_trap();
+void CrasherTest::Trap(void* ptr) {
+  void (*volatile f)(void*) = nullptr;
+  __asm__ __volatile__("" : : "r"(f) : "memory");
+  f(ptr);
 }
 
 TEST_F(CrasherTest, heap_addr_in_register) {
@@ -445,6 +445,8 @@ TEST_F(CrasherTest, heap_addr_in_register) {
   ASSERT_MATCH(result, "memory near x0 \\(\\[anon:");
 #elif defined(__arm__)
   ASSERT_MATCH(result, "memory near r0 \\(\\[anon:");
+#elif defined(__riscv)
+  ASSERT_MATCH(result, "memory near a0 \\(\\[anon:");
 #elif defined(__x86_64__)
   ASSERT_MATCH(result, "memory near rdi \\(\\[anon:");
 #else
@@ -828,7 +830,7 @@ TEST_F(CrasherTest, mte_register_tag_dump) {
 
   StartIntercept(&output_fd);
   FinishCrasher();
-  AssertDeath(SIGTRAP);
+  AssertDeath(SIGSEGV);
   FinishIntercept(&intercept_result);
 
   ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
@@ -1403,7 +1405,7 @@ TEST_F(CrasherTest, seccomp_crash_oom) {
   // We can't actually generate a backtrace, just make sure that the process terminates.
 }
 
-__attribute__((noinline)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
+__attribute__((__noinline__)) extern "C" bool raise_debugger_signal(DebuggerdDumpType dump_type) {
   siginfo_t siginfo;
   siginfo.si_code = SI_QUEUE;
   siginfo.si_pid = getpid();
