@@ -320,13 +320,13 @@ class SocketConnection {
 
   private:
     bool PollIn(uint32_t* timeout_ms) {
-        struct pollfd ufds[1];
-        ufds[0].fd = socket_;
-        ufds[0].events = POLLIN;
-        ufds[0].revents = 0;
+        struct pollfd ufd = {
+                .fd = socket_,
+                .events = POLLIN,
+        };
         while (*timeout_ms > 0) {
             auto start_time = std::chrono::steady_clock::now();
-            int nr = poll(ufds, 1, *timeout_ms);
+            int nr = poll(&ufd, 1, *timeout_ms);
             auto now = std::chrono::steady_clock::now();
             auto time_elapsed =
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
