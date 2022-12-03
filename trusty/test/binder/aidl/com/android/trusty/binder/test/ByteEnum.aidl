@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package com.android.trusty.binder.test;
+
 /*
  * Hello, world!
  */
