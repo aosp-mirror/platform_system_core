@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package com.android.trusty.binder.test;
+
 @JavaDerive(toString=true)
 @Backing(type="int")
 enum IntEnum {
