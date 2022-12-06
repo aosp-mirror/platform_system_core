@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package com.android.trusty.binder.test;
 
-import com.android.trusty.binder.test.ByteEnum;
-import com.android.trusty.binder.test.IntEnum;
-import com.android.trusty.binder.test.LongEnum;
+import ByteEnum;
+import IntEnum;
+import LongEnum;
 
 interface ITestService {
     const @utf8InCpp String PORT = "com.android.trusty.binder.test.service";
