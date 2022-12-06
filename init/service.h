@@ -73,6 +73,8 @@ class Service {
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
             Subcontext* subcontext_for_restart_commands, const std::string& filename,
             const std::vector<std::string>& args);
+    Service(const Service&) = delete;
+    void operator=(const Service&) = delete;
 
     static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
