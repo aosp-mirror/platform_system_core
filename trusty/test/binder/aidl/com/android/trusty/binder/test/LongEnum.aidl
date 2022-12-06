@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package com.android.trusty.binder.test;
+
 @Backing(type="long")
 enum LongEnum {
     FOO = 100000000000,
