@@ -290,7 +290,8 @@ void Service::Reap(const siginfo_t& siginfo) {
     }
 
     if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
-        LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
+        LOG(ERROR) << "Service " << name_
+                   << " has 'reboot_on_failure' option and failed, shutting down system.";
         trigger_shutdown(*on_failure_reboot_target_);
     }
 
