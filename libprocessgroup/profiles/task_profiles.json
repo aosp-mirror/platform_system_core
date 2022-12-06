@@ -806,6 +806,10 @@
       "Profiles": [ "Dex2oatPerformance", "LowIoPriority", "TimerSlackHigh" ]
     },
     {
+      "Name": "Dex2OatBootBackground",
+      "Profiles": [ "Dex2OatBootComplete" ]
+    },
+    {
       "Name": "OtaProfiles",
       "Profiles": [ "ServiceCapacityLow", "LowIoPriority", "HighEnergySaving" ]
     }
