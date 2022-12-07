@@ -15,6 +15,7 @@ cc_defaults {
         "-fstack-protector-all",
         "-Wno-date-time",
     ],
+    tidy: false,  // crasher.cpp tests many memory access errors
     srcs: ["crasher.cpp"],
     arch: {
         arm: {

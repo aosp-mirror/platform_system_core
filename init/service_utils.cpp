@@ -52,7 +52,7 @@ Result<void> EnterNamespace(int nstype, const char* path) {
     if (fd == -1) {
         return ErrnoError() << "Could not open namespace at " << path;
     }
-    if (setns(fd, nstype) == -1) {
+    if (setns(fd.get(), nstype) == -1) {
         return ErrnoError() << "Could not setns() namespace at " << path;
     }
     return {};
@@ -127,22 +127,22 @@ Result<void> SetUpPidNamespace(const char* name) {
 
 void SetupStdio(bool stdio_to_kmsg) {
     auto fd = unique_fd{open("/dev/null", O_RDWR | O_CLOEXEC)};
-    dup2(fd, STDIN_FILENO);
+    dup2(fd.get(), STDIN_FILENO);
     if (stdio_to_kmsg) {
         fd.reset(open("/dev/kmsg_debug", O_WRONLY | O_CLOEXEC));
         if (fd == -1) fd.reset(open("/dev/null", O_WRONLY | O_CLOEXEC));
     }
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
+    dup2(fd.get(), STDOUT_FILENO);
+    dup2(fd.get(), STDERR_FILENO);
 }
 
 void OpenConsole(const std::string& console) {
     auto fd = unique_fd{open(console.c_str(), O_RDWR | O_CLOEXEC)};
     if (fd == -1) fd.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
+    ioctl(fd.get(), TIOCSCTTY, 0);
+    dup2(fd.get(), 0);
+    dup2(fd.get(), 1);
+    dup2(fd.get(), 2);
 }
 
 }  // namespace
@@ -190,7 +190,7 @@ Result<Descriptor> FileDescriptor::Create() const {
     }
 
     // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
-    fcntl(fd, F_SETFL, flags);
+    fcntl(fd.get(), F_SETFL, flags);
 
     return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
