@@ -47,6 +47,9 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # set RLIMIT_MEMLOCK to 64KB
+    setrlimit memlock 65536 65536
+
     # Set up linker config subdirectories based on mount namespaces
     mkdir /linkerconfig/bootstrap 0755
     mkdir /linkerconfig/default 0755
