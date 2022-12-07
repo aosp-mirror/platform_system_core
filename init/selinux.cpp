@@ -567,7 +567,7 @@ Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileNam
         return ErrnoError() << "Failed to open " << dstPath;
     }
 
-    ret = ExtractEntryToFile(archive, &entry, fd);
+    ret = ExtractEntryToFile(archive, &entry, fd.get());
     if (ret != 0) {
         return Error() << "Failed to extract entry \"" << fileName << "\" ("
                        << entry.uncompressed_length << " bytes) to \"" << dstPath
@@ -785,7 +785,7 @@ void SelinuxAvcLog(char* buf, size_t buf_len) {
         return;
     }
 
-    TEMP_FAILURE_RETRY(send(fd, &request, sizeof(request), 0));
+    TEMP_FAILURE_RETRY(send(fd.get(), &request, sizeof(request), 0));
 }
 
 }  // namespace

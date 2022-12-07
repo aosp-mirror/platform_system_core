@@ -120,12 +120,12 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, bool 
 
     if (passcred) {
         int on = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
+        if (setsockopt(fd.get(), SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
             return ErrnoError() << "Failed to set SO_PASSCRED '" << name << "'";
         }
     }
 
-    int ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
+    int ret = bind(fd.get(), (struct sockaddr*)&addr, sizeof(addr));
     int savederrno = errno;
 
     if (!secontext.empty()) {
@@ -145,7 +145,7 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, bool 
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
         return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
     }
-    if (should_listen && listen(fd, /* use OS maximum */ 1 << 30)) {
+    if (should_listen && listen(fd.get(), /* use OS maximum */ 1 << 30)) {
         return ErrnoError() << "Failed to listen on socket '" << addr.sun_path << "'";
     }
 
@@ -168,7 +168,7 @@ Result<std::string> ReadFile(const std::string& path) {
     // For security reasons, disallow world-writable
     // or group-writable files.
     struct stat sb;
-    if (fstat(fd, &sb) == -1) {
+    if (fstat(fd.get(), &sb) == -1) {
         return ErrnoError() << "fstat failed()";
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
