@@ -77,7 +77,7 @@ Result<PersistentProperties> LoadLegacyPersistentProperties() {
         }
 
         struct stat sb;
-        if (fstat(fd, &sb) == -1) {
+        if (fstat(fd.get(), &sb) == -1) {
             PLOG(ERROR) << "fstat on property file \"" << entry->d_name << "\" failed";
             continue;
         }
@@ -198,7 +198,7 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     if (!WriteStringToFd(serialized_string, fd)) {
         return ErrnoError() << "Unable to write file contents";
     }
-    fsync(fd);
+    fsync(fd.get());
     fd.reset();
 
     if (rename(temp_filename.c_str(), persistent_property_filename.c_str())) {
@@ -216,7 +216,7 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     if (dir_fd < 0) {
         return ErrnoError() << "Unable to open persistent properties directory for fsync()";
     }
-    fsync(dir_fd);
+    fsync(dir_fd.get());
 
     return {};
 }

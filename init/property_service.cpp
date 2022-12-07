@@ -300,13 +300,13 @@ class SocketConnection {
         if (!socket_.ok()) {
             return true;
         }
-        int result = TEMP_FAILURE_RETRY(send(socket_, &value, sizeof(value), 0));
+        int result = TEMP_FAILURE_RETRY(send(socket_.get(), &value, sizeof(value), 0));
         return result == sizeof(value);
     }
 
     bool GetSourceContext(std::string* source_context) const {
         char* c_source_context = nullptr;
-        if (getpeercon(socket_, &c_source_context) != 0) {
+        if (getpeercon(socket_.get(), &c_source_context) != 0) {
             return false;
         }
         *source_context = c_source_context;
@@ -320,13 +320,13 @@ class SocketConnection {
 
   private:
     bool PollIn(uint32_t* timeout_ms) {
-        struct pollfd ufds[1];
-        ufds[0].fd = socket_;
-        ufds[0].events = POLLIN;
-        ufds[0].revents = 0;
+        struct pollfd ufd = {
+                .fd = socket_.get(),
+                .events = POLLIN,
+        };
         while (*timeout_ms > 0) {
             auto start_time = std::chrono::steady_clock::now();
-            int nr = poll(ufds, 1, *timeout_ms);
+            int nr = poll(&ufd, 1, *timeout_ms);
             auto now = std::chrono::steady_clock::now();
             auto time_elapsed =
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
@@ -368,7 +368,7 @@ class SocketConnection {
                 return false;
             }
 
-            int result = TEMP_FAILURE_RETRY(recv(socket_, data, bytes_left, MSG_DONTWAIT));
+            int result = TEMP_FAILURE_RETRY(recv(socket_.get(), data, bytes_left, MSG_DONTWAIT));
             if (result <= 0) {
                 PLOG(ERROR) << "sys_prop: recv error";
                 return false;
