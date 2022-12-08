@@ -75,6 +75,7 @@ class IDeviceMapper {
                               const std::chrono::milliseconds& timeout_ms) = 0;
     virtual DmDeviceState GetState(const std::string& name) const = 0;
     virtual bool LoadTableAndActivate(const std::string& name, const DmTable& table) = 0;
+    virtual bool LoadTable(const std::string& name, const DmTable& table) = 0;
     virtual bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) = 0;
@@ -116,7 +117,7 @@ class DeviceMapper final : public IDeviceMapper {
         bool IsBufferFull() const { return flags_ & DM_BUFFER_FULL_FLAG; }
         bool IsInactiveTablePresent() const { return flags_ & DM_INACTIVE_PRESENT_FLAG; }
         bool IsReadOnly() const { return flags_ & DM_READONLY_FLAG; }
-        bool IsSuspended() const { return flags_ & DM_SUSPEND_FLAG; }
+        bool IsSuspended() const { return !IsActiveTablePresent() || (flags_ & DM_SUSPEND_FLAG); }
     };
 
     // Removes a device mapper device with the given name.
@@ -198,6 +199,12 @@ class DeviceMapper final : public IDeviceMapper {
     //
     // Returns 'true' on success, false otherwise.
     bool LoadTableAndActivate(const std::string& name, const DmTable& table) override;
+
+    // Same as LoadTableAndActivate, but there is no resume step. This puts the
+    // new table in the inactive slot.
+    //
+    // Returns 'true' on success, false otherwise.
+    bool LoadTable(const std::string& name, const DmTable& table) override;
 
     // Returns true if a list of available device mapper targets registered in the kernel was
     // successfully read and stored in 'targets'. Returns 'false' otherwise.
