@@ -136,6 +136,10 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
             rc = storage_file_set_size(msg, req, req_len);
             break;
 
+        case STORAGE_FILE_GET_MAX_SIZE:
+            rc = storage_file_get_max_size(msg, req, req_len);
+            break;
+
         case STORAGE_RPMB_SEND:
             rc = rpmb_send(msg, req, req_len);
             break;
