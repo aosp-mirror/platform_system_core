@@ -170,10 +170,6 @@ cc_defaults {
     min_sdk_version: "apex_inherit",
 
     afdo: true,
-
-    header_abi_checker: {
-        diff_flags: ["-allow-adding-removing-weak-symbols"],
-    },
 }
 
 cc_library {
@@ -183,6 +179,12 @@ cc_library {
     vndk: {
         enabled: true,
         support_system_process: true,
+    },
+
+    header_abi_checker: {
+        // AFDO affects weak symbols.
+        diff_flags: ["-allow-adding-removing-weak-symbols"],
+        ref_dump_dirs: ["abi-dumps"],
     },
 }
 
