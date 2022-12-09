@@ -35,86 +35,208 @@ protected:
     }
 
     char16_t const * const kSearchString = u"I am a leaf on the wind.";
+
+    constexpr static size_t BUFSIZE = 64;       // large enough for all tests
+
+    void TestUTF8toUTF16(std::initializer_list<uint8_t> input,
+                         std::initializer_list<char16_t> expect,
+                         const char* err_msg_length = "",
+                         ssize_t expected_length = 0) {
+        uint8_t empty_str[] = {};
+        char16_t output[BUFSIZE];
+
+        const size_t inlen = input.size(), outlen = expect.size();
+        ASSERT_LT(outlen, BUFSIZE);
+
+        const uint8_t *input_data = inlen ? std::data(input) : empty_str;
+        ssize_t measured = utf8_to_utf16_length(input_data, inlen);
+        EXPECT_EQ(expected_length ? : (ssize_t)outlen, measured) << err_msg_length;
+
+        utf8_to_utf16(input_data, inlen, output, outlen + 1);
+        for (size_t i = 0; i < outlen; i++) {
+            EXPECT_EQ(std::data(expect)[i], output[i]);
+        }
+        EXPECT_EQ(0, output[outlen]) << "should be null terminated";
+    }
+
+    void TestUTF16toUTF8(std::initializer_list<char16_t> input,
+                         std::initializer_list<char> expect,
+                         const char* err_msg_length = "",
+                         ssize_t expected_length = 0) {
+        char16_t empty_str[] = {};
+        char output[BUFSIZE];
+
+        const size_t inlen = input.size(), outlen = expect.size();
+        ASSERT_LT(outlen, BUFSIZE);
+
+        const char16_t *input_data = inlen ? std::data(input) : empty_str;
+        ssize_t measured = utf16_to_utf8_length(input_data, inlen);
+        EXPECT_EQ(expected_length ? : (ssize_t)outlen, measured) << err_msg_length;
+
+        utf16_to_utf8(input_data, inlen, output, outlen + 1);
+        for (size_t i = 0; i < outlen; i++) {
+            EXPECT_EQ(std::data(expect)[i], output[i]);
+        }
+        EXPECT_EQ(0, output[outlen]) << "should be null terminated";
+    }
 };
 
 TEST_F(UnicodeTest, UTF8toUTF16ZeroLength) {
-    ssize_t measured;
-
-    const uint8_t str[] = { };
-
-    measured = utf8_to_utf16_length(str, 0);
-    EXPECT_EQ(0, measured)
-            << "Zero length input should return zero length output.";
+    TestUTF8toUTF16({}, {},
+        "Zero length input should return zero length output.");
 }
 
-TEST_F(UnicodeTest, UTF8toUTF16ASCIILength) {
-    ssize_t measured;
-
-    // U+0030 or ASCII '0'
-    const uint8_t str[] = { 0x30 };
-
-    measured = utf8_to_utf16_length(str, sizeof(str));
-    EXPECT_EQ(1, measured)
-            << "ASCII glyphs should have a length of 1 char16_t";
+TEST_F(UnicodeTest, UTF8toUTF16ASCII) {
+    TestUTF8toUTF16(
+        { 0x30 },               // U+0030 or ASCII '0'
+        { 0x0030 },
+        "ASCII codepoints should have a length of 1 char16_t");
 }
 
-TEST_F(UnicodeTest, UTF8toUTF16Plane1Length) {
-    ssize_t measured;
-
-    // U+2323 SMILE
-    const uint8_t str[] = { 0xE2, 0x8C, 0xA3 };
-
-    measured = utf8_to_utf16_length(str, sizeof(str));
-    EXPECT_EQ(1, measured)
-            << "Plane 1 glyphs should have a length of 1 char16_t";
+TEST_F(UnicodeTest, UTF8toUTF16Plane1) {
+    TestUTF8toUTF16(
+        { 0xE2, 0x8C, 0xA3 },   // U+2323 SMILE
+        { 0x2323 },
+        "Plane 1 codepoints should have a length of 1 char16_t");
 }
 
-TEST_F(UnicodeTest, UTF8toUTF16SurrogateLength) {
-    ssize_t measured;
-
-    // U+10000
-    const uint8_t str[] = { 0xF0, 0x90, 0x80, 0x80 };
-
-    measured = utf8_to_utf16_length(str, sizeof(str));
-    EXPECT_EQ(2, measured)
-            << "Surrogate pairs should have a length of 2 char16_t";
+TEST_F(UnicodeTest, UTF8toUTF16Surrogate) {
+    TestUTF8toUTF16(
+        { 0xF0, 0x90, 0x80, 0x80 },   // U+10000
+        { 0xD800, 0xDC00 },
+        "Surrogate pairs should have a length of 2 char16_t");
 }
 
 TEST_F(UnicodeTest, UTF8toUTF16TruncatedUTF8) {
-    ssize_t measured;
-
-    // Truncated U+2323 SMILE
-    // U+2323 SMILE
-    const uint8_t str[] = { 0xE2, 0x8C };
-
-    measured = utf8_to_utf16_length(str, sizeof(str));
-    EXPECT_EQ(-1, measured)
-            << "Truncated UTF-8 should return -1 to indicate invalid";
+    TestUTF8toUTF16(
+        { 0xE2, 0x8C },       // Truncated U+2323 SMILE
+        { },                  // Conversion should still work but produce nothing
+        "Truncated UTF-8 should return -1 to indicate invalid",
+        -1);
 }
 
 TEST_F(UnicodeTest, UTF8toUTF16Normal) {
-    const uint8_t str[] = {
-        0x30, // U+0030, 1 UTF-16 character
-        0xC4, 0x80, // U+0100, 1 UTF-16 character
-        0xE2, 0x8C, 0xA3, // U+2323, 1 UTF-16 character
+    TestUTF8toUTF16({
+        0x30,                   // U+0030, 1 UTF-16 character
+        0xC4, 0x80,             // U+0100, 1 UTF-16 character
+        0xE2, 0x8C, 0xA3,       // U+2323, 1 UTF-16 character
         0xF0, 0x90, 0x80, 0x80, // U+10000, 2 UTF-16 character
-    };
+    }, {
+        0x0030,
+        0x0100,
+        0x2323,
+        0xD800, 0xDC00
+    });
+}
 
-    char16_t output[1 + 1 + 1 + 2 + 1];  // Room for null
+TEST_F(UnicodeTest, UTF8toUTF16Invalid) {
+    // TODO: The current behavior of utf8_to_utf16 is to treat invalid
+    // leading byte (>= 0xf8) as a 4-byte UTF8 sequence, and to treat
+    // invalid trailing byte(s) (i.e. bytes not having MSB set) as if
+    // they are valid and do the normal conversion. However, a better
+    // handling would be to treat invalid sequences as errors, such
+    // cases need to be reported and invalid characters (e.g. U+FFFD)
+    // could be produced at the place of error.  Until a fix is ready
+    // and compatibility is not an issue, we will keep testing the
+    // current behavior
+    TestUTF8toUTF16({
+        0xf8,                   // invalid leading byte
+        0xc4, 0x00,             // U+0100 with invalid trailing byte
+        0xe2, 0x0c, 0xa3,       // U+2323 with invalid trailing bytes
+        0xf0, 0x10, 0x00, 0x00, // U+10000 with invalid trailing bytes
+    }, {
+        0x4022,                 // invalid leading byte (>=0xfc) is treated
+                                // as valid for 4-byte UTF8 sequence
+	0x000C,
+	0x00A3,                 // invalid leadnig byte (b'10xxxxxx) is
+                                // treated as valid single UTF-8 byte
+        0xD800,                 // invalid trailing bytes are treated
+        0xDC00,                 // as valid bytes and follow normal
+    });
+}
 
-    utf8_to_utf16(str, sizeof(str), output, sizeof(output) / sizeof(output[0]));
+TEST_F(UnicodeTest, UTF16toUTF8ZeroLength) {
+    // TODO: The current behavior of utf16_to_utf8_length() is that
+    // it returns -1 if the input is a zero length UTF16 string.
+    // This is inconsistent with utf8_to_utf16_length() where a zero
+    // length string returns 0.  However, to fix the current behavior,
+    // we could have compatibility issue.  Until then, we will keep
+    // testing the current behavior
+    TestUTF16toUTF8({}, {},
+        "Zero length UTF16 input should return length of -1.", -1);
+}
 
-    EXPECT_EQ(0x0030, output[0])
-            << "should be U+0030";
-    EXPECT_EQ(0x0100, output[1])
-            << "should be U+0100";
-    EXPECT_EQ(0x2323, output[2])
-            << "should be U+2323";
-    EXPECT_EQ(0xD800, output[3])
-            << "should be first half of surrogate U+10000";
-    EXPECT_EQ(0xDC00, output[4])
-            << "should be second half of surrogate U+10000";
-    EXPECT_EQ(0, output[5]) << "should be null terminated";
+TEST_F(UnicodeTest, UTF16toUTF8ASCII) {
+    TestUTF16toUTF8(
+        { 0x0030 },  // U+0030 or ASCII '0'
+        { '\x30' },
+        "ASCII codepoints in UTF16 should give a length of 1 in UTF8");
+}
+
+TEST_F(UnicodeTest, UTF16toUTF8Plane1) {
+    TestUTF16toUTF8(
+        { 0x2323 },  // U+2323 SMILE
+        { '\xE2', '\x8C', '\xA3' },
+        "Plane 1 codepoints should have a length of 3 char in UTF-8");
+}
+
+TEST_F(UnicodeTest, UTF16toUTF8Surrogate) {
+    TestUTF16toUTF8(
+        { 0xD800, 0xDC00 },  // U+10000
+        { '\xF0', '\x90', '\x80', '\x80' },
+        "Surrogate pairs should have a length of 4 chars");
+}
+
+TEST_F(UnicodeTest, UTF16toUTF8UnpairedSurrogate) {
+    TestUTF16toUTF8(
+        { 0xD800 },     // U+10000 with high surrogate pair only
+        { },            // Unpaired surrogate should be ignored
+        "A single unpaired high surrogate should have a length of 0 chars");
+
+    TestUTF16toUTF8(
+        { 0xDC00 },     // U+10000 with low surrogate pair only
+        { },            // Unpaired surrogate should be ignored
+        "A single unpaired low surrogate should have a length of 0 chars");
+
+    TestUTF16toUTF8(
+        // U+0030, U+0100, U+10000 with high surrogate pair only, U+2323
+        { 0x0030, 0x0100, 0xDC00, 0x2323 },
+        { '\x30', '\xC4', '\x80', '\xE2', '\x8C', '\xA3' },
+        "Unpaired high surrogate should be skipped in the middle");
+
+    TestUTF16toUTF8(
+        // U+0030, U+0100, U+10000 with high surrogate pair only, U+2323
+        { 0x0030, 0x0100, 0xDC00, 0x2323 },
+        { '\x30', '\xC4', '\x80', '\xE2', '\x8C', '\xA3' },
+        "Unpaired low surrogate should be skipped in the middle");
+}
+
+TEST_F(UnicodeTest, UTF16toUTF8CorrectInvalidSurrogate) {
+    // http://b/29250543
+    // d841d8 is an invalid start for a surrogate pair. Make sure this is handled by ignoring the
+    // first character in the pair and handling the rest correctly.
+    TestUTF16toUTF8(
+        { 0xD841, 0xD841, 0xDC41 },     // U+20441
+        { '\xF0', '\xA0', '\x91', '\x81' },
+        "Invalid start for a surrogate pair should be ignored");
+}
+
+TEST_F(UnicodeTest, UTF16toUTF8Normal) {
+    TestUTF16toUTF8({
+        0x0024, // U+0024 ($) --> 0x24,           1 UTF-8 byte
+        0x00A3, // U+00A3 (£) --> 0xC2 0xA3,      2 UTF-8 bytes
+        0x0939, // U+0939 (ह) --> 0xE0 0xA4 0xB9, 3 UTF-8 bytes
+        0x20AC, // U+20AC (€) --> 0xE2 0x82 0xAC, 3 UTF-8 bytes
+        0xD55C, // U+D55C (한)--> 0xED 0x95 0x9C, 3 UTF-8 bytes
+        0xD801, 0xDC37, // U+10437 (𐐷) --> 0xF0 0x90 0x90 0xB7, 4 UTF-8 bytes
+    }, {
+        '\x24',
+        '\xC2', '\xA3',
+        '\xE0', '\xA4', '\xB9',
+        '\xE2', '\x82', '\xAC',
+        '\xED', '\x95', '\x9C',
+        '\xF0', '\x90', '\x90', '\xB7',
+    });
 }
 
 TEST_F(UnicodeTest, strstr16EmptyTarget) {
