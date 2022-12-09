@@ -767,7 +767,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     if (IsDataMounted("f2fs")) {
         uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
         unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
-        int ret = ioctl(fd, F2FS_IOC_SHUTDOWN, &flag);
+        int ret = ioctl(fd.get(), F2FS_IOC_SHUTDOWN, &flag);
         if (ret) {
             PLOG(ERROR) << "Shutdown /data: ";
         } else {

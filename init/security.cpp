@@ -216,7 +216,7 @@ Result<void> TestPerfEventSelinuxAction(const BuiltinArguments&) {
         return {};
     }
 
-    int ioctl_ret = ioctl(fd, PERF_EVENT_IOC_RESET);
+    int ioctl_ret = ioctl(fd.get(), PERF_EVENT_IOC_RESET);
     if (ioctl_ret != -1) {
         // Success implies that the kernel doesn't have the hooks.
         return {};
