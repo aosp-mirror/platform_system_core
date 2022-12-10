@@ -180,6 +180,12 @@ cc_library {
         enabled: true,
         support_system_process: true,
     },
+
+    header_abi_checker: {
+        // AFDO affects weak symbols.
+        diff_flags: ["-allow-adding-removing-weak-symbols"],
+        ref_dump_dirs: ["abi-dumps"],
+    },
 }
 
 cc_library {
