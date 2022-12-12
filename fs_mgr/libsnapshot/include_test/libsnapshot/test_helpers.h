@@ -143,6 +143,9 @@ class DeviceMapperWrapper : public android::dm::IDeviceMapper {
     virtual DmDeviceState GetState(const std::string& name) const override {
         return impl_.GetState(name);
     }
+    virtual bool LoadTable(const std::string& name, const DmTable& table) {
+        return impl_.LoadTable(name, table);
+    }
     virtual bool LoadTableAndActivate(const std::string& name, const DmTable& table) {
         return impl_.LoadTableAndActivate(name, table);
     }
