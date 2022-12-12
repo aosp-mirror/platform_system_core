@@ -33,7 +33,7 @@
 namespace android {
 namespace snapshot {
 
-std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) {
+std::basic_string<uint8_t> CompressWorker::Compress(const void* data, size_t length) {
     switch (compression_) {
         case kCowCompressGz: {
             const auto bound = compressBound(length);
@@ -99,6 +99,120 @@ std::basic_string<uint8_t> CowWriter::Compress(const void* data, size_t length) 
     }
     return {};
 }
+
+bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks,
+                                    std::vector<std::basic_string<uint8_t>>* compressed_data) {
+    const uint8_t* iter = reinterpret_cast<const uint8_t*>(buffer);
+    while (num_blocks) {
+        auto data = Compress(iter, block_size_);
+        if (data.empty()) {
+            PLOG(ERROR) << "CompressBlocks: Compression failed";
+            return false;
+        }
+        if (data.size() > std::numeric_limits<uint16_t>::max()) {
+            LOG(ERROR) << "Compressed block is too large: " << data.size();
+            return false;
+        }
+
+        compressed_data->emplace_back(std::move(data));
+        num_blocks -= 1;
+        iter += block_size_;
+    }
+    return true;
+}
+
+bool CompressWorker::RunThread() {
+    while (true) {
+        // Wait for work
+        CompressWork blocks;
+        {
+            std::unique_lock<std::mutex> lock(lock_);
+            while (work_queue_.empty() && !stopped_) {
+                cv_.wait(lock);
+            }
+
+            if (stopped_) {
+                return true;
+            }
+
+            blocks = std::move(work_queue_.front());
+            work_queue_.pop();
+        }
+
+        // Compress blocks
+        bool ret = CompressBlocks(blocks.buffer, blocks.num_blocks, &blocks.compressed_data);
+        blocks.compression_status = ret;
+        {
+            std::lock_guard<std::mutex> lock(lock_);
+            compressed_queue_.push(std::move(blocks));
+        }
+
+        // Notify completion
+        cv_.notify_all();
+
+        if (!ret) {
+            LOG(ERROR) << "CompressBlocks failed";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void CompressWorker::EnqueueCompressBlocks(const void* buffer, size_t num_blocks) {
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+
+        CompressWork blocks = {};
+        blocks.buffer = buffer;
+        blocks.num_blocks = num_blocks;
+        work_queue_.push(std::move(blocks));
+    }
+    cv_.notify_all();
+}
+
+bool CompressWorker::GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf) {
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (compressed_queue_.empty() && !stopped_) {
+            cv_.wait(lock);
+        }
+
+        if (stopped_) {
+            return true;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(lock_);
+        while (compressed_queue_.size() > 0) {
+            CompressWork blocks = std::move(compressed_queue_.front());
+            compressed_queue_.pop();
+
+            if (blocks.compression_status) {
+                compressed_buf->insert(compressed_buf->end(),
+                                       std::make_move_iterator(blocks.compressed_data.begin()),
+                                       std::make_move_iterator(blocks.compressed_data.end()));
+            } else {
+                LOG(ERROR) << "Block compression failed";
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+void CompressWorker::Finalize() {
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        stopped_ = true;
+    }
+    cv_.notify_all();
+}
+
+CompressWorker::CompressWorker(CowCompressionAlgorithm compression, uint32_t block_size)
+    : compression_(compression), block_size_(block_size) {}
 
 }  // namespace snapshot
 }  // namespace android
