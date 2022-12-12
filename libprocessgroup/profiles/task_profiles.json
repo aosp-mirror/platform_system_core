@@ -806,7 +806,7 @@
       "Profiles": [ "Dex2oatPerformance", "LowIoPriority", "TimerSlackHigh" ]
     },
     {
-      "Name": "Dex2OatBootBackground",
+      "Name": "Dex2OatBackground",
       "Profiles": [ "Dex2OatBootComplete" ]
     },
     {
