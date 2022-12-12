@@ -488,13 +488,21 @@ std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     return boot_devices;
 }
 
-template <typename Pred>
-std::vector<FstabEntry*> GetEntriesByPred(Fstab* fstab, const Pred& pred) {
+// Helper class that maps Fstab* -> FstabEntry; const Fstab* -> const FstabEntry.
+template <typename FstabPtr>
+struct FstabPtrEntry {
+    using is_const_fstab = std::is_const<std::remove_pointer_t<FstabPtr>>;
+    using type = std::conditional_t<is_const_fstab::value, const FstabEntry, FstabEntry>;
+};
+
+template <typename FstabPtr, typename FstabPtrEntryType = typename FstabPtrEntry<FstabPtr>::type,
+          typename Pred>
+std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pred) {
     if (fstab == nullptr) {
         return {};
     }
-    std::vector<FstabEntry*> entries;
-    for (auto&& entry : *fstab) {
+    std::vector<FstabPtrEntryType*> entries;
+    for (FstabPtrEntryType& entry : *fstab) {
         if (pred(entry)) {
             entries.push_back(&entry);
         }
@@ -835,23 +843,25 @@ bool ReadDefaultFstab(Fstab* fstab) {
     return !fstab->empty();
 }
 
-FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
-    if (fstab == nullptr) {
-        return nullptr;
-    }
-
-    for (auto& entry : *fstab) {
-        if (entry.mount_point == path) {
-            return &entry;
-        }
-    }
-
-    return nullptr;
-}
-
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path) {
     return GetEntriesByPred(fstab,
                             [&path](const FstabEntry& entry) { return entry.mount_point == path; });
+}
+
+std::vector<const FstabEntry*> GetEntriesForMountPoint(const Fstab* fstab,
+                                                       const std::string& path) {
+    return GetEntriesByPred(fstab,
+                            [&path](const FstabEntry& entry) { return entry.mount_point == path; });
+}
+
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
+    std::vector<FstabEntry*> entries = GetEntriesForMountPoint(fstab, path);
+    return entries.empty() ? nullptr : entries.front();
+}
+
+const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& path) {
+    std::vector<const FstabEntry*> entries = GetEntriesForMountPoint(fstab, path);
+    return entries.empty() ? nullptr : entries.front();
 }
 
 std::set<std::string> GetBootDevices() {
