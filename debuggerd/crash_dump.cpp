@@ -23,7 +23,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
-#include <syscall.h>
 #include <unistd.h>
 
 #include <limits>
