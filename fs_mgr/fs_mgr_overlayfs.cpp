@@ -1351,19 +1351,14 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
     return ret;
 }
 
-bool fs_mgr_overlayfs_setup(const char* mount_point, bool* want_reboot, bool just_disabled_verity) {
+bool fs_mgr_overlayfs_setup(const Fstab& fstab, const char* mount_point, bool* want_reboot,
+                            bool just_disabled_verity) {
     if (!OverlayfsSetupAllowed(/*verbose=*/true)) {
         return false;
     }
 
     if (!fs_mgr_boot_completed()) {
         LOG(ERROR) << "Cannot setup overlayfs before persistent properties are ready";
-        return false;
-    }
-
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        LOG(ERROR) << "Could not read fstab";
         return false;
     }
 
