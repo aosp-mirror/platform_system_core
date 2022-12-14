@@ -116,8 +116,7 @@ std::vector<const std::string> OverlayMountPoints() {
 
     // For non-A/B devices prefer cache backing storage if
     // kPreferCacheBackingStorageProp property set.
-    if (!IsABDevice() &&
-        android::base::GetBoolProperty(kPreferCacheBackingStorageProp, false) &&
+    if (!IsABDevice() && android::base::GetBoolProperty(kPreferCacheBackingStorageProp, false) &&
         android::base::GetIntProperty("ro.vendor.api_level", -1) < __ANDROID_API_T__) {
         return {kCacheMountPoint, kScratchMountPoint};
     }
@@ -332,8 +331,14 @@ static inline bool KernelSupportsUserXattrs() {
     return major > 5 || (major == 5 && minor >= 15);
 }
 
+const std::string fs_mgr_mount_point(const std::string& mount_point) {
+    if ("/"s != mount_point) return mount_point;
+    return "/system";
+}
+
 // default options for mount_point, returns empty string for none available.
-std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
+std::string fs_mgr_get_overlayfs_options(const FstabEntry& entry) {
+    const auto mount_point = fs_mgr_mount_point(entry.mount_point);
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
     auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + candidate + kUpperName +
@@ -344,12 +349,12 @@ std::string fs_mgr_get_overlayfs_options(const std::string& mount_point) {
     if (KernelSupportsUserXattrs()) {
         ret += ",userxattr";
     }
+    for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
+        if (android::base::StartsWith(flag, "context=")) {
+            ret += "," + flag;
+        }
+    }
     return ret;
-}
-
-const std::string fs_mgr_mount_point(const std::string& mount_point) {
-    if ("/"s != mount_point) return mount_point;
-    return "/system";
 }
 
 constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
@@ -710,8 +715,9 @@ std::vector<mount_info> ReadMountinfoFromFile(const std::string& path) {
     return info;
 }
 
-bool fs_mgr_overlayfs_mount(const std::string& mount_point) {
-    auto options = fs_mgr_get_overlayfs_options(mount_point);
+bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
+    const auto mount_point = fs_mgr_mount_point(entry.mount_point);
+    const auto options = fs_mgr_get_overlayfs_options(entry);
     if (options.empty()) return false;
 
     auto retval = true;
@@ -1346,7 +1352,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
             scratch_can_be_mounted = false;
             TryMountScratch();
         }
-        ret &= fs_mgr_overlayfs_mount(mount_point);
+        ret &= fs_mgr_overlayfs_mount(entry);
     }
     return ret;
 }
