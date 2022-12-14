@@ -162,6 +162,17 @@ equals `true`, then the order of the commands executed will be:
     setprop e 1
     setprop f 2
 
+If the property `true` wasn't `true` when the `boot` was triggered, then the
+order of the commands executed will be:
+
+    setprop a 1
+    setprop b 2
+    setprop e 1
+    setprop f 2
+
+If the property `true` becomes `true` *AFTER* `boot` was triggered, nothing will
+be executed. The condition `boot && property:true=true` will be evaluated to
+false because the `boot` trigger is a past event.
 
 Services
 --------
@@ -433,7 +444,9 @@ event trigger.
 
 For example:
 `on boot && property:a=b` defines an action that is only executed when
-the 'boot' event trigger happens and the property a equals b.
+the 'boot' event trigger happens and the property a equals b at the moment. This
+will NOT be executed when the property a transitions to value b after the `boot`
+event was triggered.
 
 `on property:a=b && property:c=d` defines an action that is executed
 at three times:
