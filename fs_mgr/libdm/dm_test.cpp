@@ -690,3 +690,23 @@ TEST(libdm, CreateEmptyDevice) {
     // Empty device should be in suspended state.
     ASSERT_EQ(DmDeviceState::SUSPENDED, dm.GetState("empty-device"));
 }
+
+TEST(libdm, UeventAfterLoadTable) {
+    static const char* kDeviceName = "libmd-test-uevent-load-table";
+
+    DeviceMapper& dm = DeviceMapper::Instance();
+    ASSERT_TRUE(dm.CreateEmptyDevice(kDeviceName));
+
+    DmTable table;
+    table.Emplace<DmTargetError>(0, 1);
+    ASSERT_TRUE(dm.LoadTable(kDeviceName, table));
+
+    std::string ignore_path;
+    ASSERT_TRUE(dm.WaitForDevice(kDeviceName, 5s, &ignore_path));
+
+    auto info = dm.GetDetailedInfo(kDeviceName);
+    ASSERT_TRUE(info.has_value());
+    ASSERT_TRUE(info->IsSuspended());
+
+    ASSERT_TRUE(dm.DeleteDevice(kDeviceName));
+}

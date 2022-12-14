@@ -289,7 +289,7 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
     return true;
 }
 
-bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+bool DeviceMapper::LoadTable(const std::string& name, const DmTable& table) {
     std::string ioctl_buffer(sizeof(struct dm_ioctl), 0);
     ioctl_buffer += table.Serialize();
 
@@ -305,9 +305,17 @@ bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& 
         PLOG(ERROR) << "DM_TABLE_LOAD failed";
         return false;
     }
+    return true;
+}
 
-    InitIo(io, name);
-    if (ioctl(fd_, DM_DEV_SUSPEND, io)) {
+bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+    if (!LoadTable(name, table)) {
+        return false;
+    }
+
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_SUSPEND, &io)) {
         PLOG(ERROR) << "DM_TABLE_SUSPEND resume failed";
         return false;
     }
