@@ -55,10 +55,11 @@ on early-init
     # Read more in b/136247322
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
-    # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/bootstrap/linkerconfig --target /linkerconfig/bootstrap
+    # Generate empty ld.config.txt for early executed processes which rely on
+    # /system/lib libraries.
+    write /linkerconfig/bootstrap/ld.config.txt \#
+    write /linkerconfig/default/ld.config.txt \#
     chmod 644 /linkerconfig/bootstrap/ld.config.txt
-    copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
     chmod 644 /linkerconfig/default/ld.config.txt
 
     # Mount bootstrap linker configuration as current
