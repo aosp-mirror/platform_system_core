@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 
 #include <chrono>
 #include <functional>
@@ -709,6 +710,29 @@ std::map<std::string, std::string> DeviceMapper::FindDmPartitions() {
     free(namelist);
 
     return dm_block_devices;
+}
+
+bool DeviceMapper::CreatePlaceholderDevice(const std::string& name) {
+    if (!CreateEmptyDevice(name)) {
+        return false;
+    }
+
+    struct utsname uts;
+    unsigned int major, minor;
+    if (uname(&uts) != 0 || sscanf(uts.release, "%u.%u", &major, &minor) != 2) {
+        LOG(ERROR) << "Could not parse the kernel version from uname";
+        return true;
+    }
+
+    // On Linux 5.15+, there is no uevent until DM_TABLE_LOAD.
+    if (major > 5 || (major == 5 && minor >= 15)) {
+        DmTable table;
+        table.Emplace<DmTargetError>(0, 1);
+        if (!LoadTable(name, table)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace dm
