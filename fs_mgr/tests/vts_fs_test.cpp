@@ -66,6 +66,14 @@ TEST(fs, PartitionTypes) {
 
     int vsr_level = GetVsrLevel();
 
+    std::vector<std::string> must_be_f2fs;
+    if (vsr_level >= __ANDROID_API_T__) {
+        must_be_f2fs.emplace_back("/data");
+    }
+    if (vsr_level >= __ANDROID_API_U__) {
+        must_be_f2fs.emplace_back("/metadata");
+    }
+
     for (const auto& entry : fstab) {
         std::string parent_bdev = entry.blk_device;
         while (true) {
@@ -99,15 +107,15 @@ TEST(fs, PartitionTypes) {
         }
 
         if (entry.flags & MS_RDONLY) {
-            std::vector<std::string> allowed = {"erofs", "ext4"};
-            if (vsr_level == __ANDROID_API_T__) {
-                allowed.emplace_back("f2fs");
-            }
+            std::vector<std::string> allowed = {"erofs", "ext4", "f2fs"};
 
             EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
                     << entry.mount_point;
         } else {
-            EXPECT_NE(entry.fs_type, "ext4") << entry.mount_point;
+            if (std::find(must_be_f2fs.begin(), must_be_f2fs.end(), entry.mount_point) !=
+                must_be_f2fs.end()) {
+                EXPECT_EQ(entry.fs_type, "f2fs") << entry.mount_point;
+            }
         }
     }
 }
