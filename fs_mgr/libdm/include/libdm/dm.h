@@ -292,6 +292,12 @@ class DeviceMapper final : public IDeviceMapper {
     // Returns mapping <partition-name, /dev/block/dm-x>
     std::map<std::string, std::string> FindDmPartitions();
 
+    // Create a placeholder device. This is useful for ensuring that a uevent is in the pipeline,
+    // to reduce the amount of time a future WaitForDevice will block. On kernels < 5.15, this
+    // simply calls CreateEmptyDevice. On 5.15 and higher, it also loads (but does not activate)
+    // a placeholder table containing dm-error.
+    bool CreatePlaceholderDevice(const std::string& name);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
