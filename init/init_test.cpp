@@ -194,13 +194,10 @@ service A something
 }
 
 TEST(init, StartConsole) {
-    if (access("/dev/console", F_OK) < 0) {
-        GTEST_SKIP() << "/dev/console not found";
-    }
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
-    console console
+    console null
     disabled
     user root
     group root shell log readproc
