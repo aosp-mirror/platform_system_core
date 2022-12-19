@@ -162,6 +162,17 @@ equals `true`, then the order of the commands executed will be:
     setprop e 1
     setprop f 2
 
+If the property `true` wasn't `true` when the `boot` was triggered, then the
+order of the commands executed will be:
+
+    setprop a 1
+    setprop b 2
+    setprop e 1
+    setprop f 2
+
+If the property `true` becomes `true` *AFTER* `boot` was triggered, nothing will
+be executed. The condition `boot && property:true=true` will be evaluated to
+false because the `boot` trigger is a past event.
 
 Services
 --------
@@ -184,8 +195,10 @@ runs the service.
   capability without the "CAP\_" prefix, like "NET\_ADMIN" or "SETPCAP". See
   http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
   capabilities.
-  If no capabilities are provided, then all capabilities are removed from this service, even if it
-  runs as root.
+  If no capabilities are provided, then behaviour depends on the user the service runs under:
+    * if it's root, then the service will run with all the capabitilies (note: whether the
+        service can actually use them is controlled by selinux);
+    * otherwise all capabilities will be dropped.
 
 `class <name> [ <name>\* ]`
 > Specify class names for the service.  All services in a
@@ -399,7 +412,7 @@ runs the service.
   using this new mechanism, processes can use the user option to
   select their desired uid without ever running as root.
   As of Android O, processes can also request capabilities directly in their .rc
-  files. See the "capabilities" option below.
+  files. See the "capabilities" option above.
 
 `writepid <file> [ <file>\* ]`
 > Write the child's pid to the given files when it forks. Meant for
@@ -433,7 +446,9 @@ event trigger.
 
 For example:
 `on boot && property:a=b` defines an action that is only executed when
-the 'boot' event trigger happens and the property a equals b.
+the 'boot' event trigger happens and the property a equals b at the moment. This
+will NOT be executed when the property a transitions to value b after the `boot`
+event was triggered.
 
 `on property:a=b && property:c=d` defines an action that is executed
 at three times:

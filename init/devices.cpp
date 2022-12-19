@@ -470,7 +470,11 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
         MakeDevice(devpath, block, major, minor, links);
     }
 
-    // We don't have full device-mapper information until a change event is fired.
+    // Handle device-mapper nodes.
+    // On kernels <= 5.10, the "add" event is fired on DM_DEV_CREATE, but does not contain name
+    // information until DM_TABLE_LOAD - thus, we wait for a "change" event.
+    // On kernels >= 5.15, the "add" event is fired on DM_TABLE_LOAD, followed by a "change"
+    // event.
     if (action == "add" || (action == "change" && StartsWith(devpath, "/dev/block/dm-"))) {
         for (const auto& link : links) {
             if (!mkdir_recursive(Dirname(link), 0755)) {

@@ -712,8 +712,6 @@ Result<void> Service::Start() {
         if (use_memcg) {
             ConfigureMemcg();
         }
-    } else {
-        process_cgroup_empty_ = true;
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
@@ -868,6 +866,8 @@ void Service::StopOrReset(int how) {
 
     if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
         // An illegal flag: default to SVC_DISABLED.
+        LOG(ERROR) << "service '" << name_ << "' requested unknown flag " << how
+                   << ", defaulting to disabling it.";
         how = SVC_DISABLED;
     }
 
