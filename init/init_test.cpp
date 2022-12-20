@@ -194,6 +194,10 @@ service A something
 }
 
 TEST(init, StartConsole) {
+    if (GetProperty("ro.build.type", "") == "user") {
+        GTEST_SKIP() << "Must run on userdebug/eng builds. b/262090304";
+        return;
+    }
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
