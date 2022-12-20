@@ -1,4 +1,5 @@
 
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -327,34 +328,54 @@ static void read_canned_config(char* filename)
     fclose(f);
 }
 
+static const struct option long_options[] = {
+    { "dirname",    required_argument,  NULL,   'd' },
+    { "file",       required_argument,  NULL,   'f' },
+    { "help",       no_argument,        NULL,   'h' },
+    { NULL,         0,                  NULL,   0   },
+};
+
+static void usage(void)
+{
+    fprintf(stderr,
+            "Usage: mkbootfs [-d DIR|-F FILE] DIR...\n"
+            "\n"
+            "\t-d, --dirname=DIR: fs-config directory\n"
+            "\t-f, --file=FILE: Canned configuration file\n"
+            "\t-h, --help: Print this help\n"
+    );
+}
 
 int main(int argc, char *argv[])
 {
-    if (argc == 1) {
-        fprintf(stderr,
-                "usage: %s [-d TARGET_OUTPUT_PATH] [-f CANNED_CONFIGURATION_PATH] DIRECTORIES...\n",
-                argv[0]);
-        exit(1);
+    int opt, unused;
+
+    while ((opt = getopt_long(argc, argv, "hd:f:", long_options, &unused)) != -1) {
+        switch (opt) {
+        case 'd':
+            target_out_path = argv[optind - 1];
+            break;
+        case 'f':
+            read_canned_config(argv[optind - 1]);
+            break;
+        case 'h':
+            usage();
+            return 0;
+        default:
+            usage();
+            die("Unknown option %s", argv[optind - 1]);
+        }
     }
 
-    argc--;
-    argv++;
+    int num_dirs = argc - optind;
+    argv += optind;
 
-    if (argc > 1 && strcmp(argv[0], "-d") == 0) {
-        target_out_path = argv[1];
-        argc -= 2;
-        argv += 2;
+    if (num_dirs <= 0) {
+        usage();
+        die("no directories to process?!");
     }
 
-    if (argc > 1 && strcmp(argv[0], "-f") == 0) {
-        read_canned_config(argv[1]);
-        argc -= 2;
-        argv += 2;
-    }
-
-    if(argc == 0) die("no directories to process?!");
-
-    while(argc-- > 0){
+    while(num_dirs-- > 0){
         char *x = strchr(*argv, '=');
         if(x != 0) {
             *x++ = 0;
