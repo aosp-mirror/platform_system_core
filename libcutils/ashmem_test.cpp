@@ -75,7 +75,7 @@ TEST(AshmemTest, BasicTest) {
     unique_fd fd;
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
 
-    void *region1;
+    void* region1 = nullptr;
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ | PROT_WRITE, &region1));
 
     memcpy(region1, &data, size);
@@ -97,7 +97,7 @@ TEST(AshmemTest, ForkTest) {
     unique_fd fd;
     ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
 
-    void *region1;
+    void* region1 = nullptr;
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ | PROT_WRITE, &region1));
 
     memcpy(region1, &data, size);
@@ -131,7 +131,7 @@ TEST(AshmemTest, ForkTest) {
 
 TEST(AshmemTest, FileOperationsTest) {
     unique_fd fd;
-    void* region;
+    void* region = nullptr;
 
     // Allocate a 4-page buffer, but leave page-sized holes on either side
     constexpr size_t size = PAGE_SIZE * 4;
@@ -246,7 +246,7 @@ TEST(AshmemTest, ForkMultiRegionTest) {
     unique_fd fd[nRegions];
     for (int i = 0; i < nRegions; i++) {
         ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd[i], PROT_READ | PROT_WRITE));
-        void *region;
+        void* region = nullptr;
         ASSERT_NO_FATAL_FAILURE(TestMmap(fd[i], size, PROT_READ | PROT_WRITE, &region));
         memcpy(region, &data, size);
         ASSERT_EQ(0, memcmp(region, &data, size));
