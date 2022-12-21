@@ -21,11 +21,13 @@ cc_library_headers {
     vendor_ramdisk_available: true,
     host_supported: true,
     native_bridge_supported: true,
+    defaults: [
+        "apex-lowest-min-sdk-version",
+    ],
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
     ],
-    min_sdk_version: "apex_inherit",
 
     header_libs: [
         "libbase_headers",
@@ -124,7 +126,10 @@ cc_defaults {
 
 cc_defaults {
     name: "libutils_impl_defaults",
-    defaults: ["libutils_defaults"],
+    defaults: [
+        "libutils_defaults",
+        "apex-lowest-min-sdk-version",
+    ],
     native_bridge_supported: true,
 
     srcs: [
@@ -167,7 +172,6 @@ cc_defaults {
         "//apex_available:anyapex",
         "//apex_available:platform",
     ],
-    min_sdk_version: "apex_inherit",
 
     afdo: true,
 }
