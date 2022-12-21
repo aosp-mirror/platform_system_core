@@ -69,8 +69,8 @@ subsystem dma_heap
 # CDMA radio interface MUX
 /dev/ppp                  0660   radio      vpn
 
-/dev/kvm                  0600   system     system
-/dev/vhost-vsock          0600   system	    system
+/dev/kvm                  0666   root       root
+/dev/vhost-vsock          0666   root       root
 
 # sysfs properties
 /sys/devices/platform/trusty.*      trusty_version        0440  root   log
