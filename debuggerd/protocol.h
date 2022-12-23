@@ -98,6 +98,7 @@ struct __attribute__((__packed__)) CrashInfoDataDynamic : public CrashInfoDataSt
   uintptr_t scudo_stack_depot;
   uintptr_t scudo_region_info;
   uintptr_t scudo_ring_buffer;
+  size_t scudo_ring_buffer_size;
 };
 
 struct __attribute__((__packed__)) CrashInfo {
