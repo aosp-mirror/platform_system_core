@@ -145,8 +145,6 @@ class Service {
     const std::string& filename() const { return filename_; }
     void set_filename(const std::string& name) { filename_ = name; }
 
-    const std::optional<CapSet>& capabilities() const { return capabilities_; }
-
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
