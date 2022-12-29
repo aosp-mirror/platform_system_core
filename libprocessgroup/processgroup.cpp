@@ -476,6 +476,11 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
             *max_processes = processes;
         }
         LOG(VERBOSE) << "Killed " << processes << " processes for processgroup " << initialPid;
+        if (!CgroupsAvailable()) {
+            // makes no sense to retry, because there are no cgroup_procs file
+            processes = 0;  // no remaining processes
+            break;
+        }
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
             --retry;
