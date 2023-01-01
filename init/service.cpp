@@ -700,8 +700,9 @@ Result<void> Service::Start() {
             if (!result.ok()) {
                 return Error() << "Sending notification failed: " << result.error();
             }
-            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                           << ") failed for service '" << name_ << "'";
+            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_ << ", "
+                           << use_memcg << ") failed for service '" << name_
+                           << "': " << strerror(errno);
         }
 
         // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
