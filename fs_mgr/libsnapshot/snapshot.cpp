@@ -1498,6 +1498,7 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     if (UpdateUsesUserSnapshots(lock) && !device()->IsTestDevice()) {
         if (snapuserd_client_) {
             snapuserd_client_->DetachSnapuserd();
+            snapuserd_client_->RemoveTransitionedDaemonIndicator();
             snapuserd_client_ = nullptr;
         }
     }
