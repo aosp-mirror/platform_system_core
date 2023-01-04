@@ -1,4 +1,6 @@
 
+#include <error.h>
+#include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +15,8 @@
 
 #include <stdarg.h>
 #include <fcntl.h>
+
+#include <linux/kdev_t.h>
 
 #include <private/android_filesystem_config.h>
 #include <private/fs_config.h>
@@ -335,21 +339,123 @@ static void read_canned_config(char* filename)
     fclose(f);
 }
 
+static void devnodes_desc_error(const char* filename, unsigned long line_num,
+                              const char* msg)
+{
+    error(EXIT_FAILURE, 0, "failed to read nodes desc file '%s' line %lu: %s",
+          filename, line_num, msg);
+}
+
+static int append_devnodes_desc_dir(char* path, char* args)
+{
+    struct stat s;
+
+    if (sscanf(args, "%o %d %d", &s.st_mode, &s.st_uid, &s.st_gid) != 3) return -1;
+
+    s.st_mode |= S_IFDIR;
+
+    _eject(&s, path, strlen(path), NULL, 0);
+
+    return 0;
+}
+
+static int append_devnodes_desc_nod(char* path, char* args)
+{
+    int minor, major;
+    struct stat s;
+    char dev;
+
+    if (sscanf(args, "%o %d %d %c %d %d", &s.st_mode, &s.st_uid, &s.st_gid,
+               &dev, &major, &minor) != 6) return -1;
+
+    s.st_rdev = MKDEV(major, minor);
+    switch (dev) {
+    case 'b':
+        s.st_mode |= S_IFBLK;
+        break;
+    case 'c':
+        s.st_mode |= S_IFCHR;
+        break;
+    default:
+        return -1;
+    }
+
+    _eject(&s, path, strlen(path), NULL, 0);
+
+    return 0;
+}
+
+static void append_devnodes_desc(const char* filename)
+{
+    FILE* f = fopen(filename, "re");
+    if (!f) error(EXIT_FAILURE, errno,
+                  "failed to open nodes description file '%s'", filename);
+
+    char *line, *args, *type, *path;
+    unsigned long line_num = 0;
+    size_t allocated_len;
+
+    while (getline(&line, &allocated_len, f) != -1) {
+        char* type;
+
+        line_num++;
+
+        if (*line == '#') continue;
+
+        if (!(type = strtok(line, " \t"))) {
+            devnodes_desc_error(filename, line_num, "a type is missing");
+        }
+
+        if (*type == '\n') continue;
+
+        if (!(path = strtok(NULL, " \t"))) {
+            devnodes_desc_error(filename, line_num, "a path is missing");
+        }
+
+        if (!(args = strtok(NULL, "\n"))) {
+            devnodes_desc_error(filename, line_num, "args are missing");
+        }
+
+        if (!strcmp(type, "dir")) {
+            if (append_devnodes_desc_dir(path, args)) {
+                devnodes_desc_error(filename, line_num, "bad arguments for dir");
+            }
+        } else if (!strcmp(type, "nod")) {
+            if (append_devnodes_desc_nod(path, args)) {
+                devnodes_desc_error(filename, line_num, "bad arguments for nod");
+            }
+        } else {
+            devnodes_desc_error(filename, line_num, "type unknown");
+        }
+    }
+
+    free(line);
+    fclose(f);
+}
+
 static const struct option long_options[] = {
     { "dirname",    required_argument,  NULL,   'd' },
     { "file",       required_argument,  NULL,   'f' },
     { "help",       no_argument,        NULL,   'h' },
+    { "nodes",      required_argument,  NULL,   'n' },
     { NULL,         0,                  NULL,   0   },
 };
 
 static void usage(void)
 {
     fprintf(stderr,
-            "Usage: mkbootfs [-d DIR|-F FILE] DIR...\n"
+            "Usage: mkbootfs [-n FILE] [-d DIR|-F FILE] DIR...\n"
             "\n"
             "\t-d, --dirname=DIR: fs-config directory\n"
             "\t-f, --file=FILE: Canned configuration file\n"
             "\t-h, --help: Print this help\n"
+            "\t-n, --nodes=FILE: Dev nodes description file\n"
+            "\nDev nodes description:\n"
+            "\t[dir|nod] [perms] [uid] [gid] [c|b] [minor] [major]\n"
+            "\tExample:\n"
+            "\t\t# My device nodes\n"
+            "\t\tdir dev 0755 0 0\n"
+            "\t\tnod dev/null 0600 0 0 c 1 5\n"
     );
 }
 
@@ -357,7 +463,7 @@ int main(int argc, char *argv[])
 {
     int opt, unused;
 
-    while ((opt = getopt_long(argc, argv, "hd:f:", long_options, &unused)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hd:f:n:", long_options, &unused)) != -1) {
         switch (opt) {
         case 'd':
             target_out_path = argv[optind - 1];
@@ -368,6 +474,9 @@ int main(int argc, char *argv[])
         case 'h':
             usage();
             return 0;
+        case 'n':
+            append_devnodes_desc(argv[optind - 1]);
+            break;
         default:
             usage();
             die("Unknown option %s", argv[optind - 1]);
