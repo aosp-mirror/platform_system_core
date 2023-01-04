@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 
 #include <android-base/file.h>
@@ -640,6 +641,91 @@ TEST(init, MemLockLimit) {
     ASSERT_EQ(getrlimit(RLIMIT_MEMLOCK, &curr_limit), 0);
     ASSERT_LE(curr_limit.rlim_cur, max_limit);
     ASSERT_LE(curr_limit.rlim_max, max_limit);
+}
+
+static std::vector<const char*> ConvertToArgv(const std::vector<std::string>& args) {
+    std::vector<const char*> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto& arg : args) {
+        if (argv.empty()) {
+            LOG(DEBUG) << arg;
+        } else {
+            LOG(DEBUG) << "    " << arg;
+        }
+        argv.emplace_back(arg.data());
+    }
+    argv.emplace_back(nullptr);
+    return argv;
+}
+
+pid_t ForkExecvpAsync(const std::vector<std::string>& args) {
+    auto argv = ConvertToArgv(args);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+
+        execvp(argv[0], const_cast<char**>(argv.data()));
+        PLOG(ERROR) << "exec in ForkExecvpAsync init test";
+        _exit(EXIT_FAILURE);
+    }
+    if (pid == -1) {
+        PLOG(ERROR) << "fork in ForkExecvpAsync init test";
+        return -1;
+    }
+    return pid;
+}
+
+TEST(init, GentleKill) {
+    std::string init_script = R"init(
+service test_gentle_kill /system/bin/sleep 1000
+    disabled
+    oneshot
+    gentle_kill
+    user root
+    group root
+    seclabel u:r:toolbox:s0
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_NE(getsid(pid), 0);
+
+    TemporaryFile logfile;
+    logfile.DoNotRemove();
+    ASSERT_TRUE(logfile.fd != -1);
+
+    std::vector<std::string> cmd;
+    cmd.push_back("system/bin/strace");
+    cmd.push_back("-o");
+    cmd.push_back(logfile.path);
+    cmd.push_back("-e");
+    cmd.push_back("signal");
+    cmd.push_back("-p");
+    cmd.push_back(std::to_string(pid));
+    pid_t strace_pid = ForkExecvpAsync(cmd);
+
+    // Give strace a moment to connect
+    std::this_thread::sleep_for(1s);
+    service->Stop();
+
+    int status;
+    waitpid(strace_pid, &status, 0);
+
+    std::string logs;
+    android::base::ReadFdToString(logfile.fd, &logs);
+    int pos = logs.find("killed by SIGTERM");
+    ASSERT_NE(pos, (int)std::string::npos);
 }
 
 class TestCaseLogger : public ::testing::EmptyTestEventListener {
