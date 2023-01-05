@@ -490,18 +490,26 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
 service boringssl_self_test32 /system/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test64 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex64 doesn't require any capabilities
+    capabilities
 
 
 # Healthd can trigger a full boot from charger mode by signaling this
