@@ -371,11 +371,28 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
       {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
   };
 
+  constexpr size_t kHeaderSize = sizeof(version) + sizeof(siginfo_t) + sizeof(ucontext_t);
+
   if (thread_info->process_info.fdsan_table) {
     // Dynamic executables always use version 4. There is no need to increment the version number if
     // the format changes, because the sender (linker) and receiver (crash_dump) are version locked.
     version = 4;
     expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
+
+    static_assert(sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic) ==
+                      kHeaderSize + sizeof(thread_info->process_info),
+                  "Wire protocol structs do not match the data sent.");
+#define ASSERT_SAME_OFFSET(MEMBER1, MEMBER2) \
+    static_assert(sizeof(CrashInfoHeader) + offsetof(CrashInfoDataDynamic, MEMBER1) == \
+                      kHeaderSize + offsetof(debugger_process_info, MEMBER2), \
+                  "Wire protocol offset does not match data sent: " #MEMBER1);
+    ASSERT_SAME_OFFSET(fdsan_table_address, fdsan_table);
+    ASSERT_SAME_OFFSET(gwp_asan_state, gwp_asan_state);
+    ASSERT_SAME_OFFSET(gwp_asan_metadata, gwp_asan_metadata);
+    ASSERT_SAME_OFFSET(scudo_stack_depot, scudo_stack_depot);
+    ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
+    ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
+#undef ASSERT_SAME_OFFSET
 
     iovs[3] = {.iov_base = &thread_info->process_info,
                .iov_len = sizeof(thread_info->process_info)};
@@ -383,6 +400,10 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     // Static executables always use version 1.
     version = 1;
     expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
+
+    static_assert(
+        sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic) == kHeaderSize + sizeof(uintptr_t),
+        "Wire protocol structs do not match the data sent.");
 
     iovs[3] = {.iov_base = &thread_info->process_info.abort_msg, .iov_len = sizeof(uintptr_t)};
   }

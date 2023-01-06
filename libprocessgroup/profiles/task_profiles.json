@@ -462,7 +462,7 @@
           {
             "Controller": "blkio",
             "Path": "background"
-	  }
+          }
         },
         {
           "Name": "SetAttribute",
@@ -502,7 +502,7 @@
           {
             "Controller": "blkio",
             "Path": ""
-	  }
+          }
         },
         {
           "Name": "SetAttribute",
@@ -542,7 +542,7 @@
           {
             "Controller": "blkio",
             "Path": ""
-	  }
+          }
         },
         {
           "Name": "SetAttribute",
@@ -582,7 +582,7 @@
           {
             "Controller": "blkio",
             "Path": ""
-	  }
+          }
         },
         {
           "Name": "SetAttribute",
