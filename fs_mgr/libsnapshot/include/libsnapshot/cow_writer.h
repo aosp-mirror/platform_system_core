@@ -120,6 +120,12 @@ class CompressWorker {
     void EnqueueCompressBlocks(const void* buffer, size_t num_blocks);
     bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
     void Finalize();
+    static std::basic_string<uint8_t> Compress(CowCompressionAlgorithm compression,
+                                               const void* data, size_t length);
+
+    static bool CompressBlocks(CowCompressionAlgorithm compression, size_t block_size,
+                               const void* buffer, size_t num_blocks,
+                               std::vector<std::basic_string<uint8_t>>* compressed_data);
 
   private:
     struct CompressWork {
