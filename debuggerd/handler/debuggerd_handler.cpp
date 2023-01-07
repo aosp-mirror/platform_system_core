@@ -187,27 +187,29 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * mutex is being held, so we don't want to use any libc functions that
  * could allocate memory or hold a lock.
  */
-static void log_signal_summary(const siginfo_t* info) {
+static void log_signal_summary(const siginfo_t* si) {
   char main_thread_name[MAX_TASK_NAME_LEN + 1];
   if (!get_main_thread_name(main_thread_name, sizeof(main_thread_name))) {
     strncpy(main_thread_name, "<unknown>", sizeof(main_thread_name));
   }
 
-  if (info->si_signo == BIONIC_SIGNAL_DEBUGGER) {
+  if (si->si_signo == BIONIC_SIGNAL_DEBUGGER) {
     async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for pid %d (%s)", __getpid(),
                           main_thread_name);
     return;
   }
 
-  // Many signals don't have an address or sender.
-  char addr_desc[32] = "";  // ", fault addr 0x1234"
-  if (signal_has_si_addr(info)) {
-    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
-  }
+  // Many signals don't have a sender or extra detail, but some do...
   pid_t self_pid = __getpid();
   char sender_desc[32] = {};  // " from pid 1234, uid 666"
-  if (signal_has_sender(info, self_pid)) {
-    get_signal_sender(sender_desc, sizeof(sender_desc), info);
+  if (signal_has_sender(si, self_pid)) {
+    get_signal_sender(sender_desc, sizeof(sender_desc), si);
+  }
+  char extra_desc[32] = {};  // ", fault addr 0x1234" or ", syscall 1234"
+  if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
+    async_safe_format_buffer(extra_desc, sizeof(extra_desc), ", syscall %d", si->si_syscall);
+  } else if (signal_has_si_addr(si)) {
+    async_safe_format_buffer(extra_desc, sizeof(extra_desc), ", fault addr %p", si->si_addr);
   }
 
   char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
@@ -221,8 +223,8 @@ static void log_signal_summary(const siginfo_t* info) {
 
   async_safe_format_log(ANDROID_LOG_FATAL, "libc",
                         "Fatal signal %d (%s), code %d (%s%s)%s in tid %d (%s), pid %d (%s)",
-                        info->si_signo, get_signame(info), info->si_code, get_sigcode(info),
-                        sender_desc, addr_desc, __gettid(), thread_name, self_pid, main_thread_name);
+                        si->si_signo, get_signame(si), si->si_code, get_sigcode(si), sender_desc,
+                        extra_desc, __gettid(), thread_name, self_pid, main_thread_name);
 }
 
 /*
