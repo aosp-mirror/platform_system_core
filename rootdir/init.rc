@@ -847,7 +847,7 @@ on post-fs-data
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
     chmod 0770 /data/misc/virtualizationservice
     exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0770 system system
+    mkdir /data/misc/virtualizationservice 0771 system system
 
     # /data/preloads uses encryption=None because it only contains preloaded
     # files that are public information, similar to the system image.
