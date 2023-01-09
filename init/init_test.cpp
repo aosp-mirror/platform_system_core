@@ -21,8 +21,10 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android/api-level.h>
 #include <gtest/gtest.h>
 #include <selinux/selinux.h>
+#include <sys/resource.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -624,6 +626,20 @@ service A something
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
     ASSERT_EQ(1u, parser.parse_error_count());
+}
+
+TEST(init, MemLockLimit) {
+    // Test is enforced only for U+ devices
+    if (android::base::GetIntProperty("ro.vendor.api_level", 0) < __ANDROID_API_U__) {
+        GTEST_SKIP();
+    }
+
+    // Verify we are running memlock at, or under, 64KB
+    const unsigned long max_limit = 65536;
+    struct rlimit curr_limit;
+    ASSERT_EQ(getrlimit(RLIMIT_MEMLOCK, &curr_limit), 0);
+    ASSERT_LE(curr_limit.rlim_cur, max_limit);
+    ASSERT_LE(curr_limit.rlim_max, max_limit);
 }
 
 class TestCaseLogger : public ::testing::EmptyTestEventListener {
