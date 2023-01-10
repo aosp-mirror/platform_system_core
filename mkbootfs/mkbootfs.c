@@ -1,12 +1,12 @@
 
-#include <error.h>
+#include <ctype.h>
+#include <err.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <ctype.h>
+#include <unistd.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -342,8 +342,7 @@ static void read_canned_config(char* filename)
 static void devnodes_desc_error(const char* filename, unsigned long line_num,
                               const char* msg)
 {
-    error(EXIT_FAILURE, 0, "failed to read nodes desc file '%s' line %lu: %s",
-          filename, line_num, msg);
+    errx(EXIT_FAILURE, "failed to read nodes desc file '%s' line %lu: %s", filename, line_num, msg);
 }
 
 static int append_devnodes_desc_dir(char* path, char* args)
@@ -388,8 +387,7 @@ static int append_devnodes_desc_nod(char* path, char* args)
 static void append_devnodes_desc(const char* filename)
 {
     FILE* f = fopen(filename, "re");
-    if (!f) error(EXIT_FAILURE, errno,
-                  "failed to open nodes description file '%s'", filename);
+    if (!f) err(EXIT_FAILURE, "failed to open nodes description file '%s'", filename);
 
     char *line, *args, *type, *path;
     unsigned long line_num = 0;
