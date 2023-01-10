@@ -141,19 +141,19 @@ bool Parser::ParseConfigFileInsecure(const std::string& path) {
     return true;
 }
 
-bool Parser::ParseConfigFile(const std::string& path) {
+Result<void> Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     android::base::Timer t;
     auto config_contents = ReadFile(path);
     if (!config_contents.ok()) {
-        LOG(INFO) << "Unable to read config file '" << path << "': " << config_contents.error();
-        return false;
+        return Error() << "Unable to read config file '" << path
+                       << "': " << config_contents.error();
     }
 
     ParseData(path, &config_contents.value());
 
     LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
-    return true;
+    return {};
 }
 
 bool Parser::ParseConfigDir(const std::string& path) {
@@ -176,8 +176,8 @@ bool Parser::ParseConfigDir(const std::string& path) {
     // Sort first so we load files in a consistent order (bug 31996208)
     std::sort(files.begin(), files.end());
     for (const auto& file : files) {
-        if (!ParseConfigFile(file)) {
-            LOG(ERROR) << "could not import file '" << file << "'";
+        if (auto result = ParseConfigFile(file); !result.ok()) {
+            LOG(ERROR) << "could not import file '" << file << "': " << result.error();
         }
     }
     return true;
@@ -187,7 +187,11 @@ bool Parser::ParseConfig(const std::string& path) {
     if (is_dir(path.c_str())) {
         return ParseConfigDir(path);
     }
-    return ParseConfigFile(path);
+    auto result = ParseConfigFile(path);
+    if (!result.ok()) {
+        LOG(INFO) << result.error();
+    }
+    return result.ok();
 }
 
 }  // namespace init
