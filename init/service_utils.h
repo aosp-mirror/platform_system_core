@@ -54,6 +54,7 @@ struct SocketDescriptor {
     int perm = 0;
     std::string context;
     bool passcred = false;
+    bool listen = false;
     bool persist = false;
 
     // Create() creates the named unix domain socket in /dev/socket and returns a Descriptor object.

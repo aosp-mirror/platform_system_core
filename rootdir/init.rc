@@ -720,9 +720,13 @@ on post-fs-data
     # Multi-installed APEXes are selected using persist props.
     # Load persist properties and override properties (if enabled) from /data,
     # before starting apexd.
+    # /data/property should be created before `load_persist_props`
+    mkdir /data/property 0700 root root encryption=Require
     load_persist_props
+
     start logd
     start logd-reinit
+
     # Some existing vendor rc files use 'on load_persist_props_action' to know
     # when persist props are ready. These are difficult to change due to GRF,
     # so continue triggering this action here even though props are already loaded
@@ -842,7 +846,6 @@ on post-fs-data
     mkdir /data/app-asec 0700 root root encryption=Require
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
-    mkdir /data/property 0700 root root encryption=Require
 
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
@@ -918,20 +921,26 @@ on post-fs-data
     mkdir /data/user/0 0700 system system encryption=None
     mount none /data/data /data/user/0 bind rec
 
-    # A tmpfs directory, which will contain all apps CE DE data directory that
-    # bind mount from the original source.
+    # A tmpfs directory, which will contain all apps and sdk sandbox CE and DE
+    # data directory that bind mount from the original source.
     mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
+    mkdir /data_mirror/misc_ce 0700 root root
+    mkdir /data_mirror/misc_de 0700 root root
 
     # Create CE and DE data directory for default volume
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
+    mkdir /data_mirror/misc_ce/null 0700 root root
+    mkdir /data_mirror/misc_de/null 0700 root root
 
     # Bind mount CE and DE data directory to mirror's default volume directory
     mount none /data/user /data_mirror/data_ce/null bind rec
     mount none /data/user_de /data_mirror/data_de/null bind rec
+    mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
+    mount none /data/misc_de /data_mirror/misc_de/null bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
