@@ -303,6 +303,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->scudo_stack_depot = crash_info->data.d.scudo_stack_depot;
       process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
+      process_info->scudo_ring_buffer_size = crash_info->data.d.scudo_ring_buffer_size;
       FALLTHROUGH_INTENDED;
     case 1:
     case 2:
