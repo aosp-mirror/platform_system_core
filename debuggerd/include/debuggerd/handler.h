@@ -43,6 +43,7 @@ struct debugger_process_info {
   const char* scudo_stack_depot;
   const char* scudo_region_info;
   const char* scudo_ring_buffer;
+  size_t scudo_ring_buffer_size;
 };
 
 // These callbacks are called in a signal handler, and thus must be async signal safe.
