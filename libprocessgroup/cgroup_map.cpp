@@ -49,7 +49,7 @@ using android::base::WriteStringToFile;
 
 static constexpr const char* CGROUP_PROCS_FILE = "/cgroup.procs";
 static constexpr const char* CGROUP_TASKS_FILE = "/tasks";
-static constexpr const char* CGROUP_TASKS_FILE_V2 = "/cgroup.tasks";
+static constexpr const char* CGROUP_TASKS_FILE_V2 = "/cgroup.threads";
 
 uint32_t CgroupController::version() const {
     CHECK(HasValue());
