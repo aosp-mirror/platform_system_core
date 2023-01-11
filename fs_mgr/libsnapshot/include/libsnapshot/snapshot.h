@@ -395,6 +395,10 @@ class SnapshotManager final : public ISnapshotManager {
     // first-stage to decide whether to launch snapuserd.
     bool IsSnapuserdRequired();
 
+    // This is primarily used to device reboot. If OTA update is in progress,
+    // init will avoid killing processes
+    bool IsUserspaceSnapshotUpdateInProgress();
+
     enum class SnapshotDriver {
         DM_SNAPSHOT,
         DM_USER,
