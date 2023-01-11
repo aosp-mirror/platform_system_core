@@ -175,6 +175,8 @@ bool VerifyCheckpointing() {
     }
     if (checkpointing) {
         LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
+        LOG(ERROR) << "To force end checkpointing, call 'vdc checkpoint commitChanges'";
+        LOG(ERROR) << "Warning: this can lead to data corruption if rolled back.";
         return false;
     }
     return true;
