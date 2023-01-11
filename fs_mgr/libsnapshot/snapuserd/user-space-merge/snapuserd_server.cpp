@@ -55,6 +55,7 @@ DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
     if (input == "initiate_merge") return DaemonOps::INITIATE;
     if (input == "merge_percent") return DaemonOps::PERCENTAGE;
     if (input == "getstatus") return DaemonOps::GETSTATUS;
+    if (input == "update-verify") return DaemonOps::UPDATE_VERIFY;
 
     return DaemonOps::INVALID;
 }
@@ -289,6 +290,14 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
                 std::string merge_status = GetMergeStatus(*iter);
                 return Sendmsg(fd, merge_status);
             }
+        }
+        case DaemonOps::UPDATE_VERIFY: {
+            std::lock_guard<std::mutex> lock(lock_);
+            if (!UpdateVerification(&lock)) {
+                return Sendmsg(fd, "fail");
+            }
+
+            return Sendmsg(fd, "success");
         }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
@@ -748,6 +757,23 @@ bool UserSnapshotServer::RunForSocketHandoff() {
         PLOG(FATAL) << "Proxy could not receive terminating code from snapuserd";
     }
     return true;
+}
+
+bool UserSnapshotServer::UpdateVerification(std::lock_guard<std::mutex>* proof_of_lock) {
+    CHECK(proof_of_lock);
+
+    bool status = true;
+    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
+        auto& th = (*iter)->thread();
+        if (th.joinable() && status) {
+            status = (*iter)->snapuserd()->CheckPartitionVerification() && status;
+        } else {
+            // return immediately if there is a failure
+            return false;
+        }
+    }
+
+    return status;
 }
 
 }  // namespace snapshot
