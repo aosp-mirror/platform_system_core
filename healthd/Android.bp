@@ -2,17 +2,8 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_library_headers {
-    name: "libhealthd_headers",
-    vendor_available: true,
-    recovery_available: true,
-    export_include_dirs: ["include"],
-    header_libs: ["libbatteryservice_headers"],
-    export_header_lib_headers: ["libbatteryservice_headers"],
-}
-
-cc_library_static {
-    name: "libbatterymonitor",
+cc_defaults {
+    name: "libbatterymonitor_defaults",
     srcs: ["BatteryMonitor.cpp"],
     cflags: ["-Wall", "-Werror"],
     vendor_available: true,
@@ -25,6 +16,66 @@ cc_library_static {
         // Need HealthInfo definition from headers of these shared
         // libraries. Clients don't need to link to these.
         "android.hardware.health@2.1",
+    ],
+    header_libs: ["libhealthd_headers"],
+    export_header_lib_headers: ["libhealthd_headers"],
+}
+
+cc_defaults {
+    name: "libhealthd_charger_ui_defaults",
+    vendor_available: true,
+    export_include_dirs: [
+        "include",
+        "include_charger",
+    ],
+
+    static_libs: [
+        "libcharger_sysprop",
+        "libhealthd_draw",
+        "libhealthloop",
+        "libminui",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "libpng",
+        "libsuspend",
+        "libutils",
+    ],
+
+    header_libs: [
+        "libhealthd_headers",
+    ],
+
+    srcs: [
+        "healthd_mode_charger.cpp",
+        "AnimationParser.cpp",
+    ],
+
+    target: {
+        vendor: {
+            exclude_static_libs: [
+                "libcharger_sysprop",
+            ],
+        },
+    },
+}
+
+cc_library_headers {
+    name: "libhealthd_headers",
+    vendor_available: true,
+    recovery_available: true,
+    export_include_dirs: ["include"],
+    header_libs: ["libbatteryservice_headers"],
+    export_header_lib_headers: ["libbatteryservice_headers"],
+}
+
+cc_library_static {
+    name: "libbatterymonitor",
+    defaults: ["libbatterymonitor_defaults"],
+    static_libs: [
         "android.hardware.health-V1-ndk",
     ],
     whole_static_libs: [
@@ -32,8 +83,20 @@ cc_library_static {
         // BatteryMonitor.
         "android.hardware.health-translate-ndk",
     ],
-    header_libs: ["libhealthd_headers"],
-    export_header_lib_headers: ["libhealthd_headers"],
+}
+
+// TODO(b/251425963): remove when android.hardware.health is upgraded to V2.
+cc_library_static {
+    name: "libbatterymonitor-V1",
+    defaults: ["libbatterymonitor_defaults"],
+    static_libs: [
+        "android.hardware.health-V1-ndk",
+    ],
+    whole_static_libs: [
+        // Need to translate HIDL to AIDL to support legacy APIs in
+        // BatteryMonitor.
+        "android.hardware.health-translate-V1-ndk",
+    ],
 }
 
 cc_defaults {
@@ -136,50 +199,31 @@ cc_library_static {
 
 cc_library_static {
     name: "libhealthd_charger_ui",
-    vendor_available: true,
-    export_include_dirs: [
-        "include",
-        "include_charger",
-    ],
+    defaults: ["libhealthd_charger_ui_defaults"],
 
     static_libs: [
         "android.hardware.health-V1-ndk",
         "android.hardware.health-translate-ndk",
-        "libcharger_sysprop",
-        "libhealthd_draw",
-        "libhealthloop",
-        "libminui",
-    ],
-
-    shared_libs: [
-        "libbase",
-        "libcutils",
-        "liblog",
-        "libpng",
-        "libsuspend",
-        "libutils",
-    ],
-
-    header_libs: [
-        "libhealthd_headers",
     ],
 
     export_static_lib_headers: [
         "android.hardware.health-V1-ndk",
     ],
+}
 
-    srcs: [
-        "healthd_mode_charger.cpp",
-        "AnimationParser.cpp",
+// TODO(b/251425963): remove when android.hardware.health is upgraded to V2.
+cc_library_static {
+    name: "libhealthd_charger_ui-V1",
+    defaults: ["libhealthd_charger_ui_defaults"],
+
+    static_libs: [
+        "android.hardware.health-V1-ndk",
+        "android.hardware.health-translate-V1-ndk",
     ],
 
-    target: {
-        vendor: {
-            exclude_static_libs: [
-                "libcharger_sysprop",
-            ],
-        },
-    },
+    export_static_lib_headers: [
+        "android.hardware.health-V1-ndk",
+    ],
 }
 
 cc_library_static {
