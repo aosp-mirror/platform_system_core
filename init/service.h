@@ -56,6 +56,8 @@
                                      // should not be killed during shutdown
 #define SVC_TEMPORARY 0x1000  // This service was started by 'exec' and should be removed from the
                               // service list once it is reaped.
+#define SVC_GENTLE_KILL 0x2000  // This service should be stopped with SIGTERM instead of SIGKILL
+                                // Will still be SIGKILLed after timeout period of 200 ms
 
 #define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
 

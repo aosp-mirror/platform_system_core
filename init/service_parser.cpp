@@ -151,6 +151,11 @@ Result<void> ServiceParser::ParseEnterNamespace(std::vector<std::string>&& args)
     return {};
 }
 
+Result<void> ServiceParser::ParseGentleKill(std::vector<std::string>&& args) {
+    service_->flags_ |= SVC_GENTLE_KILL;
+    return {};
+}
+
 Result<void> ServiceParser::ParseGroup(std::vector<std::string>&& args) {
     auto gid = DecodeUid(args[1]);
     if (!gid.ok()) {
@@ -584,6 +589,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"disabled",                {0,     0,    &ServiceParser::ParseDisabled}},
         {"enter_namespace",         {2,     2,    &ServiceParser::ParseEnterNamespace}},
         {"file",                    {2,     2,    &ServiceParser::ParseFile}},
+        {"gentle_kill",             {0,     0,    &ServiceParser::ParseGentleKill}},
         {"group",                   {1,     NR_SVC_SUPP_GIDS + 1, &ServiceParser::ParseGroup}},
         {"interface",               {2,     2,    &ServiceParser::ParseInterface}},
         {"ioprio",                  {2,     2,    &ServiceParser::ParseIoprio}},
