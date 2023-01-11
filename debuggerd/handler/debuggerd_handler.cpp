@@ -187,27 +187,29 @@ static bool get_main_thread_name(char* buf, size_t len) {
  * mutex is being held, so we don't want to use any libc functions that
  * could allocate memory or hold a lock.
  */
-static void log_signal_summary(const siginfo_t* info) {
+static void log_signal_summary(const siginfo_t* si) {
   char main_thread_name[MAX_TASK_NAME_LEN + 1];
   if (!get_main_thread_name(main_thread_name, sizeof(main_thread_name))) {
     strncpy(main_thread_name, "<unknown>", sizeof(main_thread_name));
   }
 
-  if (info->si_signo == BIONIC_SIGNAL_DEBUGGER) {
+  if (si->si_signo == BIONIC_SIGNAL_DEBUGGER) {
     async_safe_format_log(ANDROID_LOG_INFO, "libc", "Requested dump for pid %d (%s)", __getpid(),
                           main_thread_name);
     return;
   }
 
-  // Many signals don't have an address or sender.
-  char addr_desc[32] = "";  // ", fault addr 0x1234"
-  if (signal_has_si_addr(info)) {
-    async_safe_format_buffer(addr_desc, sizeof(addr_desc), ", fault addr %p", info->si_addr);
-  }
+  // Many signals don't have a sender or extra detail, but some do...
   pid_t self_pid = __getpid();
   char sender_desc[32] = {};  // " from pid 1234, uid 666"
-  if (signal_has_sender(info, self_pid)) {
-    get_signal_sender(sender_desc, sizeof(sender_desc), info);
+  if (signal_has_sender(si, self_pid)) {
+    get_signal_sender(sender_desc, sizeof(sender_desc), si);
+  }
+  char extra_desc[32] = {};  // ", fault addr 0x1234" or ", syscall 1234"
+  if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
+    async_safe_format_buffer(extra_desc, sizeof(extra_desc), ", syscall %d", si->si_syscall);
+  } else if (signal_has_si_addr(si)) {
+    async_safe_format_buffer(extra_desc, sizeof(extra_desc), ", fault addr %p", si->si_addr);
   }
 
   char thread_name[MAX_TASK_NAME_LEN + 1];  // one more for termination
@@ -221,8 +223,8 @@ static void log_signal_summary(const siginfo_t* info) {
 
   async_safe_format_log(ANDROID_LOG_FATAL, "libc",
                         "Fatal signal %d (%s), code %d (%s%s)%s in tid %d (%s), pid %d (%s)",
-                        info->si_signo, get_signame(info), info->si_code, get_sigcode(info),
-                        sender_desc, addr_desc, __gettid(), thread_name, self_pid, main_thread_name);
+                        si->si_signo, get_signame(si), si->si_code, get_sigcode(si), sender_desc,
+                        extra_desc, __gettid(), thread_name, self_pid, main_thread_name);
 }
 
 /*
@@ -371,11 +373,29 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
       {.iov_base = thread_info->ucontext, .iov_len = sizeof(ucontext_t)},
   };
 
+  constexpr size_t kHeaderSize = sizeof(version) + sizeof(siginfo_t) + sizeof(ucontext_t);
+
   if (thread_info->process_info.fdsan_table) {
     // Dynamic executables always use version 4. There is no need to increment the version number if
     // the format changes, because the sender (linker) and receiver (crash_dump) are version locked.
     version = 4;
     expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
+
+    static_assert(sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic) ==
+                      kHeaderSize + sizeof(thread_info->process_info),
+                  "Wire protocol structs do not match the data sent.");
+#define ASSERT_SAME_OFFSET(MEMBER1, MEMBER2) \
+    static_assert(sizeof(CrashInfoHeader) + offsetof(CrashInfoDataDynamic, MEMBER1) == \
+                      kHeaderSize + offsetof(debugger_process_info, MEMBER2), \
+                  "Wire protocol offset does not match data sent: " #MEMBER1);
+    ASSERT_SAME_OFFSET(fdsan_table_address, fdsan_table);
+    ASSERT_SAME_OFFSET(gwp_asan_state, gwp_asan_state);
+    ASSERT_SAME_OFFSET(gwp_asan_metadata, gwp_asan_metadata);
+    ASSERT_SAME_OFFSET(scudo_stack_depot, scudo_stack_depot);
+    ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
+    ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
+    ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
+#undef ASSERT_SAME_OFFSET
 
     iovs[3] = {.iov_base = &thread_info->process_info,
                .iov_len = sizeof(thread_info->process_info)};
@@ -383,6 +403,10 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     // Static executables always use version 1.
     version = 1;
     expected = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
+
+    static_assert(
+        sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic) == kHeaderSize + sizeof(uintptr_t),
+        "Wire protocol structs do not match the data sent.");
 
     iovs[3] = {.iov_base = &thread_info->process_info.abort_msg, .iov_len = sizeof(uintptr_t)};
   }

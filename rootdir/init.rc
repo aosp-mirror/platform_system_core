@@ -47,6 +47,9 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # set RLIMIT_MEMLOCK to 64KB
+    setrlimit memlock 65536 65536
+
     # Set up linker config subdirectories based on mount namespaces
     mkdir /linkerconfig/bootstrap 0755
     mkdir /linkerconfig/default 0755
@@ -490,18 +493,26 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
 service boringssl_self_test32 /system/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test64 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex64 doesn't require any capabilities
+    capabilities
 
 
 # Healthd can trigger a full boot from charger mode by signaling this
@@ -839,7 +850,7 @@ on post-fs-data
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
     chmod 0770 /data/misc/virtualizationservice
     exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0770 system system
+    mkdir /data/misc/virtualizationservice 0771 system system
 
     # /data/preloads uses encryption=None because it only contains preloaded
     # files that are public information, similar to the system image.
