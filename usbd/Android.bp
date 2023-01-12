@@ -8,10 +8,12 @@ cc_binary {
     srcs: ["usbd.cpp"],
     shared_libs: [
         "libbase",
+        "libbinder_ndk",
         "libhidlbase",
         "liblog",
         "libutils",
         "libhardware",
         "android.hardware.usb.gadget@1.0",
+        "android.hardware.usb.gadget-V1-ndk",
     ],
 }
