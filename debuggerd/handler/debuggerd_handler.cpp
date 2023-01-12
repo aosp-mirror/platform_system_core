@@ -394,6 +394,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_stack_depot, scudo_stack_depot);
     ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
     ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
+    ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
 #undef ASSERT_SAME_OFFSET
 
     iovs[3] = {.iov_base = &thread_info->process_info,
