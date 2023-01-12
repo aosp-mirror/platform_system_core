@@ -174,6 +174,17 @@ If the property `true` becomes `true` *AFTER* `boot` was triggered, nothing will
 be executed. The condition `boot && property:true=true` will be evaluated to
 false because the `boot` trigger is a past event.
 
+Note that when `ro.property_service.async_persist_writes` is `true`, there is no
+defined ordering between persistent setprops and non-persistent setprops. For
+example:
+
+    on boot
+        setprop a 1
+        setprop persist.b 2
+
+When `ro.property_service.async_persist_writes` is `true`, triggers for these
+two properties may execute in any order.
+
 Services
 --------
 Services are programs which init launches and (optionally) restarts
