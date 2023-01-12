@@ -1,20 +1,18 @@
 
 #include <ctype.h>
+#include <dirent.h>
 #include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
-#include <dirent.h>
-
-#include <stdarg.h>
-#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <linux/kdev_t.h>
 
@@ -23,22 +21,11 @@
 
 /* NOTES
 **
-** - see buffer-format.txt from the linux kernel docs for
-**   an explanation of this file format
+** - see https://www.kernel.org/doc/Documentation/early-userspace/buffer-format.txt
+**   for an explanation of this file format
 ** - dotfiles are ignored
 ** - directories named 'root' are ignored
 */
-
-static void die(const char* why, ...) {
-    va_list ap;
-
-    va_start(ap, why);
-    fprintf(stderr,"error: ");
-    vfprintf(stderr, why, ap);
-    fprintf(stderr,"\n");
-    va_end(ap);
-    exit(1);
-}
 
 struct fs_config_entry {
     char* name;
@@ -48,17 +35,8 @@ struct fs_config_entry {
 static struct fs_config_entry* canned_config = NULL;
 static const char* target_out_path = NULL;
 
-/* Each line in the canned file should be a path plus three ints (uid,
- * gid, mode). */
-#ifdef PATH_MAX
-#define CANNED_LINE_LENGTH  (PATH_MAX+100)
-#else
-#define CANNED_LINE_LENGTH  (1024)
-#endif
-
 #define TRAILER "TRAILER!!!"
 
-static int verbose = 0;
 static int total_size = 0;
 
 static void fix_stat(const char *path, struct stat *s)
@@ -134,7 +112,7 @@ static void _eject(struct stat *s, char *out, int olen, char *data, unsigned dat
 
     total_size += 6 + 8*13 + olen + 1;
 
-    if(strlen(out) != (unsigned int)olen) die("ACK!");
+    if(strlen(out) != (unsigned int)olen) errx(1, "ACK!");
 
     while(total_size & 3) {
         total_size++;
@@ -168,23 +146,16 @@ static int compare(const void* a, const void* b) {
 static void _archive_dir(char *in, char *out, int ilen, int olen)
 {
     int i, t;
-    DIR *d;
     struct dirent *de;
 
-    if(verbose) {
-        fprintf(stderr,"_archive_dir('%s','%s',%d,%d)\n",
-                in, out, ilen, olen);
-    }
-
-    d = opendir(in);
-    if(d == 0) die("cannot open directory '%s'", in);
+    DIR* d = opendir(in);
+    if (d == NULL) err(1, "cannot open directory '%s'", in);
 
     int size = 32;
     int entries = 0;
     char** names = malloc(size * sizeof(char*));
     if (names == NULL) {
-      fprintf(stderr, "failed to allocate dir names array (size %d)\n", size);
-      exit(1);
+      errx(1, "failed to allocate dir names array (size %d)", size);
     }
 
     while((de = readdir(d)) != 0){
@@ -198,16 +169,12 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
           size *= 2;
           names = realloc(names, size * sizeof(char*));
           if (names == NULL) {
-            fprintf(stderr, "failed to reallocate dir names array (size %d)\n",
-                    size);
-            exit(1);
+            errx(1, "failed to reallocate dir names array (size %d)", size);
           }
         }
         names[entries] = strdup(de->d_name);
         if (names[entries] == NULL) {
-          fprintf(stderr, "failed to strdup name \"%s\"\n",
-                  de->d_name);
-          exit(1);
+          errx(1, "failed to strdup name \"%s\"", de->d_name);
         }
         ++entries;
     }
@@ -241,26 +208,17 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
 static void _archive(char *in, char *out, int ilen, int olen)
 {
     struct stat s;
-
-    if(verbose) {
-        fprintf(stderr,"_archive('%s','%s',%d,%d)\n",
-                in, out, ilen, olen);
-    }
-
-    if(lstat(in, &s)) die("could not stat '%s'\n", in);
+    if(lstat(in, &s)) err(1, "could not stat '%s'", in);
 
     if(S_ISREG(s.st_mode)){
-        char *tmp;
-        int fd;
+        int fd = open(in, O_RDONLY);
+        if(fd < 0) err(1, "cannot open '%s' for read", in);
 
-        fd = open(in, O_RDONLY);
-        if(fd < 0) die("cannot open '%s' for read", in);
-
-        tmp = (char*) malloc(s.st_size);
-        if(tmp == 0) die("cannot allocate %d bytes", s.st_size);
+        char* tmp = (char*) malloc(s.st_size);
+        if(tmp == 0) errx(1, "cannot allocate %zd bytes", s.st_size);
 
         if(read(fd, tmp, s.st_size) != s.st_size) {
-            die("cannot read %d bytes", s.st_size);
+            err(1, "cannot read %zd bytes", s.st_size);
         }
 
         _eject(&s, out, olen, tmp, s.st_size);
@@ -274,13 +232,13 @@ static void _archive(char *in, char *out, int ilen, int olen)
         char buf[1024];
         int size;
         size = readlink(in, buf, 1024);
-        if(size < 0) die("cannot read symlink '%s'", in);
+        if(size < 0) err(1, "cannot read symlink '%s'", in);
         _eject(&s, out, olen, buf, size);
     } else if(S_ISBLK(s.st_mode) || S_ISCHR(s.st_mode) ||
               S_ISFIFO(s.st_mode) || S_ISSOCK(s.st_mode)) {
         _eject(&s, out, olen, NULL, 0);
     } else {
-        die("Unknown '%s' (mode %d)?\n", in, s.st_mode);
+        errx(1, "Unknown '%s' (mode %d)?", in, s.st_mode);
     }
 }
 
@@ -302,17 +260,18 @@ static void read_canned_config(char* filename)
     canned_config =
         (struct fs_config_entry*)malloc(allocated * sizeof(struct fs_config_entry));
 
-    char line[CANNED_LINE_LENGTH];
-    FILE* f = fopen(filename, "r");
-    if (f == NULL) die("failed to open canned file '%s'", filename);
+    FILE* fp = fopen(filename, "r");
+    if (fp == NULL) err(1, "failed to open canned file '%s'", filename);
 
-    while (fgets(line, CANNED_LINE_LENGTH, f) != NULL) {
+    char* line = NULL;
+    size_t allocated_len;
+    while (getline(&line, &allocated_len, fp) != -1) {
         if (!line[0]) break;
         if (used >= allocated) {
             allocated *= 2;
             canned_config = (struct fs_config_entry*)realloc(
                 canned_config, allocated * sizeof(struct fs_config_entry));
-            if (canned_config == NULL) die("failed to reallocate memory");
+            if (canned_config == NULL) errx(1, "failed to reallocate memory");
         }
 
         struct fs_config_entry* cc = canned_config + used;
@@ -332,17 +291,18 @@ static void read_canned_config(char* filename)
         ++allocated;
         canned_config = (struct fs_config_entry*)realloc(
             canned_config, allocated * sizeof(struct fs_config_entry));
-        if (canned_config == NULL) die("failed to reallocate memory");
+        if (canned_config == NULL) errx(1, "failed to reallocate memory");
     }
     canned_config[used].name = NULL;
 
-    fclose(f);
+    free(line);
+    fclose(fp);
 }
 
 static void devnodes_desc_error(const char* filename, unsigned long line_num,
                               const char* msg)
 {
-    errx(EXIT_FAILURE, "failed to read nodes desc file '%s' line %lu: %s", filename, line_num, msg);
+    errx(1, "failed to read nodes desc file '%s' line %lu: %s", filename, line_num, msg);
 }
 
 static int append_devnodes_desc_dir(char* path, char* args)
@@ -386,15 +346,15 @@ static int append_devnodes_desc_nod(char* path, char* args)
 
 static void append_devnodes_desc(const char* filename)
 {
-    FILE* f = fopen(filename, "re");
-    if (!f) err(EXIT_FAILURE, "failed to open nodes description file '%s'", filename);
+    FILE* fp = fopen(filename, "re");
+    if (!fp) err(1, "failed to open nodes description file '%s'", filename);
 
-    char *line, *args, *type, *path;
     unsigned long line_num = 0;
-    size_t allocated_len;
 
-    while (getline(&line, &allocated_len, f) != -1) {
-        char* type;
+    char* line = NULL;
+    size_t allocated_len;
+    while (getline(&line, &allocated_len, fp) != -1) {
+        char *type, *path, *args;
 
         line_num++;
 
@@ -428,7 +388,7 @@ static void append_devnodes_desc(const char* filename)
     }
 
     free(line);
-    fclose(f);
+    fclose(fp);
 }
 
 static const struct option long_options[] = {
@@ -448,7 +408,8 @@ static void usage(void)
             "\t-f, --file=FILE: Canned configuration file\n"
             "\t-h, --help: Print this help\n"
             "\t-n, --nodes=FILE: Dev nodes description file\n"
-            "\nDev nodes description:\n"
+            "\n"
+            "Dev nodes description:\n"
             "\t[dir|nod] [perms] [uid] [gid] [c|b] [minor] [major]\n"
             "\tExample:\n"
             "\t\t# My device nodes\n"
@@ -477,7 +438,7 @@ int main(int argc, char *argv[])
             break;
         default:
             usage();
-            die("Unknown option %s", argv[optind - 1]);
+            errx(1, "Unknown option %s", argv[optind - 1]);
         }
     }
 
@@ -486,7 +447,7 @@ int main(int argc, char *argv[])
 
     if (num_dirs <= 0) {
         usage();
-        die("no directories to process?!");
+        errx(1, "no directories to process?!");
     }
 
     while(num_dirs-- > 0){
