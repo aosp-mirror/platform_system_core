@@ -244,6 +244,10 @@ runs the service.
   "r", "w" or "rw".  For native executables see libcutils
   android\_get\_control\_file().
 
+`gentle_kill`
+> This service will be sent SIGTERM instead of SIGKILL when stopped. After a 200 ms timeout, it will
+  be sent SIGKILL.
+
 `group <groupname> [ <groupname>\* ]`
 > Change to 'groupname' before exec'ing this service.  Additional
   groupnames beyond the (required) first one are used to set the
