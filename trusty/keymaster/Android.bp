@@ -181,3 +181,30 @@ cc_binary {
         "-Werror",
     ],
 }
+
+cc_binary {
+    name: "trusty_keymaster_set_attestation_ids",
+    vendor: true,
+
+    srcs: [
+        "set_attestation_ids/set_attestation_ids.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "libbase",
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}

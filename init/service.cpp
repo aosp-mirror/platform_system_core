@@ -26,6 +26,7 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
+#include <thread>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -887,6 +888,10 @@ void Service::StopOrReset(int how) {
     }
 
     if (pid_) {
+        if (flags_ & SVC_GENTLE_KILL) {
+            KillProcessGroup(SIGTERM);
+            if (!process_cgroup_empty()) std::this_thread::sleep_for(200ms);
+        }
         KillProcessGroup(SIGKILL);
         NotifyStateChange("stopping");
     } else {

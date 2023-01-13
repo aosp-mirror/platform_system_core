@@ -174,6 +174,17 @@ If the property `true` becomes `true` *AFTER* `boot` was triggered, nothing will
 be executed. The condition `boot && property:true=true` will be evaluated to
 false because the `boot` trigger is a past event.
 
+Note that when `ro.property_service.async_persist_writes` is `true`, there is no
+defined ordering between persistent setprops and non-persistent setprops. For
+example:
+
+    on boot
+        setprop a 1
+        setprop persist.b 2
+
+When `ro.property_service.async_persist_writes` is `true`, triggers for these
+two properties may execute in any order.
+
 Services
 --------
 Services are programs which init launches and (optionally) restarts
@@ -243,6 +254,10 @@ runs the service.
 > Open a file path and pass its fd to the launched process. _type_ must be
   "r", "w" or "rw".  For native executables see libcutils
   android\_get\_control\_file().
+
+`gentle_kill`
+> This service will be sent SIGTERM instead of SIGKILL when stopped. After a 200 ms timeout, it will
+  be sent SIGKILL.
 
 `group <groupname> [ <groupname>\* ]`
 > Change to 'groupname' before exec'ing this service.  Additional
