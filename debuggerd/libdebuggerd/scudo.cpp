@@ -44,9 +44,12 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
                                        __scudo_get_stack_depot_size());
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
-  auto ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
-                                       process_info.scudo_ring_buffer_size);
-  if (!stack_depot || !region_info || !ring_buffer) {
+  std::unique_ptr<char[]> ring_buffer;
+  if (process_info.scudo_ring_buffer_size != 0) {
+    ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
+                                    process_info.scudo_ring_buffer_size);
+  }
+  if (!stack_depot || !region_info) {
     return;
   }
 
