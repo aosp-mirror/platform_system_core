@@ -29,10 +29,12 @@
 #include <chrono>
 #include <sstream>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
 
 namespace android {
@@ -277,6 +279,43 @@ bool SnapuserdClient::QueryUpdateVerification() {
     }
     std::string response = Receivemsg();
     return response == "success";
+}
+
+std::string SnapuserdClient::GetDaemonAliveIndicatorPath() {
+    return "/metadata/ota/" + std::string(kDaemonAliveIndicator);
+}
+
+bool SnapuserdClient::IsTransitionedDaemonReady() {
+    if (!android::fs_mgr::WaitForFile(GetDaemonAliveIndicatorPath(), 10s)) {
+        LOG(ERROR) << "Timed out waiting for daemon indicator path: "
+                   << GetDaemonAliveIndicatorPath();
+        return false;
+    }
+
+    return true;
+}
+
+bool SnapuserdClient::RemoveTransitionedDaemonIndicator() {
+    std::string error;
+    std::string filePath = GetDaemonAliveIndicatorPath();
+    if (!android::base::RemoveFileIfExists(filePath, &error)) {
+        LOG(ERROR) << "Failed to remove DaemonAliveIndicatorPath - error: " << error;
+        return false;
+    }
+
+    if (!android::fs_mgr::WaitForFileDeleted(filePath, 5s)) {
+        LOG(ERROR) << "Timed out waiting for " << filePath << " to unlink";
+        return false;
+    }
+
+    return true;
+}
+
+void SnapuserdClient::NotifyTransitionDaemonIsReady() {
+    if (!android::base::WriteStringToFile("1", GetDaemonAliveIndicatorPath())) {
+        PLOG(ERROR) << "Unable to write daemon alive indicator path: "
+                    << GetDaemonAliveIndicatorPath();
+    }
 }
 
 }  // namespace snapshot
