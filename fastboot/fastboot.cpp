@@ -1082,7 +1082,8 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer* buf)
     sparse_file** s;
 
     if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
-        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b") {
+        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
+        partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
         copy_avb_footer(partition, buf);
     }
 
