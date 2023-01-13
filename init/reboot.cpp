@@ -51,6 +51,7 @@
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
+#include <libsnapshot/snapshot.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
@@ -422,11 +423,31 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
     if (run_fsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
-
+    auto sm = snapshot::SnapshotManager::New();
+    bool ota_update_in_progress = false;
+    if (sm->IsUserspaceSnapshotUpdateInProgress()) {
+        LOG(INFO) << "OTA update in progress";
+        ota_update_in_progress = true;
+    }
     UmountStat stat = UmountPartitions(timeout - t.duration());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
         if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        // Since umount timedout, we will try to kill all processes
+        // and do one more attempt to umount the partitions.
+        //
+        // However, if OTA update is in progress, we don't want
+        // to kill the snapuserd daemon as the daemon will
+        // be serving I/O requests. Killing the daemon will
+        // end up with I/O failures. If the update is in progress,
+        // we will just return the umount failure status immediately.
+        // This is ok, given the fact that killing the processes
+        // and doing an umount is just a last effort. We are
+        // still not doing fsck when all processes are killed.
+        //
+        if (ota_update_in_progress) {
+            return stat;
+        }
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
         UmountStat st = UmountPartitions(0ms);
