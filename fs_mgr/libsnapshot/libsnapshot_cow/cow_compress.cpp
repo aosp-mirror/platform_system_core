@@ -32,9 +32,13 @@
 
 namespace android {
 namespace snapshot {
-
 std::basic_string<uint8_t> CompressWorker::Compress(const void* data, size_t length) {
-    switch (compression_) {
+    return Compress(compression_, data, length);
+}
+
+std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm compression,
+                                                    const void* data, size_t length) {
+    switch (compression) {
         case kCowCompressGz: {
             const auto bound = compressBound(length);
             std::basic_string<uint8_t> buffer(bound, '\0');
@@ -94,17 +98,22 @@ std::basic_string<uint8_t> CompressWorker::Compress(const void* data, size_t len
             return buffer;
         }
         default:
-            LOG(ERROR) << "unhandled compression type: " << compression_;
+            LOG(ERROR) << "unhandled compression type: " << compression;
             break;
     }
     return {};
 }
-
 bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks,
+                                    std::vector<std::basic_string<uint8_t>>* compressed_data) {
+    return CompressBlocks(compression_, block_size_, buffer, num_blocks, compressed_data);
+}
+
+bool CompressWorker::CompressBlocks(CowCompressionAlgorithm compression, size_t block_size,
+                                    const void* buffer, size_t num_blocks,
                                     std::vector<std::basic_string<uint8_t>>* compressed_data) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(buffer);
     while (num_blocks) {
-        auto data = Compress(iter, block_size_);
+        auto data = Compress(compression, iter, block_size);
         if (data.empty()) {
             PLOG(ERROR) << "CompressBlocks: Compression failed";
             return false;
@@ -116,7 +125,7 @@ bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks,
 
         compressed_data->emplace_back(std::move(data));
         num_blocks -= 1;
-        iter += block_size_;
+        iter += block_size;
     }
     return true;
 }
