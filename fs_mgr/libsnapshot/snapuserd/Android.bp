@@ -37,11 +37,13 @@ cc_defaults {
 cc_library_static {
     name: "libsnapshot_snapuserd",
     defaults: [
+        "fs_mgr_defaults",
         "libsnapshot_snapuserd_defaults",
     ],
     recovery_available: true,
     static_libs: [
         "libcutils_sockets",
+        "libfs_mgr",
     ],
     shared_libs: [
         "libbase",
@@ -49,6 +51,7 @@ cc_library_static {
     ],
     export_include_dirs: ["include"],
     ramdisk_available: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_defaults {
@@ -86,6 +89,7 @@ cc_defaults {
         "libgflags",
         "liblog",
         "libsnapshot_cow",
+        "libsnapshot_snapuserd",
         "libz",
         "liblz4",
         "libext4_utils",

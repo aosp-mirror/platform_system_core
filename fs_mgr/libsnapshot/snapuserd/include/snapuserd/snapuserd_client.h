@@ -32,6 +32,7 @@ static constexpr uint32_t PACKET_SIZE = 512;
 
 static constexpr char kSnapuserdSocket[] = "snapuserd";
 static constexpr char kSnapuserdSocketProxy[] = "snapuserd_proxy";
+static constexpr char kDaemonAliveIndicator[] = "daemon-alive-indicator";
 
 // Ensure that the second-stage daemon for snapuserd is running.
 bool EnsureSnapuserdStarted();
@@ -44,9 +45,11 @@ class SnapuserdClient {
     std::string Receivemsg();
 
     bool ValidateConnection();
+    std::string GetDaemonAliveIndicatorPath();
 
   public:
     explicit SnapuserdClient(android::base::unique_fd&& sockfd);
+    SnapuserdClient(){};
 
     static std::unique_ptr<SnapuserdClient> Connect(const std::string& socket_name,
                                                     std::chrono::milliseconds timeout_ms);
@@ -91,6 +94,17 @@ class SnapuserdClient {
     // Check the update verification status - invoked by update_verifier during
     // boot
     bool QueryUpdateVerification();
+
+    // Check if Snapuser daemon is ready post selinux transition after OTA boot
+    // This is invoked only by init as there is no sockets setup yet during
+    // selinux transition
+    bool IsTransitionedDaemonReady();
+
+    // Remove the daemon-alive-indicator path post snapshot merge
+    bool RemoveTransitionedDaemonIndicator();
+
+    // Notify init that snapuserd daemon is ready post selinux transition
+    void NotifyTransitionDaemonIsReady();
 };
 
 }  // namespace snapshot
