@@ -316,6 +316,7 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
         StringPrintf(" from pid %d, uid %d", signal_info.sender_pid(), signal_info.sender_uid());
   }
 
+  bool is_async_mte_crash = false;
   if (!tombstone.has_signal_info()) {
     CBL("signal information missing");
   } else {
@@ -329,6 +330,9 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
     CBL("signal %d (%s), code %d (%s%s), fault addr %s", signal_info.number(),
         signal_info.name().c_str(), signal_info.code(), signal_info.code_name().c_str(),
         sender_desc.c_str(), fault_addr_desc.c_str());
+#ifdef SEGV_MTEAERR
+    is_async_mte_crash = signal_info.number() == SIGSEGV && signal_info.code() == SEGV_MTEAERR;
+#endif
   }
 
   if (tombstone.causes_size() == 1) {
@@ -340,6 +344,11 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   }
 
   print_thread_registers(callback, tombstone, thread, true);
+  if (is_async_mte_crash) {
+    CBL("Note: This crash is a delayed async MTE crash. Memory corruption has occurred");
+    CBL("      in this process. The stack trace below is the first system call or context");
+    CBL("      switch that was executed after the memory corruption happened.");
+  }
   print_thread_backtrace(callback, tombstone, thread, true);
 
   if (tombstone.causes_size() > 1) {
