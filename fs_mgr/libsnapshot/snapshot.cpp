@@ -4349,5 +4349,16 @@ std::string SnapshotManager::ReadSourceBuildFingerprint() {
     return status.source_build_fingerprint();
 }
 
+bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
+    auto slot = GetCurrentSlot();
+    if (slot == Slot::Target) {
+        if (IsSnapuserdRequired()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 }  // namespace snapshot
 }  // namespace android
