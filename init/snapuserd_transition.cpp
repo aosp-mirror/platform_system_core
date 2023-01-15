@@ -112,6 +112,10 @@ void LaunchFirstStageSnapuserd(SnapshotDriver driver) {
 
     setenv(kSnapuserdFirstStagePidVar, std::to_string(pid).c_str(), 1);
 
+    if (!client->RemoveTransitionedDaemonIndicator()) {
+        LOG(ERROR) << "RemoveTransitionedDaemonIndicator failed";
+    }
+
     LOG(INFO) << "Relaunched snapuserd with pid: " << pid;
 }
 
@@ -263,6 +267,19 @@ void SnapuserdSelinuxHelper::FinishTransition() {
  * we may see audit logs.
  */
 bool SnapuserdSelinuxHelper::TestSnapuserdIsReady() {
+    // Wait for the daemon to be fully up. Daemon will write to path
+    // /metadata/ota/daemon-alive-indicator only when all the threads
+    // are ready and attached to dm-user.
+    //
+    // This check will fail for GRF devices with vendor on Android S.
+    // snapuserd binary from Android S won't be able to communicate
+    // and hence, we will fallback and issue I/O to verify
+    // the presence of daemon.
+    auto client = std::make_unique<SnapuserdClient>();
+    if (!client->IsTransitionedDaemonReady()) {
+        LOG(ERROR) << "IsTransitionedDaemonReady failed";
+    }
+
     std::string dev = "/dev/block/mapper/system"s + fs_mgr_get_slot_suffix();
     android::base::unique_fd fd(open(dev.c_str(), O_RDONLY | O_DIRECT));
     if (fd < 0) {
