@@ -27,5 +27,16 @@
     {
       "name": "cow_api_test"
     }
+  ],
+  "kernel-presubmit": [
+    {
+      "name": "vts_libdm_test"
+    },
+    {
+      "name": "vts_core_liblp_test"
+    },
+    {
+      "name": "vts_libsnapshot_test"
+    }
   ]
 }
