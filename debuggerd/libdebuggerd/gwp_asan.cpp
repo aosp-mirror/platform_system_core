@@ -88,7 +88,7 @@ GwpAsanCrashData::GwpAsanCrashData(unwindstack::Memory* process_memory,
   thread_id_ = thread_info.tid;
 
   // Grab the internal error address, if it exists.
-  uintptr_t internal_crash_address = __gwp_asan_get_internal_crash_address(&state_);
+  uintptr_t internal_crash_address = __gwp_asan_get_internal_crash_address(&state_, crash_address_);
   if (internal_crash_address) {
     crash_address_ = internal_crash_address;
   }
