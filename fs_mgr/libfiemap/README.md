@@ -35,18 +35,18 @@ images. After `/data` is mounted however, there are two problems:
 
 We break the problem down into three scenarios.
 
-### FDE and Metadata Encrypted Devices
+### Metadata Encrypted Devices
 
-When FDE or metadata encryption is used, `/data` is not mounted from
+When metadata encryption is used, `/data` is not mounted from
 `/dev/block/by-name/data`. Instead, it is mounted from an intermediate
-`dm-crypt` or `dm-default-key` device. This means the underlying device is
-not marked in use, and we can create new dm-linear devices on top of it.
+`dm-default-key` device. This means the underlying device is not marked in use,
+and we can create new dm-linear devices on top of it.
 
 On these devices, a block device for an image will consist of a single
 device-mapper device with a `dm-linear` table entry for each extent in the
 backing file.
 
-### Unencrypted and FBE-encrypted Devices
+### Unencrypted and FBE-only Devices
 
 When a device is unencrypted, or is encrypted with FBE but not metadata
 encryption, we instead use a loop device with `LOOP_SET_DIRECT_IO` enabled.
