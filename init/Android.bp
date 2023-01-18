@@ -454,15 +454,7 @@ cc_test {
     defaults: ["init_defaults"],
     require_root: true,
 
-    compile_multilib: "both",
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
+    compile_multilib: "first",
 
     srcs: [
         "devices_test.cpp",
