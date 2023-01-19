@@ -40,15 +40,6 @@ on post-fs-data
     chown system log /data/misc/bootstat/time_since_last_boot
     # end ota transitional support
 
-# Record the time at which the user has successfully entered the pin to decrypt
-# the device, /data is decrypted, and the system is entering the main boot phase.
-#
-# post-fs-data: /data is writable
-# property:init.svc.bootanim=running: The boot animation is running
-# property:ro.crypto.type=block: FDE device
-on post-fs-data && property:init.svc.bootanim=running && property:ro.crypto.type=block
-    exec_background - system log -- /system/bin/bootstat -r post_decrypt_time_elapsed
-
 # Initialize bootstat state machine.
 #
 # sys.bootstat.first_boot_completed: responsible for making sure that record_boot_complete happens
