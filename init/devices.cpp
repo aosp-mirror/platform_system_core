@@ -431,6 +431,12 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         }
     }
 
+    std::string model;
+    if (ReadFileToString("/sys/class/block/" + uevent.device_name + "/queue/zoned", &model) &&
+        !StartsWith(model, "none")) {
+        links.emplace_back("/dev/block/by-name/zoned_device");
+    }
+
     auto last_slash = uevent.path.rfind('/');
     links.emplace_back(link_path + "/" + uevent.path.substr(last_slash + 1));
 

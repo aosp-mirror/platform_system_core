@@ -304,19 +304,16 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (StartsWith(flag, "zoned_device=")) {
-            std::string zoned;
-            if (ReadFileToString("/sys/class/block/" + arg + "/queue/zoned", &zoned) &&
-                android::base::StartsWith(zoned, "host-managed")) {
-                entry->zoned_device = "/dev/block/" + arg;
+        } else if (flag == "zoned_device") {
+            if (access("/dev/block/by-name/zoned_device", F_OK) == 0) {
+                entry->zoned_device = "/dev/block/by-name/zoned_device";
 
                 // atgc in f2fs does not support a zoned device
                 auto options = Split(entry->fs_options, ",");
                 options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
                 entry->fs_options = android::base::Join(options, ",");
-                LINFO << "Removed ATGC in fs_options as " << entry->fs_options;
-            } else {
-                LWARNING << "Warning: cannot find the zoned device: " << arg;
+                LINFO << "Removed ATGC in fs_options as " << entry->fs_options
+                      << " for zoned device=" << entry->zoned_device;
             }
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
