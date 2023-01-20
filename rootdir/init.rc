@@ -643,7 +643,7 @@ on late-fs
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
-    # HALs required before storage encryption can get unlocked (FBE/FDE)
+    # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
 
     # Load trusted keys from dm-verity protected partitions
@@ -746,9 +746,8 @@ on post-fs-data
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     #
-    # To handle userspace reboots as well as devices that use FDE, make sure
-    # that apexd is started cleanly here (set apexd.status="") and that it is
-    # restarted if it's already running.
+    # To handle userspace reboots, make sure that apexd is started cleanly here
+    # (set apexd.status="") and that it is restarted if it's already running.
     #
     # /data/apex uses encryption=None because direct I/O support is needed on
     # APEX files, but some devices don't support direct I/O on encrypted files.
