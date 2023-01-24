@@ -17,7 +17,7 @@
 #define LOG_TAG "healthd"
 
 #include <healthd/healthd.h>
-#include <healthd/BatteryMonitor.h>
+#include <healthd/BatteryMonitor_v1.h>
 
 #include <dirent.h>
 #include <errno.h>
@@ -55,10 +55,7 @@ using HealthInfo_1_0 = android::hardware::health::V1_0::HealthInfo;
 using HealthInfo_2_0 = android::hardware::health::V2_0::HealthInfo;
 using HealthInfo_2_1 = android::hardware::health::V2_1::HealthInfo;
 using aidl::android::hardware::health::BatteryCapacityLevel;
-using aidl::android::hardware::health::BatteryChargingPolicy;
-using aidl::android::hardware::health::BatteryChargingState;
 using aidl::android::hardware::health::BatteryHealth;
-using aidl::android::hardware::health::BatteryHealthData;
 using aidl::android::hardware::health::BatteryStatus;
 using aidl::android::hardware::health::HealthInfo;
 
@@ -230,47 +227,12 @@ BatteryHealth getBatteryHealth(const char* status) {
     return *ret;
 }
 
-BatteryChargingPolicy getBatteryChargingPolicy(const char* chargingPolicy) {
-    static SysfsStringEnumMap<BatteryChargingPolicy> batteryChargingPolicyMap[] = {
-            {"0", BatteryChargingPolicy::INVALID},   {"1", BatteryChargingPolicy::DEFAULT},
-            {"2", BatteryChargingPolicy::LONG_LIFE}, {"3", BatteryChargingPolicy::ADAPTIVE},
-            {NULL, BatteryChargingPolicy::DEFAULT},
-    };
-
-    auto ret = mapSysfsString(chargingPolicy, batteryChargingPolicyMap);
-    if (!ret) {
-        *ret = BatteryChargingPolicy::DEFAULT;
-    }
-
-    return *ret;
-}
-
-BatteryChargingState getBatteryChargingState(const char* chargingState) {
-    static SysfsStringEnumMap<BatteryChargingState> batteryChargingStateMap[] = {
-            {"0", BatteryChargingState::INVALID},   {"1", BatteryChargingState::NORMAL},
-            {"2", BatteryChargingState::TOO_COLD},  {"3", BatteryChargingState::TOO_HOT},
-            {"4", BatteryChargingState::LONG_LIFE}, {"5", BatteryChargingState::ADAPTIVE},
-            {NULL, BatteryChargingState::NORMAL},
-    };
-
-    auto ret = mapSysfsString(chargingState, batteryChargingStateMap);
-    if (!ret) {
-        *ret = BatteryChargingState::NORMAL;
-    }
-
-    return *ret;
-}
-
 static int readFromFile(const String8& path, std::string* buf) {
     buf->clear();
     if (android::base::ReadFileToString(path.c_str(), buf)) {
         *buf = android::base::Trim(*buf);
     }
     return buf->length();
-}
-
-static bool writeToFile(const String8& path, int32_t in_value) {
-    return android::base::WriteStringToFile(std::to_string(in_value), path.c_str());
 }
 
 static BatteryMonitor::PowerSupplyType readPowerSupplyType(const String8& path) {
@@ -374,17 +336,6 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->batteryFullChargeDesignCapacityUah =
                 getIntField(mHealthdConfig->batteryFullChargeDesignCapacityUahPath);
 
-    if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
-        mHealthInfo->batteryStateOfHealth = getIntField(mHealthdConfig->batteryStateOfHealthPath);
-
-    if (!mHealthdConfig->batteryManufacturingDatePath.isEmpty())
-        mHealthInfo->batteryHealthData->batteryManufacturingDateSeconds =
-                getIntField(mHealthdConfig->batteryManufacturingDatePath);
-
-    if (!mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
-        mHealthInfo->batteryHealthData->batteryFirstUsageSeconds =
-                getIntField(mHealthdConfig->batteryFirstUsageDatePath);
-
     mHealthInfo->batteryTemperatureTenthsCelsius =
             mBatteryFixedTemperature ? mBatteryFixedTemperature
                                      : getIntField(mHealthdConfig->batteryTemperaturePath);
@@ -402,12 +353,6 @@ void BatteryMonitor::updateValues(void) {
 
     if (readFromFile(mHealthdConfig->batteryTechnologyPath, &buf) > 0)
         mHealthInfo->batteryTechnology = String8(buf.c_str());
-
-    if (readFromFile(mHealthdConfig->chargingPolicyPath, &buf) > 0)
-        mHealthInfo->chargingPolicy = getBatteryChargingPolicy(buf.c_str());
-
-    if (readFromFile(mHealthdConfig->chargingStatePath, &buf) > 0)
-        mHealthInfo->chargingState = getBatteryChargingState(buf.c_str());
 
     double MaxPower = 0;
 
@@ -531,43 +476,6 @@ int BatteryMonitor::getChargeStatus() {
     return static_cast<int>(result);
 }
 
-status_t BatteryMonitor::setChargingPolicy(int value) {
-    status_t ret = NAME_NOT_FOUND;
-    bool result;
-    if (!mHealthdConfig->chargingPolicyPath.isEmpty()) {
-        result = writeToFile(mHealthdConfig->chargingPolicyPath, value);
-        if (!result) {
-            KLOG_WARNING(LOG_TAG, "setChargingPolicy fail\n");
-            ret = BAD_VALUE;
-        } else {
-            ret = OK;
-        }
-    }
-    return ret;
-}
-
-int BatteryMonitor::getChargingPolicy() {
-    BatteryChargingPolicy result = BatteryChargingPolicy::DEFAULT;
-    if (!mHealthdConfig->chargingPolicyPath.isEmpty()) {
-        std::string buf;
-        if (readFromFile(mHealthdConfig->chargingPolicyPath, &buf) > 0)
-            result = getBatteryChargingPolicy(buf.c_str());
-    }
-    return static_cast<int>(result);
-}
-
-int BatteryMonitor::getBatteryHealthData(int id) {
-    if (id == BATTERY_PROP_MANUFACTURING_DATE) {
-        if (!mHealthdConfig->batteryManufacturingDatePath.isEmpty())
-            return getIntField(mHealthdConfig->batteryManufacturingDatePath);
-    }
-    if (id == BATTERY_PROP_FIRST_USAGE_DATE) {
-        if (!mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
-            return getIntField(mHealthdConfig->batteryFirstUsageDatePath);
-    }
-    return 0;
-}
-
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     status_t ret = BAD_VALUE;
     std::string buf;
@@ -625,21 +533,6 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_BATTERY_STATUS:
         val->valueInt64 = getChargeStatus();
-        ret = OK;
-        break;
-
-    case BATTERY_PROP_CHARGING_POLICY:
-        val->valueInt64 = getChargingPolicy();
-        ret = OK;
-        break;
-
-    case BATTERY_PROP_MANUFACTURING_DATE:
-        val->valueInt64 = getBatteryHealthData(BATTERY_PROP_MANUFACTURING_DATE);
-        ret = OK;
-        break;
-
-    case BATTERY_PROP_FIRST_USAGE_DATE:
-        val->valueInt64 = getBatteryHealthData(BATTERY_PROP_FIRST_USAGE_DATE);
         ret = OK;
         break;
 
@@ -865,44 +758,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                         mHealthdConfig->batteryTechnologyPath = path;
                 }
 
-                if (mHealthdConfig->batteryStateOfHealthPath.isEmpty()) {
-                    path.clear();
-                    path.appendFormat("%s/%s/state_of_health", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) {
-                        mHealthdConfig->batteryStateOfHealthPath = path;
-                    } else {
-                        path.clear();
-                        path.appendFormat("%s/%s/health_index", POWER_SUPPLY_SYSFS_PATH, name);
-                        if (access(path, R_OK) == 0)
-                            mHealthdConfig->batteryStateOfHealthPath = path;
-                    }
-                }
-
-                if (mHealthdConfig->batteryManufacturingDatePath.isEmpty()) {
-                    path.clear();
-                    path.appendFormat("%s/%s/manufacturing_date", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryManufacturingDatePath = path;
-                }
-
-                if (mHealthdConfig->batteryFirstUsageDatePath.isEmpty()) {
-                    path.clear();
-                    path.appendFormat("%s/%s/first_usage_date", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->batteryFirstUsageDatePath = path;
-                }
-
-                if (mHealthdConfig->chargingStatePath.isEmpty()) {
-                    path.clear();
-                    path.appendFormat("%s/%s/charging_state", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->chargingStatePath = path;
-                }
-
-                if (mHealthdConfig->chargingPolicyPath.isEmpty()) {
-                    path.clear();
-                    path.appendFormat("%s/%s/charging_policy", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->chargingPolicyPath = path;
-                }
-
                 break;
 
             case ANDROID_POWER_SUPPLY_TYPE_UNKNOWN:
@@ -955,16 +810,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "batteryChargeTimeToFullNowPath. not found\n");
         if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "batteryFullChargeDesignCapacityUahPath. not found\n");
-        if (mHealthdConfig->batteryStateOfHealthPath.isEmpty())
-            KLOG_WARNING(LOG_TAG, "batteryStateOfHealthPath not found\n");
-        if (mHealthdConfig->batteryManufacturingDatePath.isEmpty())
-            KLOG_WARNING(LOG_TAG, "batteryManufacturingDatePath not found\n");
-        if (mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
-            KLOG_WARNING(LOG_TAG, "batteryFirstUsageDatePath not found\n");
-        if (mHealthdConfig->chargingStatePath.isEmpty())
-            KLOG_WARNING(LOG_TAG, "chargingStatePath not found\n");
-        if (mHealthdConfig->chargingPolicyPath.isEmpty())
-            KLOG_WARNING(LOG_TAG, "chargingPolicyPath not found\n");
     }
 
     if (property_get("ro.boot.fake_battery", pval, NULL) > 0
