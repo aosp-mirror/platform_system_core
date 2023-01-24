@@ -4,7 +4,6 @@ package {
 
 cc_defaults {
     name: "libbatterymonitor_defaults",
-    srcs: ["BatteryMonitor.cpp"],
     cflags: ["-Wall", "-Werror"],
     vendor_available: true,
     recovery_available: true,
@@ -75,6 +74,7 @@ cc_library_headers {
 cc_library_static {
     name: "libbatterymonitor",
     defaults: ["libbatterymonitor_defaults"],
+    srcs: ["BatteryMonitor.cpp"],
     static_libs: [
         "android.hardware.health-V2-ndk",
     ],
@@ -89,6 +89,7 @@ cc_library_static {
 cc_library_static {
     name: "libbatterymonitor-V1",
     defaults: ["libbatterymonitor_defaults"],
+    srcs: ["BatteryMonitor_v1.cpp"],
     static_libs: [
         "android.hardware.health-V1-ndk",
     ],
