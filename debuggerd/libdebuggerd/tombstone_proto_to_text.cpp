@@ -392,6 +392,7 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   }
 
   bool is_async_mte_crash = false;
+  bool is_mte_crash = false;
   if (!tombstone.has_signal_info()) {
     CBL("signal information missing");
   } else {
@@ -408,6 +409,8 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
         sender_desc.c_str(), fault_addr_desc.c_str());
 #ifdef SEGV_MTEAERR
     is_async_mte_crash = signal_info.number() == SIGSEGV && signal_info.code() == SEGV_MTEAERR;
+    is_mte_crash = is_async_mte_crash ||
+                   (signal_info.number() == SIGSEGV && signal_info.code() == SEGV_MTESERR);
 #endif
   }
 
@@ -457,6 +460,12 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   }
 
   print_tag_dump(callback, tombstone);
+
+  if (is_mte_crash) {
+    CBS("");
+    CBL("Learn more about MTE reports: "
+        "https://source.android.com/docs/security/test/memory-safety/mte-reports");
+  }
 
   print_thread_memory_dump(callback, tombstone, thread);
 
