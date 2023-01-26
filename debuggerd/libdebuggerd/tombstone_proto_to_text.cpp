@@ -303,9 +303,84 @@ static void print_tag_dump(CallbackType callback, const Tombstone& tombstone) {
   }
 }
 
+static void print_memory_maps(CallbackType callback, const Tombstone& tombstone) {
+  int word_size = pointer_width(tombstone);
+  const auto format_pointer = [word_size](uint64_t ptr) -> std::string {
+    if (word_size == 8) {
+      uint64_t top = ptr >> 32;
+      uint64_t bottom = ptr & 0xFFFFFFFF;
+      return StringPrintf("%08" PRIx64 "'%08" PRIx64, top, bottom);
+    }
+
+    return StringPrintf("%0*" PRIx64, word_size * 2, ptr);
+  };
+
+  std::string memory_map_header =
+      StringPrintf("memory map (%d %s):", tombstone.memory_mappings().size(),
+                   tombstone.memory_mappings().size() == 1 ? "entry" : "entries");
+
+  const Signal& signal_info = tombstone.signal_info();
+  bool has_fault_address = signal_info.has_fault_address();
+  uint64_t fault_address = untag_address(signal_info.fault_address());
+  bool preamble_printed = false;
+  bool printed_fault_address_marker = false;
+  for (const auto& map : tombstone.memory_mappings()) {
+    if (!preamble_printed) {
+      preamble_printed = true;
+      if (has_fault_address) {
+        if (fault_address < map.begin_address()) {
+          memory_map_header +=
+              StringPrintf("\n--->Fault address falls at %s before any mapped regions",
+                           format_pointer(fault_address).c_str());
+          printed_fault_address_marker = true;
+        } else {
+          memory_map_header += " (fault address prefixed with --->)";
+        }
+      }
+      CBS("%s", memory_map_header.c_str());
+    }
+
+    std::string line = "    ";
+    if (has_fault_address && !printed_fault_address_marker) {
+      if (fault_address < map.begin_address()) {
+        printed_fault_address_marker = true;
+        CBS("--->Fault address falls at %s between mapped regions",
+            format_pointer(fault_address).c_str());
+      } else if (fault_address >= map.begin_address() && fault_address < map.end_address()) {
+        printed_fault_address_marker = true;
+        line = "--->";
+      }
+    }
+    StringAppendF(&line, "%s-%s", format_pointer(map.begin_address()).c_str(),
+                  format_pointer(map.end_address() - 1).c_str());
+    StringAppendF(&line, " %s%s%s", map.read() ? "r" : "-", map.write() ? "w" : "-",
+                  map.execute() ? "x" : "-");
+    StringAppendF(&line, "  %8" PRIx64 "  %8" PRIx64, map.offset(),
+                  map.end_address() - map.begin_address());
+
+    if (!map.mapping_name().empty()) {
+      StringAppendF(&line, "  %s", map.mapping_name().c_str());
+
+      if (!map.build_id().empty()) {
+        StringAppendF(&line, " (BuildId: %s)", map.build_id().c_str());
+      }
+
+      if (map.load_bias() != 0) {
+        StringAppendF(&line, " (load bias 0x%" PRIx64 ")", map.load_bias());
+      }
+    }
+
+    CBS("%s", line.c_str());
+  }
+
+  if (has_fault_address && !printed_fault_address_marker) {
+    CBS("--->Fault address falls at %s after any mapped regions",
+        format_pointer(fault_address).c_str());
+  }
+}
+
 static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
                               const Thread& thread) {
-  int word_size = pointer_width(tombstone);
   print_thread_header(callback, tombstone, thread, true);
 
   const Signal& signal_info = tombstone.signal_info();
@@ -322,7 +397,8 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   } else {
     std::string fault_addr_desc;
     if (signal_info.has_fault_address()) {
-      fault_addr_desc = StringPrintf("0x%0*" PRIx64, 2 * word_size, signal_info.fault_address());
+      fault_addr_desc =
+          StringPrintf("0x%0*" PRIx64, 2 * pointer_width(tombstone), signal_info.fault_address());
     } else {
       fault_addr_desc = "--------";
     }
@@ -387,81 +463,10 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   CBS("");
 
   // No memory maps to print.
-  if (tombstone.memory_mappings().empty()) {
+  if (!tombstone.memory_mappings().empty()) {
+    print_memory_maps(callback, tombstone);
+  } else {
     CBS("No memory maps found");
-    return;
-  }
-
-  const auto format_pointer = [word_size](uint64_t ptr) -> std::string {
-    if (word_size == 8) {
-      uint64_t top = ptr >> 32;
-      uint64_t bottom = ptr & 0xFFFFFFFF;
-      return StringPrintf("%08" PRIx64 "'%08" PRIx64, top, bottom);
-    }
-
-    return StringPrintf("%0*" PRIx64, word_size * 2, ptr);
-  };
-
-  std::string memory_map_header =
-      StringPrintf("memory map (%d %s):", tombstone.memory_mappings().size(),
-                   tombstone.memory_mappings().size() == 1 ? "entry" : "entries");
-
-  bool has_fault_address = signal_info.has_fault_address();
-  uint64_t fault_address = untag_address(signal_info.fault_address());
-  bool preamble_printed = false;
-  bool printed_fault_address_marker = false;
-  for (const auto& map : tombstone.memory_mappings()) {
-    if (!preamble_printed) {
-      preamble_printed = true;
-      if (has_fault_address) {
-        if (fault_address < map.begin_address()) {
-          memory_map_header +=
-              StringPrintf("\n--->Fault address falls at %s before any mapped regions",
-                           format_pointer(fault_address).c_str());
-          printed_fault_address_marker = true;
-        } else {
-          memory_map_header += " (fault address prefixed with --->)";
-        }
-      }
-      CBS("%s", memory_map_header.c_str());
-    }
-
-    std::string line = "    ";
-    if (has_fault_address && !printed_fault_address_marker) {
-      if (fault_address < map.begin_address()) {
-        printed_fault_address_marker = true;
-        CBS("--->Fault address falls at %s between mapped regions",
-            format_pointer(fault_address).c_str());
-      } else if (fault_address >= map.begin_address() && fault_address < map.end_address()) {
-        printed_fault_address_marker = true;
-        line = "--->";
-      }
-    }
-    StringAppendF(&line, "%s-%s", format_pointer(map.begin_address()).c_str(),
-                  format_pointer(map.end_address() - 1).c_str());
-    StringAppendF(&line, " %s%s%s", map.read() ? "r" : "-", map.write() ? "w" : "-",
-                  map.execute() ? "x" : "-");
-    StringAppendF(&line, "  %8" PRIx64 "  %8" PRIx64, map.offset(),
-                  map.end_address() - map.begin_address());
-
-    if (!map.mapping_name().empty()) {
-      StringAppendF(&line, "  %s", map.mapping_name().c_str());
-
-      if (!map.build_id().empty()) {
-        StringAppendF(&line, " (BuildId: %s)", map.build_id().c_str());
-      }
-
-      if (map.load_bias() != 0) {
-        StringAppendF(&line, " (load bias 0x%" PRIx64 ")", map.load_bias());
-      }
-    }
-
-    CBS("%s", line.c_str());
-  }
-
-  if (has_fault_address && !printed_fault_address_marker) {
-    CBS("--->Fault address falls at %s after any mapped regions",
-        format_pointer(fault_address).c_str());
   }
 }
 
