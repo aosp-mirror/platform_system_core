@@ -53,7 +53,15 @@
 #include <libsnapshot/mock_device_info.h>
 #include <libsnapshot/mock_snapshot.h>
 
-DEFINE_string(force_mode, "",
+#if defined(LIBSNAPSHOT_TEST_VAB_LEGACY)
+#define DEFAULT_MODE "vab-legacy"
+#elif defined(LIBSNAPSHOT_TEST_VABC_LEGACY)
+#define DEFAULT_MODE "vabc-legacy"
+#else
+#define DEFAULT_MODE ""
+#endif
+
+DEFINE_string(force_mode, DEFAULT_MODE,
               "Force testing older modes (vab-legacy, vabc-legacy) ignoring device config.");
 DEFINE_string(force_iouring_disable, "",
               "Force testing mode (iouring_disabled) - disable io_uring");

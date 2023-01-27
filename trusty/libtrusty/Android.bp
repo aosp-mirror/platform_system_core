@@ -33,5 +33,6 @@ cc_library {
     // TODO(b/170753563): cc_fuzz can't deal with vendor components. Build
     // libtrusty for system and vendor.
     vendor_available: true,
+    recovery_available: true,
     defaults: ["libtrusty_defaults"],
 }

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef HEALTHD_BATTERYMONITOR_H
-#define HEALTHD_BATTERYMONITOR_H
+#ifndef HEALTHD_BATTERYMONITOR_V1_H
+#define HEALTHD_BATTERYMONITOR_V1_H
 
 #include <memory>
 
@@ -72,10 +72,6 @@ class BatteryMonitor {
     void logValues(void);
     bool isChargerOnline();
 
-    int setChargingPolicy(int value);
-    int getChargingPolicy();
-    int getBatteryHealthData(int id);
-
     static void logValues(const android::hardware::health::V2_1::HealthInfo& health_info,
                           const struct healthd_config& healthd_config);
 
@@ -90,4 +86,4 @@ class BatteryMonitor {
 
 }; // namespace android
 
-#endif // HEALTHD_BATTERY_MONTIOR_H
+#endif // HEALTHD_BATTERYMONITOR_V1_H
