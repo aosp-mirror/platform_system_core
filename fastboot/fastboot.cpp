@@ -106,6 +106,8 @@ static bool g_disable_verification = false;
 
 fastboot::FastBootDriver* fb = nullptr;
 
+using SparsePtr = std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)>;
+
 enum fb_buffer_type {
     FB_BUFFER_FD,
     FB_BUFFER_SPARSE,
@@ -113,7 +115,7 @@ enum fb_buffer_type {
 
 struct fastboot_buffer {
     enum fb_buffer_type type;
-    void* data;
+    std::vector<SparsePtr> files;
     int64_t sz;
     unique_fd fd;
     int64_t image_size;
@@ -824,24 +826,25 @@ static void DumpInfo() {
     fprintf(stderr, "--------------------------------------------\n");
 }
 
-static struct sparse_file** load_sparse_files(int fd, int64_t max_size) {
-    struct sparse_file* s = sparse_file_import_auto(fd, false, true);
+static std::vector<SparsePtr> load_sparse_files(int fd, int64_t max_size) {
+    SparsePtr s(sparse_file_import_auto(fd, false, true), sparse_file_destroy);
     if (!s) die("cannot sparse read file");
 
     if (max_size <= 0 || max_size > std::numeric_limits<uint32_t>::max()) {
         die("invalid max size %" PRId64, max_size);
     }
 
-    int files = sparse_file_resparse(s, max_size, nullptr, 0);
+    const int files = sparse_file_resparse(s.get(), max_size, nullptr, 0);
     if (files < 0) die("Failed to resparse");
 
-    sparse_file** out_s =
-            reinterpret_cast<sparse_file**>(calloc(sizeof(struct sparse_file*), files + 1));
-    if (!out_s) die("Failed to allocate sparse file array");
+    auto temp = std::make_unique<sparse_file*[]>(files);
+    const int rv = sparse_file_resparse(s.get(), max_size, temp.get(), files);
+    if (rv < 0) die("Failed to resparse");
 
-    files = sparse_file_resparse(s, max_size, out_s, files);
-    if (files < 0) die("Failed to resparse");
-
+    std::vector<SparsePtr> out_s;
+    for (int i = 0; i < files; i++) {
+        out_s.emplace_back(temp[i], sparse_file_destroy);
+    }
     return out_s;
 }
 
@@ -903,15 +906,13 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     int64_t limit = get_sparse_limit(sz);
     buf->fd = std::move(fd);
     if (limit) {
-        sparse_file** s = load_sparse_files(buf->fd.get(), limit);
-        if (s == nullptr) {
+        buf->files = load_sparse_files(buf->fd.get(), limit);
+        if (buf->files.empty()) {
             return false;
         }
         buf->type = FB_BUFFER_SPARSE;
-        buf->data = s;
     } else {
         buf->type = FB_BUFFER_FD;
-        buf->data = nullptr;
         buf->sz = sz;
     }
 
@@ -1079,8 +1080,6 @@ static void copy_avb_footer(const std::string& partition, struct fastboot_buffer
 }
 
 static void flash_buf(const std::string& partition, struct fastboot_buffer* buf) {
-    sparse_file** s;
-
     if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
         partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
         partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
@@ -1103,17 +1102,10 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer* buf)
 
     switch (buf->type) {
         case FB_BUFFER_SPARSE: {
-            std::vector<std::pair<sparse_file*, int64_t>> sparse_files;
-            s = reinterpret_cast<sparse_file**>(buf->data);
-            while (*s) {
-                int64_t sz = sparse_file_len(*s, true, false);
-                sparse_files.emplace_back(*s, sz);
-                ++s;
-            }
-
-            for (size_t i = 0; i < sparse_files.size(); ++i) {
-                const auto& pair = sparse_files[i];
-                fb->FlashPartition(partition, pair.first, pair.second, i + 1, sparse_files.size());
+            for (size_t i = 0; i < buf->files.size(); i++) {
+                sparse_file* s = buf->files[i].get();
+                int64_t sz = sparse_file_len(s, true, false);
+                fb->FlashPartition(partition, s, sz, i + 1, buf->files.size());
             }
             break;
         }
