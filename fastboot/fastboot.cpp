@@ -53,6 +53,7 @@
 
 #include <android-base/endian.h>
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
@@ -1860,7 +1861,19 @@ static void do_wipe_super(const std::string& image, const std::string& slot_over
     }
 }
 
+static void FastbootLogger(android::base::LogId /* id */, android::base::LogSeverity /* severity */,
+                           const char* /* tag */, const char* /* file */, unsigned int /* line */,
+                           const char* message) {
+    verbose("%s", message);
+}
+
+static void FastbootAborter(const char* message) {
+    die("%s", message);
+}
+
 int FastBootTool::Main(int argc, char* argv[]) {
+    android::base::InitLogging(argv, FastbootLogger, FastbootAborter);
+
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;
