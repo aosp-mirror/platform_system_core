@@ -26,8 +26,10 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 
 #include <string>
@@ -96,13 +98,11 @@ static AvbIOResult no_op_get_unique_guid_for_partition(AvbOps* ops ATTRIBUTE_UNU
     return AVB_IO_RESULT_OK;
 }
 
-static AvbIOResult no_op_get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
-                                              const char* partition ATTRIBUTE_UNUSED,
-                                              uint64_t* out_size_num_byte) {
-    // The function is for bootloader to load entire content of AVB HASH partitions.
-    // In user-space, returns 0 as we only need to set up AVB HASHTHREE partitions.
-    *out_size_num_byte = 0;
-    return AVB_IO_RESULT_OK;
+static AvbIOResult get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
+                                         const char* partition ATTRIBUTE_UNUSED,
+                                         uint64_t* out_size_num_byte) {
+    return FsManagerAvbOps::GetInstanceFromAvbOps(ops)->GetSizeOfPartition(partition,
+                                                                           out_size_num_byte);
 }
 
 // Converts a partition name (with ab_suffix) to the corresponding mount point.
@@ -131,7 +131,7 @@ FsManagerAvbOps::FsManagerAvbOps() {
     avb_ops_.validate_vbmeta_public_key = no_op_validate_vbmeta_public_key;
     avb_ops_.read_is_device_unlocked = no_op_read_is_device_unlocked;
     avb_ops_.get_unique_guid_for_partition = no_op_get_unique_guid_for_partition;
-    avb_ops_.get_size_of_partition = no_op_get_size_of_partition;
+    avb_ops_.get_size_of_partition = get_size_of_partition;
 
     // Sets user_data for GetInstanceFromAvbOps() to convert it back to FsManagerAvbOps.
     avb_ops_.user_data = this;
@@ -167,13 +167,8 @@ std::string FsManagerAvbOps::GetLogicalPath(const std::string& partition_name) {
 
     return "";
 }
-
-AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t offset,
-                                               size_t num_bytes, void* buffer,
-                                               size_t* out_num_read) {
+std::string FsManagerAvbOps::GetPartitionPath(const char* partition) {
     std::string path = "/dev/block/by-name/"s + partition;
-
-    // Ensures the device path (a symlink created by init) is ready to access.
     if (!WaitForFile(path, 1s)) {
         LERROR << "Device path not found: " << path;
         // Falls back to logical path if the physical path is not found.
@@ -182,8 +177,36 @@ AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t of
         // the bootloader failed to read a physical partition, it will failed to boot
         // the HLOS and we won't reach the code here.
         path = GetLogicalPath(partition);
-        if (path.empty() || !WaitForFile(path, 1s)) return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
-        LINFO << "Fallback to use logical device path: " << path;
+        if (path.empty() || !WaitForFile(path, 1s)) return "";
+    }
+    return path;
+}
+
+AvbIOResult FsManagerAvbOps::GetSizeOfPartition(const char* partition,
+                                                uint64_t* out_size_num_byte) {
+    const auto path = GetPartitionPath(partition);
+    if (path.empty()) {
+        return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
+    }
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) {
+        PERROR << "Failed to open " << path;
+        return AVB_IO_RESULT_ERROR_IO;
+    }
+    int err = ioctl(fd, BLKGETSIZE64, out_size_num_byte);
+    if (err) {
+        out_size_num_byte = 0;
+        return AVB_IO_RESULT_ERROR_IO;
+    }
+    return AVB_IO_RESULT_OK;
+}
+
+AvbIOResult FsManagerAvbOps::ReadFromPartition(const char* partition, int64_t offset,
+                                               size_t num_bytes, void* buffer,
+                                               size_t* out_num_read) {
+    std::string path = GetPartitionPath(partition);
+    if (path.empty()) {
+        return AVB_IO_RESULT_ERROR_NO_SUCH_PARTITION;
     }
 
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_CLOEXEC)));
