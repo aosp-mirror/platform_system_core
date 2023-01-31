@@ -44,8 +44,12 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <fstream>
 #include <functional>
+#include <iostream>
+#include <memory>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -216,7 +220,7 @@ static std::string find_item_given_name(const std::string& img_name) {
     return std::string(dir) + "/" + img_name;
 }
 
-static std::string find_item(const std::string& item) {
+std::string find_item(const std::string& item) {
     for (size_t i = 0; i < images.size(); ++i) {
         if (!images[i].nickname.empty() && item == images[i].nickname) {
             return find_item_given_name(images[i].img_name);
@@ -546,8 +550,7 @@ static void list_devices() {
     usb_open(list_devices_callback);
     NetworkDeviceConnected(/* print */ true);
 }
-
-static void syntax_error(const char* fmt, ...) {
+void syntax_error(const char* fmt, ...) {
     fprintf(stderr, "fastboot: usage: ");
 
     va_list ap;
@@ -1410,9 +1413,8 @@ static void do_for_partition(const std::string& part, const std::string& slot,
  * partition names. If force_slot is true, it will fail if a slot is specified, and the given
  * partition does not support slots.
  */
-static void do_for_partitions(const std::string& part, const std::string& slot,
-                              const std::function<void(const std::string&)>& func,
-                              bool force_slot) {
+void do_for_partitions(const std::string& part, const std::string& slot,
+                       const std::function<void(const std::string&)>& func, bool force_slot) {
     std::string has_slot;
     // |part| can be vendor_boot:default. Query has-slot on the first token only.
     auto part_tokens = android::base::Split(part, ":");
@@ -1508,7 +1510,7 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
     return partition;
 }
 
-static void do_flash(const char* pname, const char* fname) {
+void do_flash(const char* pname, const char* fname) {
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
@@ -1537,12 +1539,12 @@ static void set_active(const std::string& slot_override) {
     }
 }
 
-static bool is_userspace_fastboot() {
+bool is_userspace_fastboot() {
     std::string value;
     return fb->GetVar("is-userspace", &value) == fastboot::SUCCESS && value == "yes";
 }
 
-static void reboot_to_userspace_fastboot() {
+void reboot_to_userspace_fastboot() {
     fb->RebootTo("fastboot");
 
     auto* old_transport = fb->set_transport(nullptr);
@@ -2029,7 +2031,7 @@ failed:
     }
 }
 
-static bool should_flash_in_userspace(const std::string& partition_name) {
+bool should_flash_in_userspace(const std::string& partition_name) {
     if (!get_android_product_out()) {
         return false;
     }
@@ -2416,7 +2418,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
             fb->Boot();
         } else if (command == FB_CMD_FLASH) {
             std::string pname = next_arg(&args);
-
             std::string fname;
             if (!args.empty()) {
                 fname = next_arg(&args);
@@ -2424,21 +2425,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fname = find_item(pname);
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
-
-            auto flash = [&](const std::string& partition) {
-                if (should_flash_in_userspace(partition) && !is_userspace_fastboot() &&
-                    !force_flash) {
-                    die("The partition you are trying to flash is dynamic, and "
-                        "should be flashed via fastbootd. Please run:\n"
-                        "\n"
-                        "    fastboot reboot fastboot\n"
-                        "\n"
-                        "And try again. If you are intentionally trying to "
-                        "overwrite a fixed partition, use --force.");
-                }
-                do_flash(partition.c_str(), fname.c_str());
-            };
-            do_for_partitions(pname, slot_override, flash, true);
+            FlashTask task(slot_override, force_flash, pname, fname);
+            task.Run();
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
             std::string kernel = next_arg(&args);
