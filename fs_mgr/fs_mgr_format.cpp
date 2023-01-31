@@ -56,6 +56,9 @@ static int get_dev_sz(const std::string& fs_blkdev, uint64_t* dev_sz) {
     return 0;
 }
 
+#define __STRINGIFY(PRE) #PRE
+#define STRINGIFY(PRE) __STRINGIFY(PRE)
+
 static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_point,
                        bool needs_projid, bool needs_metadata_csum) {
     uint64_t dev_sz;
@@ -68,9 +71,10 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
 
     /* Format the partition using the calculated length */
 
-    std::string size_str = std::to_string(dev_sz / 16384);
+    std::string size_str = std::to_string(dev_sz / TARGET_PAGE_SIZE);
 
-    std::vector<const char*> mke2fs_args = {"/system/bin/mke2fs", "-t", "ext4", "-b", "16384"};
+    std::vector<const char*> mke2fs_args = {"/system/bin/mke2fs", "-t", "ext4", "-b",
+                                            STRINGIFY(TARGET_PAGE_SIZE)};
 
     // Project ID's require wider inodes. The Quotas themselves are enabled by tune2fs during boot.
     if (needs_projid) {
@@ -127,7 +131,7 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs
 
     /* Format the partition using the calculated length */
 
-    std::string size_str = std::to_string(dev_sz / 16384);
+    std::string size_str = std::to_string(dev_sz / TARGET_PAGE_SIZE);
 
     std::vector<const char*> args = {"/system/bin/make_f2fs", "-g", "android"};
     if (needs_projid) {
