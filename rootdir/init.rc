@@ -1288,11 +1288,13 @@ service console /system/bin/sh
     shutdown critical
 
 on property:ro.debuggable=1
-    # Give writes to anyone for the trace folder on debug builds.
+    # Give writes to the same group for the trace folder on debug builds,
+    # it's further protected by selinux policy.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
-    # Give reads to anyone for the window trace folder on debug builds.
-    chmod 0775 /data/misc/wmtrace
+    # Give writes and reads to anyone for the window trace folder on debug builds,
+    # it's further protected by selinux policy.
+    chmod 0777 /data/misc/wmtrace
     # Give reads to anyone for the accessibility trace folder on debug builds.
     chmod 0775 /data/misc/a11ytrace
 
