@@ -21,9 +21,11 @@
 
 #include <android-base/macros.h>
 
+#include <fcntl.h>
 #include <log/log.h>
 
 #include <utils/RefBase.h>
+#include <utils/String8.h>
 
 #include <utils/Mutex.h>
 
@@ -32,7 +34,9 @@
 #endif
 
 // Compile with refcounting debugging enabled.
+#ifndef DEBUG_REFS
 #define DEBUG_REFS 0
+#endif
 
 // The following three are ignored unless DEBUG_REFS is set.
 
@@ -45,7 +49,11 @@
 
 // folder where stack traces are saved when DEBUG_REFS is enabled
 // this folder needs to exist and be writable
+#ifdef __ANDROID__
 #define DEBUG_REFS_CALLSTACK_PATH "/data/debug"
+#else
+#define DEBUG_REFS_CALLSTACK_PATH "."
+#endif
 
 // log all reference counting operations
 #define PRINT_REFS 0
@@ -148,6 +156,29 @@ namespace android {
 
 // Same for weak counts.
 #define BAD_WEAK(c) ((c) == 0 || ((c) & (~MAX_COUNT)) != 0)
+
+// name kept because prebuilts used to use it from inlining sp<> code
+void sp_report_stack_pointer() { LOG_ALWAYS_FATAL("RefBase used with stack pointer argument"); }
+
+// Check whether address is definitely on the calling stack.  We actually check whether it is on
+// the same 4K page as the frame pointer.
+//
+// Assumptions:
+// - Pages are never smaller than 4K (MIN_PAGE_SIZE)
+// - Malloced memory never shares a page with a stack.
+//
+// It does not appear safe to broaden this check to include adjacent pages; apparently this code
+// is used in environments where there may not be a guard page below (at higher addresses than)
+// the bottom of the stack.
+static void check_not_on_stack(const void* ptr) {
+    static constexpr int MIN_PAGE_SIZE = 0x1000;  // 4K. Safer than including sys/user.h.
+    static constexpr uintptr_t MIN_PAGE_MASK = ~static_cast<uintptr_t>(MIN_PAGE_SIZE - 1);
+    uintptr_t my_frame_address =
+            reinterpret_cast<uintptr_t>(__builtin_frame_address(0 /* this frame */));
+    if (((reinterpret_cast<uintptr_t>(ptr) ^ my_frame_address) & MIN_PAGE_MASK) == 0) {
+        sp_report_stack_pointer();
+    }
+}
 
 // ---------------------------------------------------------------------------
 
@@ -297,11 +328,11 @@ public:
             char name[100];
             snprintf(name, sizeof(name), DEBUG_REFS_CALLSTACK_PATH "/%p.stack",
                      this);
-            int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 644);
+            int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 0644);
             if (rc >= 0) {
                 (void)write(rc, text.string(), text.length());
                 close(rc);
-                ALOGD("STACK TRACE for %p saved in %s", this, name);
+                ALOGI("STACK TRACE for %p saved in %s", this, name);
             }
             else ALOGE("FAILED TO PRINT STACK TRACE for %p in %s: %s", this,
                       name, strerror(errno));
@@ -431,6 +462,8 @@ void RefBase::incStrong(const void* id) const
     if (c != INITIAL_STRONG_VALUE)  {
         return;
     }
+
+    check_not_on_stack(this);
 
     int32_t old __unused = refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE, std::memory_order_relaxed);
     // A decStrong() must still happen after us.
@@ -744,21 +777,27 @@ RefBase::~RefBase()
         if (mRefs->mWeak.load(std::memory_order_relaxed) == 0) {
             delete mRefs;
         }
-    } else if (mRefs->mStrong.load(std::memory_order_relaxed) == INITIAL_STRONG_VALUE) {
-        // We never acquired a strong reference on this object.
+    } else {
+        int32_t strongs = mRefs->mStrong.load(std::memory_order_relaxed);
 
-        // TODO: make this fatal, but too much code in Android manages RefBase with
-        // new/delete manually (or using other mechanisms such as std::make_unique).
-        // However, this is dangerous because it's also common for code to use the
-        // sp<T>(T*) constructor, assuming that if the object is around, it is already
-        // owned by an sp<>.
-        ALOGW("RefBase: Explicit destruction, weak count = %d (in %p). Use sp<> to manage this "
-              "object.",
-              mRefs->mWeak.load(), this);
+        if (strongs == INITIAL_STRONG_VALUE) {
+            // We never acquired a strong reference on this object.
+
+            // It would be nice to make this fatal, but many places use RefBase on the stack.
+            // However, this is dangerous because it's also common for code to use the
+            // sp<T>(T*) constructor, assuming that if the object is around, it is already
+            // owned by an sp<>.
+            ALOGW("RefBase: Explicit destruction, weak count = %d (in %p). Use sp<> to manage this "
+                  "object.",
+                  mRefs->mWeak.load(), this);
 
 #if CALLSTACK_ENABLED
-        CallStack::logStack(LOG_TAG);
+            CallStack::logStack(LOG_TAG);
 #endif
+        } else if (strongs != 0) {
+            LOG_ALWAYS_FATAL("RefBase: object %p with strong count %d deleted. Double owned?", this,
+                             strongs);
+        }
     }
     // For debugging purposes, clear mRefs.  Ineffective against outstanding wp's.
     const_cast<weakref_impl*&>(mRefs) = nullptr;
@@ -766,6 +805,8 @@ RefBase::~RefBase()
 
 void RefBase::extendObjectLifetime(int32_t mode)
 {
+    check_not_on_stack(this);
+
     // Must be happens-before ordered with respect to construction or any
     // operation that could destroy the object.
     mRefs->mFlags.fetch_or(mode, std::memory_order_relaxed);

@@ -17,8 +17,8 @@
 #include "libdebuggerd/scudo.h"
 #include "libdebuggerd/tombstone.h"
 
+#include "unwindstack/AndroidUnwinder.h"
 #include "unwindstack/Memory.h"
-#include "unwindstack/Unwinder.h"
 
 #include <android-base/macros.h>
 #include <bionic/macros.h>
@@ -44,8 +44,14 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
                                        __scudo_get_stack_depot_size());
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
-  auto ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
-                                       __scudo_get_ring_buffer_size());
+  std::unique_ptr<char[]> ring_buffer;
+  if (process_info.scudo_ring_buffer_size != 0) {
+    ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
+                                    process_info.scudo_ring_buffer_size);
+  }
+  if (!stack_depot || !region_info) {
+    return;
+  }
 
   untagged_fault_addr_ = process_info.untagged_fault_address;
   uintptr_t fault_page = untagged_fault_addr_ & ~(PAGE_SIZE - 1);
@@ -80,7 +86,7 @@ bool ScudoCrashData::CrashIsMine() const {
 }
 
 void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
-                                 unwindstack::Unwinder* unwinder) const {
+                                 unwindstack::AndroidUnwinder* unwinder) const {
   MemoryError* memory_error = cause->mutable_memory_error();
   HeapObject* heap_object = memory_error->mutable_heap();
 
@@ -102,7 +108,6 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
 
   heap_object->set_address(report->allocation_address);
   heap_object->set_size(report->allocation_size);
-  unwinder->SetDisplayBuildID(true);
 
   heap_object->set_allocation_tid(report->allocation_tid);
   for (size_t i = 0; i < arraysize(report->allocation_trace) && report->allocation_trace[i]; ++i) {
@@ -123,7 +128,8 @@ void ScudoCrashData::FillInCause(Cause* cause, const scudo_error_report* report,
   set_human_readable_cause(cause, untagged_fault_addr_);
 }
 
-void ScudoCrashData::AddCauseProtos(Tombstone* tombstone, unwindstack::Unwinder* unwinder) const {
+void ScudoCrashData::AddCauseProtos(Tombstone* tombstone,
+                                    unwindstack::AndroidUnwinder* unwinder) const {
   size_t report_num = 0;
   while (report_num < sizeof(error_info_.reports) / sizeof(error_info_.reports[0]) &&
          error_info_.reports[report_num].error_type != UNKNOWN) {

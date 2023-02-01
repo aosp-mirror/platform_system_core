@@ -33,6 +33,7 @@
 #include <ios>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -183,6 +184,8 @@ class TargetParser final {
             }
             std::string control_device = NextArg();
             return std::make_unique<DmTargetUser>(start_sector, num_sectors, control_device);
+        } else if (target_type == "error") {
+            return std::make_unique<DmTargetError>(start_sector, num_sectors);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
@@ -206,16 +209,26 @@ class TargetParser final {
     char** argv_;
 };
 
-static bool parse_table_args(DmTable* table, int argc, char** argv) {
+struct TableArgs {
+    DmTable table;
+    bool suspended = false;
+};
+
+static std::optional<TableArgs> parse_table_args(int argc, char** argv) {
+    TableArgs out;
+
     // Parse extended options first.
     int arg_index = 1;
     while (arg_index < argc && argv[arg_index][0] == '-') {
         if (strcmp(argv[arg_index], "-ro") == 0) {
-            table->set_readonly(true);
+            out.table.set_readonly(true);
+            arg_index++;
+        } else if (strcmp(argv[arg_index], "-suspended") == 0) {
+            out.suspended = true;
             arg_index++;
         } else {
             std::cerr << "Unrecognized option: " << argv[arg_index] << std::endl;
-            return -EINVAL;
+            return {};
         }
     }
 
@@ -223,35 +236,42 @@ static bool parse_table_args(DmTable* table, int argc, char** argv) {
     TargetParser parser(argc - arg_index, argv + arg_index);
     while (parser.More()) {
         std::unique_ptr<DmTarget> target = parser.Next();
-        if (!target || !table->AddTarget(std::move(target))) {
-            return -EINVAL;
+        if (!target || !out.table.AddTarget(std::move(target))) {
+            return {};
         }
     }
 
-    if (table->num_targets() == 0) {
+    if (out.table.num_targets() == 0) {
         std::cerr << "Must define at least one target." << std::endl;
-        return -EINVAL;
+        return {};
     }
-    return 0;
+    return {std::move(out)};
 }
 
 static int DmCreateCmdHandler(int argc, char** argv) {
     if (argc < 1) {
-        std::cerr << "Usage: dmctl create <dm-name> [-ro] <targets...>" << std::endl;
+        std::cerr << "Usage: dmctl create <dm-name> [--suspended] [-ro] <targets...>" << std::endl;
         return -EINVAL;
     }
     std::string name = argv[0];
 
-    DmTable table;
-    int ret = parse_table_args(&table, argc, argv);
-    if (ret) {
-        return ret;
+    auto table_args = parse_table_args(argc, argv);
+    if (!table_args) {
+        return -EINVAL;
     }
 
     std::string ignore_path;
     DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.CreateDevice(name, table, &ignore_path, 5s)) {
+    if (!dm.CreateEmptyDevice(name)) {
         std::cerr << "Failed to create device-mapper device with name: " << name << std::endl;
+        return -EIO;
+    }
+    if (!dm.LoadTable(name, table_args->table)) {
+        std::cerr << "Failed to load table for dm device: " << name << std::endl;
+        return -EIO;
+    }
+    if (!table_args->suspended && !dm.ChangeState(name, DmDeviceState::ACTIVE)) {
+        std::cerr << "Failed to activate table for " << name << std::endl;
         return -EIO;
     }
     return 0;
@@ -269,7 +289,6 @@ static int DmDeleteCmdHandler(int argc, char** argv) {
         std::cerr << "Failed to delete [" << name << "]" << std::endl;
         return -EIO;
     }
-
     return 0;
 }
 
@@ -280,15 +299,18 @@ static int DmReplaceCmdHandler(int argc, char** argv) {
     }
     std::string name = argv[0];
 
-    DmTable table;
-    int ret = parse_table_args(&table, argc, argv);
-    if (ret) {
-        return ret;
+    auto table_args = parse_table_args(argc, argv);
+    if (!table_args) {
+        return -EINVAL;
     }
 
     DeviceMapper& dm = DeviceMapper::Instance();
-    if (!dm.LoadTableAndActivate(name, table)) {
+    if (!dm.LoadTable(name, table_args->table)) {
         std::cerr << "Failed to replace device-mapper table to: " << name << std::endl;
+        return -EIO;
+    }
+    if (!table_args->suspended && !dm.ChangeState(name, DmDeviceState::ACTIVE)) {
+        std::cerr << "Failed to activate table for " << name << std::endl;
         return -EIO;
     }
     return 0;

@@ -23,7 +23,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
-#include <syscall.h>
 #include <unistd.h>
 
 #include <limits>
@@ -51,12 +50,9 @@
 #define ATRACE_TAG ATRACE_TAG_BIONIC
 #include <utils/Trace.h>
 
-#include <unwindstack/DexFiles.h>
-#include <unwindstack/JitDebug.h>
-#include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
+#include <unwindstack/AndroidUnwinder.h>
+#include <unwindstack/Error.h>
 #include <unwindstack/Regs.h>
-#include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/tombstone.h"
@@ -307,6 +303,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->scudo_stack_depot = crash_info->data.d.scudo_stack_depot;
       process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
+      process_info->scudo_ring_buffer_size = crash_info->data.d.scudo_ring_buffer_size;
       FALLTHROUGH_INTENDED;
     case 1:
     case 2:
@@ -623,9 +620,12 @@ int main(int argc, char** argv) {
   }
 
   // TODO: Use seccomp to lock ourselves down.
-  unwindstack::UnwinderFromPid unwinder(256, vm_pid, unwindstack::Regs::CurrentArch());
-  if (!unwinder.Init()) {
-    LOG(FATAL) << "Failed to init unwinder object.";
+
+  unwindstack::AndroidRemoteUnwinder unwinder(vm_pid, unwindstack::Regs::CurrentArch());
+  unwindstack::ErrorData error_data;
+  if (!unwinder.Initialize(error_data)) {
+    LOG(FATAL) << "Failed to initialize unwinder object: "
+               << unwindstack::GetErrorCodeString(error_data.code);
   }
 
   std::string amfd_data;

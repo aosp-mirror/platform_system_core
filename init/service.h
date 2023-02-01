@@ -31,7 +31,9 @@
 
 #include "action.h"
 #include "capabilities.h"
+#include "interprocess_fifo.h"
 #include "keyword_map.h"
+#include "mount_namespace.h"
 #include "parser.h"
 #include "service_utils.h"
 #include "subcontext.h"
@@ -54,6 +56,8 @@
                                      // should not be killed during shutdown
 #define SVC_TEMPORARY 0x1000  // This service was started by 'exec' and should be removed from the
                               // service list once it is reaped.
+#define SVC_GENTLE_KILL 0x2000  // This service should be stopped with SIGTERM instead of SIGKILL
+                                // Will still be SIGKILLed after timeout period of 200 ms
 
 #define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
 
@@ -65,12 +69,14 @@ class Service {
 
   public:
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-            const std::vector<std::string>& args, bool from_apex = false);
+            const std::string& filename, const std::vector<std::string>& args);
 
     Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
-            Subcontext* subcontext_for_restart_commands, const std::vector<std::string>& args,
-            bool from_apex = false);
+            Subcontext* subcontext_for_restart_commands, const std::string& filename,
+            const std::vector<std::string>& args);
+    Service(const Service&) = delete;
+    void operator=(const Service&) = delete;
 
     static Result<std::unique_ptr<Service>> MakeTemporaryOneshotService(
             const std::vector<std::string>& args);
@@ -102,10 +108,6 @@ class Service {
     size_t CheckAllCommands() const { return onrestart_.CheckAllCommands(); }
 
     static bool is_exec_service_running() { return is_exec_service_running_; }
-    static pid_t exec_service_pid() { return exec_service_pid_; }
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started() {
-        return exec_service_started_;
-    }
 
     const std::string& name() const { return name_; }
     const std::set<std::string>& classnames() const { return classnames_; }
@@ -133,7 +135,7 @@ class Service {
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
     bool is_post_data() const { return post_data_; }
-    bool is_from_apex() const { return from_apex_; }
+    bool is_from_apex() const { return base::StartsWith(filename_, "/apex/"); }
     void set_oneshot(bool value) {
         if (value) {
             flags_ |= SVC_ONESHOT;
@@ -141,27 +143,25 @@ class Service {
             flags_ &= ~SVC_ONESHOT;
         }
     }
-    Subcontext* subcontext() const { return subcontext_; }
+    const Subcontext* subcontext() const { return subcontext_; }
+    const std::string& filename() const { return filename_; }
+    void set_filename(const std::string& name) { filename_ = name; }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
     void KillProcessGroup(int signal, bool report_oneshot = false);
-    void SetProcessAttributesAndCaps();
+    void SetProcessAttributesAndCaps(InterprocessFifo setsid_finished);
     void ResetFlagsForStart();
     Result<void> CheckConsole();
     void ConfigureMemcg();
-    void RunService(
-            const std::optional<MountNamespace>& override_mount_namespace,
-            const std::vector<Descriptor>& descriptors,
-            std::unique_ptr<std::array<int, 2>, void (*)(const std::array<int, 2>* pipe)> pipefd);
-
+    void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated,
+                    InterprocessFifo setsid_finished);
+    void SetMountNamespace();
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
-    static std::chrono::time_point<std::chrono::steady_clock> exec_service_started_;
-    static pid_t exec_service_pid_;
 
-    std::string name_;
+    const std::string name_;
     std::set<std::string> classnames_;
 
     unsigned flags_;
@@ -169,6 +169,7 @@ class Service {
     android::base::boot_clock::time_point time_started_;  // time of last start
     android::base::boot_clock::time_point time_crashed_;  // first crash within inspection window
     int crash_count_;                     // number of times crashed within window
+    bool upgraded_mte_ = false;           // whether we upgraded async MTE -> sync MTE before
     std::chrono::minutes fatal_crash_window_ = 4min;  // fatal() when more than 4 crashes in it
     std::optional<std::string> fatal_reboot_target_;  // reboot target of fatal handler
 
@@ -181,8 +182,10 @@ class Service {
     std::vector<SocketDescriptor> sockets_;
     std::vector<FileDescriptor> files_;
     std::vector<std::pair<std::string, std::string>> environment_vars_;
+    // Environment variables that only get applied to the next run.
+    std::vector<std::pair<std::string, std::string>> once_environment_vars_;
 
-    Subcontext* subcontext_;
+    const Subcontext* const subcontext_;
     Action onrestart_;  // Commands to execute on restart.
 
     std::vector<std::string> writepid_files_;
@@ -216,17 +219,17 @@ class Service {
 
     bool updatable_ = false;
 
-    std::vector<std::string> args_;
+    const std::vector<std::string> args_;
 
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
-    bool use_bootstrap_ns_ = false;
+    std::optional<MountNamespace> mount_namespace_;
 
     bool post_data_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
 
-    bool from_apex_ = false;
+    std::string filename_;
 };
 
 }  // namespace init

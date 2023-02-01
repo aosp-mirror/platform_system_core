@@ -58,7 +58,7 @@ struct AtomInfo {
 };
 
 // Maps BootEvent used inside bootstat into statsd atom defined in
-// frameworks/base/cmds/statsd/src/atoms.proto.
+// frameworks/proto_logging/stats/atoms.proto.
 const std::unordered_map<std::string_view, AtomInfo> kBootEventToAtomInfo = {
     // ELAPSED_TIME
     {"ro.boottime.init",
@@ -67,15 +67,9 @@ const std::unordered_map<std::string_view, AtomInfo> kBootEventToAtomInfo = {
     {"boot_complete",
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__BOOT_COMPLETE}},
-    {"boot_decryption_complete",
-     {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-      android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__BOOT_COMPLETE_ENCRYPTION}},
     {"boot_complete_no_encryption",
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__BOOT_COMPLETE_NO_ENCRYPTION}},
-    {"boot_complete_post_decrypt",
-     {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-      android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__BOOT_COMPLETE_POST_DECRYPT}},
     {"factory_reset_boot_complete",
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__FACTORY_RESET_BOOT_COMPLETE}},
@@ -83,22 +77,12 @@ const std::unordered_map<std::string_view, AtomInfo> kBootEventToAtomInfo = {
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::
           BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__FACTORY_RESET_BOOT_COMPLETE_NO_ENCRYPTION}},
-    {"factory_reset_boot_complete_post_decrypt",
-     {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-      android::util::
-          BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__FACTORY_RESET_BOOT_COMPLETE_POST_DECRYPT}},
     {"ota_boot_complete",
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__OTA_BOOT_COMPLETE}},
     {"ota_boot_complete_no_encryption",
      {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
       android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__OTA_BOOT_COMPLETE_NO_ENCRYPTION}},
-    {"ota_boot_complete_post_decrypt",
-     {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-      android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__OTA_BOOT_COMPLETE_POST_DECRYPT}},
-    {"post_decrypt_time_elapsed",
-     {android::util::BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
-      android::util::BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__POST_DECRYPT}},
     // DURATION
     {"absolute_boot_time",
      {android::util::BOOT_TIME_EVENT_DURATION_REPORTED,
@@ -463,6 +447,18 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"watchdog,gsa,hard", 215},
     {"watchdog,gsa,soft", 216},
     {"watchdog,pmucal", 217},
+    {"reboot,early,bl", 218},
+    {"watchdog,apc,gsa,crashed", 219},
+    {"watchdog,apc,bl31,crashed", 220},
+    {"watchdog,apc,pbl,crashed", 221},
+    {"reboot,memory_protect,hyp", 222},
+    {"reboot,tsd,pmic,main", 223},
+    {"reboot,tsd,pmic,sub", 224},
+    {"reboot,ocp,pmic,main", 225},
+    {"reboot,ocp,pmic,sub", 226},
+    {"reboot,sys_ldo_ok,pmic,main", 227},
+    {"reboot,sys_ldo_ok,pmic,sub", 228},
+    {"reboot,smpl_timeout,pmic,main", 229},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -1301,8 +1297,7 @@ android::base::boot_clock::duration GetUptime() {
   return android::base::boot_clock::now().time_since_epoch() - GetBootTimeOffset();
 }
 
-// Records several metrics related to the time it takes to boot the device,
-// including disambiguating boot time on encrypted or non-encrypted devices.
+// Records several metrics related to the time it takes to boot the device.
 void RecordBootComplete() {
   BootEventRecordStore boot_event_store;
   BootEventRecordStore::BootEventRecord record;
@@ -1329,25 +1324,15 @@ void RecordBootComplete() {
     return;
   }
 
-  // post_decrypt_time_elapsed is only logged on encrypted devices.
-  if (boot_event_store.GetBootEvent("post_decrypt_time_elapsed", &record)) {
-    // Log the amount of time elapsed until the device is decrypted, which
-    // includes the variable amount of time the user takes to enter the
-    // decryption password.
-    boot_event_store.AddBootEventWithValue("boot_decryption_complete", uptime_s.count());
+  // The *_no_encryption events are emitted unconditionally, since they are left
+  // over from a time when encryption meant "full-disk encryption".  But Android
+  // now always uses file-based encryption instead of full-disk encryption.  At
+  // some point, these misleading and redundant events should be removed.
+  boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
+                                         uptime_s.count());
 
-    // Subtract the decryption time to normalize the boot cycle timing.
-    std::chrono::seconds boot_complete = std::chrono::seconds(uptime_s.count() - record.second);
-    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_post_decrypt",
-                                           boot_complete.count());
-  } else {
-    boot_event_store.AddBootEventWithValue(boot_complete_prefix + "_no_encryption",
-                                           uptime_s.count());
-  }
-
-  // Record the total time from device startup to boot complete, regardless of
-  // encryption state.
-  // Note: we are recording seconds here even though the field in statsd atom specifies
+  // Record the total time from device startup to boot complete.  Note: we are
+  // recording seconds here even though the field in statsd atom specifies
   // milliseconds.
   boot_event_store.AddBootEventWithValue(boot_complete_prefix, uptime_s.count());
 

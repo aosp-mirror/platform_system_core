@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 
 #include <chrono>
 #include <functional>
@@ -289,7 +290,7 @@ bool DeviceMapper::CreateDevice(const std::string& name, const DmTable& table) {
     return true;
 }
 
-bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+bool DeviceMapper::LoadTable(const std::string& name, const DmTable& table) {
     std::string ioctl_buffer(sizeof(struct dm_ioctl), 0);
     ioctl_buffer += table.Serialize();
 
@@ -305,9 +306,17 @@ bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& 
         PLOG(ERROR) << "DM_TABLE_LOAD failed";
         return false;
     }
+    return true;
+}
 
-    InitIo(io, name);
-    if (ioctl(fd_, DM_DEV_SUSPEND, io)) {
+bool DeviceMapper::LoadTableAndActivate(const std::string& name, const DmTable& table) {
+    if (!LoadTable(name, table)) {
+        return false;
+    }
+
+    struct dm_ioctl io;
+    InitIo(&io, name);
+    if (ioctl(fd_, DM_DEV_SUSPEND, &io)) {
         PLOG(ERROR) << "DM_TABLE_SUSPEND resume failed";
         return false;
     }
@@ -701,6 +710,29 @@ std::map<std::string, std::string> DeviceMapper::FindDmPartitions() {
     free(namelist);
 
     return dm_block_devices;
+}
+
+bool DeviceMapper::CreatePlaceholderDevice(const std::string& name) {
+    if (!CreateEmptyDevice(name)) {
+        return false;
+    }
+
+    struct utsname uts;
+    unsigned int major, minor;
+    if (uname(&uts) != 0 || sscanf(uts.release, "%u.%u", &major, &minor) != 2) {
+        LOG(ERROR) << "Could not parse the kernel version from uname";
+        return true;
+    }
+
+    // On Linux 5.15+, there is no uevent until DM_TABLE_LOAD.
+    if (major > 5 || (major == 5 && minor >= 15)) {
+        DmTable table;
+        table.Emplace<DmTargetError>(0, 1);
+        if (!LoadTable(name, table)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace dm

@@ -207,7 +207,7 @@ void Subcontext::Fork() {
 
         // We explicitly do not use O_CLOEXEC here, such that we can reference this FD by number
         // in the subcontext process after we exec.
-        int child_fd = dup(subcontext_socket);  // NOLINT(android-cloexec-dup)
+        int child_fd = dup(subcontext_socket.get());  // NOLINT(android-cloexec-dup)
         if (child_fd < 0) {
             PLOG(FATAL) << "Could not dup child_fd";
         }
@@ -250,7 +250,11 @@ void Subcontext::Restart() {
     Fork();
 }
 
-bool Subcontext::PathMatchesSubcontext(const std::string& path) {
+bool Subcontext::PathMatchesSubcontext(const std::string& path) const {
+    auto apex_name = GetApexNameFromFileName(path);
+    if (!apex_name.empty()) {
+        return std::find(apex_list_.begin(), apex_list_.end(), apex_name) != apex_list_.end();
+    }
     for (const auto& prefix : path_prefixes_) {
         if (StartsWith(path, prefix)) {
             return true;
@@ -259,13 +263,17 @@ bool Subcontext::PathMatchesSubcontext(const std::string& path) {
     return false;
 }
 
+void Subcontext::SetApexList(std::vector<std::string>&& apex_list) {
+    apex_list_ = std::move(apex_list);
+}
+
 Result<SubcontextReply> Subcontext::TransmitMessage(const SubcontextCommand& subcontext_command) {
-    if (auto result = SendMessage(socket_, subcontext_command); !result.ok()) {
+    if (auto result = SendMessage(socket_.get(), subcontext_command); !result.ok()) {
         Restart();
         return ErrnoError() << "Failed to send message to subcontext";
     }
 
-    auto subcontext_message = ReadMessage(socket_);
+    auto subcontext_message = ReadMessage(socket_.get());
     if (!subcontext_message.ok()) {
         Restart();
         return Error() << "Failed to receive result from subcontext: " << subcontext_message.error();
@@ -370,6 +378,9 @@ bool SubcontextChildReap(pid_t pid) {
 }
 
 void SubcontextTerminate() {
+    if (!subcontext) {
+        return;
+    }
     subcontext_terminated_by_shutdown = true;
     kill(subcontext->pid(), SIGTERM);
 }

@@ -36,9 +36,9 @@
 #include <async_safe/log.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
-#include <unwindstack/Memory.h>
+#include <unwindstack/AndroidUnwinder.h>
+#include <unwindstack/Error.h>
 #include <unwindstack/Regs.h>
-#include <unwindstack/Unwinder.h>
 
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/open_files_list.h"
@@ -55,15 +55,15 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
                                 siginfo_t* siginfo, ucontext_t* ucontext) {
   pid_t uid = getuid();
   pid_t pid = getpid();
-  pid_t tid = gettid();
+  pid_t target_tid = gettid();
 
   log_t log;
-  log.current_tid = tid;
-  log.crashed_tid = tid;
+  log.current_tid = target_tid;
+  log.crashed_tid = target_tid;
   log.tfd = tombstone_fd;
   log.amfd_data = nullptr;
 
-  std::string thread_name = get_thread_name(tid);
+  std::string thread_name = get_thread_name(target_tid);
   std::vector<std::string> command_line = get_command_line(pid);
 
   std::unique_ptr<unwindstack::Regs> regs(
@@ -73,50 +73,56 @@ void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_m
   android::base::ReadFileToString("/proc/self/attr/current", &selinux_label);
 
   std::map<pid_t, ThreadInfo> threads;
-  threads[tid] = ThreadInfo{
-    .registers = std::move(regs), .uid = uid, .tid = tid, .thread_name = std::move(thread_name),
-    .pid = pid, .command_line = std::move(command_line), .selinux_label = std::move(selinux_label),
-    .siginfo = siginfo,
-#if defined(__aarch64__)
+  threads[target_tid] = ThreadInfo {
+    .registers = std::move(regs), .uid = uid, .tid = target_tid,
+    .thread_name = std::move(thread_name), .pid = pid, .command_line = std::move(command_line),
+    .selinux_label = std::move(selinux_label), .siginfo = siginfo,
     // Only supported on aarch64 for now.
-        .tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0),
+#if defined(__aarch64__)
+    .tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0),
     .pac_enabled_keys = prctl(PR_PAC_GET_ENABLED_KEYS, 0, 0, 0, 0),
 #endif
   };
-  if (pid == tid) {
-    const ThreadInfo& thread = threads[pid];
-    if (!iterate_tids(pid, [&threads, &thread](pid_t tid) {
-          threads[tid] = ThreadInfo{
-              .uid = thread.uid,
-              .tid = tid,
-              .pid = thread.pid,
-              .command_line = thread.command_line,
-              .thread_name = get_thread_name(tid),
-              .tagged_addr_ctrl = thread.tagged_addr_ctrl,
-              .pac_enabled_keys = thread.pac_enabled_keys,
-          };
-        })) {
-      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to open /proc/%d/task: %s", pid,
-                            strerror(errno));
-    }
+  const ThreadInfo& thread = threads[pid];
+  if (!iterate_tids(pid, [&threads, &thread, &target_tid](pid_t tid) {
+        if (target_tid == tid) {
+          return;
+        }
+        threads[tid] = ThreadInfo{
+            .uid = thread.uid,
+            .tid = tid,
+            .pid = thread.pid,
+            .command_line = thread.command_line,
+            .thread_name = get_thread_name(tid),
+            .tagged_addr_ctrl = thread.tagged_addr_ctrl,
+            .pac_enabled_keys = thread.pac_enabled_keys,
+        };
+      })) {
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to open /proc/%d/task: %s", pid,
+                          strerror(errno));
   }
 
-  auto process_memory =
-      unwindstack::Memory::CreateProcessMemoryCached(getpid());
-  unwindstack::UnwinderFromPid unwinder(kMaxFrames, pid, unwindstack::Regs::CurrentArch(), nullptr,
-                                        process_memory);
-  if (!unwinder.Init()) {
-    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to init unwinder object");
+  // Do not use the thread cache here because it will call pthread_key_create
+  // which doesn't work in linker code. See b/189803009.
+  // Use a normal cached object because the thread is stopped, and there
+  // is no chance of data changing between reads.
+  auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
+  unwindstack::AndroidLocalUnwinder unwinder(process_memory);
+  unwindstack::ErrorData error;
+  if (!unwinder.Initialize(error)) {
+    async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to init unwinder object: %s",
+                          unwindstack::GetErrorCodeString(error.code));
     return;
   }
 
   ProcessInfo process_info;
   process_info.abort_msg_address = abort_msg_address;
-  engrave_tombstone(unique_fd(dup(tombstone_fd)), unique_fd(dup(proto_fd)), &unwinder, threads, tid,
-                    process_info, nullptr, nullptr);
+  engrave_tombstone(unique_fd(dup(tombstone_fd)), unique_fd(dup(proto_fd)), &unwinder, threads,
+                    target_tid, process_info, nullptr, nullptr);
 }
 
-void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd, unwindstack::Unwinder* unwinder,
+void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd,
+                       unwindstack::AndroidUnwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                        const ProcessInfo& process_info, OpenFilesList* open_files,
                        std::string* amfd_data) {

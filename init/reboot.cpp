@@ -51,6 +51,7 @@
 #include <bootloader_message/bootloader_message.h>
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
+#include <libsnapshot/snapshot.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
@@ -422,11 +423,31 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
     if (run_fsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
-
+    auto sm = snapshot::SnapshotManager::New();
+    bool ota_update_in_progress = false;
+    if (sm->IsUserspaceSnapshotUpdateInProgress()) {
+        LOG(INFO) << "OTA update in progress";
+        ota_update_in_progress = true;
+    }
     UmountStat stat = UmountPartitions(timeout - t.duration());
     if (stat != UMOUNT_STAT_SUCCESS) {
         LOG(INFO) << "umount timeout, last resort, kill all and try";
         if (DUMP_ON_UMOUNT_FAILURE) DumpUmountDebuggingInfo();
+        // Since umount timedout, we will try to kill all processes
+        // and do one more attempt to umount the partitions.
+        //
+        // However, if OTA update is in progress, we don't want
+        // to kill the snapuserd daemon as the daemon will
+        // be serving I/O requests. Killing the daemon will
+        // end up with I/O failures. If the update is in progress,
+        // we will just return the umount failure status immediately.
+        // This is ok, given the fact that killing the processes
+        // and doing an umount is just a last effort. We are
+        // still not doing fsck when all processes are killed.
+        //
+        if (ota_update_in_progress) {
+            return stat;
+        }
         KillAllProcesses();
         // even if it succeeds, still it is timeout and do not run fsck with all processes killed
         UmountStat st = UmountPartitions(0ms);
@@ -491,7 +512,7 @@ static Result<void> KillZramBackingDevice() {
         return ErrnoError() << "zram_backing_dev: swapoff (" << backing_dev << ")"
                             << " failed";
     }
-    LOG(INFO) << "swapoff() took " << swap_timer;;
+    LOG(INFO) << "swapoff() took " << swap_timer;
 
     if (!WriteStringToFile("1", ZRAM_RESET)) {
         return Error() << "zram_backing_dev: reset (" << backing_dev << ")"
@@ -567,6 +588,11 @@ int StopServicesAndLogViolations(const std::set<std::string>& services,
 }
 
 static Result<void> UnmountAllApexes() {
+    // don't need to unmount because apexd doesn't use /data in Microdroid
+    if (IsMicrodroid()) {
+        return {};
+    }
+
     const char* args[] = {"/system/bin/apexd", "--unmount-all"};
     int status;
     if (logwrap_fork_execvp(arraysize(args), args, &status, false, LOG_KLOG, true, nullptr) != 0) {
@@ -608,7 +634,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     if (sem_init(&reboot_semaphore, false, 0) == -1) {
         // These should never fail, but if they do, skip the graceful reboot and reboot immediately.
         LOG(ERROR) << "sem_init() fail and RebootSystem() return!";
-        RebootSystem(cmd, reboot_target);
+        RebootSystem(cmd, reboot_target, reason);
     }
 
     // Start a thread to monitor init shutdown process
@@ -636,7 +662,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     // worry about unmounting it.
     if (!IsDataMounted("*")) {
         sync();
-        RebootSystem(cmd, reboot_target);
+        RebootSystem(cmd, reboot_target, reason);
         abort();
     }
 
@@ -762,14 +788,14 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     if (IsDataMounted("f2fs")) {
         uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
         unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
-        int ret = ioctl(fd, F2FS_IOC_SHUTDOWN, &flag);
+        int ret = ioctl(fd.get(), F2FS_IOC_SHUTDOWN, &flag);
         if (ret) {
             PLOG(ERROR) << "Shutdown /data: ";
         } else {
             LOG(INFO) << "Shutdown /data";
         }
     }
-    RebootSystem(cmd, reboot_target);
+    RebootSystem(cmd, reboot_target, reason);
     abort();
 }
 
@@ -892,7 +918,16 @@ static Result<void> DoUserspaceReboot() {
         sub_reason = "ns_switch";
         return Error() << "Failed to switch to bootstrap namespace";
     }
-    // Remove services that were defined in an APEX.
+    ActionManager::GetInstance().RemoveActionIf([](const auto& action) -> bool {
+        if (action->IsFromApex()) {
+            std::string trigger_name = action->BuildTriggersString();
+            LOG(INFO) << "Removing action (" << trigger_name << ") from (" << action->filename()
+                      << ":" << action->line() << ")";
+            return true;
+        }
+        return false;
+    });
+    // Remove services that were defined in an APEX
     ServiceList::GetInstance().RemoveServiceIf([](const std::unique_ptr<Service>& s) -> bool {
         if (s->is_from_apex()) {
             LOG(INFO) << "Removing service '" << s->name() << "' because it's defined in an APEX";

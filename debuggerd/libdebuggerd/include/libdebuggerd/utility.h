@@ -73,11 +73,13 @@ void _LOG(log_t* log, logtype ltype, const char* fmt, ...) __attribute__((format
 void _VLOG(log_t* log, logtype ltype, const char* fmt, va_list ap);
 
 namespace unwindstack {
-class Unwinder;
+class AndroidUnwinder;
 class Memory;
+struct AndroidUnwinderData;
 }
 
-void log_backtrace(log_t* log, unwindstack::Unwinder* unwinder, const char* prefix);
+void log_backtrace(log_t* log, unwindstack::AndroidUnwinder* unwinder,
+                   unwindstack::AndroidUnwinderData& data, const char* prefix);
 
 ssize_t dump_memory(void* out, size_t len, uint8_t* tags, size_t tags_len, uint64_t* addr,
                     unwindstack::Memory* memory);

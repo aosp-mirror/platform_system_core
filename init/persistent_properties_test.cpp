@@ -155,5 +155,28 @@ TEST(persistent_properties, UpdatePropertyBadParse) {
     EXPECT_FALSE(it == read_back_properties.properties().end());
 }
 
+TEST(persistent_properties, RejectNonPersistProperty) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    persistent_property_filename = tf.path;
+
+    WritePersistentProperty("notpersist.sys.locale", "pt-BR");
+
+    auto read_back_properties = LoadPersistentProperties();
+    EXPECT_EQ(read_back_properties.properties().size(), 0);
+
+    WritePersistentProperty("persist.sys.locale", "pt-BR");
+
+    read_back_properties = LoadPersistentProperties();
+    EXPECT_GT(read_back_properties.properties().size(), 0);
+
+    auto it = std::find_if(read_back_properties.properties().begin(),
+                           read_back_properties.properties().end(), [](const auto& entry) {
+                               return entry.name() == "persist.sys.locale" &&
+                                      entry.value() == "pt-BR";
+                           });
+    EXPECT_FALSE(it == read_back_properties.properties().end());
+}
+
 }  // namespace init
 }  // namespace android

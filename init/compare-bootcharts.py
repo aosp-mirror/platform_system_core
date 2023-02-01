@@ -56,24 +56,24 @@ def analyze_process_maps(process_map1, process_map2, jiffy_record):
     ]
 
     jw = jiffy_record['jiffy_to_wallclock']
-    print "process: baseline experiment (delta)"
-    print " - Unit is ms (a jiffy is %d ms on the system)" % jw
-    print "------------------------------------"
+    print("process: baseline experiment (delta)")
+    print(" - Unit is ms (a jiffy is %d ms on the system)" % jw)
+    print("------------------------------------")
     for p in processes_of_interest:
         # e.g., 32-bit system doesn't have zygote64
         if p in process_map1 and p in process_map2:
-            print "%s: %d %d (%+d)" % (
+            print("%s: %d %d (%+d)" % (
                 p, process_map1[p]['start_time'] * jw,
                 process_map2[p]['start_time'] * jw,
                 (process_map2[p]['start_time'] -
-                 process_map1[p]['start_time']) * jw)
+                 process_map1[p]['start_time']) * jw))
 
     # Print the last tick for the bootanimation process
-    print "bootanimation ends at: %d %d (%+d)" % (
+    print("bootanimation ends at: %d %d (%+d)" % (
         process_map1['/system/bin/bootanimation']['last_tick'] * jw,
         process_map2['/system/bin/bootanimation']['last_tick'] * jw,
         (process_map2['/system/bin/bootanimation']['last_tick'] -
-            process_map1['/system/bin/bootanimation']['last_tick']) * jw)
+            process_map1['/system/bin/bootanimation']['last_tick']) * jw))
 
 def parse_proc_file(pathname, process_map, jiffy_record=None):
     # Uncompress bootchart.tgz
@@ -83,7 +83,7 @@ def parse_proc_file(pathname, process_map, jiffy_record=None):
             f = tf.extractfile('proc_ps.log')
 
             # Break proc_ps into chunks based on timestamps
-            blocks = f.read().split('\n\n')
+            blocks = f.read().decode('utf-8').split('\n\n')
             for b in blocks:
                 lines = b.split('\n')
                 if not lines[0]:
@@ -133,7 +133,7 @@ def parse_proc_file(pathname, process_map, jiffy_record=None):
 
 def main():
     if len(sys.argv) != 3:
-        print "Usage: %s base_bootchart_dir exp_bootchart_dir" % sys.argv[0]
+        print("Usage: %s base_bootchart_dir exp_bootchart_dir" % sys.argv[0])
         sys.exit(1)
 
     process_map1 = {}
