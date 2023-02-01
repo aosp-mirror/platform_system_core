@@ -62,10 +62,11 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks);
 #define DEBUGGER_SIGNAL BIONIC_SIGNAL_DEBUGGER
 
 static void __attribute__((__unused__)) debuggerd_register_handlers(struct sigaction* action) {
+  bool enabled = true;
+#if ANDROID_DEBUGGABLE
   char value[PROP_VALUE_MAX] = "";
-  bool enabled =
-      !(__system_property_get("ro.debuggable", value) > 0 && !strcmp(value, "1") &&
-        __system_property_get("debug.debuggerd.disable", value) > 0 && !strcmp(value, "1"));
+  enabled = !(__system_property_get("debug.debuggerd.disable", value) > 0 && !strcmp(value, "1"));
+#endif
   if (enabled) {
     sigaction(SIGABRT, action, nullptr);
     sigaction(SIGBUS, action, nullptr);
