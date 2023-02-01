@@ -53,7 +53,15 @@
 #include <libsnapshot/mock_device_info.h>
 #include <libsnapshot/mock_snapshot.h>
 
-DEFINE_string(force_mode, "",
+#if defined(LIBSNAPSHOT_TEST_VAB_LEGACY)
+#define DEFAULT_MODE "vab-legacy"
+#elif defined(LIBSNAPSHOT_TEST_VABC_LEGACY)
+#define DEFAULT_MODE "vabc-legacy"
+#else
+#define DEFAULT_MODE ""
+#endif
+
+DEFINE_string(force_mode, DEFAULT_MODE,
               "Force testing older modes (vab-legacy, vabc-legacy) ignoring device config.");
 DEFINE_string(force_iouring_disable, "",
               "Force testing mode (iouring_disabled) - disable io_uring");
@@ -107,6 +115,12 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
+        const testing::TestInfo* const test_info =
+                testing::UnitTest::GetInstance()->current_test_info();
+        test_name_ = test_info->test_suite_name() + "/"s + test_info->name();
+
+        LOG(INFO) << "Starting test: " << test_name_;
+
         SKIP_IF_NON_VIRTUAL_AB();
 
         SetupProperties();
@@ -152,10 +166,14 @@ class SnapshotTest : public ::testing::Test {
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
 
+        LOG(INFO) << "Tearing down SnapshotTest test: " << test_name_;
+
         lock_ = nullptr;
 
         CleanupTestArtifacts();
         SnapshotTestPropertyFetcher::TearDown();
+
+        LOG(INFO) << "Teardown complete for test: " << test_name_;
     }
 
     void InitializeState() {
@@ -487,6 +505,7 @@ class SnapshotTest : public ::testing::Test {
     android::fiemap::IImageManager* image_manager_ = nullptr;
     std::string fake_super_;
     bool snapuserd_required_ = false;
+    std::string test_name_;
 };
 
 TEST_F(SnapshotTest, CreateSnapshot) {
@@ -1002,6 +1021,8 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+
+        LOG(INFO) << "Tearing down SnapshotUpdateTest test: " << test_name_;
 
         Cleanup();
         SnapshotTest::TearDown();
@@ -2660,7 +2681,6 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
-        return;  // BUG(149738928)
 
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
@@ -2668,19 +2688,6 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
     static constexpr const char* kImageName = "my_image";
     std::unique_ptr<LowSpaceUserdata> userdata_;
 };
-
-TEST_P(ImageManagerTest, CreateImageEnoughAvailSpace) {
-    if (userdata_->available_space() == 0) {
-        GTEST_SKIP() << "/data is full (" << userdata_->available_space()
-                     << " bytes available), skipping";
-    }
-    ASSERT_TRUE(image_manager_->CreateBackingImage(kImageName, userdata_->available_space(),
-                                                   IImageManager::CREATE_IMAGE_DEFAULT))
-            << "Should be able to create image with size = " << userdata_->available_space()
-            << " bytes";
-    ASSERT_TRUE(image_manager_->DeleteBackingImage(kImageName))
-            << "Should be able to delete created image";
-}
 
 TEST_P(ImageManagerTest, CreateImageNoSpace) {
     uint64_t to_allocate = userdata_->free_space() + userdata_->bsize();
@@ -2811,7 +2818,6 @@ void KillSnapuserd() {
         return;
     }
     snapuserd_client->DetachSnapuserd();
-    snapuserd_client->CloseConnection();
 }
 
 }  // namespace snapshot

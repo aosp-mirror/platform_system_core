@@ -44,8 +44,8 @@ static const char kColdBootDoneProp[] = "ro.cold_boot_done";
 
 extern void (*trigger_shutdown)(const std::string& command);
 
-Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
-                         gid_t gid, const std::string& socketcon);
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, bool should_listen,
+                         mode_t perm, uid_t uid, gid_t gid, const std::string& socketcon);
 
 Result<std::string> ReadFile(const std::string& path);
 Result<void> WriteFile(const std::string& path, const std::string& content);
@@ -109,5 +109,11 @@ bool IsMicrodroid();
 bool Has32BitAbi();
 
 std::string GetApexNameFromFileName(const std::string& path);
+
+// Compare all files */path.#rc and */path.rc with the same path prefix.
+// Keep the one with the highest # that doesn't exceed the system's SDK.
+// (.rc == .0rc for ranking purposes)
+std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
+                                                  int active_sdk);
 }  // namespace init
 }  // namespace android

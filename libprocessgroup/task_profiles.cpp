@@ -287,7 +287,7 @@ ProfileAction::CacheUseResult SetCgroupAction::UseCachedFd(ResourceCacheType cac
     if (cache_type == ResourceCacheType::RCT_TASK &&
         fd_[cache_type] == FdCacheHelper::FDS_APP_DEPENDENT) {
         // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        LOG(ERROR) << Name() << ": application profile can't be applied to a thread";
         return ProfileAction::FAIL;
     }
 
@@ -304,7 +304,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(procs_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << procs_path;
+        PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << procs_path;
         return false;
     }
     if (!AddTidToCgroup(pid, tmp_fd, controller()->name())) {
@@ -325,7 +325,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
     std::string tasks_path = controller()->GetTasksFilePath(path_);
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(tasks_path.c_str(), O_WRONLY | O_CLOEXEC)));
     if (tmp_fd < 0) {
-        PLOG(WARNING) << "Failed to open " << tasks_path;
+        PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << tasks_path;
         return false;
     }
     if (!AddTidToCgroup(tid, tmp_fd, controller()->name())) {
@@ -394,7 +394,7 @@ bool WriteFileAction::WriteValueToFile(const std::string& value_, ResourceCacheT
     unique_fd tmp_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_WRONLY | O_CLOEXEC)));
 
     if (tmp_fd < 0) {
-        if (logfailures) PLOG(WARNING) << "Failed to open " << path;
+        if (logfailures) PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << path;
         return false;
     }
 
@@ -431,7 +431,7 @@ ProfileAction::CacheUseResult WriteFileAction::UseCachedFd(ResourceCacheType cac
     if (cache_type == ResourceCacheType::RCT_TASK &&
         fd_[cache_type] == FdCacheHelper::FDS_APP_DEPENDENT) {
         // application-dependent path can't be used with tid
-        PLOG(ERROR) << "Application profile can't be applied to a thread";
+        LOG(ERROR) << Name() << ": application profile can't be applied to a thread";
         return ProfileAction::FAIL;
     }
     return ProfileAction::UNUSED;
@@ -786,7 +786,7 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
     return true;
 }
 
-TaskProfile* TaskProfiles::GetProfile(const std::string& name) const {
+TaskProfile* TaskProfiles::GetProfile(std::string_view name) const {
     auto iter = profiles_.find(name);
 
     if (iter != profiles_.end()) {
@@ -795,7 +795,7 @@ TaskProfile* TaskProfiles::GetProfile(const std::string& name) const {
     return nullptr;
 }
 
-const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) const {
+const IProfileAttribute* TaskProfiles::GetAttribute(std::string_view name) const {
     auto iter = attributes_.find(name);
 
     if (iter != attributes_.end()) {
@@ -804,8 +804,9 @@ const IProfileAttribute* TaskProfiles::GetAttribute(const std::string& name) con
     return nullptr;
 }
 
-bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
-                                      const std::vector<std::string>& profiles, bool use_fd_cache) {
+template <typename T>
+bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> profiles,
+                                      bool use_fd_cache) {
     bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
@@ -825,8 +826,8 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
     return success;
 }
 
-bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& profiles,
-                                   bool use_fd_cache) {
+template <typename T>
+bool TaskProfiles::SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache) {
     bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
@@ -845,3 +846,14 @@ bool TaskProfiles::SetTaskProfiles(int tid, const std::vector<std::string>& prof
     }
     return success;
 }
+
+template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
+                                               std::span<const std::string> profiles,
+                                               bool use_fd_cache);
+template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
+                                               std::span<const std::string_view> profiles,
+                                               bool use_fd_cache);
+template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string> profiles,
+                                            bool use_fd_cache);
+template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+                                            bool use_fd_cache);

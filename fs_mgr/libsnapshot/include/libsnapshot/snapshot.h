@@ -332,10 +332,13 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper function for second stage init to restorecon on the rollback indicator.
     static std::string GetGlobalRollbackIndicatorPath();
 
-    // Detach dm-user devices from the current snapuserd, and populate
-    // |snapuserd_argv| with the necessary arguments to restart snapuserd
-    // and reattach them.
-    bool DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv);
+    // Populate |snapuserd_argv| with the necessary arguments to restart snapuserd
+    // after loading selinux policy.
+    bool PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv);
+
+    // Detach dm-user devices from the first stage snapuserd. Load
+    // new dm-user tables after loading selinux policy.
+    bool DetachFirstStageSnapuserdForSelinux();
 
     // Perform the transition from the selinux stage of snapuserd into the
     // second-stage of snapuserd. This process involves re-creating the dm-user
@@ -391,6 +394,10 @@ class SnapshotManager final : public ISnapshotManager {
     // If true, compression is enabled for this update. This is used by
     // first-stage to decide whether to launch snapuserd.
     bool IsSnapuserdRequired();
+
+    // This is primarily used to device reboot. If OTA update is in progress,
+    // init will avoid killing processes
+    bool IsUserspaceSnapshotUpdateInProgress();
 
     enum class SnapshotDriver {
         DM_SNAPSHOT,

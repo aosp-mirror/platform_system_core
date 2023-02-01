@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <selinux/selinux.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/swap.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -903,9 +905,9 @@ static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
         // Deal with alternate entries for the same point which are required to be all following
         // each other.
         if (mounted) {
-            LERROR << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
-                   << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
-                   << fstab[*attempted_idx].fs_type;
+            LINFO << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
+                  << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
+                  << fstab[*attempted_idx].fs_type;
             continue;
         }
 
@@ -933,9 +935,9 @@ static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
                 *attempted_idx = i;
                 mounted = true;
                 if (i != start_idx) {
-                    LERROR << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
-                           << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
-                           << " instead of " << fstab[start_idx].fs_type;
+                    LINFO << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
+                          << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
+                          << " instead of " << fstab[start_idx].fs_type;
                 }
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
                 mount_errno = 0;
@@ -2189,36 +2191,22 @@ std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::Fsta
         std::vector<std::string> tokens = android::base::Split(target.data, " \t\r\n");
         if (tokens[0] != "0" && tokens[0] != "1") {
             LOG(WARNING) << "Unrecognized device mapper version in " << target.data;
-            return {};
         }
 
         // Hashtree algorithm & root digest are the 8th & 9th token in the output.
-        return HashtreeInfo{.algorithm = android::base::Trim(tokens[7]),
-                            .root_digest = android::base::Trim(tokens[8])};
+        return HashtreeInfo{
+                .algorithm = android::base::Trim(tokens[7]),
+                .root_digest = android::base::Trim(tokens[8]),
+                .check_at_most_once = target.data.find("check_at_most_once") != std::string::npos};
     }
 
     return {};
 }
 
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.avb) {
-        return false;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    std::string device = GetVerityDeviceName(entry);
-
-    std::vector<DeviceMapper::TargetInfo> table;
-    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
-        return false;
-    }
-    for (const auto& target : table) {
-        if (strcmp(target.spec.target_type, "verity") == 0 &&
-            target.data.find("check_at_most_once") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
+    auto hashtree_info = fs_mgr_get_hashtree_info(entry);
+    if (!hashtree_info) return false;
+    return hashtree_info->check_at_most_once;
 }
 
 std::string fs_mgr_get_super_partition_name(int slot) {
@@ -2358,4 +2346,50 @@ bool fs_mgr_load_verity_state(int* mode) {
     }
 
     return true;
+}
+
+bool fs_mgr_filesystem_available(const std::string& filesystem) {
+    std::string filesystems;
+    if (!android::base::ReadFileToString("/proc/filesystems", &filesystems)) return false;
+    return filesystems.find("\t" + filesystem + "\n") != std::string::npos;
+}
+
+std::string fs_mgr_get_context(const std::string& mount_point) {
+    char* ctx = nullptr;
+    if (getfilecon(mount_point.c_str(), &ctx) == -1) {
+        PERROR << "getfilecon " << mount_point;
+        return "";
+    }
+
+    std::string context(ctx);
+    free(ctx);
+    return context;
+}
+
+OverlayfsValidResult fs_mgr_overlayfs_valid() {
+    // Overlayfs available in the kernel, and patched for override_creds?
+    if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
+        return OverlayfsValidResult::kOverrideCredsRequired;
+    }
+    if (!fs_mgr_filesystem_available("overlay")) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    struct utsname uts;
+    if (uname(&uts) == -1) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    int major, minor;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (major < 4) {
+        return OverlayfsValidResult::kOk;
+    }
+    if (major > 4) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (minor > 3) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    return OverlayfsValidResult::kOk;
 }

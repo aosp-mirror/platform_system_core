@@ -59,7 +59,6 @@ struct AutoUnmapDevice : AutoDevice {
     // On destruct, delete |name| from device mapper.
     AutoUnmapDevice(android::dm::IDeviceMapper* dm, const std::string& name)
         : AutoDevice(name), dm_(dm) {}
-    AutoUnmapDevice(AutoUnmapDevice&& other) = default;
     ~AutoUnmapDevice();
 
   private:
@@ -72,7 +71,6 @@ struct AutoUnmapImage : AutoDevice {
     // On destruct, delete |name| from image manager.
     AutoUnmapImage(android::fiemap::IImageManager* images, const std::string& name)
         : AutoDevice(name), images_(images) {}
-    AutoUnmapImage(AutoUnmapImage&& other) = default;
     ~AutoUnmapImage();
 
   private:
@@ -86,7 +84,6 @@ struct AutoDeleteSnapshot : AutoDevice {
     AutoDeleteSnapshot(SnapshotManager* manager, SnapshotManager::LockedFile* lock,
                        const std::string& name)
         : AutoDevice(name), manager_(manager), lock_(lock) {}
-    AutoDeleteSnapshot(AutoDeleteSnapshot&& other);
     ~AutoDeleteSnapshot();
 
   private:
@@ -120,6 +117,7 @@ Return InitializeKernelCow(const std::string& device);
 // Note that rename() is an atomic operation. This function may not work properly if there
 // is an open fd to |path|, because that fd has an old view of the file.
 bool WriteStringToFileAtomic(const std::string& content, const std::string& path);
+bool FsyncDirectory(const char* dirname);
 
 // Writes current time to a given stream.
 struct Now {};

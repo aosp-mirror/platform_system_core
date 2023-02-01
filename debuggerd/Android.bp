@@ -14,9 +14,15 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
         "-fno-finite-loops",
+        "-DANDROID_DEBUGGABLE=0",
     ],
 
     local_include_dirs: ["include"],
+    product_variables: {
+        debuggable: {
+            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
+        }
+    },
 }
 
 cc_library_headers {
@@ -204,6 +210,7 @@ cc_library_static {
     header_libs: [
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
+        "liblog_headers",
     ],
 
     static_libs: [
@@ -212,7 +219,6 @@ cc_library_static {
         "liblzma",
         "libbase",
         "libcutils",
-        "liblog",
     ],
     runtime_libs: [
         "libdexfile",           // libdexfile_support dependency
@@ -420,8 +426,8 @@ cc_binary {
     local_include_dirs: ["include"],
 }
 
-cc_binary {
-    name: "tombstoned",
+cc_defaults {
+    name: "tombstoned_defaults",
     srcs: [
         "util.cpp",
         "tombstoned/intercept_manager.cpp",
@@ -440,8 +446,18 @@ cc_binary {
         "libevent",
         "liblog",
     ],
+}
 
+cc_binary {
+    name: "tombstoned",
+    defaults: ["tombstoned_defaults"],
     init_rc: ["tombstoned/tombstoned.rc"],
+}
+
+cc_binary {
+    name: "tombstoned.microdroid",
+    defaults: ["tombstoned_defaults"],
+    init_rc: ["tombstoned/tombstoned.microdroid.rc"],
 }
 
 prebuilt_etc {
@@ -451,25 +467,36 @@ prebuilt_etc {
     arch: {
         arm: {
             src: "seccomp_policy/crash_dump.arm.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
         arm64: {
             src: "seccomp_policy/crash_dump.arm64.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
+        },
+        riscv64: {
+            src: "seccomp_policy/crash_dump.riscv64.policy",
         },
         x86: {
             src: "seccomp_policy/crash_dump.x86.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
         x86_64: {
             src: "seccomp_policy/crash_dump.x86_64.policy",
+            required: [
+                "crash_dump.policy_other",
+            ],
         },
     },
-    required: [
-        "crash_dump.policy_other",
-    ],
 }
 
 
-// NB -- this installs "the other" architecture. (puts 32 bit config in on 64 bit device)
-// or at least that is the intention so that we get both of them populated
+// This installs the "other" architecture (so 32-bit on 64-bit device).
 prebuilt_etc {
     name: "crash_dump.policy_other",
     sub_dir: "seccomp_policy",

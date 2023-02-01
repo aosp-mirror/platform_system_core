@@ -61,14 +61,14 @@ int main(int argc, char* argv[]) {
         break;
       default:
         usage();
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
   }
 
   extra = argc - optind;
   if (extra < 2 || extra > 3) {
     usage();
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   if (extra == 3) {
@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
 
   if (block_size < 1024 || block_size % 4 != 0) {
     usage();
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   arg_in = argv[optind];
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
     in = open(arg_in, O_RDONLY | O_BINARY);
     if (in < 0) {
       fprintf(stderr, "Cannot open input file %s\n", arg_in);
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
     out = open(arg_out, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0664);
     if (out < 0) {
       fprintf(stderr, "Cannot open output file %s\n", arg_out);
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -108,24 +108,24 @@ int main(int argc, char* argv[]) {
   s = sparse_file_new(block_size, len);
   if (!s) {
     fprintf(stderr, "Failed to create sparse file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   sparse_file_verbose(s);
   ret = sparse_file_read(s, in, mode, false);
   if (ret) {
     fprintf(stderr, "Failed to read file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   ret = sparse_file_write(s, out, false, true, false);
   if (ret) {
     fprintf(stderr, "Failed to write sparse file\n");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   close(in);
   close(out);
 
-  exit(0);
+  exit(EXIT_SUCCESS);
 }

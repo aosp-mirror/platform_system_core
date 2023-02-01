@@ -53,6 +53,7 @@ class ServiceParser : public SectionParser {
     Result<void> ParseDisabled(std::vector<std::string>&& args);
     Result<void> ParseEnterNamespace(std::vector<std::string>&& args);
     Result<void> ParseGroup(std::vector<std::string>&& args);
+    Result<void> ParseGentleKill(std::vector<std::string>&& args);
     Result<void> ParsePriority(std::vector<std::string>&& args);
     Result<void> ParseInterface(std::vector<std::string>&& args);
     Result<void> ParseIoprio(std::vector<std::string>&& args);

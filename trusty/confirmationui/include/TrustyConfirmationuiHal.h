@@ -16,18 +16,10 @@
 
 #pragma once
 
-#include <android/hardware/confirmationui/1.0/IConfirmationUI.h>
+#include <aidl/android/hardware/confirmationui/IConfirmationUI.h>
 
-namespace android {
-namespace hardware {
-namespace confirmationui {
-namespace V1_0 {
-namespace implementation {
+namespace aidl::android::hardware::confirmationui {
 
-android::sp<IConfirmationUI> createTrustyConfirmationUI();
+std::shared_ptr<IConfirmationUI> createTrustyConfirmationUI();
 
-}  // namespace implementation
-}  // namespace V1_0
-}  // namespace confirmationui
-}  // namespace hardware
-}  // namespace android
+}  // namespace aidl::android::hardware::confirmationui

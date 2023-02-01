@@ -55,6 +55,11 @@ using namespace std::chrono_literals;
 
 #define PROCESSGROUP_CGROUP_PROCS_FILE "/cgroup.procs"
 
+bool CgroupsAvailable() {
+    static bool cgroups_available = access("/proc/cgroups", F_OK) == 0;
+    return cgroups_available;
+}
+
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) {
     auto controller = CgroupMap::GetInstance().FindController(cgroup_name);
 
@@ -148,14 +153,35 @@ void DropTaskProfilesResourceCaching() {
 }
 
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string>(profiles), false);
+}
+
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::initializer_list<std::string_view> profiles) {
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string_view>(profiles), false);
+}
+
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const std::string_view> profiles) {
     return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, false);
 }
 
 bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles) {
-    return TaskProfiles::GetInstance().SetProcessProfiles(uid, pid, profiles, true);
+    return TaskProfiles::GetInstance().SetProcessProfiles(
+            uid, pid, std::span<const std::string>(profiles), true);
 }
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
+    return TaskProfiles::GetInstance().SetTaskProfiles(tid, std::span<const std::string>(profiles),
+                                                       use_fd_cache);
+}
+
+bool SetTaskProfiles(int tid, std::initializer_list<std::string_view> profiles, bool use_fd_cache) {
+    return TaskProfiles::GetInstance().SetTaskProfiles(
+            tid, std::span<const std::string_view>(profiles), use_fd_cache);
+}
+
+bool SetTaskProfiles(int tid, std::span<const std::string_view> profiles, bool use_fd_cache) {
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
 }
 
@@ -166,12 +192,12 @@ bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use
 // https://chromium-review.googlesource.com/c/chromiumos/platform/crosvm/+/3574427/5/src/linux/android.rs#12
 extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_profiles,
                                              const char* profiles[]) {
-    std::vector<std::string> profiles_;
+    std::vector<std::string_view> profiles_;
     profiles_.reserve(num_profiles);
     for (size_t i = 0; i < num_profiles; i++) {
         profiles_.emplace_back(profiles[i]);
     }
-    return SetProcessProfiles(uid, pid, profiles_);
+    return SetProcessProfiles(uid, pid, std::span<const std::string_view>(profiles_));
 }
 
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
@@ -341,59 +367,70 @@ err:
 // Returns 0 if there are no processes in the process cgroup left to kill
 // Returns -1 on error
 static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid, int signal) {
-    auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
-    std::unique_ptr<FILE, decltype(&fclose)> fd(fopen(path.c_str(), "re"), fclose);
-    if (!fd) {
-        if (errno == ENOENT) {
-            // This happens when process is already dead
-            return 0;
-        }
-        PLOG(WARNING) << __func__ << " failed to open process cgroup uid " << uid << " pid "
-                      << initialPid;
-        return -1;
-    }
-
     // We separate all of the pids in the cgroup into those pids that are also the leaders of
     // process groups (stored in the pgids set) and those that are not (stored in the pids set).
     std::set<pid_t> pgids;
     pgids.emplace(initialPid);
     std::set<pid_t> pids;
 
-    pid_t pid;
+    std::unique_ptr<FILE, decltype(&fclose)> fd(nullptr, fclose);
+
+    if (CgroupsAvailable()) {
+        auto path = ConvertUidPidToPath(cgroup, uid, initialPid) + PROCESSGROUP_CGROUP_PROCS_FILE;
+        fd.reset(fopen(path.c_str(), "re"));
+        if (!fd) {
+            if (errno == ENOENT) {
+                // This happens when process is already dead
+                return 0;
+            }
+            PLOG(WARNING) << __func__ << " failed to open process cgroup uid " << uid << " pid "
+                          << initialPid;
+            return -1;
+        }
+        pid_t pid;
+        bool file_is_empty = true;
+        while (fscanf(fd.get(), "%d\n", &pid) == 1 && pid >= 0) {
+            file_is_empty = false;
+            if (pid == 0) {
+                // Should never happen...  but if it does, trying to kill this
+                // will boomerang right back and kill us!  Let's not let that happen.
+                LOG(WARNING)
+                        << "Yikes, we've been told to kill pid 0!  How about we don't do that?";
+                continue;
+            }
+            pid_t pgid = getpgid(pid);
+            if (pgid == -1) PLOG(ERROR) << "getpgid(" << pid << ") failed";
+            if (pgid == pid) {
+                pgids.emplace(pid);
+            } else {
+                pids.emplace(pid);
+            }
+        }
+        if (file_is_empty) {
+            // This happens when process is already dead
+            return 0;
+        }
+
+        // Erase all pids that will be killed when we kill the process groups.
+        for (auto it = pids.begin(); it != pids.end();) {
+            pid_t pgid = getpgid(*it);
+            if (pgids.count(pgid) == 1) {
+                it = pids.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     int processes = 0;
-    while (fscanf(fd.get(), "%d\n", &pid) == 1 && pid >= 0) {
-        processes++;
-        if (pid == 0) {
-            // Should never happen...  but if it does, trying to kill this
-            // will boomerang right back and kill us!  Let's not let that happen.
-            LOG(WARNING) << "Yikes, we've been told to kill pid 0!  How about we don't do that?";
-            continue;
-        }
-        pid_t pgid = getpgid(pid);
-        if (pgid == -1) PLOG(ERROR) << "getpgid(" << pid << ") failed";
-        if (pgid == pid) {
-            pgids.emplace(pid);
-        } else {
-            pids.emplace(pid);
-        }
-    }
-
-    // Erase all pids that will be killed when we kill the process groups.
-    for (auto it = pids.begin(); it != pids.end();) {
-        pid_t pgid = getpgid(*it);
-        if (pgids.count(pgid) == 1) {
-            it = pids.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     // Kill all process groups.
     for (const auto pgid : pgids) {
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
                      << " as part of process cgroup " << initialPid;
 
-        if (kill(-pgid, signal) == -1 && errno != ESRCH) {
+        if (kill(-pgid, signal) == 0) {
+            processes++;
+        } else if (errno != ESRCH) {
             PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
         }
     }
@@ -403,18 +440,22 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
 
-        if (kill(pid, signal) == -1 && errno != ESRCH) {
+        if (kill(pid, signal) == 0) {
+            processes++;
+        } else if (errno != ESRCH) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
 
-    return feof(fd.get()) ? processes : -1;
+    return (!fd || feof(fd.get())) ? processes : -1;
 }
 
 static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
                             int* max_processes) {
     std::string hierarchy_root_path;
-    CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+    if (CgroupsAvailable()) {
+        CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+    }
     const char* cgroup = hierarchy_root_path.c_str();
 
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
@@ -430,6 +471,11 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
             *max_processes = processes;
         }
         LOG(VERBOSE) << "Killed " << processes << " processes for processgroup " << initialPid;
+        if (!CgroupsAvailable()) {
+            // makes no sense to retry, because there are no cgroup_procs file
+            processes = 0;  // no remaining processes
+            break;
+        }
         if (retry > 0) {
             std::this_thread::sleep_for(5ms);
             --retry;
@@ -457,6 +503,11 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
         if (retries > 0) {
             LOG(INFO) << "Successfully killed process cgroup uid " << uid << " pid " << initialPid
                       << " in " << static_cast<int>(ms) << "ms";
+        }
+
+        if (!CgroupsAvailable()) {
+            // nothing to do here, if cgroups isn't available
+            return 0;
         }
 
         // 400 retries correspond to 2 secs max timeout

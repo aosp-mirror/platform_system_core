@@ -93,6 +93,9 @@ bool CompressedSnapshotWriter::VerifyMergeOps() const noexcept {
 
 std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
     auto cow = OpenCowReader();
+    if (cow == nullptr) {
+        return nullptr;
+    }
 
     auto reader = std::make_unique<CompressedSnapshotReader>();
     if (!reader->SetCow(std::move(cow))) {
@@ -111,8 +114,9 @@ std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
     return reader;
 }
 
-bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
-    return cow_->AddCopy(new_block, old_block);
+bool CompressedSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block,
+                                        uint64_t num_blocks) {
+    return cow_->AddCopy(new_block, old_block, num_blocks);
 }
 
 bool CompressedSnapshotWriter::EmitRawBlocks(uint64_t new_block_start, const void* data,
@@ -191,19 +195,29 @@ bool OnlineKernelSnapshotWriter::EmitZeroBlocks(uint64_t new_block_start, uint64
     return true;
 }
 
-bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block) {
+bool OnlineKernelSnapshotWriter::EmitCopy(uint64_t new_block, uint64_t old_block,
+                                          uint64_t num_blocks) {
     auto source_fd = GetSourceFd();
     if (source_fd < 0) {
         return false;
     }
 
-    std::string buffer(options_.block_size, 0);
-    uint64_t offset = old_block * options_.block_size;
-    if (!android::base::ReadFullyAtOffset(source_fd, buffer.data(), buffer.size(), offset)) {
-        PLOG(ERROR) << "EmitCopy read";
-        return false;
+    CHECK(num_blocks != 0);
+
+    for (size_t i = 0; i < num_blocks; i++) {
+        std::string buffer(options_.block_size, 0);
+        uint64_t offset = (old_block + i) * options_.block_size;
+        if (!android::base::ReadFullyAtOffset(source_fd, buffer.data(), buffer.size(), offset)) {
+            PLOG(ERROR) << "EmitCopy read";
+            return false;
+        }
+        if (!EmitRawBlocks(new_block + i, buffer.data(), buffer.size())) {
+            PLOG(ERROR) << "EmitRawBlocks failed";
+            return false;
+        }
     }
-    return EmitRawBlocks(new_block, buffer.data(), buffer.size());
+
+    return true;
 }
 
 bool OnlineKernelSnapshotWriter::EmitLabel(uint64_t) {

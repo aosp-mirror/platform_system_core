@@ -74,7 +74,7 @@ class ICowReader {
     virtual bool GetLastLabel(uint64_t* label) = 0;
 
     // Return an iterator for retrieving CowOperation entries.
-    virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
+    virtual std::unique_ptr<ICowOpIter> GetOpIter(bool merge_progress) = 0;
 
     // Return an iterator for retrieving CowOperation entries in reverse merge order
     virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress) = 0;
@@ -115,7 +115,7 @@ class CowReader final : public ICowReader {
         USERSPACE_MERGE = 1,
     };
 
-    CowReader(ReaderFlags reader_flag = ReaderFlags::DEFAULT);
+    CowReader(ReaderFlags reader_flag = ReaderFlags::DEFAULT, bool is_merge = false);
     ~CowReader() { owned_fd_ = {}; }
 
     // Parse the COW, optionally, up to the given label. If no label is
@@ -135,7 +135,7 @@ class CowReader final : public ICowReader {
     // CowOperation objects. Get() returns a unique CowOperation object
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
-    std::unique_ptr<ICowOpIter> GetOpIter() override;
+    std::unique_ptr<ICowOpIter> GetOpIter(bool merge_progress = false) override;
     std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
     std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
@@ -177,6 +177,7 @@ class CowReader final : public ICowReader {
     bool has_seq_ops_{};
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     ReaderFlags reader_flag_;
+    bool is_merge_{};
 };
 
 }  // namespace snapshot

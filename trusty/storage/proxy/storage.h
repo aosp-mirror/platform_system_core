@@ -39,6 +39,8 @@ int storage_file_get_size(struct storage_msg *msg,
 int storage_file_set_size(struct storage_msg *msg,
                           const void *req, size_t req_len);
 
+int storage_file_get_max_size(struct storage_msg* msg, const void* req, size_t req_len);
+
 int storage_init(const char *dirname);
 
 int storage_sync_checkpoint(void);

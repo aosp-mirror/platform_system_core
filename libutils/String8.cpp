@@ -25,6 +25,7 @@
 
 #include <ctype.h>
 
+#include <limits>
 #include <string>
 
 #include "SharedBuffer.h"

@@ -210,6 +210,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <type_traits>  // for common_type.
 
 #include <stdint.h>
