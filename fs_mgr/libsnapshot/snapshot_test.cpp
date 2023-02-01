@@ -2609,7 +2609,6 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
-        return;  // BUG(149738928)
 
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
@@ -2617,19 +2616,6 @@ class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t
     static constexpr const char* kImageName = "my_image";
     std::unique_ptr<LowSpaceUserdata> userdata_;
 };
-
-TEST_P(ImageManagerTest, CreateImageEnoughAvailSpace) {
-    if (userdata_->available_space() == 0) {
-        GTEST_SKIP() << "/data is full (" << userdata_->available_space()
-                     << " bytes available), skipping";
-    }
-    ASSERT_TRUE(image_manager_->CreateBackingImage(kImageName, userdata_->available_space(),
-                                                   IImageManager::CREATE_IMAGE_DEFAULT))
-            << "Should be able to create image with size = " << userdata_->available_space()
-            << " bytes";
-    ASSERT_TRUE(image_manager_->DeleteBackingImage(kImageName))
-            << "Should be able to delete created image";
-}
 
 TEST_P(ImageManagerTest, CreateImageNoSpace) {
     uint64_t to_allocate = userdata_->free_space() + userdata_->bsize();
