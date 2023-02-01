@@ -36,6 +36,7 @@
 #include <string>
 #include <thread>
 
+#include <android/dlext.h>
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
 #include <bionic/malloc.h>
@@ -1842,7 +1843,7 @@ TEST_F(CrasherTest, stack_overflow) {
   ASSERT_MATCH(result, R"(Cause: stack pointer[^\n]*stack overflow.\n)");
 }
 
-static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
+static std::string GetTestLibraryPath() {
   std::string test_lib(testing::internal::GetArgvs()[0]);
   auto const value = test_lib.find_last_of('/');
   if (value == std::string::npos) {
@@ -1850,7 +1851,62 @@ static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
   } else {
     test_lib = test_lib.substr(0, value + 1) + "./";
   }
-  test_lib += "libcrash_test.so";
+  return test_lib + "libcrash_test.so";
+}
+
+static void CreateEmbeddedLibrary(int out_fd) {
+  std::string test_lib(GetTestLibraryPath());
+  android::base::unique_fd fd(open(test_lib.c_str(), O_RDONLY | O_CLOEXEC));
+  ASSERT_NE(fd.get(), -1);
+  off_t file_size = lseek(fd, 0, SEEK_END);
+  ASSERT_EQ(lseek(fd, 0, SEEK_SET), 0);
+  std::vector<uint8_t> contents(file_size);
+  ASSERT_TRUE(android::base::ReadFully(fd, contents.data(), contents.size()));
+
+  // Put the shared library data at a pagesize() offset.
+  ASSERT_EQ(lseek(out_fd, 4 * getpagesize(), SEEK_CUR), 4 * getpagesize());
+  ASSERT_EQ(static_cast<size_t>(write(out_fd, contents.data(), contents.size())), contents.size());
+}
+
+TEST_F(CrasherTest, non_zero_offset_in_library) {
+  int intercept_result;
+  unique_fd output_fd;
+  TemporaryFile tf;
+  CreateEmbeddedLibrary(tf.fd);
+  StartProcess([&tf]() {
+    android_dlextinfo extinfo{};
+    extinfo.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_USE_LIBRARY_FD_OFFSET;
+    extinfo.library_fd = tf.fd;
+    extinfo.library_fd_offset = 4 * getpagesize();
+    void* handle = android_dlopen_ext(tf.path, RTLD_NOW, &extinfo);
+    if (handle == nullptr) {
+      _exit(1);
+    }
+    void (*crash_func)() = reinterpret_cast<void (*)()>(dlsym(handle, "crash"));
+    if (crash_func == nullptr) {
+      _exit(1);
+    }
+    crash_func();
+  });
+
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGSEGV);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+
+  // Verify the crash includes an offset value in the backtrace.
+  std::string match_str = android::base::StringPrintf("%s\\!libcrash_test.so \\(offset 0x%x\\)",
+                                                      tf.path, 4 * getpagesize());
+  ASSERT_MATCH(result, match_str);
+}
+
+static bool CopySharedLibrary(const char* tmp_dir, std::string* tmp_so_name) {
+  std::string test_lib(GetTestLibraryPath());
 
   *tmp_so_name = std::string(tmp_dir) + "/libcrash_test.so";
   std::string cp_cmd = android::base::StringPrintf("cp %s %s", test_lib.c_str(), tmp_dir);
