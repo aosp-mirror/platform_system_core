@@ -24,8 +24,8 @@ namespace init {
 ServiceList::ServiceList() {}
 
 ServiceList& ServiceList::GetInstance() {
-    static ServiceList instance;
-    return instance;
+    static ServiceList* instance = new ServiceList;
+    return *instance;
 }
 
 size_t ServiceList::CheckAllCommands() {

@@ -41,13 +41,13 @@ int main(int argc, char* argv[]) {
 
   if (argc < 3) {
     usage();
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   out = open(argv[argc - 1], O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0664);
   if (out < 0) {
     fprintf(stderr, "Cannot open output file %s\n", argv[argc - 1]);
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
 
   for (i = 1; i < argc - 1; i++) {
@@ -57,14 +57,14 @@ int main(int argc, char* argv[]) {
       in = open(argv[i], O_RDONLY | O_BINARY);
       if (in < 0) {
         fprintf(stderr, "Cannot open input file %s\n", argv[i]);
-        exit(-1);
+        exit(EXIT_FAILURE);
       }
     }
 
     s = sparse_file_import(in, true, false);
     if (!s) {
       fprintf(stderr, "Failed to read sparse file\n");
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
 
     if (lseek(out, 0, SEEK_SET) == -1) {
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     if (sparse_file_write(s, out, false, false, false) < 0) {
       fprintf(stderr, "Cannot write output file\n");
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
     sparse_file_destroy(s);
     close(in);
@@ -82,5 +82,5 @@ int main(int argc, char* argv[]) {
 
   close(out);
 
-  exit(0);
+  exit(EXIT_SUCCESS);
 }

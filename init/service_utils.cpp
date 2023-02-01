@@ -52,7 +52,7 @@ Result<void> EnterNamespace(int nstype, const char* path) {
     if (fd == -1) {
         return ErrnoError() << "Could not open namespace at " << path;
     }
-    if (setns(fd, nstype) == -1) {
+    if (setns(fd.get(), nstype) == -1) {
         return ErrnoError() << "Could not setns() namespace at " << path;
     }
     return {};
@@ -127,22 +127,22 @@ Result<void> SetUpPidNamespace(const char* name) {
 
 void SetupStdio(bool stdio_to_kmsg) {
     auto fd = unique_fd{open("/dev/null", O_RDWR | O_CLOEXEC)};
-    dup2(fd, STDIN_FILENO);
+    dup2(fd.get(), STDIN_FILENO);
     if (stdio_to_kmsg) {
         fd.reset(open("/dev/kmsg_debug", O_WRONLY | O_CLOEXEC));
         if (fd == -1) fd.reset(open("/dev/null", O_WRONLY | O_CLOEXEC));
     }
-    dup2(fd, STDOUT_FILENO);
-    dup2(fd, STDERR_FILENO);
+    dup2(fd.get(), STDOUT_FILENO);
+    dup2(fd.get(), STDERR_FILENO);
 }
 
 void OpenConsole(const std::string& console) {
     auto fd = unique_fd{open(console.c_str(), O_RDWR | O_CLOEXEC)};
     if (fd == -1) fd.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
-    ioctl(fd, TIOCSCTTY, 0);
-    dup2(fd, 0);
-    dup2(fd, 1);
-    dup2(fd, 2);
+    ioctl(fd.get(), TIOCSCTTY, 0);
+    dup2(fd.get(), 0);
+    dup2(fd.get(), 1);
+    dup2(fd.get(), 2);
 }
 
 }  // namespace
@@ -168,7 +168,8 @@ void Descriptor::Publish() const {
 
 Result<Descriptor> SocketDescriptor::Create(const std::string& global_context) const {
     const auto& socket_context = context.empty() ? global_context : context;
-    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, perm, uid, gid, socket_context);
+    auto result = CreateSocket(name, type | SOCK_CLOEXEC, passcred, listen, perm, uid, gid,
+                               socket_context);
     if (!result.ok()) {
         return result.error();
     }
@@ -189,7 +190,7 @@ Result<Descriptor> FileDescriptor::Create() const {
     }
 
     // Fixup as we set O_NONBLOCK for open, the intent for fd is to block reads.
-    fcntl(fd, F_SETFL, flags);
+    fcntl(fd.get(), F_SETFL, flags);
 
     return Descriptor(ANDROID_FILE_ENV_PREFIX + name, std::move(fd));
 }
@@ -231,7 +232,7 @@ Result<void> EnterNamespaces(const NamespaceInfo& info, const std::string& name,
     return {};
 }
 
-Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
+Result<void> SetProcessAttributes(const ProcessAttributes& attr, InterprocessFifo setsid_finished) {
     if (attr.ioprio_class != IoSchedClass_NONE) {
         if (android_set_ioprio(getpid(), attr.ioprio_class, attr.ioprio_pri)) {
             PLOG(ERROR) << "failed to set pid " << getpid() << " ioprio=" << attr.ioprio_class
@@ -239,11 +240,17 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
         }
     }
 
-    if (!attr.console.empty()) {
+    if (RequiresConsole(attr)) {
         setsid();
+        setsid_finished.Write(kSetSidFinished);
+        setsid_finished.Close();
         OpenConsole(attr.console);
     } else {
-        if (setpgid(0, getpid()) == -1) {
+        // Without PID namespaces, this call duplicates the setpgid() call from
+        // the parent process. With PID namespaces, this setpgid() call sets the
+        // process group ID for a child of the init process in the PID
+        // namespace.
+        if (setpgid(0, 0) == -1) {
             return ErrnoError() << "setpgid failed";
         }
         SetupStdio(attr.stdio_to_kmsg);
@@ -279,6 +286,15 @@ Result<void> SetProcessAttributes(const ProcessAttributes& attr) {
 }
 
 Result<void> WritePidToFiles(std::vector<std::string>* files) {
+    if (files->empty()) {
+        // No files to write pid to, exit early.
+        return {};
+    }
+
+    if (!CgroupsAvailable()) {
+        return Error() << "cgroups are not available";
+    }
+
     // See if there were "writepid" instructions to write to files under cpuset path.
     std::string cpuset_path;
     if (CgroupGetControllerPath("cpuset", &cpuset_path)) {

@@ -49,6 +49,7 @@ class ActionManager {
     bool HasMoreCommands() const;
     void DumpState() const;
     void ClearQueue();
+    auto size() const { return actions_.size(); }
 
   private:
     ActionManager(ActionManager const&) = delete;

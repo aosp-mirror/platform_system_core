@@ -1,0 +1,10 @@
+{
+  "presubmit": [
+      {
+        "name": "VtsAidlKeyMintTargetTest"
+      },
+      {
+        "name": "VtsHalRemotelyProvisionedComponentTargetTest"
+      }
+  ]
+}

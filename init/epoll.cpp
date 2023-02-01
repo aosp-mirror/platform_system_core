@@ -23,6 +23,8 @@
 #include <functional>
 #include <map>
 
+#include <android-base/logging.h>
+
 namespace android {
 namespace init {
 
@@ -42,17 +44,20 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
     if (!events) {
         return Error() << "Must specify events";
     }
-    auto sp = std::make_shared<decltype(handler)>(std::move(handler));
-    auto [it, inserted] = epoll_handlers_.emplace(fd, std::move(sp));
+
+    auto [it, inserted] = epoll_handlers_.emplace(
+            fd, Info{
+                        .events = events,
+                        .handler = std::move(handler),
+                });
     if (!inserted) {
         return Error() << "Cannot specify two epoll handlers for a given FD";
     }
-    epoll_event ev;
-    ev.events = events;
-    // std::map's iterators do not get invalidated until erased, so we use the
-    // pointer to the std::function in the map directly for epoll_ctl.
-    ev.data.ptr = reinterpret_cast<void*>(&it->second);
-    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
+    epoll_event ev = {
+            .events = events,
+            .data.fd = fd,
+    };
+    if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, fd, &ev) == -1) {
         Result<void> result = ErrnoError() << "epoll_ctl failed to add fd";
         epoll_handlers_.erase(fd);
         return result;
@@ -61,34 +66,54 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
 }
 
 Result<void> Epoll::UnregisterHandler(int fd) {
-    if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
+    if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_DEL, fd, nullptr) == -1) {
         return ErrnoError() << "epoll_ctl failed to remove fd";
     }
-    if (epoll_handlers_.erase(fd) != 1) {
+    auto it = epoll_handlers_.find(fd);
+    if (it == epoll_handlers_.end()) {
         return Error() << "Attempting to remove epoll handler for FD without an existing handler";
     }
+    to_remove_.insert(it->first);
     return {};
 }
 
-Result<std::vector<std::shared_ptr<Epoll::Handler>>> Epoll::Wait(
-        std::optional<std::chrono::milliseconds> timeout) {
+void Epoll::SetFirstCallback(std::function<void()> first_callback) {
+    first_callback_ = std::move(first_callback);
+}
+
+Result<int> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
     int timeout_ms = -1;
     if (timeout && timeout->count() < INT_MAX) {
         timeout_ms = timeout->count();
     }
     const auto max_events = epoll_handlers_.size();
     epoll_event ev[max_events];
-    auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_, ev, max_events, timeout_ms));
+    auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_.get(), ev, max_events, timeout_ms));
     if (num_events == -1) {
         return ErrnoError() << "epoll_wait failed";
     }
-    std::vector<std::shared_ptr<Handler>> pending_functions;
-    for (int i = 0; i < num_events; ++i) {
-        auto sp = *reinterpret_cast<std::shared_ptr<Handler>*>(ev[i].data.ptr);
-        pending_functions.emplace_back(std::move(sp));
+    if (num_events > 0 && first_callback_) {
+        first_callback_();
     }
-
-    return pending_functions;
+    for (int i = 0; i < num_events; ++i) {
+        const auto it = epoll_handlers_.find(ev[i].data.fd);
+        if (it == epoll_handlers_.end()) {
+            continue;
+        }
+        const Info& info = it->second;
+        if ((info.events & (EPOLLIN | EPOLLPRI)) == (EPOLLIN | EPOLLPRI) &&
+            (ev[i].events & EPOLLIN) != ev[i].events) {
+            // This handler wants to know about exception events, and just got one.
+            // Log something informational.
+            LOG(ERROR) << "Received unexpected epoll event set: " << ev[i].events;
+        }
+        info.handler();
+        for (auto fd : to_remove_) {
+            epoll_handlers_.erase(fd);
+        }
+        to_remove_.clear();
+    }
+    return num_events;
 }
 
 }  // namespace init

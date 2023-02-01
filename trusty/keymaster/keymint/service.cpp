@@ -41,7 +41,7 @@ std::shared_ptr<T> addService(Args&&... args) {
 
 int main() {
     auto trustyKeymaster = std::make_shared<keymaster::TrustyKeymaster>();
-    int err = trustyKeymaster->Initialize(keymaster::KmVersion::KEYMINT_2);
+    int err = trustyKeymaster->Initialize(keymaster::KmVersion::KEYMINT_3);
     if (err != 0) {
         LOG(FATAL) << "Could not initialize TrustyKeymaster for KeyMint (" << err << ")";
         return -1;

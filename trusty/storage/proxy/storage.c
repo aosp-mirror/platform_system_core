@@ -13,10 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <cutils/properties.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <linux/fs.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +37,9 @@
 
 #define ALTERNATE_DATA_DIR "alternate/"
 
+/* Maximum file size for filesystem backed storage (i.e. not block dev backed storage) */
+#define MAX_FILE_SIZE (0x10000000000)
+
 enum sync_state {
     SS_UNUSED = -1,
     SS_CLEAN =  0,
@@ -42,6 +47,22 @@ enum sync_state {
 };
 
 static const char *ssdir_name;
+
+/*
+ * Property set to 1 after we have opened a file under ssdir_name. The backing
+ * files for both TD and TDP are currently located under /data/vendor/ss and can
+ * only be opened once userdata is mounted. This storageproxyd service is
+ * restarted when userdata is available, which causes the Trusty storage service
+ * to reconnect and attempt to open the backing files for TD and TDP. Once we
+ * set this property, other users can expect that the Trusty storage service
+ * ports will be available (although they may block if still being initialized),
+ * and connections will not be reset after this point (assuming the
+ * storageproxyd service stays running).
+ */
+#define FS_READY_PROPERTY "ro.vendor.trusty.storage.fs_ready"
+
+/* has FS_READY_PROPERTY been set? */
+static bool fs_ready_initialized = false;
 
 static enum sync_state fs_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
@@ -336,6 +357,16 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len) {
     ALOGV("%s: \"%s\": fd = %u: handle = %d\n",
           __func__, path, rc, resp.handle);
 
+    /* a backing file has been opened, notify any waiting init steps */
+    if (!fs_ready_initialized) {
+        rc = property_set(FS_READY_PROPERTY, "1");
+        if (rc == 0) {
+            fs_ready_initialized = true;
+        } else {
+            ALOGE("Could not set property %s, rc: %d\n", FS_READY_PROPERTY, rc);
+        }
+    }
+
     return ipc_respond(msg, &resp, sizeof(resp));
 
 err_response:
@@ -517,6 +548,45 @@ int storage_file_set_size(struct storage_msg *msg,
     }
 
     msg->result = STORAGE_NO_ERROR;
+
+err_response:
+    return ipc_respond(msg, NULL, 0);
+}
+
+int storage_file_get_max_size(struct storage_msg* msg, const void* r, size_t req_len) {
+    const struct storage_file_get_max_size_req* req = r;
+    struct storage_file_get_max_size_resp resp = {0};
+    uint64_t max_size = 0;
+
+    if (req_len != sizeof(*req)) {
+        ALOGE("%s: invalid request length (%zd != %zd)\n", __func__, req_len, sizeof(*req));
+        msg->result = STORAGE_ERR_NOT_VALID;
+        goto err_response;
+    }
+
+    struct stat stat;
+    int fd = lookup_fd(req->handle, false);
+    int rc = fstat(fd, &stat);
+    if (rc < 0) {
+        ALOGE("%s: error stat'ing file (fd=%d): %s\n", __func__, fd, strerror(errno));
+        goto err_response;
+    }
+
+    if ((stat.st_mode & S_IFMT) == S_IFBLK) {
+        rc = ioctl(fd, BLKGETSIZE64, &max_size);
+        if (rc < 0) {
+            rc = errno;
+            ALOGE("%s: error calling ioctl on file (fd=%d): %s\n", __func__, fd, strerror(errno));
+            msg->result = translate_errno(rc);
+            goto err_response;
+        }
+    } else {
+        max_size = MAX_FILE_SIZE;
+    }
+
+    resp.max_size = max_size;
+    msg->result = STORAGE_NO_ERROR;
+    return ipc_respond(msg, &resp, sizeof(resp));
 
 err_response:
     return ipc_respond(msg, NULL, 0);

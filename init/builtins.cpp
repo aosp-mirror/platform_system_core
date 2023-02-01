@@ -69,6 +69,7 @@
 #include <system/thread_defs.h>
 
 #include "action_manager.h"
+#include "apex_init_util.h"
 #include "bootchart.h"
 #include "builtin_arguments.h"
 #include "fscrypt_init_extensions.h"
@@ -330,13 +331,13 @@ static Result<void> do_ifup(const BuiltinArguments& args) {
     unique_fd s(TEMP_FAILURE_RETRY(socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0)));
     if (s < 0) return ErrnoError() << "opening socket failed";
 
-    if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0) {
+    if (ioctl(s.get(), SIOCGIFFLAGS, &ifr) < 0) {
         return ErrnoError() << "ioctl(..., SIOCGIFFLAGS, ...) failed";
     }
 
     ifr.ifr_flags |= IFF_UP;
 
-    if (ioctl(s, SIOCSIFFLAGS, &ifr) < 0) {
+    if (ioctl(s.get(), SIOCSIFFLAGS, &ifr) < 0) {
         return ErrnoError() << "ioctl(..., SIOCSIFFLAGS, ...) failed";
     }
 
@@ -515,11 +516,11 @@ static Result<void> do_mount(const BuiltinArguments& args) {
 
             loop_info info;
             /* if it is a blank loop device */
-            if (ioctl(loop, LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
+            if (ioctl(loop.get(), LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
                 /* if it becomes our loop device */
-                if (ioctl(loop, LOOP_SET_FD, fd.get()) >= 0) {
+                if (ioctl(loop.get(), LOOP_SET_FD, fd.get()) >= 0) {
                     if (mount(tmp.c_str(), target, system, flags, options) < 0) {
-                        ioctl(loop, LOOP_CLR_FD, 0);
+                        ioctl(loop.get(), LOOP_CLR_FD, 0);
                         return ErrnoError() << "mount() failed";
                     }
                     return {};
@@ -878,6 +879,8 @@ static Result<void> do_verity_update_state(const BuiltinArguments& args) {
             SetProperty("partition." + partition + ".verified.hash_alg", hashtree_info->algorithm);
             SetProperty("partition." + partition + ".verified.root_digest",
                         hashtree_info->root_digest);
+            SetProperty("partition." + partition + ".verified.check_at_most_once",
+                        hashtree_info->check_at_most_once ? "1" : "0");
         }
     }
 
@@ -898,16 +901,16 @@ static Result<void> readahead_file(const std::string& filename, bool fully) {
     if (fd == -1) {
         return ErrnoError() << "Error opening file";
     }
-    if (posix_fadvise(fd, 0, 0, POSIX_FADV_WILLNEED)) {
+    if (posix_fadvise(fd.get(), 0, 0, POSIX_FADV_WILLNEED)) {
         return ErrnoError() << "Error posix_fadvise file";
     }
-    if (readahead(fd, 0, std::numeric_limits<size_t>::max())) {
+    if (readahead(fd.get(), 0, std::numeric_limits<size_t>::max())) {
         return ErrnoError() << "Error readahead file";
     }
     if (fully) {
         char buf[BUFSIZ];
         ssize_t n;
-        while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
+        while ((n = TEMP_FAILURE_RETRY(read(fd.get(), &buf[0], sizeof(buf)))) > 0) {
         }
         if (n != 0) {
             return ErrnoError() << "Error reading file";
@@ -1279,48 +1282,6 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
     return GenerateLinkerConfiguration();
 }
 
-static Result<void> parse_apex_configs() {
-    glob_t glob_result;
-    static constexpr char glob_pattern[] = "/apex/*/etc/*rc";
-    const int ret = glob(glob_pattern, GLOB_MARK, nullptr, &glob_result);
-    if (ret != 0 && ret != GLOB_NOMATCH) {
-        globfree(&glob_result);
-        return Error() << "glob pattern '" << glob_pattern << "' failed";
-    }
-    std::vector<std::string> configs;
-    Parser parser =
-            CreateApexConfigParser(ActionManager::GetInstance(), ServiceList::GetInstance());
-    for (size_t i = 0; i < glob_result.gl_pathc; i++) {
-        std::string path = glob_result.gl_pathv[i];
-        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
-        // /apex/<name> paths, so unless we filter them out, we will parse the
-        // same file twice.
-        std::vector<std::string> paths = android::base::Split(path, "/");
-        if (paths.size() >= 3 && paths[2].find('@') != std::string::npos) {
-            continue;
-        }
-        // Filter directories
-        if (path.back() == '/') {
-            continue;
-        }
-        configs.push_back(path);
-    }
-    globfree(&glob_result);
-
-    int active_sdk = android::base::GetIntProperty("ro.build.version.sdk", INT_MAX);
-
-    bool success = true;
-    for (const auto& c : parser.FilterVersionedConfigs(configs, active_sdk)) {
-        success &= parser.ParseConfigFile(c);
-    }
-    ServiceList::GetInstance().MarkServicesUpdate();
-    if (success) {
-        return {};
-    } else {
-        return Error() << "Could not parse apex configs";
-    }
-}
-
 /*
  * Creates a directory under /data/misc/apexdata/ for each APEX.
  */
@@ -1351,7 +1312,8 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     if (!create_dirs.ok()) {
         return create_dirs.error();
     }
-    auto parse_configs = parse_apex_configs();
+    auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
+    ServiceList::GetInstance().MarkServicesUpdate();
     if (!parse_configs.ok()) {
         return parse_configs.error();
     }

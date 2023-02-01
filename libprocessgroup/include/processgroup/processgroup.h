@@ -18,13 +18,17 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <initializer_list>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 __BEGIN_DECLS
 
 static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
 
+bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
@@ -32,6 +36,19 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::s
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
+
+__END_DECLS
+
+bool SetTaskProfiles(int tid, std::initializer_list<std::string_view> profiles,
+                     bool use_fd_cache = false);
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::initializer_list<std::string_view> profiles);
+#if _LIBCPP_STD_VER > 17
+bool SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+                     bool use_fd_cache = false);
+bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const std::string_view> profiles);
+#endif
+
+__BEGIN_DECLS
 
 #ifndef __ANDROID_VNDK__
 

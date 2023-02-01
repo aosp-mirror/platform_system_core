@@ -257,12 +257,12 @@ void FirmwareHandler::ProcessFirmwareEvent(const std::string& root,
             return false;
         }
         struct stat sb;
-        if (fstat(fw_fd, &sb) == -1) {
+        if (fstat(fw_fd.get(), &sb) == -1) {
             attempted_paths_and_errors.emplace_back("firmware: attempted " + file +
                                                     ", fstat failed: " + strerror(errno));
             return false;
         }
-        LoadFirmware(firmware, root, fw_fd, sb.st_size, loading_fd, data_fd);
+        LoadFirmware(firmware, root, fw_fd.get(), sb.st_size, loading_fd.get(), data_fd.get());
         return true;
     };
 
@@ -287,7 +287,7 @@ try_loading_again:
     }
 
     // Write "-1" as our response to the kernel's firmware request, since we have nothing for it.
-    write(loading_fd, "-1", 2);
+    write(loading_fd.get(), "-1", 2);
 }
 
 bool FirmwareHandler::ForEachFirmwareDirectory(

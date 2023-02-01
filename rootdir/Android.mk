@@ -213,4 +213,15 @@ $(LOCAL_BUILT_MODULE):
 	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
 		echo $(lib) >> $@;)
 
+#######################################
+# ramdisk_node_list
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := ramdisk_node_list
+LOCAL_MODULE_CLASS := ETC
+LOCAL_SRC_FILES := $(LOCAL_MODULE)
+LOCAL_MODULE_PATH := $(PRODUCT_OUT)
+
+include $(BUILD_PREBUILT)
+
 include $(call all-makefiles-under,$(LOCAL_PATH))

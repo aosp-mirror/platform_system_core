@@ -15,11 +15,17 @@
  */
 
 #include <functional>
+#include <string_view>
+#include <thread>
+#include <type_traits>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android/api-level.h>
 #include <gtest/gtest.h>
+#include <selinux/selinux.h>
+#include <sys/resource.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -27,6 +33,7 @@
 #include "builtin_arguments.h"
 #include "builtins.h"
 #include "import_parser.h"
+#include "init.h"
 #include "keyword_map.h"
 #include "parser.h"
 #include "service.h"
@@ -37,6 +44,7 @@
 using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::SetProperty;
+using android::base::StringReplace;
 using android::base::WaitForProperty;
 using namespace std::literals;
 
@@ -186,6 +194,263 @@ service A something
     EXPECT_EQ(std::set<std::string>({"second"}), service->classnames());
     EXPECT_EQ("A", service->name());
     EXPECT_TRUE(service->is_override());
+}
+
+TEST(init, StartConsole) {
+    if (GetProperty("ro.build.type", "") == "user") {
+        GTEST_SKIP() << "Must run on userdebug/eng builds. b/262090304";
+        return;
+    }
+    std::string init_script = R"init(
+service console /system/bin/sh
+    class core
+    console null
+    disabled
+    user root
+    group root shell log readproc
+    seclabel u:r:shell:s0
+    setenv HOSTNAME console
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_NE(getsid(pid), 0);
+    service->Stop();
+}
+
+static std::string GetSecurityContext() {
+    char* ctx;
+    if (getcon(&ctx) == -1) {
+        ADD_FAILURE() << "Failed to call getcon : " << strerror(errno);
+    }
+    std::string result = std::string(ctx);
+    freecon(ctx);
+    return result;
+}
+
+void TestStartApexServices(const std::vector<std::string>& service_names,
+        const std::string& apex_name) {
+    for (auto const& svc : service_names) {
+        auto service = ServiceList::GetInstance().FindService(svc);
+        ASSERT_NE(nullptr, service);
+        ASSERT_RESULT_OK(service->Start());
+        ASSERT_TRUE(service->IsRunning());
+        LOG(INFO) << "Service " << svc << " is running";
+        if (!apex_name.empty()) {
+            service->set_filename("/apex/" + apex_name + "/init_test.rc");
+        } else {
+            service->set_filename("");
+        }
+    }
+    if (!apex_name.empty()) {
+        auto apex_services = ServiceList::GetInstance().FindServicesByApexName(apex_name);
+        EXPECT_EQ(service_names.size(), apex_services.size());
+    }
+}
+
+void TestStopApexServices(const std::vector<std::string>& service_names, bool expect_to_run) {
+    for (auto const& svc : service_names) {
+        auto service = ServiceList::GetInstance().FindService(svc);
+        ASSERT_NE(nullptr, service);
+        EXPECT_EQ(expect_to_run, service->IsRunning());
+    }
+}
+
+void TestRemoveApexService(const std::vector<std::string>& service_names, bool exist) {
+    for (auto const& svc : service_names) {
+        auto service = ServiceList::GetInstance().FindService(svc);
+        ASSERT_EQ(exist, service != nullptr);
+    }
+}
+
+void InitApexService(const std::string_view& init_template) {
+    std::string init_script = StringReplace(init_template, "$selabel",
+                                    GetSecurityContext(), true);
+
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &ActionManager::GetInstance(),
+            &ServiceList::GetInstance());
+}
+
+void CleanupApexServices() {
+    std::vector<std::string> names;
+    for (const auto& s : ServiceList::GetInstance()) {
+        names.push_back(s->name());
+    }
+
+    for (const auto& name : names) {
+        auto s = ServiceList::GetInstance().FindService(name);
+        auto pid = s->pid();
+        ServiceList::GetInstance().RemoveService(*s);
+        if (pid > 0) {
+            kill(pid, SIGTERM);
+            kill(pid, SIGKILL);
+        }
+    }
+
+    ActionManager::GetInstance().RemoveActionIf([&](const std::unique_ptr<Action>& s) -> bool {
+        return true;
+    });
+}
+
+void TestApexServicesInit(const std::vector<std::string>& apex_services,
+            const std::vector<std::string>& other_apex_services,
+            const std::vector<std::string> non_apex_services) {
+    auto num_svc = apex_services.size() + other_apex_services.size() + non_apex_services.size();
+    ASSERT_EQ(num_svc, ServiceList::GetInstance().size());
+
+    TestStartApexServices(apex_services, "com.android.apex.test_service");
+    TestStartApexServices(other_apex_services, "com.android.other_apex.test_service");
+    TestStartApexServices(non_apex_services, /*apex_anme=*/ "");
+
+    StopServicesFromApex("com.android.apex.test_service");
+    TestStopApexServices(apex_services, /*expect_to_run=*/ false);
+    TestStopApexServices(other_apex_services, /*expect_to_run=*/ true);
+    TestStopApexServices(non_apex_services, /*expect_to_run=*/ true);
+
+    RemoveServiceAndActionFromApex("com.android.apex.test_service");
+    ASSERT_EQ(other_apex_services.size() + non_apex_services.size(),
+        ServiceList::GetInstance().size());
+
+    // TODO(b/244232142): Add test to check if actions are removed
+    TestRemoveApexService(apex_services, /*exist*/ false);
+    TestRemoveApexService(other_apex_services, /*exist*/ true);
+    TestRemoveApexService(non_apex_services, /*exist*/ true);
+
+    CleanupApexServices();
+}
+
+TEST(init, StopServiceByApexName) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string_view script_template = R"init(
+service apex_test_service /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+    TestApexServicesInit({"apex_test_service"}, {}, {});
+}
+
+TEST(init, StopMultipleServicesByApexName) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string_view script_template = R"init(
+service apex_test_service_multiple_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_multiple_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+    TestApexServicesInit({"apex_test_service_multiple_a",
+            "apex_test_service_multiple_b"}, {}, {});
+}
+
+TEST(init, StopServicesFromMultipleApexes) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string_view apex_script_template = R"init(
+service apex_test_service_multi_apex_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_multi_apex_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(apex_script_template);
+
+    std::string_view other_apex_script_template = R"init(
+service apex_test_service_multi_apex_c /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(other_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_multi_apex_a",
+            "apex_test_service_multi_apex_b"}, {"apex_test_service_multi_apex_c"}, {});
+}
+
+TEST(init, StopServicesFromApexAndNonApex) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string_view apex_script_template = R"init(
+service apex_test_service_apex_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+service apex_test_service_apex_b /system/bin/id
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(apex_script_template);
+
+    std::string_view non_apex_script_template = R"init(
+service apex_test_service_non_apex /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(non_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_apex_a",
+            "apex_test_service_apex_b"}, {}, {"apex_test_service_non_apex"});
+}
+
+TEST(init, StopServicesFromApexMixed) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string_view script_template = R"init(
+service apex_test_service_mixed_a /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(script_template);
+
+    std::string_view other_apex_script_template = R"init(
+service apex_test_service_mixed_b /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(other_apex_script_template);
+
+    std::string_view non_apex_script_template = R"init(
+service apex_test_service_mixed_c /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+    InitApexService(non_apex_script_template);
+
+    TestApexServicesInit({"apex_test_service_mixed_a"},
+            {"apex_test_service_mixed_b"}, {"apex_test_service_mixed_c"});
 }
 
 TEST(init, EventTriggerOrderMultipleFiles) {
@@ -338,20 +603,6 @@ TEST(init, LazilyLoadedActionsCanBeTriggeredByTheNextTrigger) {
     EXPECT_EQ(2, num_executed);
 }
 
-TEST(init, RespondToCtlApexMessages) {
-    if (getuid() != 0) {
-        GTEST_SKIP() << "Skipping test, must be run as root.";
-        return;
-    }
-
-    std::string apex_name = "com.android.apex.cts.shim";
-    SetProperty("ctl.apex_unload", apex_name);
-    EXPECT_TRUE(WaitForProperty("init.apex." + apex_name, "unloaded", 10s));
-
-    SetProperty("ctl.apex_load", apex_name);
-    EXPECT_TRUE(WaitForProperty("init.apex." + apex_name, "loaded", 10s));
-}
-
 TEST(init, RejectsCriticalAndOneshotService) {
     if (GetIntProperty("ro.product.first_api_level", 10000) < 30) {
         GTEST_SKIP() << "Test only valid for devices launching with R or later";
@@ -376,6 +627,105 @@ service A something
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
     ASSERT_EQ(1u, parser.parse_error_count());
+}
+
+TEST(init, MemLockLimit) {
+    // Test is enforced only for U+ devices
+    if (android::base::GetIntProperty("ro.vendor.api_level", 0) < __ANDROID_API_U__) {
+        GTEST_SKIP();
+    }
+
+    // Verify we are running memlock at, or under, 64KB
+    const unsigned long max_limit = 65536;
+    struct rlimit curr_limit;
+    ASSERT_EQ(getrlimit(RLIMIT_MEMLOCK, &curr_limit), 0);
+    ASSERT_LE(curr_limit.rlim_cur, max_limit);
+    ASSERT_LE(curr_limit.rlim_max, max_limit);
+}
+
+static std::vector<const char*> ConvertToArgv(const std::vector<std::string>& args) {
+    std::vector<const char*> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto& arg : args) {
+        if (argv.empty()) {
+            LOG(DEBUG) << arg;
+        } else {
+            LOG(DEBUG) << "    " << arg;
+        }
+        argv.emplace_back(arg.data());
+    }
+    argv.emplace_back(nullptr);
+    return argv;
+}
+
+pid_t ForkExecvpAsync(const std::vector<std::string>& args) {
+    auto argv = ConvertToArgv(args);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+
+        execvp(argv[0], const_cast<char**>(argv.data()));
+        PLOG(ERROR) << "exec in ForkExecvpAsync init test";
+        _exit(EXIT_FAILURE);
+    }
+    if (pid == -1) {
+        PLOG(ERROR) << "fork in ForkExecvpAsync init test";
+        return -1;
+    }
+    return pid;
+}
+
+TEST(init, GentleKill) {
+    std::string init_script = R"init(
+service test_gentle_kill /system/bin/sleep 1000
+    disabled
+    oneshot
+    gentle_kill
+    user root
+    group root
+    seclabel u:r:toolbox:s0
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_NE(getsid(pid), 0);
+
+    TemporaryFile logfile;
+    logfile.DoNotRemove();
+    ASSERT_TRUE(logfile.fd != -1);
+
+    std::vector<std::string> cmd;
+    cmd.push_back("system/bin/strace");
+    cmd.push_back("-o");
+    cmd.push_back(logfile.path);
+    cmd.push_back("-e");
+    cmd.push_back("signal");
+    cmd.push_back("-p");
+    cmd.push_back(std::to_string(pid));
+    pid_t strace_pid = ForkExecvpAsync(cmd);
+
+    // Give strace a moment to connect
+    std::this_thread::sleep_for(1s);
+    service->Stop();
+
+    int status;
+    waitpid(strace_pid, &status, 0);
+
+    std::string logs;
+    android::base::ReadFdToString(logfile.fd, &logs);
+    int pos = logs.find("killed by SIGTERM");
+    ASSERT_NE(pos, (int)std::string::npos);
 }
 
 class TestCaseLogger : public ::testing::EmptyTestEventListener {

@@ -119,6 +119,12 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
         }
     }
 
+    // We reach this point only during selinux transition during device boot.
+    // At this point, all threads are spin up and are ready to serve the I/O
+    // requests for dm-user. Lets inform init.
+    auto client = std::make_unique<SnapuserdClient>();
+    client->NotifyTransitionDaemonIsReady();
+
     // Skip the accept() call to avoid spurious log spam. The server will still
     // run until all handlers have completed.
     return user_server_.WaitForSocket();

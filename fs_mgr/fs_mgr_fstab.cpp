@@ -304,13 +304,16 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (StartsWith(flag, "zoned_device=")) {
-            std::string zoned;
-            if (ReadFileToString("/sys/class/block/" + arg + "/queue/zoned", &zoned) &&
-                android::base::StartsWith(zoned, "host-managed")) {
-                entry->zoned_device = "/dev/block/" + arg;
-            } else {
-                LWARNING << "Warning: cannot find the zoned device: " << arg;
+        } else if (flag == "zoned_device") {
+            if (access("/dev/block/by-name/zoned_device", F_OK) == 0) {
+                entry->zoned_device = "/dev/block/by-name/zoned_device";
+
+                // atgc in f2fs does not support a zoned device
+                auto options = Split(entry->fs_options, ",");
+                options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
+                entry->fs_options = android::base::Join(options, ",");
+                LINFO << "Removed ATGC in fs_options as " << entry->fs_options
+                      << " for zoned device=" << entry->zoned_device;
             }
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
@@ -482,13 +485,21 @@ std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     return boot_devices;
 }
 
-template <typename Pred>
-std::vector<FstabEntry*> GetEntriesByPred(Fstab* fstab, const Pred& pred) {
+// Helper class that maps Fstab* -> FstabEntry; const Fstab* -> const FstabEntry.
+template <typename FstabPtr>
+struct FstabPtrEntry {
+    using is_const_fstab = std::is_const<std::remove_pointer_t<FstabPtr>>;
+    using type = std::conditional_t<is_const_fstab::value, const FstabEntry, FstabEntry>;
+};
+
+template <typename FstabPtr, typename FstabPtrEntryType = typename FstabPtrEntry<FstabPtr>::type,
+          typename Pred>
+std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pred) {
     if (fstab == nullptr) {
         return {};
     }
-    std::vector<FstabEntry*> entries;
-    for (auto&& entry : *fstab) {
+    std::vector<FstabPtrEntryType*> entries;
+    for (FstabPtrEntryType& entry : *fstab) {
         if (pred(entry)) {
             entries.push_back(&entry);
         }
@@ -748,10 +759,11 @@ bool ReadFstabFromDt(Fstab* fstab, bool verbose) {
 }
 
 #ifdef NO_SKIP_MOUNT
-bool SkipMountingPartitions(Fstab*, bool) {
-    return true;
-}
+static constexpr bool kNoSkipMount = true;
 #else
+static constexpr bool kNoSkipMount = false;
+#endif
+
 // For GSI to skip mounting /product and /system_ext, until there are well-defined interfaces
 // between them and /system. Otherwise, the GSI flashed on /system might not be able to work with
 // device-specific /product and /system_ext. skip_mount.cfg belongs to system_ext partition because
@@ -759,17 +771,24 @@ bool SkipMountingPartitions(Fstab*, bool) {
 // /system/system_ext because GSI is a single system.img that includes the contents of system_ext
 // partition and product partition under /system/system_ext and /system/product, respectively.
 bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
-    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
-
-    std::string skip_config;
-    auto save_errno = errno;
-    if (!ReadFileToString(kSkipMountConfig, &skip_config)) {
-        errno = save_errno;  // missing file is expected
+    if (kNoSkipMount) {
         return true;
     }
 
+    static constexpr char kSkipMountConfig[] = "/system/system_ext/etc/init/config/skip_mount.cfg";
+
+    std::string skip_mount_config;
+    auto save_errno = errno;
+    if (!ReadFileToString(kSkipMountConfig, &skip_mount_config)) {
+        errno = save_errno;  // missing file is expected
+        return true;
+    }
+    return SkipMountWithConfig(skip_mount_config, fstab, verbose);
+}
+
+bool SkipMountWithConfig(const std::string& skip_mount_config, Fstab* fstab, bool verbose) {
     std::vector<std::string> skip_mount_patterns;
-    for (const auto& line : Split(skip_config, "\n")) {
+    for (const auto& line : Split(skip_mount_config, "\n")) {
         if (line.empty() || StartsWith(line, "#")) {
             continue;
         }
@@ -795,7 +814,6 @@ bool SkipMountingPartitions(Fstab* fstab, bool verbose) {
     fstab->erase(remove_from, fstab->end());
     return true;
 }
-#endif
 
 // Loads the fstab file and combines with fstab entries passed in from device tree.
 bool ReadDefaultFstab(Fstab* fstab) {
@@ -822,23 +840,25 @@ bool ReadDefaultFstab(Fstab* fstab) {
     return !fstab->empty();
 }
 
-FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
-    if (fstab == nullptr) {
-        return nullptr;
-    }
-
-    for (auto& entry : *fstab) {
-        if (entry.mount_point == path) {
-            return &entry;
-        }
-    }
-
-    return nullptr;
-}
-
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path) {
     return GetEntriesByPred(fstab,
                             [&path](const FstabEntry& entry) { return entry.mount_point == path; });
+}
+
+std::vector<const FstabEntry*> GetEntriesForMountPoint(const Fstab* fstab,
+                                                       const std::string& path) {
+    return GetEntriesByPred(fstab,
+                            [&path](const FstabEntry& entry) { return entry.mount_point == path; });
+}
+
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
+    std::vector<FstabEntry*> entries = GetEntriesForMountPoint(fstab, path);
+    return entries.empty() ? nullptr : entries.front();
+}
+
+const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& path) {
+    std::vector<const FstabEntry*> entries = GetEntriesForMountPoint(fstab, path);
+    return entries.empty() ? nullptr : entries.front();
 }
 
 std::set<std::string> GetBootDevices() {

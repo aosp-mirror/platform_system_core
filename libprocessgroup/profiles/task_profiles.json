@@ -76,6 +76,24 @@
       "Name": "FreezerState",
       "Controller": "freezer",
       "File": "cgroup.freeze"
+    },
+    {
+      "Name": "BfqWeight",
+      "Controller": "io",
+      "File": "blkio.bfq.weight",
+      "FileV2": "io.bfq.weight"
+    },
+    {
+      "Name": "CfqGroupIdle",
+      "Controller": "io",
+      "File": "blkio.group_idle",
+      "FileV2": "io.group_idle"
+    },
+    {
+      "Name": "CfqWeight",
+      "Controller": "io",
+      "File": "blkio.weight",
+      "FileV2": "io.weight"
     }
   ],
 
@@ -445,6 +463,33 @@
             "Controller": "blkio",
             "Path": "background"
           }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "BfqWeight",
+            "Value": "10",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "200",
+            "Optional": "true"
+          }
         }
       ]
     },
@@ -457,6 +502,33 @@
           {
             "Controller": "blkio",
             "Path": ""
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
           }
         }
       ]
@@ -471,6 +543,33 @@
             "Controller": "blkio",
             "Path": ""
           }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
+          }
         }
       ]
     },
@@ -483,6 +582,33 @@
           {
             "Controller": "blkio",
             "Path": ""
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "BfqWeight",
+            "Value": "100",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqGroupIdle",
+            "Value": "0",
+            "Optional": "true"
+          }
+        },
+        {
+          "Name": "SetAttribute",
+          "Params":
+          {
+            "Name": "CfqWeight",
+            "Value": "1000",
+            "Optional": "true"
           }
         }
       ]
@@ -681,6 +807,10 @@
     {
       "Name": "Dex2OatBootComplete",
       "Profiles": [ "Dex2oatPerformance", "LowIoPriority", "TimerSlackHigh" ]
+    },
+    {
+      "Name": "Dex2OatBackground",
+      "Profiles": [ "Dex2OatBootComplete" ]
     },
     {
       "Name": "OtaProfiles",
