@@ -195,7 +195,7 @@ AvbIOResult FsManagerAvbOps::GetSizeOfPartition(const char* partition,
     }
     int err = ioctl(fd, BLKGETSIZE64, out_size_num_byte);
     if (err) {
-        out_size_num_byte = 0;
+        *out_size_num_byte = 0;
         return AVB_IO_RESULT_ERROR_IO;
     }
     return AVB_IO_RESULT_OK;
