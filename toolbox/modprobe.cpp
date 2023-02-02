@@ -23,7 +23,10 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <android-base/stringprintf.h>
 #include <modprobe/modprobe.h>
+
+#include <sys/utsname.h>
 
 namespace {
 
@@ -37,9 +40,8 @@ enum modprobe_mode {
 void print_usage(void) {
     LOG(INFO) << "Usage:";
     LOG(INFO);
-    // -d option is required on Android
-    LOG(INFO) << "  modprobe [options] -d DIR [--all=FILE|MODULE]...";
-    LOG(INFO) << "  modprobe [options] -d DIR MODULE [symbol=value]...";
+    LOG(INFO) << "  modprobe [options] [-d DIR] [--all=FILE|MODULE]...";
+    LOG(INFO) << "  modprobe [options] [-d DIR] MODULE [symbol=value]...";
     LOG(INFO);
     LOG(INFO) << "Options:";
     LOG(INFO) << "  --all=FILE: FILE to acquire module names from";
@@ -187,6 +189,12 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 module_parameters = module_parameters + " " + argv[opt];
             }
         }
+    }
+
+    if (mod_dirs.empty()) {
+        utsname uts;
+        uname(&uts);
+        mod_dirs.emplace_back(android::base::StringPrintf("/lib/modules/%s", uts.release));
     }
 
     LOG(DEBUG) << "mode is " << mode;

@@ -952,6 +952,8 @@ int SecondStageMain(int argc, char** argv) {
     InitKernelLogging(argv);
     LOG(INFO) << "init second stage started!";
 
+    SelinuxSetupKernelLogging();
+
     // Update $PATH in the case the second stage init is newer than first stage init, where it is
     // first set.
     if (setenv("PATH", _PATH_DEFPATH, 1) != 0) {
@@ -1012,7 +1014,6 @@ int SecondStageMain(int argc, char** argv) {
     MountExtraFilesystems();
 
     // Now set up SELinux for second stage.
-    SelinuxSetupKernelLogging();
     SelabelInitialize();
     SelinuxRestoreContext();
 
