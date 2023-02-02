@@ -171,6 +171,16 @@ static int usb_ffs_do_aio(usb_handle* h, const void* data, int len, bool read) {
         if (num_bufs == 1 && aiob->events[0].res == -EINTR) {
             continue;
         }
+        if (read && aiob->events[0].res == -EPIPE) {
+            // On initial connection, some clients will send a ClearFeature(HALT) to
+            // attempt to resynchronize host and device after the fastboot server is killed.
+            // On newer device kernels, the reads we've already dispatched will be cancelled.
+            // Instead of treating this as a failure, which will tear down the interface and
+            // lead to the client doing the same thing again, just resubmit if this happens
+            // before we've actually read anything.
+            PLOG(ERROR) << "aio: got -EPIPE on first read attempt. Re-submitting read... ";
+            continue;
+        }
         int ret = 0;
         for (int i = 0; i < num_bufs; i++) {
             if (aiob->events[i].res < 0) {
