@@ -53,6 +53,7 @@
 
 #include <android-base/endian.h>
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
 #include <android-base/parsenetaddress.h>
@@ -113,7 +114,7 @@ enum fb_buffer_type {
 
 struct fastboot_buffer {
     enum fb_buffer_type type;
-    void* data;
+    std::vector<SparsePtr> files;
     int64_t sz;
     unique_fd fd;
     int64_t image_size;
@@ -244,14 +245,6 @@ static void Epilog(int status) {
 
 static void InfoMessage(const std::string& info) {
     fprintf(stderr, "(bootloader) %s\n", info.c_str());
-}
-
-static int64_t get_file_size(borrowed_fd fd) {
-    struct stat sb;
-    if (fstat(fd.get(), &sb) == -1) {
-        die("could not get file size");
-    }
-    return sb.st_size;
 }
 
 bool ReadFileToVector(const std::string& file, std::vector<char>* out) {
@@ -824,25 +817,30 @@ static void DumpInfo() {
     fprintf(stderr, "--------------------------------------------\n");
 }
 
-static struct sparse_file** load_sparse_files(int fd, int64_t max_size) {
-    struct sparse_file* s = sparse_file_import_auto(fd, false, true);
-    if (!s) die("cannot sparse read file");
-
+static std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size) {
     if (max_size <= 0 || max_size > std::numeric_limits<uint32_t>::max()) {
         die("invalid max size %" PRId64, max_size);
     }
 
-    int files = sparse_file_resparse(s, max_size, nullptr, 0);
+    const int files = sparse_file_resparse(s, max_size, nullptr, 0);
     if (files < 0) die("Failed to resparse");
 
-    sparse_file** out_s =
-            reinterpret_cast<sparse_file**>(calloc(sizeof(struct sparse_file*), files + 1));
-    if (!out_s) die("Failed to allocate sparse file array");
+    auto temp = std::make_unique<sparse_file*[]>(files);
+    const int rv = sparse_file_resparse(s, max_size, temp.get(), files);
+    if (rv < 0) die("Failed to resparse");
 
-    files = sparse_file_resparse(s, max_size, out_s, files);
-    if (files < 0) die("Failed to resparse");
-
+    std::vector<SparsePtr> out_s;
+    for (int i = 0; i < files; i++) {
+        out_s.emplace_back(temp[i], sparse_file_destroy);
+    }
     return out_s;
+}
+
+static std::vector<SparsePtr> load_sparse_files(int fd, int64_t max_size) {
+    SparsePtr s(sparse_file_import_auto(fd, false, true), sparse_file_destroy);
+    if (!s) die("cannot sparse read file");
+
+    return resparse_file(s.get(), max_size);
 }
 
 static uint64_t get_uint_var(const char* var_name) {
@@ -903,15 +901,13 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     int64_t limit = get_sparse_limit(sz);
     buf->fd = std::move(fd);
     if (limit) {
-        sparse_file** s = load_sparse_files(buf->fd.get(), limit);
-        if (s == nullptr) {
+        buf->files = load_sparse_files(buf->fd.get(), limit);
+        if (buf->files.empty()) {
             return false;
         }
         buf->type = FB_BUFFER_SPARSE;
-        buf->data = s;
     } else {
         buf->type = FB_BUFFER_FD;
-        buf->data = nullptr;
         buf->sz = sz;
     }
 
@@ -996,6 +992,8 @@ static bool has_vbmeta_partition() {
            fb->GetVar("partition-type:vbmeta_b", &partition_type) == fastboot::SUCCESS;
 }
 
+// Note: this only works in userspace fastboot. In the bootloader, use
+// should_flash_in_userspace().
 static bool is_logical(const std::string& partition) {
     std::string value;
     return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
@@ -1078,9 +1076,16 @@ static void copy_avb_footer(const std::string& partition, struct fastboot_buffer
     lseek(buf->fd.get(), 0, SEEK_SET);
 }
 
-static void flash_buf(const std::string& partition, struct fastboot_buffer* buf) {
-    sparse_file** s;
+static void flash_partition_files(const std::string& partition,
+                                  const std::vector<SparsePtr>& files) {
+    for (size_t i = 0; i < files.size(); i++) {
+        sparse_file* s = files[i].get();
+        int64_t sz = sparse_file_len(s, true, false);
+        fb->FlashPartition(partition, s, sz, i + 1, files.size());
+    }
+}
 
+static void flash_buf(const std::string& partition, struct fastboot_buffer* buf) {
     if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
         partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
         partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
@@ -1103,18 +1108,7 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer* buf)
 
     switch (buf->type) {
         case FB_BUFFER_SPARSE: {
-            std::vector<std::pair<sparse_file*, int64_t>> sparse_files;
-            s = reinterpret_cast<sparse_file**>(buf->data);
-            while (*s) {
-                int64_t sz = sparse_file_len(*s, true, false);
-                sparse_files.emplace_back(*s, sz);
-                ++s;
-            }
-
-            for (size_t i = 0; i < sparse_files.size(); ++i) {
-                const auto& pair = sparse_files[i];
-                fb->FlashPartition(partition, pair.first, pair.second, i + 1, sparse_files.size());
-            }
+            flash_partition_files(partition, buf->files);
             break;
         }
         case FB_BUFFER_FD:
@@ -1401,13 +1395,6 @@ static void CancelSnapshotIfNeeded() {
         fb->SnapshotUpdateCommand("cancel");
     }
 }
-
-class ImageSource {
-  public:
-    virtual ~ImageSource(){};
-    virtual bool ReadFile(const std::string& name, std::vector<char>* out) const = 0;
-    virtual unique_fd OpenFile(const std::string& name) const = 0;
-};
 
 class FlashAllTool {
   public:
@@ -1782,20 +1769,7 @@ static bool should_flash_in_userspace(const std::string& partition_name) {
     if (!metadata) {
         return false;
     }
-    for (const auto& partition : metadata->partitions) {
-        auto candidate = android::fs_mgr::GetPartitionName(partition);
-        if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
-            // On retrofit devices, we don't know if, or whether, the A or B
-            // slot has been flashed for dynamic partitions. Instead we add
-            // both names to the list as a conservative guess.
-            if (candidate + "_a" == partition_name || candidate + "_b" == partition_name) {
-                return true;
-            }
-        } else if (candidate == partition_name) {
-            return true;
-        }
-    }
-    return false;
+    return should_flash_in_userspace(*metadata.get(), partition_name);
 }
 
 static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::string& slot,
@@ -1868,7 +1842,19 @@ static void do_wipe_super(const std::string& image, const std::string& slot_over
     }
 }
 
+static void FastbootLogger(android::base::LogId /* id */, android::base::LogSeverity /* severity */,
+                           const char* /* tag */, const char* /* file */, unsigned int /* line */,
+                           const char* message) {
+    verbose("%s", message);
+}
+
+static void FastbootAborter(const char* message) {
+    die("%s", message);
+}
+
 int FastBootTool::Main(int argc, char* argv[]) {
+    android::base::InitLogging(argv, FastbootLogger, FastbootAborter);
+
     bool wants_wipe = false;
     bool wants_reboot = false;
     bool wants_reboot_bootloader = false;

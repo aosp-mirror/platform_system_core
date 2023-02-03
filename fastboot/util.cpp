@@ -30,10 +30,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include "util.h"
+
+using android::base::borrowed_fd;
 
 static bool g_verbose = false;
 
@@ -72,4 +74,35 @@ void verbose(const char* fmt, ...) {
         va_end(ap);
     }
     fprintf(stderr, "\n");
+}
+
+bool should_flash_in_userspace(const android::fs_mgr::LpMetadata& metadata,
+                               const std::string& partition_name) {
+    for (const auto& partition : metadata.partitions) {
+        auto candidate = android::fs_mgr::GetPartitionName(partition);
+        if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
+            // On retrofit devices, we don't know if, or whether, the A or B
+            // slot has been flashed for dynamic partitions. Instead we add
+            // both names to the list as a conservative guess.
+            if (candidate + "_a" == partition_name || candidate + "_b" == partition_name) {
+                return true;
+            }
+        } else if (candidate == partition_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_sparse_file(borrowed_fd fd) {
+    SparsePtr s(sparse_file_import(fd.get(), false, false), sparse_file_destroy);
+    return !!s;
+}
+
+int64_t get_file_size(borrowed_fd fd) {
+    struct stat sb;
+    if (fstat(fd.get(), &sb) == -1) {
+        die("could not get file size");
+    }
+    return sb.st_size;
 }
