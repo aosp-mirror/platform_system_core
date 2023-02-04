@@ -63,6 +63,7 @@
 #include <build/version.h>
 #include <libavb/libavb.h>
 #include <liblp/liblp.h>
+#include <liblp/super_layout_builder.h>
 #include <platform_tools_version.h>
 #include <sparse/sparse.h>
 #include <ziparchive/zip_archive.h>
@@ -72,6 +73,7 @@
 #include "diagnose_usb.h"
 #include "fastboot_driver.h"
 #include "fs.h"
+#include "super_flash_helper.h"
 #include "tcp.h"
 #include "transport.h"
 #include "udp.h"
@@ -1405,20 +1407,30 @@ class FlashAllTool {
 
   private:
     void CheckRequirements();
-    void DetermineSecondarySlot();
+    void DetermineSlot();
     void CollectImages();
     void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
     void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
     void UpdateSuperPartition();
+    bool OptimizedFlashSuper();
+
+    // If the image uses the default slot, or the user specified "all", then
+    // the paired string will be empty. If the image requests a specific slot
+    // (for example, system_other) it is specified instead.
+    using ImageEntry = std::pair<const Image*, std::string>;
+
+    std::string GetPartitionName(const ImageEntry& entry);
 
     const ImageSource& source_;
     std::string slot_override_;
     bool skip_secondary_;
     bool wipe_;
     bool force_flash_;
+    std::string current_slot_;
     std::string secondary_slot_;
-    std::vector<std::pair<const Image*, std::string>> boot_images_;
-    std::vector<std::pair<const Image*, std::string>> os_images_;
+
+    std::vector<ImageEntry> boot_images_;
+    std::vector<ImageEntry> os_images_;
 };
 
 FlashAllTool::FlashAllTool(const ImageSource& source, const std::string& slot_override,
@@ -1441,7 +1453,7 @@ void FlashAllTool::Flash() {
         set_active(slot_override_);
     }
 
-    DetermineSecondarySlot();
+    DetermineSlot();
     CollectImages();
 
     CancelSnapshotIfNeeded();
@@ -1450,22 +1462,90 @@ void FlashAllTool::Flash() {
     // or in bootloader fastboot.
     FlashImages(boot_images_);
 
-    // Sync the super partition. This will reboot to userspace fastboot if needed.
-    UpdateSuperPartition();
+    if (!OptimizedFlashSuper()) {
+        // Sync the super partition. This will reboot to userspace fastboot if needed.
+        UpdateSuperPartition();
 
-    // Resize any logical partition to 0, so each partition is reset to 0
-    // extents, and will achieve more optimal allocation.
-    for (const auto& [image, slot] : os_images_) {
-        auto resize_partition = [](const std::string& partition) -> void {
-            if (is_logical(partition)) {
-                fb->ResizePartition(partition, "0");
-            }
-        };
-        do_for_partitions(image->part_name, slot, resize_partition, false);
+        // Resize any logical partition to 0, so each partition is reset to 0
+        // extents, and will achieve more optimal allocation.
+        for (const auto& [image, slot] : os_images_) {
+            auto resize_partition = [](const std::string& partition) -> void {
+                if (is_logical(partition)) {
+                    fb->ResizePartition(partition, "0");
+                }
+            };
+            do_for_partitions(image->part_name, slot, resize_partition, false);
+        }
     }
 
     // Flash OS images, resizing logical partitions as needed.
     FlashImages(os_images_);
+}
+
+bool FlashAllTool::OptimizedFlashSuper() {
+    if (!supports_AB()) {
+        LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
+        return false;
+    }
+    if (slot_override_ == "all") {
+        LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
+        return false;
+    }
+
+    // Does this device use dynamic partitions at all?
+    unique_fd fd = source_.OpenFile("super_empty.img");
+    if (fd < 0) {
+        LOG(VERBOSE) << "could not open super_empty.img";
+        return false;
+    }
+
+    // Try to find whether there is a super partition.
+    std::string super_name;
+    if (fb->GetVar("super-partition-name", &super_name) != fastboot::SUCCESS) {
+        super_name = "super";
+    }
+    std::string partition_size_str;
+    if (fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
+        LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
+        return false;
+    }
+
+    SuperFlashHelper helper(source_);
+    if (!helper.Open(fd)) {
+        return false;
+    }
+
+    for (const auto& entry : os_images_) {
+        auto partition = GetPartitionName(entry);
+        auto image = entry.first;
+
+        if (!helper.AddPartition(partition, image->img_name, image->optional_if_no_image)) {
+            return false;
+        }
+    }
+
+    auto s = helper.GetSparseLayout();
+    if (!s) {
+        return false;
+    }
+
+    std::vector<SparsePtr> files;
+    if (int limit = get_sparse_limit(sparse_file_len(s.get(), false, false))) {
+        files = resparse_file(s.get(), limit);
+    } else {
+        files.emplace_back(std::move(s));
+    }
+
+    // Send the data to the device.
+    flash_partition_files(super_name, files);
+
+    // Remove images that we already flashed, just in case we have non-dynamic OS images.
+    auto remove_if_callback = [&, this](const ImageEntry& entry) -> bool {
+        return helper.WillFlash(GetPartitionName(entry));
+    };
+    os_images_.erase(std::remove_if(os_images_.begin(), os_images_.end(), remove_if_callback),
+                     os_images_.end());
+    return true;
 }
 
 void FlashAllTool::CheckRequirements() {
@@ -1476,7 +1556,13 @@ void FlashAllTool::CheckRequirements() {
     ::CheckRequirements({contents.data(), contents.size()}, force_flash_);
 }
 
-void FlashAllTool::DetermineSecondarySlot() {
+void FlashAllTool::DetermineSlot() {
+    if (slot_override_.empty()) {
+        current_slot_ = get_current_slot();
+    } else {
+        current_slot_ = slot_override_;
+    }
+
     if (skip_secondary_) {
         return;
     }
@@ -1573,6 +1659,20 @@ void FlashAllTool::UpdateSuperPartition() {
             }
         }
     }
+}
+
+std::string FlashAllTool::GetPartitionName(const ImageEntry& entry) {
+    auto slot = entry.second;
+    if (slot.empty()) {
+        slot = current_slot_;
+    }
+    if (slot.empty()) {
+        return entry.first->part_name;
+    }
+    if (slot == "all") {
+        LOG(FATAL) << "Cannot retrieve a singular name when using all slots";
+    }
+    return entry.first->part_name + "_" + slot;
 }
 
 class ZipImageSource final : public ImageSource {
