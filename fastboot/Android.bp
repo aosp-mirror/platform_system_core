@@ -286,6 +286,7 @@ cc_library_host_static {
         "fastboot.cpp",
         "fs.cpp",
         "socket.cpp",
+        "super_flash_helper.cpp",
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
