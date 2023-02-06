@@ -613,7 +613,7 @@ static void tune_metadata_csum(const std::string& blk_device, const FstabEntry& 
 
 // Read the primary superblock from an f2fs filesystem.  On failure return
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
-#define F2FS_BLKSIZE 16384
+#define F2FS_BLKSIZE TARGET_PAGE_SIZE
 #define F2FS_SUPER_OFFSET 1024
 static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));

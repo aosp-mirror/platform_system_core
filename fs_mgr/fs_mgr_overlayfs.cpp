@@ -932,6 +932,9 @@ static std::string GetBootScratchDevice() {
     return "";
 }
 
+#define __STRINGIFY(PRE) #PRE
+#define STRINGIFY(PRE) __STRINGIFY(PRE)
+
 bool MakeScratchFilesystem(const std::string& scratch_device) {
     // Force mkfs by design for overlay support of adb remount, simplify and
     // thus do not rely on fsck to correct problems that could creep in.
@@ -939,10 +942,13 @@ bool MakeScratchFilesystem(const std::string& scratch_device) {
     auto command = ""s;
     if (!access(kMkF2fs.c_str(), X_OK) && fs_mgr_filesystem_available("f2fs")) {
         fs_type = "f2fs";
-        command = kMkF2fs + " -w 16384 -f -d1 -l" + android::base::Basename(kScratchMountPoint);
+        command = kMkF2fs + " -w " STRINGIFY(TARGET_PAGE_SIZE) " -f -d1 -l" +
+                  android::base::Basename(kScratchMountPoint);
     } else if (!access(kMkExt4.c_str(), X_OK) && fs_mgr_filesystem_available("ext4")) {
         fs_type = "ext4";
-        command = kMkExt4 + " -F -b 16384 -t ext4 -m 0 -O has_journal -M " + kScratchMountPoint;
+        command = kMkExt4 +
+                  " -F -b " STRINGIFY(TARGET_PAGE_SIZE) " -t ext4 -m 0 -O has_journal -M " +
+                  kScratchMountPoint;
     } else {
         LERROR << "No supported mkfs command or filesystem driver available, supported filesystems "
                   "are: f2fs, ext4";
