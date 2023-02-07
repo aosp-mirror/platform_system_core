@@ -74,6 +74,7 @@
 #include "fastboot_driver.h"
 #include "fs.h"
 #include "super_flash_helper.h"
+#include "task.h"
 #include "tcp.h"
 #include "transport.h"
 #include "udp.h"
