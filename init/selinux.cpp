@@ -629,7 +629,7 @@ Result<void> LoadSepolicyApexCerts() {
 }
 
 Result<void> SepolicyFsVerityCheck() {
-    return Error() << "TODO implementent support for fsverity SEPolicy.";
+    return Error() << "TODO implement support for fsverity SEPolicy.";
 }
 
 Result<void> SepolicyCheckSignature(const std::string& dir) {
