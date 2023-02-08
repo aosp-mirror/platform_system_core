@@ -395,6 +395,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
     ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
     ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
+    ASSERT_SAME_OFFSET(recoverable_gwp_asan_crash, recoverable_gwp_asan_crash);
 #undef ASSERT_SAME_OFFSET
 
     iovs[3] = {.iov_base = &thread_info->process_info,
@@ -572,14 +573,13 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   // In order to do that, we need to disable GWP-ASan's guard pages. The
   // following callbacks handle this case.
   gwp_asan_callbacks_t gwp_asan_callbacks = g_callbacks.get_gwp_asan_callbacks();
-  bool gwp_asan_recoverable = false;
   if (signal_number == SIGSEGV && signal_has_si_addr(info) &&
       gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery &&
       gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report &&
       gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report &&
       gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery(info->si_addr)) {
     gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report(info->si_addr);
-    gwp_asan_recoverable = true;
+    process_info.recoverable_gwp_asan_crash = true;
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
@@ -593,7 +593,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
     debuggerd_fallback_handler(info, ucontext, process_info.abort_msg);
-    if (no_new_privs && gwp_asan_recoverable) {
+    if (no_new_privs && process_info.recoverable_gwp_asan_crash) {
       gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report(info->si_addr);
       return;
     }
@@ -670,7 +670,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
-  } else if (gwp_asan_recoverable) {
+  } else if (process_info.recoverable_gwp_asan_crash) {
     gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report(info->si_addr);
     pthread_mutex_unlock(&crash_mutex);
   }
