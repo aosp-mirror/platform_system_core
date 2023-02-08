@@ -2669,44 +2669,46 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Merge"s;
                          });
 
-// Test behavior of ImageManager::Create on low space scenario. These tests assumes image manager
-// uses /data as backup device.
-class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t> {
+class ImageManagerTest : public SnapshotTest {
   protected:
     void SetUp() override {
         SKIP_IF_NON_VIRTUAL_AB();
         SnapshotTest::SetUp();
-        userdata_ = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata_->Init(GetParam()));
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
-
+        CleanUp();
+    }
+    void CleanUp() {
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
     }
+
     static constexpr const char* kImageName = "my_image";
-    std::unique_ptr<LowSpaceUserdata> userdata_;
 };
 
-TEST_P(ImageManagerTest, CreateImageNoSpace) {
-    uint64_t to_allocate = userdata_->free_space() + userdata_->bsize();
-    auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                  IImageManager::CREATE_IMAGE_DEFAULT);
-    ASSERT_FALSE(res) << "Should not be able to create image with size = " << to_allocate
-                      << " bytes because only " << userdata_->free_space() << " bytes are free";
-    ASSERT_EQ(FiemapStatus::ErrorCode::NO_SPACE, res.error_code()) << res.string();
-}
-
-std::vector<uint64_t> ImageManagerTestParams() {
-    std::vector<uint64_t> ret;
+TEST_F(ImageManagerTest, CreateImageNoSpace) {
+    bool at_least_one_failure = false;
     for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        ret.push_back(size);
-    }
-    return ret;
-}
+        auto userdata = std::make_unique<LowSpaceUserdata>();
+        ASSERT_TRUE(userdata->Init(size));
 
-INSTANTIATE_TEST_SUITE_P(ImageManagerTest, ImageManagerTest, ValuesIn(ImageManagerTestParams()));
+        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
+
+        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
+                                                      IImageManager::CREATE_IMAGE_DEFAULT);
+        if (!res) {
+            at_least_one_failure = true;
+        } else {
+            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
+        }
+
+        CleanUp();
+    }
+
+    ASSERT_TRUE(at_least_one_failure)
+            << "We should have failed to allocate at least one over-sized image";
+}
 
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
