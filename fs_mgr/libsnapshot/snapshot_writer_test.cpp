@@ -33,8 +33,8 @@ TEST_F(CompressedSnapshotWriterTest, ReadAfterWrite) {
     TemporaryFile cow_device_file{};
     android::snapshot::CowOptions options{.block_size = BLOCK_SIZE};
     android::snapshot::CompressedSnapshotWriter snapshot_writer{options};
-    snapshot_writer.SetCowDevice(android::base::unique_fd{cow_device_file.fd});
-    snapshot_writer.Initialize();
+    ASSERT_TRUE(snapshot_writer.SetCowDevice(android::base::unique_fd{cow_device_file.fd}));
+    ASSERT_TRUE(snapshot_writer.Initialize());
     std::vector<unsigned char> buffer;
     buffer.resize(BLOCK_SIZE);
     std::fill(buffer.begin(), buffer.end(), 123);
