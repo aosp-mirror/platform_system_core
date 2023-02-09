@@ -378,6 +378,7 @@ cc_test_host {
         "fastboot_test.cpp",
         "socket_mock.cpp",
         "socket_test.cpp",
+        "super_flash_helper_test.cpp",
         "tcp_test.cpp",
         "udp_test.cpp",
     ],
@@ -395,6 +396,12 @@ cc_test_host {
     },
 
     test_suites: ["general-tests"],
+
+    data: [
+        "testdata/super.img",
+        "testdata/super_empty.img",
+        "testdata/system.img",
+    ],
 }
 
 cc_test_host {
