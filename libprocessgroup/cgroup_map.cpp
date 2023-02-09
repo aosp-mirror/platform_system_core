@@ -229,8 +229,8 @@ int CgroupMap::ActivateControllers(const std::string& path) const {
         auto controller_count = ACgroupFile_getControllerCount();
         for (uint32_t i = 0; i < controller_count; ++i) {
             const ACgroupController* controller = ACgroupFile_getController(i);
-            if (ACgroupController_getFlags(controller) &
-                CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+            const uint32_t flags = ACgroupController_getFlags(controller);
+            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
                 std::string str("+");
                 str.append(ACgroupController_getName(controller));
                 if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
