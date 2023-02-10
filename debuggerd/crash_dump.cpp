@@ -265,10 +265,12 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
 }
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
-                          std::unique_ptr<unwindstack::Regs>* regs, ProcessInfo* process_info) {
+                          std::unique_ptr<unwindstack::Regs>* regs, ProcessInfo* process_info,
+                          bool* recoverable_gwp_asan_crash) {
   std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
   CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
   ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
+  *recoverable_gwp_asan_crash = false;
   if (rc == -1) {
     PLOG(FATAL) << "failed to read target ucontext";
   } else {
@@ -304,6 +306,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
       process_info->scudo_ring_buffer_size = crash_info->data.d.scudo_ring_buffer_size;
+      *recoverable_gwp_asan_crash = crash_info->data.d.recoverable_gwp_asan_crash;
       FALLTHROUGH_INTENDED;
     case 1:
     case 2:
@@ -468,6 +471,7 @@ int main(int argc, char** argv) {
   std::map<pid_t, ThreadInfo> thread_info;
   siginfo_t siginfo;
   std::string error;
+  bool recoverable_gwp_asan_crash = false;
 
   {
     ATRACE_NAME("ptrace");
@@ -519,7 +523,8 @@ int main(int argc, char** argv) {
 
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
-        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info);
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info,
+                      &recoverable_gwp_asan_crash);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
 
@@ -646,7 +651,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (fatal_signal) {
+  if (fatal_signal && !recoverable_gwp_asan_crash) {
     // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
     if (thread_info[target_process].thread_name != "system_server") {
       activity_manager_notify(target_process, signo, amfd_data);
