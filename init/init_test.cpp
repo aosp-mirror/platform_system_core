@@ -679,6 +679,10 @@ pid_t ForkExecvpAsync(const std::vector<std::string>& args) {
 }
 
 TEST(init, GentleKill) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string init_script = R"init(
 service test_gentle_kill /system/bin/sleep 1000
     disabled
