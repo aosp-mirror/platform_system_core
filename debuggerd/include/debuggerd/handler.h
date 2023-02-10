@@ -35,7 +35,7 @@ struct AllocationMetadata;
 
 // When updating this data structure, CrashInfoDataDynamic and the code in
 // ReadCrashInfo() must also be updated.
-struct debugger_process_info {
+struct __attribute__((packed)) debugger_process_info {
   void* abort_msg;
   void* fdsan_table;
   const gwp_asan::AllocatorState* gwp_asan_state;
@@ -44,6 +44,7 @@ struct debugger_process_info {
   const char* scudo_region_info;
   const char* scudo_ring_buffer;
   size_t scudo_ring_buffer_size;
+  bool recoverable_gwp_asan_crash;
 };
 
 // GWP-ASan calbacks to support the recoverable mode. Separate from the
