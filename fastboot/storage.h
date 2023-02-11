@@ -24,11 +24,12 @@
 class ConnectedDevicesStorage {
   public:
     ConnectedDevicesStorage();
-    void WriteDevices(const std::set<std::string>& devices);
-    std::set<std::string> ReadDevices();
-    void Clear();
+    void WriteDevices(const FileLock&, const std::set<std::string>& devices);
+    std::set<std::string> ReadDevices(const FileLock&);
+    void Clear(const FileLock&);
 
     FileLock Lock() const;
+
   private:
     std::string devices_path_;
     std::string devices_lock_path_;
