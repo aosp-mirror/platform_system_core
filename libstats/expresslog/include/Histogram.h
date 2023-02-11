@@ -46,10 +46,9 @@ public:
 
     /** Used by Histogram to map data sample to corresponding bin for uniform bins */
     class UniformOptions : public BinOptions {
-        UniformOptions(int binCount, float minValue, float exclusiveMaxValue);
-
     public:
-        static UniformOptions* create(int binCount, float minValue, float exclusiveMaxValue);
+        static std::shared_ptr<UniformOptions> create(int binCount, float minValue,
+                                                      float exclusiveMaxValue);
 
         int getBinsCount() const override {
             return mBinCount;
@@ -58,6 +57,8 @@ public:
         int getBinForSample(float sample) const override;
 
     private:
+        UniformOptions(int binCount, float minValue, float exclusiveMaxValue);
+
         const int mBinCount;
         const float mMinValue;
         const float mExclusiveMaxValue;
