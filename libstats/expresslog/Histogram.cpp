@@ -26,8 +26,8 @@
 namespace android {
 namespace expresslog {
 
-Histogram::UniformOptions* Histogram::UniformOptions::create(int binCount, float minValue,
-                                                             float exclusiveMaxValue) {
+std::shared_ptr<Histogram::UniformOptions> Histogram::UniformOptions::create(
+        int binCount, float minValue, float exclusiveMaxValue) {
     if (binCount < 1) {
         ALOGE("Bin count should be positive number");
         return nullptr;
@@ -38,7 +38,8 @@ Histogram::UniformOptions* Histogram::UniformOptions::create(int binCount, float
         return nullptr;
     }
 
-    return new UniformOptions(binCount, minValue, exclusiveMaxValue);
+    return std::shared_ptr<UniformOptions>(
+            new UniformOptions(binCount, minValue, exclusiveMaxValue));
 }
 
 Histogram::UniformOptions::UniformOptions(int binCount, float minValue, float exclusiveMaxValue)
