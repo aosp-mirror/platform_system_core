@@ -283,15 +283,17 @@ cc_library_host_static {
 
     srcs: [
         "bootimg_utils.cpp",
+        "fastboot_driver.cpp",
         "fastboot.cpp",
+        "filesystem.cpp",
         "fs.cpp",
         "socket.cpp",
+        "storage.cpp",
         "super_flash_helper.cpp",
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
         "vendor_boot_img_utils.cpp",
-        "fastboot_driver.cpp",
     ],
 
     // Only version the final binaries
