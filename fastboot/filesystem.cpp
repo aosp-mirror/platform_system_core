@@ -38,15 +38,15 @@ int LockFile(int fd) {
 #ifdef _WIN32
     HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
     OVERLAPPED overlapped = {};
-    const BOOL locked = LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0,
-                                   MAXDWORD, MAXDWORD, &overlapped);
+    const BOOL locked =
+            LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &overlapped);
     return locked ? 0 : -1;
 #else
     return flock(fd, LOCK_EX);
 #endif
 }
 
-}
+}  // namespace
 
 // inspired by adb implementation:
 // cs.android.com/android/platform/superproject/+/master:packages/modules/adb/adb_utils.cpp;l=275
@@ -90,9 +90,9 @@ bool FileExists(const std::string& path) {
 bool EnsureDirectoryExists(const std::string& directory_path) {
     const int result =
 #ifdef _WIN32
-                       _mkdir(directory_path.c_str());
+            _mkdir(directory_path.c_str());
 #else
-                       mkdir(directory_path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+            mkdir(directory_path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 #endif
 
     return result == 0 || errno == EEXIST;
