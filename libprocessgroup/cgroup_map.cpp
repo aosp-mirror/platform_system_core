@@ -234,7 +234,12 @@ int CgroupMap::ActivateControllers(const std::string& path) const {
                 std::string str("+");
                 str.append(ACgroupController_getName(controller));
                 if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
-                    return -errno;
+                    if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
+                        PLOG(WARNING) << "Activation of cgroup controller " << str
+                                      << " failed in path " << path;
+                    } else {
+                        return -errno;
+                    }
                 }
             }
         }
