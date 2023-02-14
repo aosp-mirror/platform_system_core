@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fstream>
 #include <functional>
 #include <string_view>
 #include <thread>
@@ -22,6 +23,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android/api-level.h>
 #include <gtest/gtest.h>
 #include <selinux/selinux.h>
@@ -44,6 +46,7 @@
 using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::SetProperty;
+using android::base::StringPrintf;
 using android::base::StringReplace;
 using android::base::WaitForProperty;
 using namespace std::literals;
@@ -663,6 +666,18 @@ pid_t ForkExecvpAsync(const char* argv[]) {
     return pid;
 }
 
+pid_t TracerPid(pid_t pid) {
+    static constexpr std::string_view prefix{"TracerPid:"};
+    std::ifstream is(StringPrintf("/proc/%d/status", pid));
+    std::string line;
+    while (std::getline(is, line)) {
+        if (line.find(prefix) == 0) {
+            return atoi(line.substr(prefix.length()).c_str());
+        }
+    }
+    return -1;
+}
+
 TEST(init, GentleKill) {
     if (getuid() != 0) {
         GTEST_SKIP() << "Must be run as root.";
@@ -699,8 +714,10 @@ service test_gentle_kill /system/bin/sleep 1000
                           pid_str.c_str(),      nullptr};
     pid_t strace_pid = ForkExecvpAsync(argv);
 
-    // Give strace a moment to connect
-    std::this_thread::sleep_for(1s);
+    // Give strace the chance to connect
+    while (TracerPid(pid) == 0) {
+        std::this_thread::sleep_for(10ms);
+    }
     service->Stop();
 
     int status;
