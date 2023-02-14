@@ -376,6 +376,7 @@ cc_test_host {
     defaults: ["fastboot_host_defaults"],
 
     srcs: [
+        "fastboot_driver_test.cpp",
         "fastboot_test.cpp",
         "socket_mock.cpp",
         "socket_test.cpp",
@@ -384,7 +385,10 @@ cc_test_host {
         "udp_test.cpp",
     ],
 
-    static_libs: ["libfastboot"],
+    static_libs: [
+        "libfastboot",
+        "libgmock",
+    ],
 
     target: {
         windows: {
