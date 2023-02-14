@@ -312,7 +312,7 @@ void disk_stats_monitor::publish(void)
 {
     struct disk_perf perf = get_disk_perf(&mAccumulate_pub);
     log_debug_disk_perf(&perf, "regular");
-    log_event_disk_stats(&mAccumulate, "regular");
+    log_event_disk_stats(&mAccumulate_pub, "regular");
     // Reset global structures
     memset(&mAccumulate_pub, 0, sizeof(struct disk_stats));
 }
