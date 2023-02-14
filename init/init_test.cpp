@@ -646,13 +646,26 @@ TEST(init, MemLockLimit) {
     ASSERT_LE(curr_limit.rlim_max, max_limit);
 }
 
+void CloseAllFds() {
+    DIR* dir;
+    struct dirent* ent;
+    int fd;
+
+    if ((dir = opendir("/proc/self/fd"))) {
+        while ((ent = readdir(dir))) {
+            if (sscanf(ent->d_name, "%d", &fd) == 1) {
+                close(fd);
+            }
+        }
+        closedir(dir);
+    }
+}
+
 pid_t ForkExecvpAsync(const char* argv[]) {
     pid_t pid = fork();
     if (pid == 0) {
         // Child process.
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
+        CloseAllFds();
 
         execvp(argv[0], const_cast<char**>(argv));
         PLOG(ERROR) << "exec in ForkExecvpAsync init test";
