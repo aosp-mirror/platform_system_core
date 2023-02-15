@@ -43,20 +43,20 @@ ConnectedDevicesStorage::ConnectedDevicesStorage() {
     devices_lock_path_ = home_fastboot_path + kPathSeparator + "devices.lock";
 }
 
-void ConnectedDevicesStorage::WriteDevices(const std::set<std::string>& devices) {
+void ConnectedDevicesStorage::WriteDevices(const FileLock&, const std::set<std::string>& devices) {
     std::ofstream devices_stream(devices_path_);
     std::copy(devices.begin(), devices.end(),
               std::ostream_iterator<std::string>(devices_stream, "\n"));
 }
 
-std::set<std::string> ConnectedDevicesStorage::ReadDevices() {
+std::set<std::string> ConnectedDevicesStorage::ReadDevices(const FileLock&) {
     std::ifstream devices_stream(devices_path_);
     std::istream_iterator<std::string> start(devices_stream), end;
     std::set<std::string> devices(start, end);
     return devices;
 }
 
-void ConnectedDevicesStorage::Clear() {
+void ConnectedDevicesStorage::Clear(const FileLock&) {
     if (!android::base::RemoveFileIfExists(devices_path_)) {
         LOG(FATAL) << "Failed to clear connected device list: " << devices_path_;
     }
