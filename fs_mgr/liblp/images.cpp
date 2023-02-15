@@ -312,6 +312,11 @@ static inline bool HasFillValue(uint32_t* buffer, size_t count) {
 
 bool ImageBuilder::AddPartitionImage(const LpMetadataPartition& partition,
                                      const std::string& file) {
+    if (partition.num_extents == 0) {
+        LERROR << "Partition size is zero: " << GetPartitionName(partition);
+        return false;
+    }
+
     // Track which extent we're processing.
     uint32_t extent_index = partition.first_extent_index;
 

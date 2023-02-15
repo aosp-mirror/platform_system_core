@@ -25,9 +25,9 @@ using android::base::unique_fd;
 // TODO(b/175635923): remove after enabling libc++fs for windows
 const char kPathSeparator =
 #ifdef _WIN32
-                            '\\';
+        '\\';
 #else
-                            '/';
+        '/';
 #endif
 
 std::string GetHomeDirPath();
