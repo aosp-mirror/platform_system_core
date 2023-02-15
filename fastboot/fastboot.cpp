@@ -428,7 +428,7 @@ static Transport* NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "device");
+            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "fastboot");
         }
 
         if (transport != nullptr) {
