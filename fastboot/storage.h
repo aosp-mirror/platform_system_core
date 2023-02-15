@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,15 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
-#include <stdint.h>
-#include <trusty/interface/storage.h>
+#include <set>
+#include <string>
 
-#include "watchdog.h"
+#include "filesystem.h"
 
-enum dev_type { UNKNOWN_RPMB, MMC_RPMB, VIRT_RPMB, UFS_RPMB, SOCK_RPMB };
+class ConnectedDevicesStorage {
+  public:
+    ConnectedDevicesStorage();
+    void WriteDevices(const FileLock&, const std::set<std::string>& devices);
+    std::set<std::string> ReadDevices(const FileLock&);
+    void Clear(const FileLock&);
 
-int rpmb_open(const char* rpmb_devname, enum dev_type dev_type);
-int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len, struct watcher* watcher);
-void rpmb_close(void);
+    FileLock Lock() const;
+
+  private:
+    std::string devices_path_;
+    std::string devices_lock_path_;
+};

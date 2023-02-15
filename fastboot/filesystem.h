@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,15 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
-#include <stdint.h>
-#include <trusty/interface/storage.h>
+#include <android-base/unique_fd.h>
 
-#include "watchdog.h"
+#include <string>
 
-enum dev_type { UNKNOWN_RPMB, MMC_RPMB, VIRT_RPMB, UFS_RPMB, SOCK_RPMB };
+using android::base::unique_fd;
 
-int rpmb_open(const char* rpmb_devname, enum dev_type dev_type);
-int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len, struct watcher* watcher);
-void rpmb_close(void);
+// TODO(b/175635923): remove after enabling libc++fs for windows
+const char kPathSeparator =
+#ifdef _WIN32
+        '\\';
+#else
+        '/';
+#endif
+
+std::string GetHomeDirPath();
+bool EnsureDirectoryExists(const std::string& directory_path);
+
+class FileLock {
+  public:
+    FileLock() = delete;
+    FileLock(const std::string& path);
+
+  private:
+    unique_fd fd_;
+};
