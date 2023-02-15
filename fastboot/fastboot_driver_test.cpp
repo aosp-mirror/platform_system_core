@@ -58,3 +58,38 @@ TEST_F(DriverTest, InfoMessage) {
     ASSERT_EQ(info.size(), size_t(1));
     ASSERT_EQ(info[0], "this is an info line");
 }
+
+TEST_F(DriverTest, TextMessage) {
+    MockTransport transport;
+    std::string text;
+
+    DriverCallbacks callbacks{[](const std::string&) {}, [](int) {}, [](const std::string&) {},
+                              [&text](const std::string& extra_text) { text += extra_text; }};
+
+    FastBootDriver driver(&transport, callbacks);
+
+    EXPECT_CALL(transport, Write(_, _))
+            .With(AllArgs(RawData("oem trusty runtest trusty.hwaes.bench")))
+            .WillOnce(ReturnArg<1>());
+    EXPECT_CALL(transport, Read(_, _)).WillOnce(Invoke(CopyData("TEXTthis is a text line")));
+    EXPECT_CALL(transport, Read(_, _))
+            .WillOnce(Invoke(
+                    CopyData("TEXT, albeit very long and split over multiple TEXT messages.")));
+    EXPECT_CALL(transport, Read(_, _))
+            .WillOnce(Invoke(CopyData("TEXT Indeed we can do that now with a TEXT message whenever "
+                                      "we feel like it.")));
+    EXPECT_CALL(transport, Read(_, _))
+            .WillOnce(Invoke(CopyData("TEXT Isn't that truly super cool?")));
+
+    EXPECT_CALL(transport, Read(_, _)).WillOnce(Invoke(CopyData("OKAY")));
+
+    std::vector<std::string> info;
+    ASSERT_EQ(driver.RawCommand("oem trusty runtest trusty.hwaes.bench", "", nullptr, &info),
+              SUCCESS)
+            << driver.Error();
+    ASSERT_EQ(text,
+              "this is a text line"
+              ", albeit very long and split over multiple TEXT messages."
+              " Indeed we can do that now with a TEXT message whenever we feel like it."
+              " Isn't that truly super cool?");
+}
