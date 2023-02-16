@@ -255,6 +255,10 @@ static void InfoMessage(const std::string& info) {
     fprintf(stderr, "(bootloader) %s\n", info.c_str());
 }
 
+static void TextMessage(const std::string& text) {
+    fprintf(stderr, "%s", text.c_str());
+}
+
 bool ReadFileToVector(const std::string& file, std::vector<char>* out) {
     out->clear();
 
@@ -428,7 +432,7 @@ static Transport* NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "device");
+            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "fastboot");
         }
 
         if (transport != nullptr) {
@@ -2305,7 +2309,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
             .prolog = Status,
             .epilog = Epilog,
             .info = InfoMessage,
+            .text = TextMessage,
     };
+
     fastboot::FastBootDriver fastboot_driver(transport, driver_callbacks, false);
     fb = &fastboot_driver;
 
