@@ -101,7 +101,7 @@ void UserSnapshotServer::ShutdownThreads() {
     JoinAllThreads();
 }
 
-UserSnapshotDmUserHandler::UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd)
+HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
     : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
 bool UserSnapshotServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
@@ -307,7 +307,7 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
     }
 }
 
-void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler) {
+void UserSnapshotServer::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
     if (!handler->snapuserd()->Start()) {
@@ -428,7 +428,7 @@ bool UserSnapshotServer::Run() {
 
 void UserSnapshotServer::JoinAllThreads() {
     // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<UserSnapshotDmUserHandler>> dm_users;
+    std::vector<std::shared_ptr<HandlerThread>> dm_users;
     {
         std::lock_guard<std::mutex> guard(lock_);
         dm_users = std::move(dm_users_);
@@ -483,9 +483,10 @@ void UserSnapshotServer::Interrupt() {
     SetTerminating();
 }
 
-std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
-        const std::string& misc_name, const std::string& cow_device_path,
-        const std::string& backing_device, const std::string& base_path_merge) {
+std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string& misc_name,
+                                                              const std::string& cow_device_path,
+                                                              const std::string& backing_device,
+                                                              const std::string& base_path_merge) {
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
                                                        base_path_merge);
     if (!snapuserd->InitCowDevice()) {
@@ -501,7 +502,7 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
         return nullptr;
     }
 
-    auto handler = std::make_shared<UserSnapshotDmUserHandler>(snapuserd);
+    auto handler = std::make_shared<HandlerThread>(snapuserd);
     {
         std::lock_guard<std::mutex> lock(lock_);
         if (FindHandler(&lock, misc_name) != dm_users_.end()) {
@@ -513,7 +514,7 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
     return handler;
 }
 
-bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+bool UserSnapshotServer::StartHandler(const std::shared_ptr<HandlerThread>& handler) {
     if (handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler already attached";
         return false;
@@ -526,7 +527,7 @@ bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHa
 }
 
 bool UserSnapshotServer::StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
-                                    const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+                                    const std::shared_ptr<HandlerThread>& handler) {
     CHECK(proof_of_lock);
 
     if (!handler->snapuserd()->IsAttached()) {
@@ -568,8 +569,7 @@ void UserSnapshotServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proo
     }
 }
 
-std::string UserSnapshotServer::GetMergeStatus(
-        const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+std::string UserSnapshotServer::GetMergeStatus(const std::shared_ptr<HandlerThread>& handler) {
     return handler->snapuserd()->GetMergeStatus();
 }
 
@@ -604,7 +604,7 @@ double UserSnapshotServer::GetMergePercentage(std::lock_guard<std::mutex>* proof
 }
 
 bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
-    std::shared_ptr<UserSnapshotDmUserHandler> handler;
+    std::shared_ptr<HandlerThread> handler;
     {
         std::lock_guard<std::mutex> lock(lock_);
 
