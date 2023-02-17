@@ -212,16 +212,16 @@ static class PropWaiterState {
     }
 
   private:
-    void ResetWaitForPropLocked() {
+    void ResetWaitForPropLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
         wait_prop_name_.clear();
         wait_prop_value_.clear();
         waiting_for_prop_.reset();
     }
 
     std::mutex lock_;
-    std::unique_ptr<Timer> waiting_for_prop_{nullptr};
-    std::string wait_prop_name_;
-    std::string wait_prop_value_;
+    GUARDED_BY(lock_) std::unique_ptr<Timer> waiting_for_prop_{nullptr};
+    GUARDED_BY(lock_) std::string wait_prop_name_;
+    GUARDED_BY(lock_) std::string wait_prop_value_;
 
 } prop_waiter_state;
 
