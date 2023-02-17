@@ -29,6 +29,7 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
+#include <android-base/strings.h>
 #include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
 #include "snapuserd_server.h"
@@ -487,15 +488,31 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
                                                               const std::string& cow_device_path,
                                                               const std::string& backing_device,
                                                               const std::string& base_path_merge) {
+    // We will need multiple worker threads only during
+    // device boot after OTA. For all other purposes,
+    // one thread is sufficient. We don't want to consume
+    // unnecessary memory especially during OTA install phase
+    // when daemon will be up during entire post install phase.
+    //
+    // During boot up, we need multiple threads primarily for
+    // update-verification.
+    int num_worker_threads = kNumWorkerThreads;
+    if (is_socket_present_) {
+        num_worker_threads = 1;
+    }
+
+    bool perform_verification = true;
+    if (android::base::EndsWith(misc_name, "-init") || is_socket_present_) {
+        perform_verification = false;
+    }
+
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge);
+                                                       base_path_merge, num_worker_threads,
+                                                       io_uring_enabled_, perform_verification);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;
     }
-
-    snapuserd->SetSocketPresent(is_socket_present_);
-    snapuserd->SetIouringEnabled(io_uring_enabled_);
 
     if (!snapuserd->InitializeWorkers()) {
         LOG(ERROR) << "Failed to initialize workers";
