@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fstream>
 #include <functional>
 #include <string_view>
 #include <thread>
@@ -22,6 +23,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android/api-level.h>
 #include <gtest/gtest.h>
 #include <selinux/selinux.h>
@@ -44,6 +46,7 @@
 using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::SetProperty;
+using android::base::StringPrintf;
 using android::base::StringReplace;
 using android::base::WaitForProperty;
 using namespace std::literals;
@@ -643,39 +646,49 @@ TEST(init, MemLockLimit) {
     ASSERT_LE(curr_limit.rlim_max, max_limit);
 }
 
-static std::vector<const char*> ConvertToArgv(const std::vector<std::string>& args) {
-    std::vector<const char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const auto& arg : args) {
-        if (argv.empty()) {
-            LOG(DEBUG) << arg;
-        } else {
-            LOG(DEBUG) << "    " << arg;
+void CloseAllFds() {
+    DIR* dir;
+    struct dirent* ent;
+    int fd;
+
+    if ((dir = opendir("/proc/self/fd"))) {
+        while ((ent = readdir(dir))) {
+            if (sscanf(ent->d_name, "%d", &fd) == 1) {
+                close(fd);
+            }
         }
-        argv.emplace_back(arg.data());
+        closedir(dir);
     }
-    argv.emplace_back(nullptr);
-    return argv;
 }
 
-pid_t ForkExecvpAsync(const std::vector<std::string>& args) {
-    auto argv = ConvertToArgv(args);
-
+pid_t ForkExecvpAsync(const char* argv[]) {
     pid_t pid = fork();
     if (pid == 0) {
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
+        // Child process.
+        CloseAllFds();
 
-        execvp(argv[0], const_cast<char**>(argv.data()));
+        execvp(argv[0], const_cast<char**>(argv));
         PLOG(ERROR) << "exec in ForkExecvpAsync init test";
         _exit(EXIT_FAILURE);
     }
+    // Parent process.
     if (pid == -1) {
         PLOG(ERROR) << "fork in ForkExecvpAsync init test";
         return -1;
     }
     return pid;
+}
+
+pid_t TracerPid(pid_t pid) {
+    static constexpr std::string_view prefix{"TracerPid:"};
+    std::ifstream is(StringPrintf("/proc/%d/status", pid));
+    std::string line;
+    while (std::getline(is, line)) {
+        if (line.find(prefix) == 0) {
+            return atoi(line.substr(prefix.length()).c_str());
+        }
+    }
+    return -1;
 }
 
 TEST(init, GentleKill) {
@@ -709,18 +722,15 @@ service test_gentle_kill /system/bin/sleep 1000
     logfile.DoNotRemove();
     ASSERT_TRUE(logfile.fd != -1);
 
-    std::vector<std::string> cmd;
-    cmd.push_back("system/bin/strace");
-    cmd.push_back("-o");
-    cmd.push_back(logfile.path);
-    cmd.push_back("-e");
-    cmd.push_back("signal");
-    cmd.push_back("-p");
-    cmd.push_back(std::to_string(pid));
-    pid_t strace_pid = ForkExecvpAsync(cmd);
+    std::string pid_str = std::to_string(pid);
+    const char* argv[] = {"/system/bin/strace", "-o", logfile.path, "-e", "signal", "-p",
+                          pid_str.c_str(),      nullptr};
+    pid_t strace_pid = ForkExecvpAsync(argv);
 
-    // Give strace a moment to connect
-    std::this_thread::sleep_for(1s);
+    // Give strace the chance to connect
+    while (TracerPid(pid) == 0) {
+        std::this_thread::sleep_for(10ms);
+    }
     service->Stop();
 
     int status;
@@ -728,8 +738,7 @@ service test_gentle_kill /system/bin/sleep 1000
 
     std::string logs;
     android::base::ReadFdToString(logfile.fd, &logs);
-    int pos = logs.find("killed by SIGTERM");
-    ASSERT_NE(pos, (int)std::string::npos);
+    ASSERT_NE(logs.find("killed by SIGTERM"), std::string::npos);
 }
 
 class TestCaseLogger : public ::testing::EmptyTestEventListener {
