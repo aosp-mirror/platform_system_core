@@ -51,6 +51,7 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android-base/thread_annotations.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <keyutils.h>
@@ -211,16 +212,16 @@ static class PropWaiterState {
     }
 
   private:
-    void ResetWaitForPropLocked() {
+    void ResetWaitForPropLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_) {
         wait_prop_name_.clear();
         wait_prop_value_.clear();
         waiting_for_prop_.reset();
     }
 
     std::mutex lock_;
-    std::unique_ptr<Timer> waiting_for_prop_{nullptr};
-    std::string wait_prop_name_;
-    std::string wait_prop_value_;
+    GUARDED_BY(lock_) std::unique_ptr<Timer> waiting_for_prop_{nullptr};
+    GUARDED_BY(lock_) std::string wait_prop_name_;
+    GUARDED_BY(lock_) std::string wait_prop_value_;
 
 } prop_waiter_state;
 
@@ -259,7 +260,7 @@ static class ShutdownState {
 
   private:
     std::mutex shutdown_command_lock_;
-    std::string shutdown_command_;
+    std::string shutdown_command_ GUARDED_BY(shutdown_command_lock_);
     bool do_shutdown_ = false;
 } shutdown_state;
 
