@@ -1099,7 +1099,9 @@ static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_BINARY)));
 
     if (fd == -1) {
-        return false;
+        auto path = find_item_given_name(fname);
+        fd = unique_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_BINARY)));
+        if (fd == -1) return false;
     }
 
     struct stat s;
@@ -2143,10 +2145,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     android::base::InitLogging(argv, FastbootLogger, FastbootAborter);
 
     bool wants_wipe = false;
-    bool wants_reboot = false;
-    bool wants_reboot_bootloader = false;
-    bool wants_reboot_recovery = false;
-    bool wants_reboot_fastboot = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
     bool skip_secondary = false;
@@ -2335,7 +2333,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
         }
     }
-
+    std::unique_ptr<Task> reboot_task = nullptr;
     std::vector<std::string> args(argv, argv + argc);
     while (!args.empty()) {
         std::string command = next_arg(&args);
@@ -2387,30 +2385,19 @@ int FastBootTool::Main(int argc, char* argv[]) {
             fb->Download("signature", data);
             fb->RawCommand("signature", "installing signature");
         } else if (command == FB_CMD_REBOOT) {
-            wants_reboot = true;
-
             if (args.size() == 1) {
-                std::string what = next_arg(&args);
-                if (what == "bootloader") {
-                    wants_reboot = false;
-                    wants_reboot_bootloader = true;
-                } else if (what == "recovery") {
-                    wants_reboot = false;
-                    wants_reboot_recovery = true;
-                } else if (what == "fastboot") {
-                    wants_reboot = false;
-                    wants_reboot_fastboot = true;
-                } else {
-                    syntax_error("unknown reboot target %s", what.c_str());
-                }
+                std::string reboot_target = next_arg(&args);
+                reboot_task = std::make_unique<RebootTask>(fb, reboot_target);
+            } else {
+                reboot_task = std::make_unique<RebootTask>(fb);
             }
             if (!args.empty()) syntax_error("junk after reboot command");
         } else if (command == FB_CMD_REBOOT_BOOTLOADER) {
-            wants_reboot_bootloader = true;
+            reboot_task = std::make_unique<RebootTask>(fb, "bootloader");
         } else if (command == FB_CMD_REBOOT_RECOVERY) {
-            wants_reboot_recovery = true;
+            reboot_task = std::make_unique<RebootTask>(fb, "recovery");
         } else if (command == FB_CMD_REBOOT_FASTBOOT) {
-            wants_reboot_fastboot = true;
+            reboot_task = std::make_unique<RebootTask>(fb, "fastboot");
         } else if (command == FB_CMD_CONTINUE) {
             fb->Continue();
         } else if (command == FB_CMD_BOOT) {
@@ -2454,7 +2441,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 do_flashall(slot_override, skip_secondary, wants_wipe, force_flash);
             }
-            wants_reboot = true;
+            reboot_task = std::make_unique<RebootTask>(fb);
         } else if (command == "update") {
             bool slot_all = (slot_override == "all");
             if (slot_all) {
@@ -2466,7 +2453,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 filename = next_arg(&args);
             }
             do_update(filename.c_str(), slot_override, skip_secondary || slot_all, force_flash);
-            wants_reboot = true;
+            reboot_task = std::make_unique<RebootTask>(fb);
         } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
             fb->SetActive(slot);
@@ -2538,7 +2525,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
             syntax_error("unknown command %s", command.c_str());
         }
     }
-
     if (wants_wipe) {
         if (force_flash) {
             CancelSnapshotIfNeeded();
@@ -2557,19 +2543,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
     if (wants_set_active) {
         fb->SetActive(next_active);
     }
-    if (wants_reboot && !skip_reboot) {
-        fb->Reboot();
-        fb->WaitForDisconnect();
-    } else if (wants_reboot_bootloader) {
-        fb->RebootTo("bootloader");
-        fb->WaitForDisconnect();
-    } else if (wants_reboot_recovery) {
-        fb->RebootTo("recovery");
-        fb->WaitForDisconnect();
-    } else if (wants_reboot_fastboot) {
-        reboot_to_userspace_fastboot();
+    if (reboot_task && !skip_reboot) {
+        reboot_task->Run();
     }
-
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
 
     auto* old_transport = fb->set_transport(nullptr);
