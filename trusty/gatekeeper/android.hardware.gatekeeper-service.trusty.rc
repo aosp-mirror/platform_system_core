@@ -1,0 +1,4 @@
+service vendor.gatekeeper_default /vendor/bin/hw/android.hardware.gatekeeper-service.trusty
+    class hal
+    user system
+    group system

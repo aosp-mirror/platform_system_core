@@ -897,29 +897,31 @@ void MountMissingSystemPartitions() {
             continue;
         }
 
-        auto system_entry = GetEntryForMountPoint(&fstab, "/system");
-        if (!system_entry) {
-            LOG(ERROR) << "Could not find mount entry for /system";
-            break;
-        }
-        if (!system_entry->fs_mgr_flags.logical) {
-            LOG(INFO) << "Skipping mount of " << name << ", system is not dynamic.";
-            break;
-        }
+        auto system_entries = GetEntriesForMountPoint(&fstab, "/system");
+        for (auto& system_entry : system_entries) {
+            if (!system_entry) {
+                LOG(ERROR) << "Could not find mount entry for /system";
+                break;
+            }
+            if (!system_entry->fs_mgr_flags.logical) {
+                LOG(INFO) << "Skipping mount of " << name << ", system is not dynamic.";
+                break;
+            }
 
-        auto entry = *system_entry;
-        auto partition_name = name + fs_mgr_get_slot_suffix();
-        auto replace_name = "system"s + fs_mgr_get_slot_suffix();
+            auto entry = *system_entry;
+            auto partition_name = name + fs_mgr_get_slot_suffix();
+            auto replace_name = "system"s + fs_mgr_get_slot_suffix();
 
-        entry.mount_point = "/"s + name;
-        entry.blk_device =
+            entry.mount_point = "/"s + name;
+            entry.blk_device =
                 android::base::StringReplace(entry.blk_device, replace_name, partition_name, false);
-        if (!fs_mgr_update_logical_partition(&entry)) {
-            LOG(ERROR) << "Could not update logical partition";
-            continue;
-        }
+            if (!fs_mgr_update_logical_partition(&entry)) {
+                LOG(ERROR) << "Could not update logical partition";
+                continue;
+            }
 
-        extra_fstab.emplace_back(std::move(entry));
+            extra_fstab.emplace_back(std::move(entry));
+        }
     }
 
     SkipMountingPartitions(&extra_fstab, true /* verbose */);
