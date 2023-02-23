@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 #include "task.h"
+#include "fastboot.h"
+#include "util.h"
 
 #include "fastboot.h"
 #include "util.h"
@@ -43,4 +45,28 @@ void FlashTask::Run() {
         do_flash(partition.c_str(), fname_.c_str());
     };
     do_for_partitions(pname_, slot_, flash, true);
+}
+
+RebootTask::RebootTask(fastboot::FastBootDriver* _fb) : fb_(_fb){};
+RebootTask::RebootTask(fastboot::FastBootDriver* _fb, std::string _reboot_target)
+    : reboot_target_(std::move(_reboot_target)), fb_(_fb){};
+
+void RebootTask::Run() {
+    if ((reboot_target_ == "userspace" || reboot_target_ == "fastboot")) {
+        if (!is_userspace_fastboot()) {
+            reboot_to_userspace_fastboot();
+            fb_->WaitForDisconnect();
+        }
+    } else if (reboot_target_ == "recovery") {
+        fb_->RebootTo("recovery");
+        fb_->WaitForDisconnect();
+    } else if (reboot_target_ == "bootloader") {
+        fb_->RebootTo("bootloader");
+        fb_->WaitForDisconnect();
+    } else if (reboot_target_ == "") {
+        fb_->Reboot();
+        fb_->WaitForDisconnect();
+    } else {
+        syntax_error("unknown reboot target %s", reboot_target_.c_str());
+    }
 }
