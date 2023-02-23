@@ -6,10 +6,20 @@
 #include <string>
 #include <vector>
 
+#include <android-base/logging.h>
+#include <android-base/result.h>
 #include <android-base/unique_fd.h>
 #include <bootimg.h>
 #include <liblp/liblp.h>
 #include <sparse/sparse.h>
+
+using android::base::ErrnoError;
+using android::base::Error;
+using android::base::Result;
+using android::base::ResultError;
+
+#define EXPECT(result) \
+    (result.ok() ? result.value() : (LOG(FATAL) << result.error().message(), result.value()))
 
 using SparsePtr = std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)>;
 

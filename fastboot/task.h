@@ -18,14 +18,41 @@
 #include <sstream>
 #include <string>
 
-#include "fastboot.h"
 #include "fastboot_driver.h"
-#include "util.h"
 
 class Task {
   public:
     Task() = default;
     virtual void Run() = 0;
-    virtual bool Parse(const std::string& text) = 0;
     virtual ~Task() = default;
+};
+
+class FlashTask : public Task {
+  public:
+    FlashTask(const std::string& _slot);
+    FlashTask(const std::string& _slot, bool _force_flash);
+    FlashTask(const std::string& _slot, bool _force_flash, const std::string& _pname);
+    FlashTask(const std::string& _slot, bool _force_flash, const std::string& _pname,
+              const std::string& _fname);
+
+    void Run() override;
+    ~FlashTask() {}
+
+  private:
+    const std::string pname_;
+    const std::string fname_;
+    const std::string slot_;
+    bool force_flash_ = false;
+};
+
+class RebootTask : public Task {
+  public:
+    RebootTask(fastboot::FastBootDriver* _fb);
+    RebootTask(fastboot::FastBootDriver* _fb, const std::string _reboot_target);
+    void Run() override;
+    ~RebootTask() {}
+
+  private:
+    const std::string reboot_target_ = "";
+    fastboot::FastBootDriver* fb_;
 };
