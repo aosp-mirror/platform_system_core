@@ -925,6 +925,10 @@ on post-fs-data
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
+    # Mkdir and set SELinux security contexts for shutdown-checkpoints.
+    # TODO(b/270286197): remove these after couple releases.
+    mkdir /data/system/shutdown-checkpoints 0700 system system
+    restorecon_recursive /data/system/shutdown-checkpoints
 
     # Create the parent directories of the user CE and DE storage directories.
     # These parent directories must use encryption=None, since each of their
