@@ -47,6 +47,9 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # set RLIMIT_MEMLOCK to 64KB
+    setrlimit memlock 65536 65536
+
     # Set up linker config subdirectories based on mount namespaces
     mkdir /linkerconfig/bootstrap 0755
     mkdir /linkerconfig/default 0755
@@ -55,10 +58,11 @@ on early-init
     # Read more in b/136247322
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
-    # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/bootstrap/linkerconfig --target /linkerconfig/bootstrap
+    # Generate empty ld.config.txt for early executed processes which rely on
+    # /system/lib libraries.
+    write /linkerconfig/bootstrap/ld.config.txt \#
+    write /linkerconfig/default/ld.config.txt \#
     chmod 644 /linkerconfig/bootstrap/ld.config.txt
-    copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
     chmod 644 /linkerconfig/default/ld.config.txt
 
     # Mount bootstrap linker configuration as current
@@ -489,18 +493,26 @@ on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
 service boringssl_self_test32 /system/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test64 /system/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test64 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex32 doesn't require any capabilities
+    capabilities
 
 service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
     reboot_on_failure reboot,boringssl-self-check-failed
     stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex64 doesn't require any capabilities
+    capabilities
 
 
 # Healthd can trigger a full boot from charger mode by signaling this
@@ -631,7 +643,7 @@ on late-fs
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
-    # HALs required before storage encryption can get unlocked (FBE/FDE)
+    # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
 
     # Load trusted keys from dm-verity protected partitions
@@ -734,9 +746,8 @@ on post-fs-data
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     #
-    # To handle userspace reboots as well as devices that use FDE, make sure
-    # that apexd is started cleanly here (set apexd.status="") and that it is
-    # restarted if it's already running.
+    # To handle userspace reboots, make sure that apexd is started cleanly here
+    # (set apexd.status="") and that it is restarted if it's already running.
     #
     # /data/apex uses encryption=None because direct I/O support is needed on
     # APEX files, but some devices don't support direct I/O on encrypted files.
@@ -838,7 +849,7 @@ on post-fs-data
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
     chmod 0770 /data/misc/virtualizationservice
     exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0770 system system
+    mkdir /data/misc/virtualizationservice 0771 system system
 
     # /data/preloads uses encryption=None because it only contains preloaded
     # files that are public information, similar to the system image.
@@ -914,6 +925,10 @@ on post-fs-data
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
+    # Mkdir and set SELinux security contexts for shutdown-checkpoints.
+    # TODO(b/270286197): remove these after couple releases.
+    mkdir /data/system/shutdown-checkpoints 0700 system system
+    restorecon_recursive /data/system/shutdown-checkpoints
 
     # Create the parent directories of the user CE and DE storage directories.
     # These parent directories must use encryption=None, since each of their
@@ -936,16 +951,20 @@ on post-fs-data
     restorecon /data/media
     exec - media_rw media_rw -- /system/bin/chattr +F /data/media
 
-    # A tmpfs directory, which will contain all apps CE DE data directory that
-    # bind mount from the original source.
+    # A tmpfs directory, which will contain all apps and sdk sandbox CE and DE
+    # data directory that bind mount from the original source.
     mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
+    mkdir /data_mirror/misc_ce 0700 root root
+    mkdir /data_mirror/misc_de 0700 root root
 
     # Create CE and DE data directory for default volume
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
+    mkdir /data_mirror/misc_ce/null 0700 root root
+    mkdir /data_mirror/misc_de/null 0700 root root
 
     # Bind mount CE and DE data directory to mirror's default volume directory.
     # Note that because the /data mount has the "shared" propagation type, the
@@ -953,6 +972,8 @@ on post-fs-data
     # propagate to /data_mirror/data_ce/null/0 as well.
     mount none /data/user /data_mirror/data_ce/null bind rec
     mount none /data/user_de /data_mirror/data_de/null bind rec
+    mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
+    mount none /data/misc_de /data_mirror/misc_de/null bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
@@ -976,6 +997,7 @@ on post-fs-data
     # Create directories for statsd
     mkdir /data/misc/stats-active-metric/ 0770 statsd system
     mkdir /data/misc/stats-data/ 0770 statsd system
+    mkdir /data/misc/stats-data/restricted-data 0770 statsd system
     mkdir /data/misc/stats-metadata/ 0770 statsd system
     mkdir /data/misc/stats-service/ 0770 statsd system
     mkdir /data/misc/train-info/ 0770 statsd system
@@ -1268,13 +1290,16 @@ service console /system/bin/sh
     group shell log readproc
     seclabel u:r:shell:s0
     setenv HOSTNAME console
+    shutdown critical
 
 on property:ro.debuggable=1
-    # Give writes to anyone for the trace folder on debug builds.
+    # Give writes to the same group for the trace folder on debug builds,
+    # it's further protected by selinux policy.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
-    # Give reads to anyone for the window trace folder on debug builds.
-    chmod 0775 /data/misc/wmtrace
+    # Give writes and reads to anyone for the window trace folder on debug builds,
+    # it's further protected by selinux policy.
+    chmod 0777 /data/misc/wmtrace
     # Give reads to anyone for the accessibility trace folder on debug builds.
     chmod 0775 /data/misc/a11ytrace
 

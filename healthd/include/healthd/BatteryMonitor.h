@@ -56,6 +56,14 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_DOCK
     };
 
+    enum BatteryHealthStatus {
+        BH_UNKNOWN = -1,
+        BH_NOMINAL,
+        BH_MARGINAL,
+        BH_NEEDS_REPLACEMENT,
+        BH_FAILED,
+    };
+
     BatteryMonitor();
     ~BatteryMonitor();
     void init(struct healthd_config *hc);
@@ -72,6 +80,10 @@ class BatteryMonitor {
     void logValues(void);
     bool isChargerOnline();
 
+    int setChargingPolicy(int value);
+    int getChargingPolicy();
+    int getBatteryHealthData(int id);
+
     static void logValues(const android::hardware::health::V2_1::HealthInfo& health_info,
                           const struct healthd_config& healthd_config);
 
@@ -81,6 +93,7 @@ class BatteryMonitor {
     bool mBatteryDevicePresent;
     int mBatteryFixedCapacity;
     int mBatteryFixedTemperature;
+    int mBatteryHealthStatus;
     std::unique_ptr<aidl::android::hardware::health::HealthInfo> mHealthInfo;
 };
 

@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
+#include <fstream>
 #include <functional>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
+#include <android/api-level.h>
 #include <gtest/gtest.h>
 #include <selinux/selinux.h>
+#include <sys/resource.h>
 
 #include "action.h"
 #include "action_manager.h"
@@ -41,6 +46,7 @@
 using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::SetProperty;
+using android::base::StringPrintf;
 using android::base::StringReplace;
 using android::base::WaitForProperty;
 using namespace std::literals;
@@ -194,13 +200,14 @@ service A something
 }
 
 TEST(init, StartConsole) {
-    if (access("/dev/console", F_OK) < 0) {
-        GTEST_SKIP() << "/dev/console not found";
+    if (GetProperty("ro.build.type", "") == "user") {
+        GTEST_SKIP() << "Must run on userdebug/eng builds. b/262090304";
+        return;
     }
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
-    console console
+    console null
     disabled
     user root
     group root shell log readproc
@@ -623,6 +630,115 @@ service A something
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
     ASSERT_EQ(1u, parser.parse_error_count());
+}
+
+TEST(init, MemLockLimit) {
+    // Test is enforced only for U+ devices
+    if (android::base::GetIntProperty("ro.vendor.api_level", 0) < __ANDROID_API_U__) {
+        GTEST_SKIP();
+    }
+
+    // Verify we are running memlock at, or under, 64KB
+    const unsigned long max_limit = 65536;
+    struct rlimit curr_limit;
+    ASSERT_EQ(getrlimit(RLIMIT_MEMLOCK, &curr_limit), 0);
+    ASSERT_LE(curr_limit.rlim_cur, max_limit);
+    ASSERT_LE(curr_limit.rlim_max, max_limit);
+}
+
+void CloseAllFds() {
+    DIR* dir;
+    struct dirent* ent;
+    int fd;
+
+    if ((dir = opendir("/proc/self/fd"))) {
+        while ((ent = readdir(dir))) {
+            if (sscanf(ent->d_name, "%d", &fd) == 1) {
+                close(fd);
+            }
+        }
+        closedir(dir);
+    }
+}
+
+pid_t ForkExecvpAsync(const char* argv[]) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process.
+        CloseAllFds();
+
+        execvp(argv[0], const_cast<char**>(argv));
+        PLOG(ERROR) << "exec in ForkExecvpAsync init test";
+        _exit(EXIT_FAILURE);
+    }
+    // Parent process.
+    if (pid == -1) {
+        PLOG(ERROR) << "fork in ForkExecvpAsync init test";
+        return -1;
+    }
+    return pid;
+}
+
+pid_t TracerPid(pid_t pid) {
+    static constexpr std::string_view prefix{"TracerPid:"};
+    std::ifstream is(StringPrintf("/proc/%d/status", pid));
+    std::string line;
+    while (std::getline(is, line)) {
+        if (line.find(prefix) == 0) {
+            return atoi(line.substr(prefix.length()).c_str());
+        }
+    }
+    return -1;
+}
+
+TEST(init, GentleKill) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+    std::string init_script = R"init(
+service test_gentle_kill /system/bin/sleep 1000
+    disabled
+    oneshot
+    gentle_kill
+    user root
+    group root
+    seclabel u:r:toolbox:s0
+)init";
+
+    ActionManager action_manager;
+    ServiceList service_list;
+    TestInitText(init_script, BuiltinFunctionMap(), {}, &action_manager, &service_list);
+    ASSERT_EQ(std::distance(service_list.begin(), service_list.end()), 1);
+
+    auto service = service_list.begin()->get();
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    const pid_t pid = service->pid();
+    ASSERT_GT(pid, 0);
+    EXPECT_NE(getsid(pid), 0);
+
+    TemporaryFile logfile;
+    logfile.DoNotRemove();
+    ASSERT_TRUE(logfile.fd != -1);
+
+    std::string pid_str = std::to_string(pid);
+    const char* argv[] = {"/system/bin/strace", "-o", logfile.path, "-e", "signal", "-p",
+                          pid_str.c_str(),      nullptr};
+    pid_t strace_pid = ForkExecvpAsync(argv);
+
+    // Give strace the chance to connect
+    while (TracerPid(pid) == 0) {
+        std::this_thread::sleep_for(10ms);
+    }
+    service->Stop();
+
+    int status;
+    waitpid(strace_pid, &status, 0);
+
+    std::string logs;
+    android::base::ReadFdToString(logfile.fd, &logs);
+    ASSERT_NE(logs.find("killed by SIGTERM"), std::string::npos);
 }
 
 class TestCaseLogger : public ::testing::EmptyTestEventListener {

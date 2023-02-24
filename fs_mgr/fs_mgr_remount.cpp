@@ -175,6 +175,8 @@ bool VerifyCheckpointing() {
     }
     if (checkpointing) {
         LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
+        LOG(ERROR) << "To force end checkpointing, call 'vdc checkpoint commitChanges'";
+        LOG(ERROR) << "Warning: this can lead to data corruption if rolled back.";
         return false;
     }
     return true;
@@ -289,7 +291,7 @@ bool CheckOverlayfs(Fstab* partitions, RemountCheckResult* result) {
         if (fs_mgr_wants_overlayfs(&entry)) {
             bool want_reboot = false;
             bool force = result->disabled_verity;
-            if (!fs_mgr_overlayfs_setup(mount_point.c_str(), &want_reboot, force)) {
+            if (!fs_mgr_overlayfs_setup(*partitions, mount_point.c_str(), &want_reboot, force)) {
                 LOG(ERROR) << "Overlayfs setup for " << mount_point << " failed, skipping";
                 ok = false;
                 it = partitions->erase(it);
@@ -442,7 +444,12 @@ SetVerityStateResult SetVerityState(bool enable_verity) {
 bool SetupOrTeardownOverlayfs(bool enable) {
     bool want_reboot = false;
     if (enable) {
-        if (!fs_mgr_overlayfs_setup(nullptr, &want_reboot)) {
+        Fstab fstab;
+        if (!ReadDefaultFstab(&fstab)) {
+            LOG(ERROR) << "Could not read fstab.";
+            return want_reboot;
+        }
+        if (!fs_mgr_overlayfs_setup(fstab, nullptr, &want_reboot)) {
             LOG(ERROR) << "Overlayfs setup failed.";
             return want_reboot;
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,23 @@
  * limitations under the License.
  */
 
-@Backing(type="long")
-enum LongEnum {
-    FOO = 100000000000,
-    BAR = 200000000000,
-    BAZ,
-}
+#pragma once
+
+#include <set>
+#include <string>
+
+#include "filesystem.h"
+
+class ConnectedDevicesStorage {
+  public:
+    ConnectedDevicesStorage();
+    void WriteDevices(const FileLock&, const std::set<std::string>& devices);
+    std::set<std::string> ReadDevices(const FileLock&);
+    void Clear(const FileLock&);
+
+    FileLock Lock() const;
+
+  private:
+    std::string devices_path_;
+    std::string devices_lock_path_;
+};

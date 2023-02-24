@@ -22,6 +22,7 @@
 #include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
+#include <memory>
 
 int MaybeDowngrade() {
     int res = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
@@ -58,7 +59,11 @@ int main(int argc, char** argv) {
         // Disallow automatic upgrade from ASYNC mode.
         if (prctl(PR_SET_TAGGED_ADDR_CTRL, res & ~PR_MTE_TCF_SYNC, 0, 0, 0) == -1) abort();
     }
-    volatile char* f = (char*)malloc(1);
+    std::unique_ptr<volatile char[]> f(new char[1]);
+    // This out-of-bounds is on purpose: we are testing MTE, which is designed to turn
+    // out-of-bound errors into segfaults.
+    // This binary gets run by src/com/android/tests/init/MteUpgradeTest.java, which
+    // asserts that it crashes as expected.
     f[17] = 'x';
     char buf[1];
     read(1, buf, 1);

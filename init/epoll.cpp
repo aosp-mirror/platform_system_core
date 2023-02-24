@@ -57,7 +57,7 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
             .events = events,
             .data.fd = fd,
     };
-    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1) {
+    if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, fd, &ev) == -1) {
         Result<void> result = ErrnoError() << "epoll_ctl failed to add fd";
         epoll_handlers_.erase(fd);
         return result;
@@ -66,7 +66,7 @@ Result<void> Epoll::RegisterHandler(int fd, Handler handler, uint32_t events) {
 }
 
 Result<void> Epoll::UnregisterHandler(int fd) {
-    if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr) == -1) {
+    if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_DEL, fd, nullptr) == -1) {
         return ErrnoError() << "epoll_ctl failed to remove fd";
     }
     auto it = epoll_handlers_.find(fd);
@@ -88,7 +88,7 @@ Result<int> Epoll::Wait(std::optional<std::chrono::milliseconds> timeout) {
     }
     const auto max_events = epoll_handlers_.size();
     epoll_event ev[max_events];
-    auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_, ev, max_events, timeout_ms));
+    auto num_events = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd_.get(), ev, max_events, timeout_ms));
     if (num_events == -1) {
         return ErrnoError() << "epoll_wait failed";
     }

@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-@JavaDerive(toString=true)
-@Backing(type="int")
-enum IntEnum {
-    FOO = 1000,
-    BAR = 2000,
+package com.android.trusty.binder.test;
+
+@Backing(type="long")
+enum LongEnum {
+    FOO = 100000000000,
+    BAR = 200000000000,
     BAZ,
-    /** @deprecated do not use this */
-    QUX,
 }

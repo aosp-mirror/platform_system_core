@@ -92,12 +92,12 @@ UeventListener::UeventListener(size_t uevent_socket_rcvbuf_size) {
         LOG(FATAL) << "Could not open uevent socket";
     }
 
-    fcntl(device_fd_, F_SETFL, O_NONBLOCK);
+    fcntl(device_fd_.get(), F_SETFL, O_NONBLOCK);
 }
 
 ReadUeventResult UeventListener::ReadUevent(Uevent* uevent) const {
     char msg[UEVENT_MSG_LEN + 2];
-    int n = uevent_kernel_multicast_recv(device_fd_, msg, UEVENT_MSG_LEN);
+    int n = uevent_kernel_multicast_recv(device_fd_.get(), msg, UEVENT_MSG_LEN);
     if (n <= 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             PLOG(ERROR) << "Error reading from Uevent Fd";
@@ -184,9 +184,10 @@ void UeventListener::Poll(const ListenerCallback& callback,
                           const std::optional<std::chrono::milliseconds> relative_timeout) const {
     using namespace std::chrono;
 
-    pollfd ufd;
-    ufd.events = POLLIN;
-    ufd.fd = device_fd_;
+    pollfd ufd = {
+            .events = POLLIN,
+            .fd = device_fd_.get(),
+    };
 
     auto start_time = steady_clock::now();
 

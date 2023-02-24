@@ -24,7 +24,7 @@ cc_defaults {
     shared_libs: [
         "android.hardware.health@1.0",
         "android.hardware.health@2.0",
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
         "libbase",
         "libbinder",
         "libbinder_ndk",

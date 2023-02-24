@@ -98,6 +98,7 @@ cc_library_static {
         "libbase_headers",
         "libdebuggerd_common_headers",
         "bionic_libc_platform_headers",
+        "gwp_asan_headers",
     ],
 
     whole_static_libs: [

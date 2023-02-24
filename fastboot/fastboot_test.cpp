@@ -16,6 +16,7 @@
 
 #include "fastboot.h"
 
+#include <android-base/logging.h>
 #include <gtest/gtest.h>
 
 TEST(FastBoot, ParseOsPatchLevel) {
@@ -200,4 +201,12 @@ TEST(FastBoot, ParseRequirementLineMalformed) {
 
     // No spaces allowed before between require-for-product and :.
     ParseRequirementLineTestMalformed("require-for-product :");
+}
+
+int main(int argc, char* argv[]) {
+    ::testing::InitGoogleTest(&argc, argv);
+    android::base::InitLogging(argv);
+    android::base::SetMinimumLogSeverity(android::base::VERBOSE);
+
+    return RUN_ALL_TESTS();
 }
