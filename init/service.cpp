@@ -26,6 +26,7 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
+#include <thread>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -290,7 +291,8 @@ void Service::Reap(const siginfo_t& siginfo) {
     }
 
     if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
-        LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
+        LOG(ERROR) << "Service " << name_
+                   << " has 'reboot_on_failure' option and failed, shutting down system.";
         trigger_shutdown(*on_failure_reboot_target_);
     }
 
@@ -699,8 +701,9 @@ Result<void> Service::Start() {
             if (!result.ok()) {
                 return Error() << "Sending notification failed: " << result.error();
             }
-            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                           << ") failed for service '" << name_ << "'";
+            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_ << ", "
+                           << use_memcg << ") failed for service '" << name_
+                           << "': " << strerror(errno);
         }
 
         // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
@@ -711,8 +714,6 @@ Result<void> Service::Start() {
         if (use_memcg) {
             ConfigureMemcg();
         }
-    } else {
-        process_cgroup_empty_ = true;
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
@@ -867,6 +868,8 @@ void Service::StopOrReset(int how) {
 
     if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
         // An illegal flag: default to SVC_DISABLED.
+        LOG(ERROR) << "service '" << name_ << "' requested unknown flag " << how
+                   << ", defaulting to disabling it.";
         how = SVC_DISABLED;
     }
 
@@ -885,6 +888,10 @@ void Service::StopOrReset(int how) {
     }
 
     if (pid_) {
+        if (flags_ & SVC_GENTLE_KILL) {
+            KillProcessGroup(SIGTERM);
+            if (!process_cgroup_empty()) std::this_thread::sleep_for(200ms);
+        }
         KillProcessGroup(SIGKILL);
         NotifyStateChange("stopping");
     } else {

@@ -13,27 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define LOG_TAG "android.hardware.gatekeeper@1.0-service.trusty"
+#define LOG_TAG "android.hardware.gatekeeper-service.trusty"
 
 #include <android-base/logging.h>
-#include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
-
-#include <hidl/LegacySupport.h>
+#include <android/binder_manager.h>
+#include <android/binder_process.h>
 
 #include "trusty_gatekeeper.h"
 
-// Generated HIDL files
-using android::hardware::gatekeeper::V1_0::IGatekeeper;
-using gatekeeper::TrustyGateKeeperDevice;
+using aidl::android::hardware::gatekeeper::TrustyGateKeeperDevice;
 
 int main() {
-    ::android::hardware::configureRpcThreadpool(1, true /* willJoinThreadpool */);
-    android::sp<TrustyGateKeeperDevice> gatekeeper(new TrustyGateKeeperDevice());
-    auto status = gatekeeper->registerAsService();
-    if (status != android::OK) {
-        LOG(FATAL) << "Could not register service for Gatekeeper 1.0 (trusty) (" << status << ")";
-    }
+    ABinderProcess_setThreadPoolMaxThreadCount(0);
 
-    android::hardware::joinRpcThreadpool();
+    std::shared_ptr<TrustyGateKeeperDevice> gatekeeper =
+            ndk::SharedRefBase::make<TrustyGateKeeperDevice>();
+
+    const std::string instance = std::string() + TrustyGateKeeperDevice::descriptor + "/default";
+    binder_status_t status =
+            AServiceManager_addService(gatekeeper->asBinder().get(), instance.c_str());
+    CHECK_EQ(status, STATUS_OK);
+
+    ABinderProcess_joinThreadPool();
+
     return -1;  // Should never get here.
 }

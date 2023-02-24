@@ -170,7 +170,7 @@ cc_binary {
         "android.hardware.fastboot@1.1",
         "android.hardware.fastboot-V1-ndk",
         "android.hardware.health@2.0",
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
         "libasyncio",
         "libbase",
         "libbinder_ndk",
@@ -283,14 +283,18 @@ cc_library_host_static {
 
     srcs: [
         "bootimg_utils.cpp",
+        "fastboot_driver.cpp",
         "fastboot.cpp",
+        "filesystem.cpp",
         "fs.cpp",
         "socket.cpp",
+        "storage.cpp",
+        "super_flash_helper.cpp",
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
         "vendor_boot_img_utils.cpp",
-        "fastboot_driver.cpp",
+        "task.cpp",
     ],
 
     // Only version the final binaries
@@ -372,14 +376,19 @@ cc_test_host {
     defaults: ["fastboot_host_defaults"],
 
     srcs: [
+        "fastboot_driver_test.cpp",
         "fastboot_test.cpp",
         "socket_mock.cpp",
         "socket_test.cpp",
+        "super_flash_helper_test.cpp",
         "tcp_test.cpp",
         "udp_test.cpp",
     ],
 
-    static_libs: ["libfastboot"],
+    static_libs: [
+        "libfastboot",
+        "libgmock",
+    ],
 
     target: {
         windows: {
@@ -390,6 +399,14 @@ cc_test_host {
             enabled: false,
         },
     },
+
+    test_suites: ["general-tests"],
+
+    data: [
+        "testdata/super.img",
+        "testdata/super_empty.img",
+        "testdata/system.img",
+    ],
 }
 
 cc_test_host {

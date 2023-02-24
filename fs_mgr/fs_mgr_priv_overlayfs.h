@@ -29,8 +29,8 @@ android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fs
 //
 // If |want_reboot| is non-null, and a reboot is needed to apply overlays, then
 // it will be true on return. The caller is responsible for initializing it.
-bool fs_mgr_overlayfs_setup(const char* mount_point = nullptr, bool* want_reboot = nullptr,
-                            bool just_disabled_verity = true);
+bool fs_mgr_overlayfs_setup(const android::fs_mgr::Fstab& fstab, const char* mount_point = nullptr,
+                            bool* want_reboot = nullptr, bool just_disabled_verity = true);
 
 enum class OverlayfsTeardownResult {
     Ok,

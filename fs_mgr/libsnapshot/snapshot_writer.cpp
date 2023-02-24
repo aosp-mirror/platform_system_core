@@ -93,6 +93,9 @@ bool CompressedSnapshotWriter::VerifyMergeOps() const noexcept {
 
 std::unique_ptr<FileDescriptor> CompressedSnapshotWriter::OpenReader() {
     auto cow = OpenCowReader();
+    if (cow == nullptr) {
+        return nullptr;
+    }
 
     auto reader = std::make_unique<CompressedSnapshotReader>();
     if (!reader->SetCow(std::move(cow))) {

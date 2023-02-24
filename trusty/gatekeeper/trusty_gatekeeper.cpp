@@ -16,27 +16,25 @@
 
 #define LOG_TAG "TrustyGateKeeper"
 
-#include <android-base/logging.h>
+#include <endian.h>
 #include <limits>
 
+#include <android-base/logging.h>
+#include <gatekeeper/password_handle.h>
+#include <hardware/hw_auth_token.h>
+
+#include "gatekeeper_ipc.h"
 #include "trusty_gatekeeper.h"
 #include "trusty_gatekeeper_ipc.h"
-#include "gatekeeper_ipc.h"
 
-using ::android::hardware::hidl_vec;
-using ::android::hardware::Return;
-using ::android::hardware::gatekeeper::V1_0::GatekeeperStatusCode;
-using ::gatekeeper::EnrollRequest;
-using ::gatekeeper::EnrollResponse;
+namespace aidl::android::hardware::gatekeeper {
+
 using ::gatekeeper::ERROR_INVALID;
-using ::gatekeeper::ERROR_MEMORY_ALLOCATION_FAILED;
 using ::gatekeeper::ERROR_NONE;
 using ::gatekeeper::ERROR_RETRY;
 using ::gatekeeper::SizedBuffer;
 using ::gatekeeper::VerifyRequest;
 using ::gatekeeper::VerifyResponse;
-
-namespace gatekeeper {
 
 constexpr const uint32_t SEND_BUF_SIZE = 8192;
 constexpr const uint32_t RECV_BUF_SIZE = 8192;
@@ -54,89 +52,101 @@ TrustyGateKeeperDevice::~TrustyGateKeeperDevice() {
     trusty_gatekeeper_disconnect();
 }
 
-SizedBuffer hidl_vec2sized_buffer(const hidl_vec<uint8_t>& vec) {
+SizedBuffer vec2sized_buffer(const std::vector<uint8_t>& vec) {
     if (vec.size() == 0 || vec.size() > std::numeric_limits<uint32_t>::max()) return {};
     auto buffer = new uint8_t[vec.size()];
     std::copy(vec.begin(), vec.end(), buffer);
     return {buffer, static_cast<uint32_t>(vec.size())};
 }
 
-Return<void> TrustyGateKeeperDevice::enroll(uint32_t uid,
-                                            const hidl_vec<uint8_t>& currentPasswordHandle,
-                                            const hidl_vec<uint8_t>& currentPassword,
-                                            const hidl_vec<uint8_t>& desiredPassword,
-                                            enroll_cb _hidl_cb) {
+void sizedBuffer2AidlHWToken(SizedBuffer& buffer,
+                             android::hardware::security::keymint::HardwareAuthToken* aidlToken) {
+    const hw_auth_token_t* authToken =
+            reinterpret_cast<const hw_auth_token_t*>(buffer.Data<uint8_t>());
+    aidlToken->challenge = authToken->challenge;
+    aidlToken->userId = authToken->user_id;
+    aidlToken->authenticatorId = authToken->authenticator_id;
+    // these are in network order: translate to host
+    aidlToken->authenticatorType =
+            static_cast<android::hardware::security::keymint::HardwareAuthenticatorType>(
+                    be32toh(authToken->authenticator_type));
+    aidlToken->timestamp.milliSeconds = be64toh(authToken->timestamp);
+    aidlToken->mac.insert(aidlToken->mac.begin(), std::begin(authToken->hmac),
+                          std::end(authToken->hmac));
+}
+
+::ndk::ScopedAStatus TrustyGateKeeperDevice::enroll(
+        int32_t uid, const std::vector<uint8_t>& currentPasswordHandle,
+        const std::vector<uint8_t>& currentPassword, const std::vector<uint8_t>& desiredPassword,
+        GatekeeperEnrollResponse* rsp) {
     if (error_ != 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
     if (desiredPassword.size() == 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
-    EnrollRequest request(uid, hidl_vec2sized_buffer(currentPasswordHandle),
-                          hidl_vec2sized_buffer(desiredPassword),
-                          hidl_vec2sized_buffer(currentPassword));
+    EnrollRequest request(uid, vec2sized_buffer(currentPasswordHandle),
+                          vec2sized_buffer(desiredPassword), vec2sized_buffer(currentPassword));
     EnrollResponse response;
     auto error = Send(request, &response);
     if (error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else if (response.error == ERROR_RETRY) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_RETRY_TIMEOUT, response.retry_timeout, {}});
+        *rsp = {ERROR_RETRY_TIMEOUT, static_cast<int32_t>(response.retry_timeout), 0, {}};
+        return ndk::ScopedAStatus::ok();
     } else if (response.error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else {
-        hidl_vec<uint8_t> new_handle(response.enrolled_password_handle.Data<uint8_t>(),
-                                     response.enrolled_password_handle.Data<uint8_t>() +
-                                             response.enrolled_password_handle.size());
-        _hidl_cb({GatekeeperStatusCode::STATUS_OK, response.retry_timeout, new_handle});
+        const ::gatekeeper::password_handle_t* password_handle =
+                response.enrolled_password_handle.Data<::gatekeeper::password_handle_t>();
+        *rsp = {STATUS_OK,
+                0,
+                static_cast<int64_t>(password_handle->user_id),
+                {response.enrolled_password_handle.Data<uint8_t>(),
+                 (response.enrolled_password_handle.Data<uint8_t>() +
+                  response.enrolled_password_handle.size())}};
     }
-    return {};
+    return ndk::ScopedAStatus::ok();
 }
 
-Return<void> TrustyGateKeeperDevice::verify(
-        uint32_t uid, uint64_t challenge,
-        const ::android::hardware::hidl_vec<uint8_t>& enrolledPasswordHandle,
-        const ::android::hardware::hidl_vec<uint8_t>& providedPassword, verify_cb _hidl_cb) {
+::ndk::ScopedAStatus TrustyGateKeeperDevice::verify(
+        int32_t uid, int64_t challenge, const std::vector<uint8_t>& enrolledPasswordHandle,
+        const std::vector<uint8_t>& providedPassword, GatekeeperVerifyResponse* rsp) {
     if (error_ != 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
     if (enrolledPasswordHandle.size() == 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
-    VerifyRequest request(uid, challenge, hidl_vec2sized_buffer(enrolledPasswordHandle),
-                          hidl_vec2sized_buffer(providedPassword));
+    VerifyRequest request(uid, challenge, vec2sized_buffer(enrolledPasswordHandle),
+                          vec2sized_buffer(providedPassword));
     VerifyResponse response;
 
     auto error = Send(request, &response);
     if (error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else if (response.error == ERROR_RETRY) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_RETRY_TIMEOUT, response.retry_timeout, {}});
+        *rsp = {ERROR_RETRY_TIMEOUT, static_cast<int32_t>(response.retry_timeout), {}};
+        return ndk::ScopedAStatus::ok();
     } else if (response.error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else {
-        hidl_vec<uint8_t> auth_token(
-                response.auth_token.Data<uint8_t>(),
-                response.auth_token.Data<uint8_t>() + response.auth_token.size());
-
-        _hidl_cb({response.request_reenroll ? GatekeeperStatusCode::STATUS_REENROLL
-                                            : GatekeeperStatusCode::STATUS_OK,
-                  response.retry_timeout, auth_token});
+        // On Success, return GatekeeperVerifyResponse with Success Status, timeout{0} and
+        // valid HardwareAuthToken.
+        *rsp = {response.request_reenroll ? STATUS_REENROLL : STATUS_OK, 0, {}};
+        // Convert the hw_auth_token_t to HardwareAuthToken in the response.
+        sizedBuffer2AidlHWToken(response.auth_token, &rsp->hardwareAuthToken);
     }
-    return {};
+    return ndk::ScopedAStatus::ok();
 }
 
-Return<void> TrustyGateKeeperDevice::deleteUser(uint32_t uid, deleteUser_cb _hidl_cb) {
+::ndk::ScopedAStatus TrustyGateKeeperDevice::deleteUser(int32_t uid) {
     if (error_ != 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
     DeleteUserRequest request(uid);
@@ -144,21 +154,19 @@ Return<void> TrustyGateKeeperDevice::deleteUser(uint32_t uid, deleteUser_cb _hid
     auto error = Send(request, &response);
 
     if (error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else if (response.error == ERROR_NOT_IMPLEMENTED) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_NOT_IMPLEMENTED, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_NOT_IMPLEMENTED));
     } else if (response.error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else {
-        _hidl_cb({GatekeeperStatusCode::STATUS_OK, response.retry_timeout, {}});
+        return ndk::ScopedAStatus::ok();
     }
-    return {};
 }
 
-Return<void> TrustyGateKeeperDevice::deleteAllUsers(deleteAllUsers_cb _hidl_cb) {
+::ndk::ScopedAStatus TrustyGateKeeperDevice::deleteAllUsers() {
     if (error_ != 0) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
-        return {};
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     }
 
     DeleteAllUsersRequest request;
@@ -166,16 +174,14 @@ Return<void> TrustyGateKeeperDevice::deleteAllUsers(deleteAllUsers_cb _hidl_cb) 
     auto error = Send(request, &response);
 
     if (error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else if (response.error == ERROR_NOT_IMPLEMENTED) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_NOT_IMPLEMENTED, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_NOT_IMPLEMENTED));
     } else if (response.error != ERROR_NONE) {
-        _hidl_cb({GatekeeperStatusCode::ERROR_GENERAL_FAILURE, 0, {}});
+        return ndk::ScopedAStatus(AStatus_fromServiceSpecificError(ERROR_GENERAL_FAILURE));
     } else {
-        _hidl_cb({GatekeeperStatusCode::STATUS_OK, response.retry_timeout, {}});
+        return ndk::ScopedAStatus::ok();
     }
-
-    return {};
 }
 
 gatekeeper_error_t TrustyGateKeeperDevice::Send(uint32_t command, const GateKeeperMessage& request,
@@ -201,4 +207,4 @@ gatekeeper_error_t TrustyGateKeeperDevice::Send(uint32_t command, const GateKeep
     return response->Deserialize(payload, payload + response_size);
 }
 
-};
+}  // namespace aidl::android::hardware::gatekeeper
