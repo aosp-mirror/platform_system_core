@@ -18,8 +18,16 @@ using android::base::Error;
 using android::base::Result;
 using android::base::ResultError;
 
-#define EXPECT(result) \
-    (result.ok() ? result.value() : (LOG(FATAL) << result.error().message(), result.value()))
+template <typename T, typename U>
+inline T Expect(Result<T, U> r) {
+    if (r.ok()) {
+        return r.value();
+    }
+
+    LOG(FATAL) << r.error().message();
+
+    return r.value();
+}
 
 using SparsePtr = std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)>;
 
