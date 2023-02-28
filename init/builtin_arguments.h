@@ -24,10 +24,6 @@ namespace android {
 namespace init {
 
 struct BuiltinArguments {
-    BuiltinArguments(const std::string& context) : context(context) {}
-    BuiltinArguments(std::vector<std::string> args, const std::string& context)
-        : args(std::move(args)), context(context) {}
-
     const std::string& operator[](std::size_t i) const { return args[i]; }
     auto begin() const { return args.begin(); }
     auto end() const { return args.end(); }

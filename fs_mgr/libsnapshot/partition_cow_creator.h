@@ -60,6 +60,12 @@ struct PartitionCowCreator {
     bool using_snapuserd = false;
     std::string compression_algorithm;
 
+    // True if multi-threaded compression should be enabled
+    bool enable_threading;
+
+    // True if COW writes should be batched in memory
+    bool batched_writes;
+
     struct Return {
         SnapshotStatus snapshot_status;
         std::vector<Interval> cow_partition_usable_regions;
