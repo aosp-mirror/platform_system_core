@@ -71,11 +71,18 @@ message DynamicPartitionGroup {
     repeated string partition_names = 3;
 }
 
+message VABCFeatureSet {
+  optional bool threaded = 1;
+  optional bool batch_writes = 2;
+}
+
 message DynamicPartitionMetadata {
     repeated DynamicPartitionGroup groups = 1;
     optional bool vabc_enabled = 3;
     optional string vabc_compression_param = 4;
     optional uint32 cow_version = 5;
+    // A collection of knobs to tune Virtual AB Compression
+    optional VABCFeatureSet vabc_feature_set = 6;
 }
 
 message DeltaArchiveManifest {
