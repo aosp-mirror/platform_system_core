@@ -406,18 +406,15 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
                 pids.emplace(pid);
             }
         }
-        if (file_is_empty) {
-            // This happens when process is already dead
-            return 0;
-        }
-
-        // Erase all pids that will be killed when we kill the process groups.
-        for (auto it = pids.begin(); it != pids.end();) {
-            pid_t pgid = getpgid(*it);
-            if (pgids.count(pgid) == 1) {
-                it = pids.erase(it);
-            } else {
-                ++it;
+        if (!file_is_empty) {
+            // Erase all pids that will be killed when we kill the process groups.
+            for (auto it = pids.begin(); it != pids.end();) {
+                pid_t pgid = getpgid(*it);
+                if (pgids.count(pgid) == 1) {
+                    it = pids.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
     }
