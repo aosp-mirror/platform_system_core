@@ -755,6 +755,9 @@ Result<void> Service::Start() {
 
     NotifyStateChange("running");
     reboot_on_failure.Disable();
+
+    LOG(INFO) << "... started service '" << name_ << "' has pid " << pid_;
+
     return {};
 }
 
