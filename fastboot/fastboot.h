@@ -31,6 +31,10 @@
 
 #include <bootimg.h>
 
+#include "result.h"
+#include "socket.h"
+#include "util.h"
+
 class FastBootTool {
   public:
     int Main(int argc, char* argv[]);
@@ -48,3 +52,11 @@ void do_for_partitions(const std::string& part, const std::string& slot,
 std::string find_item(const std::string& item);
 void reboot_to_userspace_fastboot();
 void syntax_error(const char* fmt, ...);
+
+struct NetworkSerial {
+    Socket::Protocol protocol;
+    std::string address;
+    int port;
+};
+
+Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);

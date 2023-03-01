@@ -336,28 +336,7 @@ static int list_devices_callback(usb_ifc_info* info) {
     return -1;
 }
 
-struct NetworkSerial {
-    Socket::Protocol protocol;
-    std::string address;
-    int port;
-};
-
-class ParseNetworkAddressError {
-  public:
-    enum Type { WRONG_PREFIX = 1, WRONG_ADDRESS = 2 };
-
-    ParseNetworkAddressError(Type&& type) : type_(std::forward<Type>(type)) {}
-
-    Type value() const { return type_; }
-    operator Type() const { return value(); }
-    std::string print() const { return ""; }
-
-  private:
-    Type type_;
-};
-
-static Result<NetworkSerial, ParseNetworkAddressError> ParseNetworkSerial(
-        const std::string& serial) {
+Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial) {
     Socket::Protocol protocol;
     const char* net_address = nullptr;
     int port = 0;
@@ -371,7 +350,7 @@ static Result<NetworkSerial, ParseNetworkAddressError> ParseNetworkSerial(
         net_address = serial.c_str() + strlen("udp:");
         port = udp::kDefaultPort;
     } else {
-        return Error<ParseNetworkAddressError>(ParseNetworkAddressError::Type::WRONG_PREFIX)
+        return Error<FastbootError>(FastbootError::Type::NETWORK_SERIAL_WRONG_PREFIX)
                << "protocol prefix ('tcp:' or 'udp:') is missed: " << serial << ". "
                << "Expected address format:\n"
                << "<protocol>:<address>:<port> (tcp:localhost:5554)";
@@ -380,7 +359,7 @@ static Result<NetworkSerial, ParseNetworkAddressError> ParseNetworkSerial(
     std::string error;
     std::string host;
     if (!android::base::ParseNetAddress(net_address, &host, &port, nullptr, &error)) {
-        return Error<ParseNetworkAddressError>(ParseNetworkAddressError::Type::WRONG_ADDRESS)
+        return Error<FastbootError>(FastbootError::Type::NETWORK_SERIAL_WRONG_ADDRESS)
                << "invalid network address '" << net_address << "': " << error;
     }
 
@@ -399,8 +378,7 @@ static Result<NetworkSerial, ParseNetworkAddressError> ParseNetworkSerial(
 // object, and the caller should not attempt to delete the returned Transport.
 static Transport* open_device(const char* local_serial, bool wait_for_device = true,
                               bool announce = true) {
-    const Result<NetworkSerial, ParseNetworkAddressError> network_serial =
-            ParseNetworkSerial(local_serial);
+    const Result<NetworkSerial, FastbootError> network_serial = ParseNetworkSerial(local_serial);
 
     Transport* transport = nullptr;
     while (true) {
@@ -417,7 +395,8 @@ static Transport* open_device(const char* local_serial, bool wait_for_device = t
             if (transport == nullptr && announce) {
                 LOG(ERROR) << "error: " << error;
             }
-        } else if (network_serial.error().code() == ParseNetworkAddressError::Type::WRONG_PREFIX) {
+        } else if (network_serial.error().code() ==
+                   FastbootError::Type::NETWORK_SERIAL_WRONG_PREFIX) {
             // WRONG_PREFIX is special because it happens when user wants to communicate with USB
             // device
             transport = usb_open(match_fastboot(local_serial));
