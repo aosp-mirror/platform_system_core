@@ -439,54 +439,58 @@ bool Modprobe::IsBlocklisted(const std::string& module_name) {
     return module_blocklist_.count(canonical_name) > 0;
 }
 
-// Another option to load kernel modules. load in independent modules in parallel
-// and then update dependency list of other remaining modules, repeat these steps
-// until all modules are loaded.
+// Another option to load kernel modules. load independent modules dependencies
+// in parallel and then update dependency list of other remaining modules,
+// repeat these steps until all modules are loaded.
+// Discard all blocklist.
+// Softdeps are taken care in InsmodWithDeps().
 bool Modprobe::LoadModulesParallel(int num_threads) {
     bool ret = true;
-    int count = -1;
-    std::map<std::string, std::set<std::string>> mod_with_deps;
+    std::unordered_map<std::string, std::vector<std::string>> mod_with_deps;
 
     // Get dependencies
     for (const auto& module : module_load_) {
+        // Skip blocklist modules
+        if (IsBlocklisted(module)) {
+            LOG(VERBOSE) << "LMP: Blocklist: Module " << module << " skipping...";
+            continue;
+        }
         auto dependencies = GetDependencies(MakeCanonical(module));
-
-        for (auto dep = dependencies.rbegin(); dep != dependencies.rend(); dep++) {
-            mod_with_deps[module].emplace(*dep);
+        if (dependencies.empty()) {
+            LOG(ERROR) << "LMP: Hard-dep: Module " << module
+                       << " not in .dep file";
+            return false;
         }
+        mod_with_deps[MakeCanonical(module)] = dependencies;
     }
 
-    // Get soft dependencies
-    for (const auto& [it_mod, it_softdep] : module_pre_softdep_) {
-        if (mod_with_deps.find(MakeCanonical(it_softdep)) != mod_with_deps.end()) {
-            mod_with_deps[MakeCanonical(it_mod)].emplace(
-                GetDependencies(MakeCanonical(it_softdep))[0]);
-        }
-    }
-
-    // Get soft post dependencies
-    for (const auto& [it_mod, it_softdep] : module_post_softdep_) {
-        if (mod_with_deps.find(MakeCanonical(it_softdep)) != mod_with_deps.end()) {
-            mod_with_deps[MakeCanonical(it_softdep)].emplace(
-                GetDependencies(MakeCanonical(it_mod))[0]);
-        }
-    }
-
-    while (!mod_with_deps.empty() &&  count != module_loaded_.size()) {
+    while (!mod_with_deps.empty()) {
         std::vector<std::thread> threads;
         std::vector<std::string> mods_path_to_load;
         std::mutex vector_lock;
-        count = module_loaded_.size();
 
         // Find independent modules
         for (const auto& [it_mod, it_dep] : mod_with_deps) {
-            if (it_dep.size() == 1) {
-                if (module_options_[it_mod].find("load_sequential=1") != std::string::npos) {
-                    if (!LoadWithAliases(it_mod, true) && !IsBlocklisted(it_mod)) {
-                      return false;
-                    }
-                } else {
-                    mods_path_to_load.emplace_back(it_mod);
+            auto itd_last = it_dep.rbegin();
+            if (itd_last == it_dep.rend())
+                continue;
+
+            auto cnd_last = MakeCanonical(*itd_last);
+            // Hard-dependencies cannot be blocklisted
+            if (IsBlocklisted(cnd_last)) {
+                LOG(ERROR) << "LMP: Blocklist: Module-dep " << cnd_last
+                           << " : failed to load module " << it_mod;
+                return false;
+            }
+
+            if (module_options_[cnd_last].find("load_sequential=1") != std::string::npos) {
+                if (!LoadWithAliases(cnd_last, true)) {
+                    return false;
+                }
+            } else {
+                if (std::find(mods_path_to_load.begin(), mods_path_to_load.end(),
+                            cnd_last) == mods_path_to_load.end()) {
+                    mods_path_to_load.emplace_back(cnd_last);
                 }
             }
         }
@@ -502,7 +506,7 @@ bool Modprobe::LoadModulesParallel(int num_threads) {
                 lk.unlock();
                 ret_load &= LoadWithAliases(mod_to_load, true);
                 lk.lock();
-                if (!ret_load && !IsBlocklisted(mod_to_load)) {
+                if (!ret_load) {
                     ret &= ret_load;
                 }
             }
@@ -521,13 +525,18 @@ bool Modprobe::LoadModulesParallel(int num_threads) {
         std::lock_guard guard(module_loaded_lock_);
         // Remove loaded module form mod_with_deps and soft dependencies of other modules
         for (const auto& module_loaded : module_loaded_) {
-            mod_with_deps.erase(module_loaded);
+            if (mod_with_deps.find(module_loaded) != mod_with_deps.end()) {
+                mod_with_deps.erase(module_loaded);
+            }
         }
 
         // Remove loaded module form dependencies of other modules which are not loaded yet
         for (const auto& module_loaded_path : module_loaded_paths_) {
             for (auto& [mod, deps] : mod_with_deps) {
-                deps.erase(module_loaded_path);
+                auto it = std::find(deps.begin(), deps.end(), module_loaded_path);
+                if (it != deps.end()) {
+                    deps.erase(it);
+                }
             }
         }
     }
