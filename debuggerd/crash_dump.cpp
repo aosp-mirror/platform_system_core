@@ -665,7 +665,7 @@ int main(int argc, char** argv) {
         "* Process %d has been suspended while crashing.\n"
         "* To attach the debugger, run this on the host:\n"
         "*\n"
-        "*     gdbclient.py -p %d\n"
+        "*     lldbclient.py -p %d\n"
         "*\n"
         "***********************************************************",
         target_process, target_process);
