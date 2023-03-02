@@ -257,6 +257,7 @@ cc_defaults {
     },
     auto_gen_config: true,
     require_root: true,
+    compile_multilib: "first",
 }
 
 cc_test {
