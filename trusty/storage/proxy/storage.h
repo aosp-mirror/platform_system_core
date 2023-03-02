@@ -18,30 +18,33 @@
 #include <stdint.h>
 #include <trusty/interface/storage.h>
 
-int storage_file_delete(struct storage_msg *msg,
-                        const void *req, size_t req_len);
+/* Defined in watchdog.h */
+struct watcher;
 
-int storage_file_open(struct storage_msg *msg,
-                      const void *req, size_t req_len);
+int storage_file_delete(struct storage_msg* msg, const void* req, size_t req_len,
+                        struct watcher* watcher);
 
-int storage_file_close(struct storage_msg *msg,
-                       const void *req, size_t req_len);
+int storage_file_open(struct storage_msg* msg, const void* req, size_t req_len,
+                      struct watcher* watcher);
 
-int storage_file_write(struct storage_msg *msg,
-                       const void *req, size_t req_len);
+int storage_file_close(struct storage_msg* msg, const void* req, size_t req_len,
+                       struct watcher* watcher);
 
-int storage_file_read(struct storage_msg *msg,
-                      const void *req, size_t req_len);
+int storage_file_write(struct storage_msg* msg, const void* req, size_t req_len,
+                       struct watcher* watcher);
 
-int storage_file_get_size(struct storage_msg *msg,
-                          const void *req, size_t req_len);
+int storage_file_read(struct storage_msg* msg, const void* req, size_t req_len,
+                      struct watcher* watcher);
 
-int storage_file_set_size(struct storage_msg *msg,
-                          const void *req, size_t req_len);
+int storage_file_get_size(struct storage_msg* msg, const void* req, size_t req_len,
+                          struct watcher* watcher);
 
-int storage_file_get_max_size(struct storage_msg* msg, const void* req, size_t req_len);
+int storage_file_set_size(struct storage_msg* msg, const void* req, size_t req_len,
+                          struct watcher* watcher);
 
-int storage_init(const char *dirname);
+int storage_file_get_max_size(struct storage_msg* msg, const void* req, size_t req_len,
+                              struct watcher* watcher);
 
-int storage_sync_checkpoint(void);
+int storage_init(const char* dirname);
 
+int storage_sync_checkpoint(struct watcher* watcher);
