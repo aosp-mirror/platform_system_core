@@ -372,6 +372,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
     std::set<pid_t> pgids;
     pgids.emplace(initialPid);
     std::set<pid_t> pids;
+    int processes = 0;
 
     std::unique_ptr<FILE, decltype(&fclose)> fd(nullptr, fclose);
 
@@ -390,6 +391,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         pid_t pid;
         bool file_is_empty = true;
         while (fscanf(fd.get(), "%d\n", &pid) == 1 && pid >= 0) {
+            processes++;
             file_is_empty = false;
             if (pid == 0) {
                 // Should never happen...  but if it does, trying to kill this
@@ -419,15 +421,12 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         }
     }
 
-    int processes = 0;
     // Kill all process groups.
     for (const auto pgid : pgids) {
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
                      << " as part of process cgroup " << initialPid;
 
-        if (kill(-pgid, signal) == 0) {
-            processes++;
-        } else if (errno != ESRCH) {
+        if (kill(-pgid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
         }
     }
@@ -437,9 +436,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
 
-        if (kill(pid, signal) == 0) {
-            processes++;
-        } else if (errno != ESRCH) {
+        if (kill(pid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
