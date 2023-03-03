@@ -255,7 +255,6 @@ static class ShutdownState {
         return {};
     }
 
-    bool do_shutdown() const { return do_shutdown_; }
     void set_do_shutdown(bool value) { do_shutdown_ = value; }
 
   private:
@@ -263,31 +262,6 @@ static class ShutdownState {
     std::string shutdown_command_ GUARDED_BY(shutdown_command_lock_);
     bool do_shutdown_ = false;
 } shutdown_state;
-
-static void UnwindMainThreadStack() {
-    unwindstack::AndroidLocalUnwinder unwinder;
-    unwindstack::AndroidUnwinderData data;
-    if (!unwinder.Unwind(data)) {
-        LOG(ERROR) << __FUNCTION__
-                   << "sys.powerctl: Failed to unwind callstack: " << data.GetErrorString();
-    }
-    for (const auto& frame : data.frames) {
-        LOG(ERROR) << "sys.powerctl: " << unwinder.FormatFrame(frame);
-    }
-}
-
-void DebugRebootLogging() {
-    LOG(INFO) << "sys.powerctl: do_shutdown: " << shutdown_state.do_shutdown()
-              << " IsShuttingDown: " << IsShuttingDown();
-    if (shutdown_state.do_shutdown()) {
-        LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
-        UnwindMainThreadStack();
-    }
-    if (IsShuttingDown()) {
-        LOG(ERROR) << "sys.powerctl set while init is already shutting down";
-        UnwindMainThreadStack();
-    }
-}
 
 void DumpState() {
     ServiceList::GetInstance().DumpState();
