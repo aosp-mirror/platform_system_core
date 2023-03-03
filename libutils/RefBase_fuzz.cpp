@@ -177,7 +177,7 @@ void spawnThreads(FuzzedDataProvider* dataProvider) {
         uint8_t opCount = dataProvider->ConsumeIntegralInRange<uint8_t>(1, kMaxOperations);
         std::vector<uint8_t> threadOperations = dataProvider->ConsumeBytes<uint8_t>(opCount);
         std::thread tmpThread = std::thread(loop, threadOperations);
-        threads.push_back(move(tmpThread));
+        threads.push_back(std::move(tmpThread));
     }
 
     for (auto& th : threads) {
