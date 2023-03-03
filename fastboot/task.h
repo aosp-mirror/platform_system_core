@@ -79,3 +79,16 @@ class UpdateSuperTask : public Task {
   private:
     FlashingPlan* fp_;
 };
+
+class ResizeTask : public Task {
+  public:
+    ResizeTask(FlashingPlan* fp, const std::string& pname, const std::string& size,
+               const std::string& slot);
+    void Run() override;
+
+  private:
+    FlashingPlan* fp_;
+    const std::string pname_;
+    const std::string size_;
+    const std::string slot_;
+};
