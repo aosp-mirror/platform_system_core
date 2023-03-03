@@ -447,6 +447,15 @@ Result<void> Service::CheckConsole() {
         return {};
     }
 
+    // On newer kernels, /dev/console will always exist because
+    // "console=ttynull" is hard-coded in CONFIG_CMDLINE. This new boot
+    // property should be set via "androidboot.serialconsole=0" to explicitly
+    // disable services requiring the console. For older kernels and boot
+    // images, not setting this at all will fall back to the old behavior
+    if (GetProperty("ro.boot.serialconsole", "") == "0") {
+        return {};
+    }
+
     if (proc_attr_.console.empty()) {
         proc_attr_.console = "/dev/" + GetProperty("ro.boot.console", "console");
     }
