@@ -2301,6 +2301,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
     fastboot::FastBootDriver fastboot_driver(transport, driver_callbacks, false);
     fb = &fastboot_driver;
+    fp->fb = &fastboot_driver;
 
     const double start = now();
 
@@ -2376,17 +2377,17 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == FB_CMD_REBOOT) {
             if (args.size() == 1) {
                 std::string reboot_target = next_arg(&args);
-                reboot_task = std::make_unique<RebootTask>(fb, reboot_target);
+                reboot_task = std::make_unique<RebootTask>(fp.get(), reboot_target);
             } else {
-                reboot_task = std::make_unique<RebootTask>(fb);
+                reboot_task = std::make_unique<RebootTask>(fp.get());
             }
             if (!args.empty()) syntax_error("junk after reboot command");
         } else if (command == FB_CMD_REBOOT_BOOTLOADER) {
-            reboot_task = std::make_unique<RebootTask>(fb, "bootloader");
+            reboot_task = std::make_unique<RebootTask>(fp.get(), "bootloader");
         } else if (command == FB_CMD_REBOOT_RECOVERY) {
-            reboot_task = std::make_unique<RebootTask>(fb, "recovery");
+            reboot_task = std::make_unique<RebootTask>(fp.get(), "recovery");
         } else if (command == FB_CMD_REBOOT_FASTBOOT) {
-            reboot_task = std::make_unique<RebootTask>(fb, "fastboot");
+            reboot_task = std::make_unique<RebootTask>(fp.get(), "fastboot");
         } else if (command == FB_CMD_CONTINUE) {
             fb->Continue();
         } else if (command == FB_CMD_BOOT) {
@@ -2407,7 +2408,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fname = find_item(pname);
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
-            FlashTask task(slot_override, fp->force_flash, pname, fname);
+            FlashTask task(slot_override, pname, fname);
             task.Run();
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
@@ -2431,7 +2432,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 do_flashall(fp.get());
             }
-            reboot_task = std::make_unique<RebootTask>(fb);
+            reboot_task = std::make_unique<RebootTask>(fp.get());
         } else if (command == "update") {
             bool slot_all = (slot_override == "all");
             if (slot_all) {
@@ -2443,7 +2444,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 filename = next_arg(&args);
             }
             do_update(filename.c_str(), fp.get());
-            reboot_task = std::make_unique<RebootTask>(fb);
+            reboot_task = std::make_unique<RebootTask>(fp.get());
         } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
             fb->SetActive(slot);
