@@ -73,6 +73,7 @@ struct healthd_config {
     android::String8 batteryChargeTimeToFullNowPath;
     android::String8 batteryFullChargeDesignCapacityUahPath;
     android::String8 batteryStateOfHealthPath;
+    android::String8 batteryHealthStatusPath;
     android::String8 batteryManufacturingDatePath;
     android::String8 batteryFirstUsageDatePath;
     android::String8 chargingStatePath;

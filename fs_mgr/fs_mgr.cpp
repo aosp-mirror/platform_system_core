@@ -1176,6 +1176,10 @@ class CheckpointManager {
                     return false;
                 }
 
+                // dm-bow will not load if size is not a multiple of 4096
+                // rounding down does not hurt, since ext4 will only use full blocks
+                size &= ~7;
+
                 android::dm::DmTable table;
                 auto bowTarget =
                         std::make_unique<android::dm::DmTargetBow>(0, size, entry->blk_device);
