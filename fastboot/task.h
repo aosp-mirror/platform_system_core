@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 
+#include "fastboot.h"
 #include "fastboot_driver.h"
 
 class Task {
@@ -29,11 +30,8 @@ class Task {
 
 class FlashTask : public Task {
   public:
-    FlashTask(const std::string& _slot);
-    FlashTask(const std::string& _slot, bool _force_flash);
-    FlashTask(const std::string& _slot, bool _force_flash, const std::string& _pname);
-    FlashTask(const std::string& _slot, bool _force_flash, const std::string& _pname,
-              const std::string& _fname);
+    FlashTask(const std::string& _slot, const std::string& _pname);
+    FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname);
 
     void Run() override;
     ~FlashTask() {}
@@ -42,17 +40,16 @@ class FlashTask : public Task {
     const std::string pname_;
     const std::string fname_;
     const std::string slot_;
-    bool force_flash_ = false;
 };
 
 class RebootTask : public Task {
   public:
-    RebootTask(fastboot::FastBootDriver* _fb);
-    RebootTask(fastboot::FastBootDriver* _fb, const std::string _reboot_target);
+    RebootTask(FlashingPlan* _fp);
+    RebootTask(FlashingPlan* _fp, const std::string& _reboot_target);
     void Run() override;
     ~RebootTask() {}
 
   private:
     const std::string reboot_target_ = "";
-    fastboot::FastBootDriver* fb_;
+    FlashingPlan* fp_;
 };

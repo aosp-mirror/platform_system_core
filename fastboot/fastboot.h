@@ -28,8 +28,14 @@
 #pragma once
 
 #include <string>
+#include "fastboot_driver.h"
+#include "util.h"
 
 #include <bootimg.h>
+
+#include "result.h"
+#include "socket.h"
+#include "util.h"
 
 class FastBootTool {
   public:
@@ -40,6 +46,45 @@ class FastBootTool {
     unsigned ParseFsOption(const char*);
 };
 
+enum class ImageType {
+    // Must be flashed for device to boot into the kernel.
+    BootCritical,
+    // Normal partition to be flashed during "flashall".
+    Normal,
+    // Partition that is never flashed during "flashall".
+    Extra
+};
+
+struct Image {
+    std::string nickname;
+    std::string img_name;
+    std::string sig_name;
+    std::string part_name;
+    bool optional_if_no_image;
+    ImageType type;
+    bool IsSecondary() const { return nickname.empty(); }
+};
+
+using ImageEntry = std::pair<const Image*, std::string>;
+
+struct FlashingPlan {
+    // If the image uses the default slot, or the user specified "all", then
+    // the paired string will be empty. If the image requests a specific slot
+    // (for example, system_other) it is specified instead.
+    ImageSource* source;
+    bool wants_wipe = false;
+    bool skip_reboot = false;
+    bool wants_set_active = false;
+    bool skip_secondary = false;
+    bool force_flash = false;
+
+    std::string slot;
+    std::string current_slot;
+    std::string secondary_slot;
+    fastboot::FastBootDriver* fb;
+
+};
+
 bool should_flash_in_userspace(const std::string& partition_name);
 bool is_userspace_fastboot();
 void do_flash(const char* pname, const char* fname);
@@ -48,3 +93,11 @@ void do_for_partitions(const std::string& part, const std::string& slot,
 std::string find_item(const std::string& item);
 void reboot_to_userspace_fastboot();
 void syntax_error(const char* fmt, ...);
+
+struct NetworkSerial {
+    Socket::Protocol protocol;
+    std::string address;
+    int port;
+};
+
+Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
