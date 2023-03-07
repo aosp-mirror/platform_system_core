@@ -29,6 +29,7 @@
 #include <fs_mgr/roots.h>
 #include <liblp/property_fetcher.h>
 
+using android::dm::DeviceMapper;
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
@@ -251,7 +252,10 @@ bool CanUseUserspaceSnapshots() {
         LOG(INFO) << "Userspace snapshots disabled for testing";
         return false;
     }
-
+    if (!KernelSupportsCompressedSnapshots()) {
+        LOG(ERROR) << "Userspace snapshots requested, but no kernel support is available.";
+        return false;
+    }
     return true;
 }
 
@@ -276,6 +280,11 @@ std::string GetOtherPartitionName(const std::string& name) {
 bool IsDmSnapshotTestingEnabled() {
     auto fetcher = IPropertyFetcher::GetInstance();
     return fetcher->GetBoolProperty("snapuserd.test.dm.snapshots", false);
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
 }
 
 }  // namespace snapshot
