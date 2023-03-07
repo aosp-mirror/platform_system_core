@@ -180,3 +180,9 @@ void ResizeTask::Run() {
     };
     do_for_partitions(pname_, slot_, resize_partition, false);
 }
+
+DeleteTask::DeleteTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
+
+void DeleteTask::Run() {
+    fp_->fb->DeletePartition(pname_);
+}

@@ -92,3 +92,13 @@ class ResizeTask : public Task {
     const std::string size_;
     const std::string slot_;
 };
+
+class DeleteTask : public Task {
+  public:
+    DeleteTask(FlashingPlan* _fp, const std::string& _pname);
+    void Run() override;
+
+  private:
+    FlashingPlan* fp_;
+    const std::string pname_;
+};
