@@ -552,9 +552,6 @@ std::optional<uint32_t> HandlePropertySet(const std::string& name, const std::st
         }
         LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
                   << process_log_string;
-        if (!value.empty()) {
-            DebugRebootLogging();
-        }
         if (value == "reboot,userspace" && !is_userspace_reboot_supported().value_or(false)) {
             *error = "Userspace reboot is not supported by this device";
             return {PROP_ERROR_INVALID_VALUE};
