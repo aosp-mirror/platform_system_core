@@ -3216,6 +3216,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         vabc_disable_reason = "recovery";
     } else if (!cow_format_support) {
         vabc_disable_reason = "cow format not supported";
+    } else if (!KernelSupportsCompressedSnapshots()) {
+        vabc_disable_reason = "kernel missing userspace block device support";
     }
 
     if (!vabc_disable_reason.empty()) {
