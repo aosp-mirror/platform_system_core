@@ -1633,6 +1633,19 @@ void FlashAllTool::Flash() {
         // extents, and will achieve more optimal allocation.
         std::vector<std::unique_ptr<ResizeTask>> resize_tasks;
         for (const auto& [image, slot] : os_images_) {
+            // Retrofit devices have two super partitions, named super_a and super_b.
+            // On these devices, secondary slots must be flashed as physical
+            // partitions (otherwise they would not mount on first boot). To enforce
+            // this, we delete any logical partitions for the "other" slot.
+            if (is_retrofit_device()) {
+                std::string partition_name = image->part_name + "_"s + slot;
+                if (image->IsSecondary() && is_logical(partition_name)) {
+                    fp_->fb->DeletePartition(partition_name);
+                    std::unique_ptr<DeleteTask> delete_task =
+                            std::make_unique<DeleteTask>(fp_, partition_name);
+                    delete_task->Run();
+                }
+            }
             resize_tasks.emplace_back(
                     std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
@@ -2352,6 +2365,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             fb->CreatePartition(partition, size);
         } else if (command == FB_CMD_DELETE_PARTITION) {
             std::string partition = next_arg(&args);
+            auto delete_task = std::make_unique<DeleteTask>(fp.get(), partition);
             fb->DeletePartition(partition);
         } else if (command == FB_CMD_RESIZE_PARTITION) {
             std::string partition = next_arg(&args);

@@ -21,8 +21,8 @@
 
 using namespace std::string_literals;
 
-FlashTask::FlashTask(const std::string& _slot, const std::string& _pname)
-    : pname_(_pname), fname_(find_item(_pname)), slot_(_slot) {
+FlashTask::FlashTask(const std::string& slot, const std::string& pname)
+    : pname_(pname), fname_(find_item(pname)), slot_(slot) {
     if (fname_.empty()) die("cannot determine image filename for '%s'", pname_.c_str());
 }
 FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname)
@@ -44,9 +44,9 @@ void FlashTask::Run() {
     do_for_partitions(pname_, slot_, flash, true);
 }
 
-RebootTask::RebootTask(FlashingPlan* _fp) : fp_(_fp){};
-RebootTask::RebootTask(FlashingPlan* _fp, const std::string& _reboot_target)
-    : reboot_target_(_reboot_target), fp_(_fp){};
+RebootTask::RebootTask(FlashingPlan* fp) : fp_(fp){};
+RebootTask::RebootTask(FlashingPlan* fp, const std::string& reboot_target)
+    : reboot_target_(reboot_target), fp_(fp){};
 
 void RebootTask::Run() {
     if ((reboot_target_ == "userspace" || reboot_target_ == "fastboot")) {
@@ -179,4 +179,10 @@ void ResizeTask::Run() {
         }
     };
     do_for_partitions(pname_, slot_, resize_partition, false);
+}
+
+DeleteTask::DeleteTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
+
+void DeleteTask::Run() {
+    fp_->fb->DeletePartition(pname_);
 }
