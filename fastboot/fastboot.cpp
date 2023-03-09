@@ -1631,13 +1631,13 @@ void FlashAllTool::Flash() {
         update_super_task->Run();
         // Resize any logical partition to 0, so each partition is reset to 0
         // extents, and will achieve more optimal allocation.
+        std::vector<std::unique_ptr<ResizeTask>> resize_tasks;
         for (const auto& [image, slot] : os_images_) {
-            auto resize_partition = [](const std::string& partition) -> void {
-                if (is_logical(partition)) {
-                    fb->ResizePartition(partition, "0");
-                }
-            };
-            do_for_partitions(image->part_name, slot, resize_partition, false);
+            resize_tasks.emplace_back(
+                    std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
+        }
+        for (auto& i : resize_tasks) {
+            i->Run();
         }
     }
     FlashImages(os_images_);
@@ -2356,7 +2356,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == FB_CMD_RESIZE_PARTITION) {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
-            fb->ResizePartition(partition, size);
+            std::unique_ptr<ResizeTask> resize_task =
+                    std::make_unique<ResizeTask>(fp.get(), partition, size, slot_override);
+            resize_task->Run();
         } else if (command == "gsi") {
             std::string arg = next_arg(&args);
             if (arg == "wipe") {
