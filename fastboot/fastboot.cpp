@@ -1587,7 +1587,6 @@ class FlashAllTool {
     void CollectImages();
     void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
     void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
-    void UpdateSuperPartition();
 
     // If the image uses the default slot, or the user specified "all", then
     // the paired string will be empty. If the image requests a specific slot
@@ -1628,7 +1627,8 @@ void FlashAllTool::Flash() {
         flash_super_task->Run();
     } else {
         // Sync the super partition. This will reboot to userspace fastboot if needed.
-        UpdateSuperPartition();
+        std::unique_ptr<UpdateSuperTask> update_super_task = std::make_unique<UpdateSuperTask>(fp_);
+        update_super_task->Run();
         // Resize any logical partition to 0, so each partition is reset to 0
         // extents, and will achieve more optimal allocation.
         for (const auto& [image, slot] : os_images_) {
@@ -1719,41 +1719,6 @@ void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastb
         flash_buf(partition_name.c_str(), buf);
     };
     do_for_partitions(image.part_name, slot, flash, false);
-}
-
-void FlashAllTool::UpdateSuperPartition() {
-    unique_fd fd = fp_->source->OpenFile("super_empty.img");
-    if (fd < 0) {
-        return;
-    }
-    if (!is_userspace_fastboot()) {
-        reboot_to_userspace_fastboot();
-    }
-
-    std::string super_name;
-    if (fb->GetVar("super-partition-name", &super_name) != fastboot::RetCode::SUCCESS) {
-        super_name = "super";
-    }
-    fb->Download(super_name, fd, get_file_size(fd));
-
-    std::string command = "update-super:" + super_name;
-    if (fp_->wants_wipe) {
-        command += ":wipe";
-    }
-    fb->RawCommand(command, "Updating super partition");
-
-    // Retrofit devices have two super partitions, named super_a and super_b.
-    // On these devices, secondary slots must be flashed as physical
-    // partitions (otherwise they would not mount on first boot). To enforce
-    // this, we delete any logical partitions for the "other" slot.
-    if (is_retrofit_device()) {
-        for (const auto& [image, slot] : os_images_) {
-            std::string partition_name = image->part_name + "_"s + slot;
-            if (image->IsSecondary() && is_logical(partition_name)) {
-                fb->DeletePartition(partition_name);
-            }
-        }
-    }
 }
 
 class ZipImageSource final : public ImageSource {
