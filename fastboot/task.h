@@ -70,3 +70,12 @@ class FlashSuperLayoutTask : public Task {
     std::unique_ptr<SuperFlashHelper> helper_;
     SparsePtr sparse_layout_;
 };
+
+class UpdateSuperTask : public Task {
+  public:
+    UpdateSuperTask(FlashingPlan* fp);
+    void Run() override;
+
+  private:
+    FlashingPlan* fp_;
+};
