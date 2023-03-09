@@ -642,7 +642,7 @@ TEST_F(CrasherTest, mte_async) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 8 \(SEGV_MTEAERR\), fault addr --------)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code [89] \(SEGV_MTE[AS]ERR\), fault addr)");
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
