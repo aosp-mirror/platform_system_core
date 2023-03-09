@@ -167,3 +167,16 @@ void UpdateSuperTask::Run() {
     }
     fp_->fb->RawCommand(command, "Updating super partition");
 }
+
+ResizeTask::ResizeTask(FlashingPlan* fp, const std::string& pname, const std::string& size,
+                       const std::string& slot)
+    : fp_(fp), pname_(pname), size_(size), slot_(slot) {}
+
+void ResizeTask::Run() {
+    auto resize_partition = [this](const std::string& partition) -> void {
+        if (is_logical(partition)) {
+            fp_->fb->ResizePartition(partition, size_);
+        }
+    };
+    do_for_partitions(pname_, slot_, resize_partition, false);
+}
