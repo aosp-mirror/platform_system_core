@@ -142,3 +142,28 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
                     os_images.end());
     return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s));
 }
+
+UpdateSuperTask::UpdateSuperTask(FlashingPlan* fp)
+    : fp_(fp) {}
+
+void UpdateSuperTask::Run() {
+    unique_fd fd = fp_->source->OpenFile("super_empty.img");
+    if (fd < 0) {
+        return;
+    }
+    if (!is_userspace_fastboot()) {
+        reboot_to_userspace_fastboot();
+    }
+
+    std::string super_name;
+    if (fp_->fb->GetVar("super-partition-name", &super_name) != fastboot::RetCode::SUCCESS) {
+        super_name = "super";
+    }
+    fp_->fb->Download(super_name, fd, get_file_size(fd));
+
+    std::string command = "update-super:" + super_name;
+    if (fp_->wants_wipe) {
+        command += ":wipe";
+    }
+    fp_->fb->RawCommand(command, "Updating super partition");
+}
