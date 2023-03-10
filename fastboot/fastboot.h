@@ -83,6 +83,7 @@ struct FlashingPlan {
     std::string slot_override;
     std::string current_slot;
     std::string secondary_slot;
+
     fastboot::FastBootDriver* fb;
 };
 
@@ -94,6 +95,7 @@ void do_for_partitions(const std::string& part, const std::string& slot,
 std::string find_item(const std::string& item);
 void reboot_to_userspace_fastboot();
 void syntax_error(const char* fmt, ...);
+std::string get_current_slot();
 
 struct NetworkSerial {
     Socket::Protocol protocol;
@@ -103,7 +105,7 @@ struct NetworkSerial {
 
 Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
 bool supports_AB();
-std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot_);
+std::string GetPartitionName(const ImageEntry& entry, const std::string& current_slot_);
 void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
 int64_t get_sparse_limit(int64_t size);
 std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
