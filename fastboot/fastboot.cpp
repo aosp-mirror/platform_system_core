@@ -1621,9 +1621,7 @@ void FlashAllTool::Flash() {
     // or in bootloader fastboot.
     FlashImages(boot_images_);
 
-    auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_);
-
-    if (flash_super_task) {
+    if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
         flash_super_task->Run();
     } else {
         // Sync the super partition. This will reboot to userspace fastboot if needed.
