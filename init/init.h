@@ -42,8 +42,6 @@ void SendLoadPersistentPropertiesMessage();
 void PropertyChanged(const std::string& name, const std::string& value);
 bool QueueControlMessage(const std::string& message, const std::string& name, pid_t pid, int fd);
 
-void DebugRebootLogging();
-
 int SecondStageMain(int argc, char** argv);
 
 int StopServicesFromApex(const std::string& apex_name);
