@@ -2247,7 +2247,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             if (args.size() == 1) {
                 std::string reboot_target = next_arg(&args);
                 reboot_task = std::make_unique<RebootTask>(fp.get(), reboot_target);
-            } else {
+            } else if (!fp->skip_reboot) {
                 reboot_task = std::make_unique<RebootTask>(fp.get());
             }
             if (!args.empty()) syntax_error("junk after reboot command");
@@ -2302,7 +2302,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 do_flashall(fp.get());
             }
-            reboot_task = std::make_unique<RebootTask>(fp.get());
+            if (!fp->skip_reboot) {
+                reboot_task = std::make_unique<RebootTask>(fp.get());
+            }
         } else if (command == "update") {
             bool slot_all = (slot_override == "all");
             if (slot_all) {
@@ -2314,7 +2316,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 filename = next_arg(&args);
             }
             do_update(filename.c_str(), fp.get());
-            reboot_task = std::make_unique<RebootTask>(fp.get());
+            if (!fp->skip_reboot) {
+                reboot_task = std::make_unique<RebootTask>(fp.get());
+            }
         } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
             fb->SetActive(slot);
@@ -2403,7 +2407,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
     if (fp->wants_set_active) {
         fb->SetActive(next_active);
     }
-    if (reboot_task && !fp->skip_reboot) {
+    if (reboot_task) {
         reboot_task->Run();
     }
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
