@@ -143,8 +143,7 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
     return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s));
 }
 
-UpdateSuperTask::UpdateSuperTask(FlashingPlan* fp)
-    : fp_(fp) {}
+UpdateSuperTask::UpdateSuperTask(FlashingPlan* fp) : fp_(fp) {}
 
 void UpdateSuperTask::Run() {
     unique_fd fd = fp_->source->OpenFile("super_empty.img");
@@ -185,4 +184,16 @@ DeleteTask::DeleteTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pn
 
 void DeleteTask::Run() {
     fp_->fb->DeletePartition(pname_);
+}
+
+WipeTask::WipeTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
+
+void WipeTask::Run() {
+    std::string partition_type;
+    if (fp_->fb->GetVar("partition-type:" + pname_, &partition_type) != fastboot::SUCCESS) {
+        return;
+    }
+    if (partition_type.empty()) return;
+    fp_->fb->Erase(pname_);
+    fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options);
 }
