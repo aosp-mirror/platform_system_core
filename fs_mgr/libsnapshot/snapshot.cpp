@@ -2901,6 +2901,20 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, MergePhase phase) {
+    switch (phase) {
+        case MergePhase::NO_MERGE:
+            return os << "none";
+        case MergePhase::FIRST_PHASE:
+            return os << "first";
+        case MergePhase::SECOND_PHASE:
+            return os << "second";
+        default:
+            LOG(ERROR) << "Unknown merge phase: " << static_cast<uint32_t>(phase);
+            return os << "unknown(" << static_cast<uint32_t>(phase) << ")";
+    }
+}
+
 UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock);
     return status.state();
@@ -3761,7 +3775,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     auto update_status = ReadSnapshotUpdateStatus(file.get());
 
-    ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
+    ss << "Update state: " << update_status.state() << std::endl;
     ss << "Using snapuserd: " << update_status.using_snapuserd() << std::endl;
     ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
@@ -3775,6 +3789,17 @@ bool SnapshotManager::Dump(std::ostream& os) {
        << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
        << std::endl;
     ss << "Source build fingerprint: " << update_status.source_build_fingerprint() << std::endl;
+
+    if (update_status.state() == UpdateState::Merging) {
+        ss << "Merge completion: ";
+        if (!EnsureSnapuserdConnected()) {
+            ss << "N/A";
+        } else {
+            ss << snapuserd_client_->GetMergePercent() << "%";
+        }
+        ss << std::endl;
+        ss << "Merge phase: " << update_status.merge_phase() << std::endl;
+    }
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -3798,6 +3823,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
         ss << "    compression: " << status.compression_algorithm() << std::endl;
+        ss << "    merge phase: " << DecideMergePhase(status) << std::endl;
     }
     os << ss.rdbuf();
     return ok;
