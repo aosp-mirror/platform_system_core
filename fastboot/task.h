@@ -100,3 +100,13 @@ class DeleteTask : public Task {
     const FlashingPlan* fp_;
     const std::string pname_;
 };
+
+class WipeTask : public Task {
+  public:
+    WipeTask(FlashingPlan* fp, const std::string& pname);
+    void Run() override;
+
+  private:
+    const FlashingPlan* fp_;
+    const std::string pname_;
+};
