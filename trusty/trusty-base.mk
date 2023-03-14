@@ -39,7 +39,6 @@ PRODUCT_PACKAGES += \
 	$(LOCAL_KEYMINT_PRODUCT_PACKAGE) \
 	android.hardware.gatekeeper-service.trusty \
 	trusty_apploader \
-	RemoteProvisioner
 
 PRODUCT_PROPERTY_OVERRIDES += \
 	ro.hardware.keystore_desede=true \
