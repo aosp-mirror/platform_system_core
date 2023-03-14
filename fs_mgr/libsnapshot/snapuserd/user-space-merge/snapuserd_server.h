@@ -40,21 +40,6 @@ namespace snapshot {
 static constexpr uint32_t kMaxPacketSize = 512;
 static constexpr uint8_t kMaxMergeThreads = 2;
 
-enum class DaemonOps {
-    INIT,
-    START,
-    QUERY,
-    STOP,
-    DELETE,
-    DETACH,
-    SUPPORTS,
-    INITIATE,
-    PERCENTAGE,
-    GETSTATUS,
-    UPDATE_VERIFY,
-    INVALID,
-};
-
 class UserSnapshotServer {
   private:
     android::base::unique_fd sockfd_;
@@ -76,7 +61,6 @@ class UserSnapshotServer {
     bool Receivemsg(android::base::borrowed_fd fd, const std::string& str);
 
     void ShutdownThreads();
-    DaemonOps Resolveop(std::string& input);
     std::string GetDaemonStatus();
     void Parsemsg(std::string const& msg, const char delim, std::vector<std::string>& out);
 
