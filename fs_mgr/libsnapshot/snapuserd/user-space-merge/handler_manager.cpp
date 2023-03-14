@@ -25,6 +25,9 @@ namespace snapshot {
 
 static constexpr uint8_t kMaxMergeThreads = 2;
 
+HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
+    : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
+
 void HandlerThread::FreeResources() {
     // Each worker thread holds a reference to snapuserd.
     // Clear them so that all the resources
