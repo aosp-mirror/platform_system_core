@@ -45,22 +45,6 @@ using namespace std::string_literals;
 using android::base::borrowed_fd;
 using android::base::unique_fd;
 
-DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
-    if (input == "init") return DaemonOps::INIT;
-    if (input == "start") return DaemonOps::START;
-    if (input == "stop") return DaemonOps::STOP;
-    if (input == "query") return DaemonOps::QUERY;
-    if (input == "delete") return DaemonOps::DELETE;
-    if (input == "detach") return DaemonOps::DETACH;
-    if (input == "supports") return DaemonOps::SUPPORTS;
-    if (input == "initiate_merge") return DaemonOps::INITIATE;
-    if (input == "merge_percent") return DaemonOps::PERCENTAGE;
-    if (input == "getstatus") return DaemonOps::GETSTATUS;
-    if (input == "update-verify") return DaemonOps::UPDATE_VERIFY;
-
-    return DaemonOps::INVALID;
-}
-
 UserSnapshotServer::UserSnapshotServer() {
     terminating_ = false;
     handlers_ = std::make_unique<SnapshotHandlerManager>();
@@ -132,132 +116,118 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
 
     std::vector<std::string> out;
     Parsemsg(str, delim, out);
-    DaemonOps op = Resolveop(out[0]);
 
-    switch (op) {
-        case DaemonOps::INIT: {
-            // Message format:
-            // init,<misc_name>,<cow_device_path>,<backing_device>,<base_path_merge>
-            //
-            // Reads the metadata and send the number of sectors
-            if (out.size() != 5) {
-                LOG(ERROR) << "Malformed init message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-
-            auto handler = AddHandler(out[1], out[2], out[3], out[4]);
-            if (!handler) {
-                return Sendmsg(fd, "fail");
-            }
-
-            auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
-            return Sendmsg(fd, retval);
-        }
-        case DaemonOps::START: {
-            // Message format:
-            // start,<misc_name>
-            //
-            // Start the new thread which binds to dm-user misc device
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed start message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-
-            if (!handlers_->StartHandler(out[1])) {
-                return Sendmsg(fd, "fail");
-            }
-            return Sendmsg(fd, "success");
-        }
-        case DaemonOps::STOP: {
-            // Message format: stop
-            //
-            // Stop all the threads gracefully and then shutdown the
-            // main thread
-            SetTerminating();
-            ShutdownThreads();
-            return true;
-        }
-        case DaemonOps::QUERY: {
-            // Message format: query
-            //
-            // As part of transition, Second stage daemon will be
-            // created before terminating the first stage daemon. Hence,
-            // for a brief period client may have to distiguish between
-            // first stage daemon and second stage daemon.
-            //
-            // Second stage daemon is marked as active and hence will
-            // be ready to receive control message.
-            return Sendmsg(fd, GetDaemonStatus());
-        }
-        case DaemonOps::DELETE: {
-            // Message format:
-            // delete,<misc_name>
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            if (!handlers_->DeleteHandler(out[1])) {
-                return Sendmsg(fd, "fail");
-            }
-            return Sendmsg(fd, "success");
-        }
-        case DaemonOps::DETACH: {
-            handlers_->TerminateMergeThreads();
-            terminating_ = true;
-            return true;
-        }
-        case DaemonOps::SUPPORTS: {
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed supports message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            if (out[1] == "second_stage_socket_handoff") {
-                return Sendmsg(fd, "success");
-            }
+    const auto& cmd = out[0];
+    if (cmd == "init") {
+        // Message format:
+        // init,<misc_name>,<cow_device_path>,<backing_device>,<base_path_merge>
+        //
+        // Reads the metadata and send the number of sectors
+        if (out.size() != 5) {
+            LOG(ERROR) << "Malformed init message, " << out.size() << " parts";
             return Sendmsg(fd, "fail");
         }
-        case DaemonOps::INITIATE: {
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed initiate-merge message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            if (out[0] == "initiate_merge") {
-                if (!handlers_->InitiateMerge(out[1])) {
-                    return Sendmsg(fd, "fail");
-                }
-                return Sendmsg(fd, "success");
-            }
+
+        auto handler = AddHandler(out[1], out[2], out[3], out[4]);
+        if (!handler) {
             return Sendmsg(fd, "fail");
         }
-        case DaemonOps::PERCENTAGE: {
-            double percentage = handlers_->GetMergePercentage();
 
-            return Sendmsg(fd, std::to_string(percentage));
+        auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
+        return Sendmsg(fd, retval);
+    } else if (cmd == "start") {
+        // Message format:
+        // start,<misc_name>
+        //
+        // Start the new thread which binds to dm-user misc device
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed start message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
         }
-        case DaemonOps::GETSTATUS: {
-            // Message format:
-            // getstatus,<misc_name>
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
-                return Sendmsg(fd, "snapshot-merge-failed");
-            }
-            auto status = handlers_->GetMergeStatus(out[1]);
-            if (status.empty()) {
-                return Sendmsg(fd, "snapshot-merge-failed");
-            }
-            return Sendmsg(fd, status);
+
+        if (!handlers_->StartHandler(out[1])) {
+            return Sendmsg(fd, "fail");
         }
-        case DaemonOps::UPDATE_VERIFY: {
-            if (!handlers_->GetVerificationStatus()) {
+        return Sendmsg(fd, "success");
+    } else if (cmd == "stop") {
+        // Message format: stop
+        //
+        // Stop all the threads gracefully and then shutdown the
+        // main thread
+        SetTerminating();
+        ShutdownThreads();
+        return true;
+    } else if (cmd == "query") {
+        // Message format: query
+        //
+        // As part of transition, Second stage daemon will be
+        // created before terminating the first stage daemon. Hence,
+        // for a brief period client may have to distiguish between
+        // first stage daemon and second stage daemon.
+        //
+        // Second stage daemon is marked as active and hence will
+        // be ready to receive control message.
+        return Sendmsg(fd, GetDaemonStatus());
+    } else if (cmd == "delete") {
+        // Message format:
+        // delete,<misc_name>
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
+        }
+        if (!handlers_->DeleteHandler(out[1])) {
+            return Sendmsg(fd, "fail");
+        }
+        return Sendmsg(fd, "success");
+    } else if (cmd == "detach") {
+        handlers_->TerminateMergeThreads();
+        terminating_ = true;
+        return true;
+    } else if (cmd == "supports") {
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed supports message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
+        }
+        if (out[1] == "second_stage_socket_handoff") {
+            return Sendmsg(fd, "success");
+        }
+        return Sendmsg(fd, "fail");
+    } else if (cmd == "initiate_merge") {
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed initiate-merge message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
+        }
+        if (out[0] == "initiate_merge") {
+            if (!handlers_->InitiateMerge(out[1])) {
                 return Sendmsg(fd, "fail");
             }
             return Sendmsg(fd, "success");
         }
-        default: {
-            LOG(ERROR) << "Received unknown message type from client";
-            Sendmsg(fd, "fail");
-            return false;
+        return Sendmsg(fd, "fail");
+    } else if (cmd == "merge_percent") {
+        double percentage = handlers_->GetMergePercentage();
+        return Sendmsg(fd, std::to_string(percentage));
+    } else if (cmd == "getstatus") {
+        // Message format:
+        // getstatus,<misc_name>
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+            return Sendmsg(fd, "snapshot-merge-failed");
         }
+        auto status = handlers_->GetMergeStatus(out[1]);
+        if (status.empty()) {
+            return Sendmsg(fd, "snapshot-merge-failed");
+        }
+        return Sendmsg(fd, status);
+    } else if (cmd == "update-verify") {
+        if (!handlers_->GetVerificationStatus()) {
+            return Sendmsg(fd, "fail");
+        }
+        return Sendmsg(fd, "success");
+    } else {
+        LOG(ERROR) << "Received unknown message type from client";
+        Sendmsg(fd, "fail");
+        return false;
     }
 }
 
