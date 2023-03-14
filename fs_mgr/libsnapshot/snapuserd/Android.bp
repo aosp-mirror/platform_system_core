@@ -164,7 +164,7 @@ cc_binary {
 }
 
 cc_test {
-    name: "cow_snapuserd_test",
+    name: "snapuserd_test_legacy",
     defaults: [
         "fs_mgr_defaults",
         "libsnapshot_cow_defaults",
@@ -216,16 +216,17 @@ cc_test {
     ],
     static_libs: [
         "libbrotli",
+        "libcutils_sockets",
+        "libdm",
+        "libext4_utils",
+        "libfs_mgr",
+        "libgflags",
         "libgtest",
         "libsnapshot_cow",
         "libsnapshot_snapuserd",
-        "libcutils_sockets",
-        "libz",
-        "libfs_mgr",
-        "libdm",
-        "libext4_utils",
+        "libsnapuserd",
         "liburing",
-        "libgflags",
+        "libz",
     ],
     include_dirs: ["bionic/libc/kernel"],
     header_libs: [

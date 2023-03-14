@@ -83,9 +83,6 @@ void UserSnapshotServer::ShutdownThreads() {
     handlers_->JoinAllThreads();
 }
 
-HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
-    : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
-
 bool UserSnapshotServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
     ssize_t ret = TEMP_FAILURE_RETRY(send(fd.get(), msg.data(), msg.size(), MSG_NOSIGNAL));
     if (ret < 0) {
