@@ -29,6 +29,7 @@
 
 #include <string>
 #include "fastboot_driver.h"
+#include "super_flash_helper.h"
 #include "util.h"
 
 #include <bootimg.h>
@@ -68,6 +69,7 @@ struct Image {
 using ImageEntry = std::pair<const Image*, std::string>;
 
 struct FlashingPlan {
+    unsigned fs_options = 0;
     // If the image uses the default slot, or the user specified "all", then
     // the paired string will be empty. If the image requests a specific slot
     // (for example, system_other) it is specified instead.
@@ -82,7 +84,6 @@ struct FlashingPlan {
     std::string current_slot;
     std::string secondary_slot;
     fastboot::FastBootDriver* fb;
-
 };
 
 bool should_flash_in_userspace(const std::string& partition_name);
@@ -101,3 +102,14 @@ struct NetworkSerial {
 };
 
 Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
+bool supports_AB();
+std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot_);
+void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
+int64_t get_sparse_limit(int64_t size);
+std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
+
+bool is_retrofit_device();
+bool is_logical(const std::string& partition);
+void fb_perform_format(const std::string& partition, int skip_if_not_supported,
+                       const std::string& type_override, const std::string& size_override,
+                       const unsigned fs_options);

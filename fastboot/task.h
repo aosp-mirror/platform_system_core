@@ -20,6 +20,8 @@
 
 #include "fastboot.h"
 #include "fastboot_driver.h"
+#include "super_flash_helper.h"
+#include "util.h"
 
 class Task {
   public:
@@ -30,11 +32,10 @@ class Task {
 
 class FlashTask : public Task {
   public:
-    FlashTask(const std::string& _slot, const std::string& _pname);
-    FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname);
+    FlashTask(const std::string& slot, const std::string& pname);
+    FlashTask(const std::string& slot, const std::string& pname, const std::string& fname);
 
     void Run() override;
-    ~FlashTask() {}
 
   private:
     const std::string pname_;
@@ -44,12 +45,68 @@ class FlashTask : public Task {
 
 class RebootTask : public Task {
   public:
-    RebootTask(FlashingPlan* _fp);
-    RebootTask(FlashingPlan* _fp, const std::string& _reboot_target);
+    RebootTask(FlashingPlan* fp);
+    RebootTask(FlashingPlan* fp, const std::string& reboot_target);
     void Run() override;
-    ~RebootTask() {}
 
   private:
     const std::string reboot_target_ = "";
-    FlashingPlan* fp_;
+    const FlashingPlan* fp_;
+};
+
+class FlashSuperLayoutTask : public Task {
+  public:
+    FlashSuperLayoutTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
+                         SparsePtr sparse_layout);
+    static std::unique_ptr<FlashSuperLayoutTask> Initialize(FlashingPlan* fp,
+                                                            std::vector<ImageEntry>& os_images);
+    using ImageEntry = std::pair<const Image*, std::string>;
+    void Run() override;
+
+  private:
+    const std::string super_name_;
+    std::unique_ptr<SuperFlashHelper> helper_;
+    SparsePtr sparse_layout_;
+};
+
+class UpdateSuperTask : public Task {
+  public:
+    UpdateSuperTask(FlashingPlan* fp);
+    void Run() override;
+
+  private:
+    const FlashingPlan* fp_;
+};
+
+class ResizeTask : public Task {
+  public:
+    ResizeTask(FlashingPlan* fp, const std::string& pname, const std::string& size,
+               const std::string& slot);
+    void Run() override;
+
+  private:
+    const FlashingPlan* fp_;
+    const std::string pname_;
+    const std::string size_;
+    const std::string slot_;
+};
+
+class DeleteTask : public Task {
+  public:
+    DeleteTask(FlashingPlan* _fp, const std::string& _pname);
+    void Run() override;
+
+  private:
+    const FlashingPlan* fp_;
+    const std::string pname_;
+};
+
+class WipeTask : public Task {
+  public:
+    WipeTask(FlashingPlan* fp, const std::string& pname);
+    void Run() override;
+
+  private:
+    const FlashingPlan* fp_;
+    const std::string pname_;
 };
