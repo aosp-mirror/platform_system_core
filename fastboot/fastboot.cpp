@@ -1830,9 +1830,9 @@ static unsigned fb_get_flash_block_size(std::string name) {
     return size;
 }
 
-static void fb_perform_format(const std::string& partition, int skip_if_not_supported,
-                              const std::string& type_override, const std::string& size_override,
-                              const unsigned fs_options) {
+void fb_perform_format(const std::string& partition, int skip_if_not_supported,
+                       const std::string& type_override, const std::string& size_override,
+                       const unsigned fs_options) {
     std::string partition_type, partition_size;
 
     struct fastboot_buffer buf;
@@ -2026,7 +2026,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     android::base::InitLogging(argv, FastbootLogger, FastbootAborter);
     std::unique_ptr<FlashingPlan> fp = std::make_unique<FlashingPlan>();
 
-    unsigned fs_options = 0;
     int longindex;
     std::string slot_override;
     std::string next_active;
@@ -2080,7 +2079,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else if (name == "force") {
                 fp->force_flash = true;
             } else if (name == "fs-options") {
-                fs_options = ParseFsOption(optarg);
+                fp->fs_options = ParseFsOption(optarg);
             } else if (name == "header-version") {
                 g_boot_img_hdr.header_version = strtoul(optarg, nullptr, 0);
             } else if (name == "dtb") {
@@ -2250,7 +2249,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string partition = next_arg(&args);
 
             auto format = [&](const std::string& partition) {
-                fb_perform_format(partition, 0, type_override, size_override, fs_options);
+                fb_perform_format(partition, 0, type_override, size_override, fp->fs_options);
             };
             do_for_partitions(partition, slot_override, format, true);
         } else if (command == "signature") {
@@ -2407,19 +2406,15 @@ int FastBootTool::Main(int argc, char* argv[]) {
             syntax_error("unknown command %s", command.c_str());
         }
     }
+
     if (fp->wants_wipe) {
         if (fp->force_flash) {
             CancelSnapshotIfNeeded();
         }
         std::vector<std::string> partitions = {"userdata", "cache", "metadata"};
         for (const auto& partition : partitions) {
-            std::string partition_type;
-            if (fb->GetVar("partition-type:" + partition, &partition_type) != fastboot::SUCCESS) {
-                continue;
-            }
-            if (partition_type.empty()) continue;
-            fb->Erase(partition);
-            fb_perform_format(partition, 1, partition_type, "", fs_options);
+            std::unique_ptr<WipeTask> wipe_task = std::make_unique<WipeTask>(fp.get(), partition);
+            wipe_task->Run();
         }
     }
     if (fp->wants_set_active) {

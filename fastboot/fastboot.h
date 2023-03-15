@@ -69,6 +69,7 @@ struct Image {
 using ImageEntry = std::pair<const Image*, std::string>;
 
 struct FlashingPlan {
+    unsigned fs_options = 0;
     // If the image uses the default slot, or the user specified "all", then
     // the paired string will be empty. If the image requests a specific slot
     // (for example, system_other) it is specified instead.
@@ -109,3 +110,6 @@ std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
 
 bool is_retrofit_device();
 bool is_logical(const std::string& partition);
+void fb_perform_format(const std::string& partition, int skip_if_not_supported,
+                       const std::string& type_override, const std::string& size_override,
+                       const unsigned fs_options);
