@@ -11,5 +11,9 @@ crash1:
 
 
 crashnostack:
-	movl $0, %ebp
-	jmp *%ebp
+	.cfi_startproc
+	movl %esp, %eax
+	.cfi_def_cfa_register %eax
+	movl $0, %esp
+	movl (%esp), %ebx
+	.cfi_endproc

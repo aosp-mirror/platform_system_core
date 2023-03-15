@@ -1,6 +1,11 @@
 .globl crash1
 .type crash1, %function
 crash1:
+	.cfi_startproc
+	stp x29, x30, [sp, -16]!
+	.cfi_def_cfa_offset 16
+	.cfi_rel_offset x29, 0
+	.cfi_rel_offset x30, 8
 	ldr x0, =0xa5a50000
 	ldr x1, =0xa5a50001
 	ldr x2, =0xa5a50002
@@ -68,12 +73,17 @@ crash1:
 	mov x30, xzr
 	ldr x30, [x30]
 	b .
+	.cfi_endproc
 
 
 .globl crashnostack
 .type crashnostack, %function
 crashnostack:
+	.cfi_startproc
+	mov x1, sp
+	.cfi_def_cfa_register x1
 	mov x0, xzr
 	add sp, x0, xzr
 	ldr x0, [x0]
 	b .
+	.cfi_endproc
