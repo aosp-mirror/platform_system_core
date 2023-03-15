@@ -502,10 +502,12 @@ cc_defaults {
         "libbase",
         "libcutils",
         "libselinux",
-        "libhidl-gen-utils",
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "libhidl-gen-utils",
     ],
 }
 
