@@ -451,6 +451,14 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
 
 static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
                             int* max_processes) {
+    if (uid < 0) {
+        LOG(ERROR) << __func__ << ": invalid UID " << uid;
+        return -1;
+    }
+    if (initialPid <= 0) {
+        LOG(ERROR) << __func__ << ": invalid PID " << initialPid;
+        return -1;
+    }
     std::string hierarchy_root_path;
     if (CgroupsAvailable()) {
         CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
