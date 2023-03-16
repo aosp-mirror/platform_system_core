@@ -1159,6 +1159,12 @@ static bool has_vbmeta_partition() {
            fb->GetVar("partition-type:vbmeta_b", &partition_type) == fastboot::SUCCESS;
 }
 
+static bool is_vbmeta_partition(const std::string& partition) {
+    return android::base::EndsWith(partition, "vbmeta") ||
+           android::base::EndsWith(partition, "vbmeta_a") ||
+           android::base::EndsWith(partition, "vbmeta_b");
+}
+
 // Note: this only works in userspace fastboot. In the bootloader, use
 // should_flash_in_userspace().
 bool is_logical(const std::string& partition) {
@@ -1251,7 +1257,8 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
     }
 }
 
-static void flash_buf(const std::string& partition, struct fastboot_buffer* buf) {
+static void flash_buf(const std::string& partition, struct fastboot_buffer* buf,
+                      const bool apply_vbmeta) {
     if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
         partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
         partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
@@ -1262,9 +1269,7 @@ static void flash_buf(const std::string& partition, struct fastboot_buffer* buf)
     if (g_disable_verity || g_disable_verification) {
         // The vbmeta partition might have additional prefix if running in virtual machine
         // e.g., guest_vbmeta_a.
-        if (android::base::EndsWith(partition, "vbmeta") ||
-            android::base::EndsWith(partition, "vbmeta_a") ||
-            android::base::EndsWith(partition, "vbmeta_b")) {
+        if (apply_vbmeta) {
             rewrite_vbmeta_buffer(buf, false /* vbmeta_in_boot */);
         } else if (!has_vbmeta_partition() &&
                    (partition == "boot" || partition == "boot_a" || partition == "boot_b")) {
@@ -1499,7 +1504,7 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
     return partition;
 }
 
-void do_flash(const char* pname, const char* fname) {
+void do_flash(const char* pname, const char* fname, const bool apply_vbmeta) {
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
@@ -1510,7 +1515,7 @@ void do_flash(const char* pname, const char* fname) {
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     std::string flash_pname = repack_ramdisk(pname, &buf);
-    flash_buf(flash_pname, &buf);
+    flash_buf(flash_pname, &buf, apply_vbmeta);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
@@ -1729,7 +1734,8 @@ void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastb
         if (is_logical(partition_name)) {
             fb->ResizePartition(partition_name, std::to_string(buf->image_size));
         }
-        flash_buf(partition_name.c_str(), buf);
+
+        flash_buf(partition_name.c_str(), buf, is_vbmeta_partition(partition_name));
     };
     do_for_partitions(image.part_name, slot, flash, false);
 }
@@ -1904,7 +1910,7 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (!load_buf_fd(std::move(fd), &buf)) {
         die("Cannot read image: %s", strerror(errno));
     }
-    flash_buf(partition, &buf);
+    flash_buf(partition, &buf, is_vbmeta_partition(partition));
     return;
 
 failed:
@@ -1974,7 +1980,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
 
         auto image_path = temp_dir.path + "/"s + image_name;
         auto flash = [&](const std::string& partition_name) {
-            do_flash(partition_name.c_str(), image_path.c_str());
+            do_flash(partition_name.c_str(), image_path.c_str(), false);
         };
         do_for_partitions(partition, slot, flash, force_slot);
 
@@ -2295,7 +2301,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fname = find_item(pname);
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
-            FlashTask task(slot_override, pname, fname);
+
+            FlashTask task(slot_override, pname, fname, is_vbmeta_partition(pname));
             task.Run();
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
