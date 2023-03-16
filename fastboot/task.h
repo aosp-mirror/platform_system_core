@@ -32,8 +32,9 @@ class Task {
 
 class FlashTask : public Task {
   public:
-    FlashTask(const std::string& slot, const std::string& pname);
-    FlashTask(const std::string& slot, const std::string& pname, const std::string& fname);
+    FlashTask(const std::string& slot, const std::string& pname, const bool apply_vbmeta);
+    FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
+              const bool apply_vbmeta);
 
     void Run() override;
 
@@ -41,6 +42,7 @@ class FlashTask : public Task {
     const std::string pname_;
     const std::string fname_;
     const std::string slot_;
+    const bool apply_vbmeta_;
 };
 
 class RebootTask : public Task {
