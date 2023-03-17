@@ -88,7 +88,7 @@ char* locale;
 #define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
-#define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
+#define MAX_BATT_LEVEL_WAIT_TIME (5 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME_PROP "ro.product.charger.unplugged_shutdown_time"
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
