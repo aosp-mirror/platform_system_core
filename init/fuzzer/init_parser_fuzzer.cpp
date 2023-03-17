@@ -125,7 +125,7 @@ void InitParserFuzzer::InvokeParser() {
     std::string path = fdp_.ConsumeBool() ? fdp_.PickValueInArray(kValidPaths)
                                           : fdp_.ConsumeRandomLengthString(kMaxBytes);
     parser.ParseConfig(path);
-    parser.ParseConfigFileInsecure(path);
+    parser.ParseConfigFileInsecure(path, false /* follow_symlinks */);
 }
 
 void InitParserFuzzer::Process() {
