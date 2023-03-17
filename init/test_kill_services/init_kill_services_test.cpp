@@ -29,8 +29,8 @@ void ExpectKillingServiceRecovers(const std::string& service_name) {
 
     const std::string initial_pid = GetProperty(pid_prop, "");
 
-    EXPECT_EQ("running", GetProperty(status_prop, "")) << status_prop;
-    EXPECT_NE("", initial_pid) << pid_prop;
+    ASSERT_EQ("running", GetProperty(status_prop, "")) << status_prop;
+    ASSERT_NE("", initial_pid) << pid_prop;
 
     EXPECT_EQ(0, system(("kill -9 " + initial_pid).c_str()));
 
