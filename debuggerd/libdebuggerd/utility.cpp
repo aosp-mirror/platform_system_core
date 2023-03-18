@@ -47,12 +47,7 @@ using android::base::StringPrintf;
 using android::base::unique_fd;
 
 bool is_allowed_in_logcat(enum logtype ltype) {
-  if ((ltype == HEADER)
-   || (ltype == REGISTERS)
-   || (ltype == BACKTRACE)) {
-    return true;
-  }
-  return false;
+  return (ltype == HEADER) || (ltype == REGISTERS) || (ltype == BACKTRACE);
 }
 
 static bool should_write_to_kmsg() {
