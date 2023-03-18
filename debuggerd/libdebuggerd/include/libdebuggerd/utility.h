@@ -51,7 +51,6 @@ enum logtype {
   HEADER,
   THREAD,
   REGISTERS,
-  FP_REGISTERS,
   BACKTRACE,
   MAPS,
   MEMORY,
