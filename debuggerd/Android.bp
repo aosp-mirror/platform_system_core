@@ -368,6 +368,7 @@ cc_binary {
     name: "crash_dump",
     srcs: [
         "crash_dump.cpp",
+        "tombstone_handler.cpp",
         "util.cpp",
     ],
     defaults: ["debuggerd_defaults"],
