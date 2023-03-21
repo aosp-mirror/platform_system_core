@@ -32,7 +32,6 @@ class Task {
 
 class FlashTask : public Task {
   public:
-    FlashTask(const std::string& slot, const std::string& pname, const bool apply_vbmeta);
     FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
               const bool apply_vbmeta);
 
