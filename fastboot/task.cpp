@@ -20,11 +20,6 @@
 #include "super_flash_helper.h"
 
 using namespace std::string_literals;
-
-FlashTask::FlashTask(const std::string& slot, const std::string& pname, const bool apply_vbmeta)
-    : pname_(pname), fname_(find_item(pname)), slot_(slot), apply_vbmeta_(apply_vbmeta) {
-    if (fname_.empty()) die("cannot determine image filename for '%s'", pname_.c_str());
-}
 FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
                      const bool apply_vbmeta)
     : pname_(_pname), fname_(_fname), slot_(_slot), apply_vbmeta_(apply_vbmeta) {}
