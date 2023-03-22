@@ -1202,10 +1202,9 @@ static uint64_t get_partition_size(const std::string& partition) {
 }
 
 static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
-    if (buf->sz < AVB_FOOTER_SIZE) {
+    if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition)) {
         return;
     }
-
     // If overflows and negative, it should be < buf->sz.
     int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
 
@@ -1259,11 +1258,7 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
 
 static void flash_buf(const std::string& partition, struct fastboot_buffer* buf,
                       const bool apply_vbmeta) {
-    if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
-        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
-        partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
-        copy_avb_footer(partition, buf);
-    }
+    copy_avb_footer(partition, buf);
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
@@ -1593,11 +1588,6 @@ class FlashAllTool {
     void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
     void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
 
-    // If the image uses the default slot, or the user specified "all", then
-    // the paired string will be empty. If the image requests a specific slot
-    // (for example, system_other) it is specified instead.
-    using ImageEntry = std::pair<const Image*, std::string>;
-
     std::vector<ImageEntry> boot_images_;
     std::vector<ImageEntry> os_images_;
     FlashingPlan* fp_;
@@ -1626,17 +1616,15 @@ void FlashAllTool::Flash() {
     // or in bootloader fastboot.
     FlashImages(boot_images_);
 
-    auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_);
+    std::vector<std::unique_ptr<Task>> tasks;
 
-    if (flash_super_task) {
-        flash_super_task->Run();
+    if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
+        tasks.emplace_back(std::move(flash_super_task));
     } else {
         // Sync the super partition. This will reboot to userspace fastboot if needed.
-        std::unique_ptr<UpdateSuperTask> update_super_task = std::make_unique<UpdateSuperTask>(fp_);
-        update_super_task->Run();
+        tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
         // Resize any logical partition to 0, so each partition is reset to 0
         // extents, and will achieve more optimal allocation.
-        std::vector<std::unique_ptr<ResizeTask>> resize_tasks;
         for (const auto& [image, slot] : os_images_) {
             // Retrofit devices have two super partitions, named super_a and super_b.
             // On these devices, secondary slots must be flashed as physical
@@ -1646,17 +1634,14 @@ void FlashAllTool::Flash() {
                 std::string partition_name = image->part_name + "_"s + slot;
                 if (image->IsSecondary() && is_logical(partition_name)) {
                     fp_->fb->DeletePartition(partition_name);
-                    std::unique_ptr<DeleteTask> delete_task =
-                            std::make_unique<DeleteTask>(fp_, partition_name);
-                    delete_task->Run();
                 }
+                tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
-            resize_tasks.emplace_back(
-                    std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
+            tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
-        for (auto& i : resize_tasks) {
-            i->Run();
-        }
+    }
+    for (auto& task : tasks) {
+        task->Run();
     }
     FlashImages(os_images_);
 }
