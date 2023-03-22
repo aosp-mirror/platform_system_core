@@ -988,7 +988,7 @@ std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size) {
     }
 
     const int files = sparse_file_resparse(s, max_size, nullptr, 0);
-    if (files < 0) die("Failed to resparse");
+    if (files < 0) die("Failed to compute resparse boundaries");
 
     auto temp = std::make_unique<sparse_file*[]>(files);
     const int rv = sparse_file_resparse(s, max_size, temp.get(), files);
@@ -1057,6 +1057,10 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
 
     if (sparse_file* s = sparse_file_import(fd.get(), false, false)) {
         buf->image_size = sparse_file_len(s, false, false);
+        if (buf->image_size < 0) {
+            LOG(ERROR) << "Could not compute length of sparse file";
+            return false;
+        }
         sparse_file_destroy(s);
     } else {
         buf->image_size = sz;
@@ -1172,15 +1176,6 @@ bool is_logical(const std::string& partition) {
     return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
 }
 
-static std::string fb_fix_numeric_var(std::string var) {
-    // Some bootloaders (angler, for example), send spurious leading whitespace.
-    var = android::base::Trim(var);
-    // Some bootloaders (hammerhead, for example) use implicit hex.
-    // This code used to use strtol with base 16.
-    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
-    return var;
-}
-
 static uint64_t get_partition_size(const std::string& partition) {
     std::string partition_size_str;
     if (fb->GetVar("partition-size:" + partition, &partition_size_str) != fastboot::SUCCESS) {
@@ -1252,6 +1247,9 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
     for (size_t i = 0; i < files.size(); i++) {
         sparse_file* s = files[i].get();
         int64_t sz = sparse_file_len(s, true, false);
+        if (sz < 0) {
+            LOG(FATAL) << "Could not compute length of sparse image for " << partition;
+        }
         fb->FlashPartition(partition, s, sz, i + 1, files.size());
     }
 }
