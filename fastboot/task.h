@@ -58,7 +58,7 @@ class RebootTask : public Task {
 class FlashSuperLayoutTask : public Task {
   public:
     FlashSuperLayoutTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
-                         SparsePtr sparse_layout);
+                         SparsePtr sparse_layout, uint64_t super_size);
     static std::unique_ptr<FlashSuperLayoutTask> Initialize(FlashingPlan* fp,
                                                             std::vector<ImageEntry>& os_images);
     using ImageEntry = std::pair<const Image*, std::string>;
@@ -68,6 +68,7 @@ class FlashSuperLayoutTask : public Task {
     const std::string super_name_;
     std::unique_ptr<SuperFlashHelper> helper_;
     SparsePtr sparse_layout_;
+    uint64_t super_size_;
 };
 
 class UpdateSuperTask : public Task {
