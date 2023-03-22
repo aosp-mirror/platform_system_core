@@ -19,14 +19,12 @@
 #include "filesystem.h"
 #include "super_flash_helper.h"
 
-using namespace std::string_literals;
+#include <android-base/parseint.h>
 
-FlashTask::FlashTask(const std::string& slot, const std::string& pname)
-    : pname_(pname), fname_(find_item(pname)), slot_(slot) {
-    if (fname_.empty()) die("cannot determine image filename for '%s'", pname_.c_str());
-}
-FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname)
-    : pname_(_pname), fname_(_fname), slot_(_slot) {}
+using namespace std::string_literals;
+FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
+                     const bool apply_vbmeta)
+    : pname_(_pname), fname_(_fname), slot_(_slot), apply_vbmeta_(apply_vbmeta) {}
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
@@ -39,7 +37,7 @@ void FlashTask::Run() {
                 "And try again. If you are intentionally trying to "
                 "overwrite a fixed partition, use --force.");
         }
-        do_flash(partition.c_str(), fname_.c_str());
+        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_);
     };
     do_for_partitions(pname_, slot_, flash, true);
 }
@@ -70,14 +68,18 @@ void RebootTask::Run() {
 
 FlashSuperLayoutTask::FlashSuperLayoutTask(const std::string& super_name,
                                            std::unique_ptr<SuperFlashHelper> helper,
-                                           SparsePtr sparse_layout)
+                                           SparsePtr sparse_layout, uint64_t super_size)
     : super_name_(super_name),
       helper_(std::move(helper)),
-      sparse_layout_(std::move(sparse_layout)) {}
+      sparse_layout_(std::move(sparse_layout)),
+      super_size_(super_size) {}
 
 void FlashSuperLayoutTask::Run() {
+    // Use the reported super partition size as the upper limit, rather than
+    // sparse_file_len, which (1) can fail and (2) is kind of expensive, since
+    // it will map in all of the embedded fds.
     std::vector<SparsePtr> files;
-    if (int limit = get_sparse_limit(sparse_file_len(sparse_layout_.get(), false, false))) {
+    if (int limit = get_sparse_limit(super_size_)) {
         files = resparse_file(sparse_layout_.get(), limit);
     } else {
         files.emplace_back(std::move(sparse_layout_));
@@ -111,12 +113,19 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
     if (fp->fb->GetVar("super-partition-name", &super_name) != fastboot::SUCCESS) {
         super_name = "super";
     }
-    std::string partition_size_str;
 
+    uint64_t partition_size;
+    std::string partition_size_str;
     if (fp->fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
         LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
         return nullptr;
     }
+    partition_size_str = fb_fix_numeric_var(partition_size_str);
+    if (!android::base::ParseUint(partition_size_str, &partition_size)) {
+        LOG(VERBOSE) << "Could not parse " << super_name << " size: " << partition_size_str;
+        return nullptr;
+    }
+
     std::unique_ptr<SuperFlashHelper> helper = std::make_unique<SuperFlashHelper>(*fp->source);
     if (!helper->Open(fd)) {
         return nullptr;
@@ -140,7 +149,8 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
     };
     os_images.erase(std::remove_if(os_images.begin(), os_images.end(), remove_if_callback),
                     os_images.end());
-    return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s));
+    return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s),
+                                                  partition_size);
 }
 
 UpdateSuperTask::UpdateSuperTask(FlashingPlan* fp) : fp_(fp) {}

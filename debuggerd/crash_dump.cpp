@@ -59,7 +59,7 @@
 #include "libdebuggerd/utility.h"
 
 #include "debuggerd/handler.h"
-#include "tombstoned/tombstoned.h"
+#include "tombstone_handler.h"
 
 #include "protocol.h"
 #include "util.h"
@@ -215,8 +215,8 @@ static void Initialize(char** argv) {
     // If we abort before we get an output fd, contact tombstoned to let any
     // potential listeners know that we failed.
     if (!g_tombstoned_connected) {
-      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, &g_proto_fd,
-                              kDebuggerdAnyIntercept)) {
+      if (!connect_tombstone_server(g_target_thread, &g_tombstoned_socket, &g_output_fd,
+                                    &g_proto_fd, kDebuggerdAnyIntercept)) {
         // We failed to connect, not much we can do.
         LOG(ERROR) << "failed to connected to tombstoned to report failure";
         _exit(1);
@@ -589,8 +589,8 @@ int main(int argc, char** argv) {
   {
     ATRACE_NAME("tombstoned_connect");
     LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type;
-    g_tombstoned_connected = tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
-                                                &g_proto_fd, dump_type);
+    g_tombstoned_connected = connect_tombstone_server(g_target_thread, &g_tombstoned_socket,
+                                                      &g_output_fd, &g_proto_fd, dump_type);
   }
 
   if (g_tombstoned_connected) {
@@ -673,7 +673,8 @@ int main(int argc, char** argv) {
 
   // Close stdout before we notify tombstoned of completion.
   close(STDOUT_FILENO);
-  if (g_tombstoned_connected && !tombstoned_notify_completion(g_tombstoned_socket.get())) {
+  if (g_tombstoned_connected &&
+      !notify_completion(g_tombstoned_socket.get(), g_output_fd.get(), g_proto_fd.get())) {
     LOG(ERROR) << "failed to notify tombstoned of completion";
   }
 

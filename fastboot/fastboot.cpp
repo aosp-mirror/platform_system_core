@@ -988,7 +988,7 @@ std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size) {
     }
 
     const int files = sparse_file_resparse(s, max_size, nullptr, 0);
-    if (files < 0) die("Failed to resparse");
+    if (files < 0) die("Failed to compute resparse boundaries");
 
     auto temp = std::make_unique<sparse_file*[]>(files);
     const int rv = sparse_file_resparse(s, max_size, temp.get(), files);
@@ -1057,6 +1057,10 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
 
     if (sparse_file* s = sparse_file_import(fd.get(), false, false)) {
         buf->image_size = sparse_file_len(s, false, false);
+        if (buf->image_size < 0) {
+            LOG(ERROR) << "Could not compute length of sparse file";
+            return false;
+        }
         sparse_file_destroy(s);
     } else {
         buf->image_size = sz;
@@ -1159,20 +1163,17 @@ static bool has_vbmeta_partition() {
            fb->GetVar("partition-type:vbmeta_b", &partition_type) == fastboot::SUCCESS;
 }
 
+static bool is_vbmeta_partition(const std::string& partition) {
+    return android::base::EndsWith(partition, "vbmeta") ||
+           android::base::EndsWith(partition, "vbmeta_a") ||
+           android::base::EndsWith(partition, "vbmeta_b");
+}
+
 // Note: this only works in userspace fastboot. In the bootloader, use
 // should_flash_in_userspace().
 bool is_logical(const std::string& partition) {
     std::string value;
     return fb->GetVar("is-logical:" + partition, &value) == fastboot::SUCCESS && value == "yes";
-}
-
-static std::string fb_fix_numeric_var(std::string var) {
-    // Some bootloaders (angler, for example), send spurious leading whitespace.
-    var = android::base::Trim(var);
-    // Some bootloaders (hammerhead, for example) use implicit hex.
-    // This code used to use strtol with base 16.
-    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
-    return var;
 }
 
 static uint64_t get_partition_size(const std::string& partition) {
@@ -1196,10 +1197,9 @@ static uint64_t get_partition_size(const std::string& partition) {
 }
 
 static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
-    if (buf->sz < AVB_FOOTER_SIZE) {
+    if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition)) {
         return;
     }
-
     // If overflows and negative, it should be < buf->sz.
     int64_t partition_size = static_cast<int64_t>(get_partition_size(partition));
 
@@ -1247,24 +1247,22 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
     for (size_t i = 0; i < files.size(); i++) {
         sparse_file* s = files[i].get();
         int64_t sz = sparse_file_len(s, true, false);
+        if (sz < 0) {
+            LOG(FATAL) << "Could not compute length of sparse image for " << partition;
+        }
         fb->FlashPartition(partition, s, sz, i + 1, files.size());
     }
 }
 
-static void flash_buf(const std::string& partition, struct fastboot_buffer* buf) {
-    if (partition == "boot" || partition == "boot_a" || partition == "boot_b" ||
-        partition == "init_boot" || partition == "init_boot_a" || partition == "init_boot_b" ||
-        partition == "recovery" || partition == "recovery_a" || partition == "recovery_b") {
-        copy_avb_footer(partition, buf);
-    }
+static void flash_buf(const std::string& partition, struct fastboot_buffer* buf,
+                      const bool apply_vbmeta) {
+    copy_avb_footer(partition, buf);
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
         // The vbmeta partition might have additional prefix if running in virtual machine
         // e.g., guest_vbmeta_a.
-        if (android::base::EndsWith(partition, "vbmeta") ||
-            android::base::EndsWith(partition, "vbmeta_a") ||
-            android::base::EndsWith(partition, "vbmeta_b")) {
+        if (apply_vbmeta) {
             rewrite_vbmeta_buffer(buf, false /* vbmeta_in_boot */);
         } else if (!has_vbmeta_partition() &&
                    (partition == "boot" || partition == "boot_a" || partition == "boot_b")) {
@@ -1499,7 +1497,7 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
     return partition;
 }
 
-void do_flash(const char* pname, const char* fname) {
+void do_flash(const char* pname, const char* fname, const bool apply_vbmeta) {
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
@@ -1510,7 +1508,7 @@ void do_flash(const char* pname, const char* fname) {
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     std::string flash_pname = repack_ramdisk(pname, &buf);
-    flash_buf(flash_pname, &buf);
+    flash_buf(flash_pname, &buf, apply_vbmeta);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
@@ -1588,11 +1586,6 @@ class FlashAllTool {
     void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
     void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
 
-    // If the image uses the default slot, or the user specified "all", then
-    // the paired string will be empty. If the image requests a specific slot
-    // (for example, system_other) it is specified instead.
-    using ImageEntry = std::pair<const Image*, std::string>;
-
     std::vector<ImageEntry> boot_images_;
     std::vector<ImageEntry> os_images_;
     FlashingPlan* fp_;
@@ -1621,17 +1614,15 @@ void FlashAllTool::Flash() {
     // or in bootloader fastboot.
     FlashImages(boot_images_);
 
-    auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_);
+    std::vector<std::unique_ptr<Task>> tasks;
 
-    if (flash_super_task) {
-        flash_super_task->Run();
+    if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
+        tasks.emplace_back(std::move(flash_super_task));
     } else {
         // Sync the super partition. This will reboot to userspace fastboot if needed.
-        std::unique_ptr<UpdateSuperTask> update_super_task = std::make_unique<UpdateSuperTask>(fp_);
-        update_super_task->Run();
+        tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
         // Resize any logical partition to 0, so each partition is reset to 0
         // extents, and will achieve more optimal allocation.
-        std::vector<std::unique_ptr<ResizeTask>> resize_tasks;
         for (const auto& [image, slot] : os_images_) {
             // Retrofit devices have two super partitions, named super_a and super_b.
             // On these devices, secondary slots must be flashed as physical
@@ -1641,17 +1632,14 @@ void FlashAllTool::Flash() {
                 std::string partition_name = image->part_name + "_"s + slot;
                 if (image->IsSecondary() && is_logical(partition_name)) {
                     fp_->fb->DeletePartition(partition_name);
-                    std::unique_ptr<DeleteTask> delete_task =
-                            std::make_unique<DeleteTask>(fp_, partition_name);
-                    delete_task->Run();
                 }
+                tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
-            resize_tasks.emplace_back(
-                    std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
+            tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
-        for (auto& i : resize_tasks) {
-            i->Run();
-        }
+    }
+    for (auto& task : tasks) {
+        task->Run();
     }
     FlashImages(os_images_);
 }
@@ -1729,7 +1717,8 @@ void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastb
         if (is_logical(partition_name)) {
             fb->ResizePartition(partition_name, std::to_string(buf->image_size));
         }
-        flash_buf(partition_name.c_str(), buf);
+
+        flash_buf(partition_name.c_str(), buf, is_vbmeta_partition(partition_name));
     };
     do_for_partitions(image.part_name, slot, flash, false);
 }
@@ -1904,7 +1893,7 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (!load_buf_fd(std::move(fd), &buf)) {
         die("Cannot read image: %s", strerror(errno));
     }
-    flash_buf(partition, &buf);
+    flash_buf(partition, &buf, is_vbmeta_partition(partition));
     return;
 
 failed:
@@ -1974,7 +1963,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
 
         auto image_path = temp_dir.path + "/"s + image_name;
         auto flash = [&](const std::string& partition_name) {
-            do_flash(partition_name.c_str(), image_path.c_str());
+            do_flash(partition_name.c_str(), image_path.c_str(), false);
         };
         do_for_partitions(partition, slot, flash, force_slot);
 
@@ -2295,7 +2284,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fname = find_item(pname);
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
-            FlashTask task(slot_override, pname, fname);
+
+            FlashTask task(slot_override, pname, fname, is_vbmeta_partition(pname));
             task.Run();
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
