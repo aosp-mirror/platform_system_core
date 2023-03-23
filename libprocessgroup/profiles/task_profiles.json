@@ -457,14 +457,6 @@
       "Name": "LowIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "blkio",
-            "Path": "background"
-          }
-        },
-        {
           "Name": "SetAttribute",
           "Params":
           {
@@ -496,14 +488,6 @@
     {
       "Name": "NormalIoPriority",
       "Actions": [
-        {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "blkio",
-            "Path": ""
-          }
-        },
         {
           "Name": "SetAttribute",
           "Params":
@@ -537,14 +521,6 @@
       "Name": "HighIoPriority",
       "Actions": [
         {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "blkio",
-            "Path": ""
-          }
-        },
-        {
           "Name": "SetAttribute",
           "Params":
           {
@@ -576,14 +552,6 @@
     {
       "Name": "MaxIoPriority",
       "Actions": [
-        {
-          "Name": "JoinCgroup",
-          "Params":
-          {
-            "Controller": "blkio",
-            "Path": ""
-          }
-        },
         {
           "Name": "SetAttribute",
           "Params":
