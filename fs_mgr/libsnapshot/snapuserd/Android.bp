@@ -62,6 +62,7 @@ cc_library_static {
         "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
         "snapuserd_buffer.cpp",
+        "user-space-merge/handler_manager.cpp",
         "user-space-merge/snapuserd_core.cpp",
         "user-space-merge/snapuserd_dm_user.cpp",
         "user-space-merge/snapuserd_merge.cpp",
