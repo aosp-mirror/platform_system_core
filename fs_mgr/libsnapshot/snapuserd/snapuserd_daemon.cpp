@@ -114,7 +114,7 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
             return false;
         }
         auto handler = user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3]);
-        if (!handler || !user_server_.StartHandler(handler)) {
+        if (!handler || !user_server_.StartHandler(parts[0])) {
             return false;
         }
     }
