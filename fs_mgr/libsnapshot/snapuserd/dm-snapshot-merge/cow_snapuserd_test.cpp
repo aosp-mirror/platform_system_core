@@ -1152,35 +1152,6 @@ void CowSnapuserdMetadataTest::ValidateMetadata() {
     }
 }
 
-TEST(Snapuserd_Test, xor_buffer) {
-    std::string data = "Test String";
-    std::string jumbled = {0x0C, 0x2A, 0x21, 0x54, 0x73, 0x27, 0x06, 0x1B, 0x07, 0x09, 0x46};
-    std::string result = "XOR String!";
-
-    BufferSink sink;
-    XorSink xor_sink;
-    sink.Initialize(sizeof(struct dm_user_header) + 10);
-    int buffsize = 5;
-    xor_sink.Initialize(&sink, buffsize);
-
-    void* buff = sink.GetPayloadBuffer(data.length());
-    memcpy(buff, data.data(), data.length());
-
-    size_t actual;
-    size_t count = 0;
-    while (count < data.length()) {
-        void* xor_buff = xor_sink.GetBuffer(10, &actual);
-        ASSERT_EQ(actual, buffsize);
-        ASSERT_NE(xor_buff, nullptr);
-        memcpy(xor_buff, jumbled.data() + count, buffsize);
-        xor_sink.ReturnData(xor_buff, actual);
-        count += actual;
-    }
-
-    std::string answer = reinterpret_cast<char*>(sink.GetPayloadBufPtr());
-    ASSERT_EQ(answer, result);
-}
-
 TEST(Snapuserd_Test, Snapshot_Metadata) {
     CowSnapuserdMetadataTest harness;
     harness.Setup();

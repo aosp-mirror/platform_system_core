@@ -350,7 +350,7 @@ bool Snapuserd::ReadMetadata() {
     CowHeader header;
     CowOptions options;
     bool metadata_found = false;
-    int replace_ops = 0, zero_ops = 0, copy_ops = 0, xor_ops = 0;
+    int replace_ops = 0, zero_ops = 0, copy_ops = 0;
 
     SNAP_LOG(DEBUG) << "ReadMetadata: Parsing cow file";
 
@@ -515,10 +515,6 @@ bool Snapuserd::ReadMetadata() {
             //===========================================================
             uint64_t block_source = cow_op->source;
             uint64_t block_offset = 0;
-            if (cow_op->type == kCowXorOp) {
-                block_source /= BLOCK_SZ;
-                block_offset = cow_op->source % BLOCK_SZ;
-            }
             if (prev_id.has_value()) {
                 if (dest_blocks.count(cow_op->new_block) || source_blocks.count(block_source) ||
                     (block_offset > 0 && source_blocks.count(block_source + 1))) {
@@ -538,7 +534,7 @@ bool Snapuserd::ReadMetadata() {
         } while (!cowop_rm_iter->Done() && pending_ordered_ops);
 
         data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
-        SNAP_LOG(DEBUG) << "Batch Merge copy-ops/xor-ops of size: " << vec.size()
+        SNAP_LOG(DEBUG) << "Batch Merge copy-ops of size: " << vec.size()
                         << " Area: " << vec_.size() << " Area offset: " << offset
                         << " Pending-ordered-ops in this area: " << pending_ordered_ops;
 
@@ -556,8 +552,6 @@ bool Snapuserd::ReadMetadata() {
             num_ops += 1;
             if (cow_op->type == kCowCopyOp) {
                 copy_ops++;
-            } else {  // it->second->type == kCowXorOp
-                xor_ops++;
             }
 
             if (read_ahead_feature_) {
@@ -629,8 +623,8 @@ bool Snapuserd::ReadMetadata() {
     SNAP_LOG(INFO) << "ReadMetadata completed. Final-chunk-id: " << data_chunk_id
                    << " Num Sector: " << ChunkToSector(data_chunk_id)
                    << " Replace-ops: " << replace_ops << " Zero-ops: " << zero_ops
-                   << " Copy-ops: " << copy_ops << " Xor-ops: " << xor_ops
-                   << " Areas: " << vec_.size() << " Num-ops-merged: " << header.num_merge_ops
+                   << " Copy-ops: " << copy_ops << " Areas: " << vec_.size()
+                   << " Num-ops-merged: " << header.num_merge_ops
                    << " Total-data-ops: " << reader_->get_num_total_data_ops();
 
     // Total number of sectors required for creating dm-user device

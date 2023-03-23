@@ -174,10 +174,6 @@ ReadAheadThread::ReadAheadThread(const std::string& cow_device, const std::strin
 void ReadAheadThread::CheckOverlap(const CowOperation* cow_op) {
     uint64_t source_block = cow_op->source;
     uint64_t source_offset = 0;
-    if (cow_op->type == kCowXorOp) {
-        source_block /= BLOCK_SZ;
-        source_offset = cow_op->source % BLOCK_SZ;
-    }
     if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block) ||
         (source_offset > 0 && source_blocks_.count(source_block + 1))) {
         overlap_ = true;
