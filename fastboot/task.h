@@ -32,8 +32,8 @@ class Task {
 
 class FlashTask : public Task {
   public:
-    FlashTask(const std::string& slot, const std::string& pname);
-    FlashTask(const std::string& slot, const std::string& pname, const std::string& fname);
+    FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
+              const bool apply_vbmeta);
 
     void Run() override;
 
@@ -41,6 +41,7 @@ class FlashTask : public Task {
     const std::string pname_;
     const std::string fname_;
     const std::string slot_;
+    const bool apply_vbmeta_;
 };
 
 class RebootTask : public Task {
@@ -57,7 +58,7 @@ class RebootTask : public Task {
 class FlashSuperLayoutTask : public Task {
   public:
     FlashSuperLayoutTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
-                         SparsePtr sparse_layout);
+                         SparsePtr sparse_layout, uint64_t super_size);
     static std::unique_ptr<FlashSuperLayoutTask> Initialize(FlashingPlan* fp,
                                                             std::vector<ImageEntry>& os_images);
     using ImageEntry = std::pair<const Image*, std::string>;
@@ -67,6 +68,7 @@ class FlashSuperLayoutTask : public Task {
     const std::string super_name_;
     std::unique_ptr<SuperFlashHelper> helper_;
     SparsePtr sparse_layout_;
+    uint64_t super_size_;
 };
 
 class UpdateSuperTask : public Task {
