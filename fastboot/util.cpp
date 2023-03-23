@@ -33,6 +33,9 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#include <android-base/parseint.h>
+#include <android-base/strings.h>
+
 #include "util.h"
 
 using android::base::borrowed_fd;
@@ -105,4 +108,13 @@ int64_t get_file_size(borrowed_fd fd) {
         die("could not get file size");
     }
     return sb.st_size;
+}
+
+std::string fb_fix_numeric_var(std::string var) {
+    // Some bootloaders (angler, for example), send spurious leading whitespace.
+    var = android::base::Trim(var);
+    // Some bootloaders (hammerhead, for example) use implicit hex.
+    // This code used to use strtol with base 16.
+    if (!android::base::StartsWith(var, "0x")) var = "0x" + var;
+    return var;
 }
