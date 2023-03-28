@@ -71,5 +71,10 @@ void Histogram::logSample(float sample) const {
     stats_write(EXPRESS_HISTOGRAM_SAMPLE_REPORTED, mMetricIdHash, /*count*/ 1, binIndex);
 }
 
+void Histogram::logSampleWithUid(int32_t uid, float sample) const {
+    const int binIndex = mBinOptions->getBinForSample(sample);
+    stats_write(EXPRESS_UID_HISTOGRAM_SAMPLE_REPORTED, mMetricIdHash, /*count*/ 1, binIndex, uid);
+}
+
 }  // namespace expresslog
 }  // namespace android
