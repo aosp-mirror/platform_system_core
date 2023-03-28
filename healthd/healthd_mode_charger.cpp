@@ -620,6 +620,18 @@ void Charger::OnHealthInfoChanged(const ChargerHealthInfo& health_info) {
         kick_animation(&batt_anim_);
     }
     health_info_ = health_info;
+
+    if (property_get_bool("ro.charger_mode_autoboot", false)) {
+        if (health_info_.battery_level >= boot_min_cap_) {
+            if (property_get_bool("ro.enable_boot_charger_mode", false)) {
+                LOGW("booting from charger mode\n");
+                property_set("sys.boot_from_charger_mode", "1");
+            } else {
+                LOGW("Battery SOC = %d%%, Automatically rebooting\n", health_info_.battery_level);
+                reboot(RB_AUTOBOOT);
+            }
+        }
+    }
 }
 
 int Charger::OnPrepareToWait(void) {
