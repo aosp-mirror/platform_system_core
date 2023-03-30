@@ -201,9 +201,13 @@ WipeTask::WipeTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_
 void WipeTask::Run() {
     std::string partition_type;
     if (fp_->fb->GetVar("partition-type:" + pname_, &partition_type) != fastboot::SUCCESS) {
+        LOG(ERROR) << "wipe task partition not found: " << pname_;
         return;
     }
     if (partition_type.empty()) return;
-    fp_->fb->Erase(pname_);
+    if (fp_->fb->Erase(pname_) != fastboot::SUCCESS) {
+        LOG(ERROR) << "wipe task erase failed with partition: " << pname_;
+        return;
+    }
     fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options);
 }
