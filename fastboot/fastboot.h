@@ -32,6 +32,7 @@
 #include "fastboot_driver_interface.h"
 #include "filesystem.h"
 #include "super_flash_helper.h"
+#include "task.h"
 #include "util.h"
 
 #include <bootimg.h>
@@ -130,6 +131,19 @@ std::string find_item(const std::string& item);
 void reboot_to_userspace_fastboot();
 void syntax_error(const char* fmt, ...);
 std::string get_current_slot();
+
+// Code for Parsing fastboot-info.txt
+std::unique_ptr<FlashTask> ParseFlashCommand(const FlashingPlan* fp,
+                                             const std::vector<std::string>& parts);
+std::unique_ptr<RebootTask> ParseRebootCommand(const FlashingPlan* fp,
+                                               const std::vector<std::string>& parts);
+std::unique_ptr<WipeTask> ParseWipeCommand(const FlashingPlan* fp,
+                                           const std::vector<std::string>& parts);
+std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
+                                            const std::vector<std::string>& command);
+void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
+std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
+                                                     const std::vector<std::string>& file);
 
 struct NetworkSerial {
     Socket::Protocol protocol;
