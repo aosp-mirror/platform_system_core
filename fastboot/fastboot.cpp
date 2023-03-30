@@ -1197,7 +1197,8 @@ static uint64_t get_partition_size(const std::string& partition) {
 }
 
 static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
-    if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition)) {
+    if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition) ||
+        should_flash_in_userspace(partition)) {
         return;
     }
     // If overflows and negative, it should be < buf->sz.
