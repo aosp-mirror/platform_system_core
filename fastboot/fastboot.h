@@ -80,8 +80,7 @@ struct FlashingPlan {
     bool skip_secondary = false;
     bool force_flash = false;
 
-    std::string slot;
-    std::string current_slot;
+    std::string slot_override;
     std::string secondary_slot;
     fastboot::FastBootDriver* fb;
 };
@@ -103,7 +102,7 @@ struct NetworkSerial {
 
 Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
 bool supports_AB();
-std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot_);
+std::string GetPartitionName(const ImageEntry& entry);
 void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
 int64_t get_sparse_limit(int64_t size);
 std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
