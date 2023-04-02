@@ -164,7 +164,8 @@ noinline void fprintf_null() {
 }
 
 noinline void readdir_null() {
-    readdir(nullptr);
+    DIR* sneaky_null = nullptr;
+    readdir(sneaky_null);
 }
 
 noinline int strlen_null() {
