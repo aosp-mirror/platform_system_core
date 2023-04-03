@@ -1560,10 +1560,10 @@ static void CancelSnapshotIfNeeded() {
     }
 }
 
-std::string GetPartitionName(const ImageEntry& entry) {
+std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot) {
     auto slot = entry.second;
     if (slot.empty()) {
-        slot = get_current_slot();
+        slot = current_slot;
     }
     if (slot.empty()) {
         return entry.first->part_name;
@@ -1582,7 +1582,7 @@ class FlashAllTool {
 
   private:
     void CheckRequirements();
-    void DetermineSecondarySlot();
+    void DetermineSlot();
     void CollectImages();
     void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
     void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
@@ -1600,13 +1600,15 @@ void FlashAllTool::Flash() {
 
     // Change the slot first, so we boot into the correct recovery image when
     // using fastbootd.
-    if (fp_->slot_override == "all") {
+    if (fp_->slot == "all") {
         set_active("a");
     } else {
-        set_active(fp_->slot_override);
+        set_active(fp_->slot);
     }
 
-    DetermineSecondarySlot();
+    DetermineSlot();
+    CollectImages();
+
     CancelSnapshotIfNeeded();
 
     // First flash boot partitions. We allow this to happen either in userspace
@@ -1651,12 +1653,18 @@ void FlashAllTool::CheckRequirements() {
     ::CheckRequirements({contents.data(), contents.size()}, fp_->force_flash);
 }
 
-void FlashAllTool::DetermineSecondarySlot() {
+void FlashAllTool::DetermineSlot() {
+    if (fp_->slot.empty()) {
+        fp_->current_slot = get_current_slot();
+    } else {
+        fp_->current_slot = fp_->slot;
+    }
+
     if (fp_->skip_secondary) {
         return;
     }
-    if (fp_->slot_override != "" && fp_->slot_override != "all") {
-        fp_->secondary_slot = get_other_slot(fp_->slot_override);
+    if (fp_->slot != "" && fp_->slot != "all") {
+        fp_->secondary_slot = get_other_slot(fp_->slot);
     } else {
         fp_->secondary_slot = get_other_slot();
     }
@@ -1670,7 +1678,7 @@ void FlashAllTool::DetermineSecondarySlot() {
 
 void FlashAllTool::CollectImages() {
     for (size_t i = 0; i < images.size(); ++i) {
-        std::string slot = fp_->slot_override;
+        std::string slot = fp_->slot;
         if (images[i].IsSecondary()) {
             if (fp_->skip_secondary) {
                 continue;
