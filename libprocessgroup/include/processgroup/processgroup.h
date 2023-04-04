@@ -76,6 +76,11 @@ int killProcessGroup(uid_t uid, int initialPid, int signal, int* max_processes =
 // that it only returns 0 in the case that the cgroup exists and it contains no processes.
 int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_processes = nullptr);
 
+// Sends the provided signal to all members of a process group, but does not wait for processes to
+// exit, or for the cgroup to be removed. Callers should also ensure that killProcessGroup is called
+// later to ensure the cgroup is fully removed, otherwise system resources may leak.
+int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal);
+
 int createProcessGroup(uid_t uid, int initialPid, bool memControl = false);
 
 // Set various properties of a process group. For these functions to work, the process group must
