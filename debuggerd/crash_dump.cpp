@@ -59,7 +59,7 @@
 #include "libdebuggerd/utility.h"
 
 #include "debuggerd/handler.h"
-#include "tombstoned/tombstoned.h"
+#include "tombstone_handler.h"
 
 #include "protocol.h"
 #include "util.h"
@@ -142,7 +142,8 @@ static bool ptrace_interrupt(pid_t tid, int* received_signal) {
   return false;
 }
 
-static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data) {
+static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data,
+                                    bool recoverable_gwp_asan_crash) {
   ATRACE_CALL();
   android::base::unique_fd amfd(socket_local_client(
       "/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
@@ -165,19 +166,32 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
     return false;
   }
 
-  // Activity Manager protocol: binary 32-bit network-byte-order ints for the
-  // pid and signal number, followed by the raw text of the dump, culminating
-  // in a zero byte that marks end-of-data.
+  // Activity Manager protocol:
+  //  - 32-bit network-byte-order: pid
+  //  - 32-bit network-byte-order: signal number
+  //  - byte: recoverable_gwp_asan_crash
+  //  - bytes: raw text of the dump
+  //  - null terminator
+
   uint32_t datum = htonl(pid);
-  if (!android::base::WriteFully(amfd, &datum, 4)) {
+  if (!android::base::WriteFully(amfd, &datum, sizeof(datum))) {
     PLOG(ERROR) << "AM pid write failed";
     return false;
   }
+
   datum = htonl(signal);
-  if (!android::base::WriteFully(amfd, &datum, 4)) {
-    PLOG(ERROR) << "AM signal write failed";
+  if (!android::base::WriteFully(amfd, &datum, sizeof(datum))) {
+    PLOG(ERROR) << "AM signo write failed";
     return false;
   }
+
+  uint8_t recoverable_gwp_asan_crash_byte = recoverable_gwp_asan_crash ? 1 : 0;
+  if (!android::base::WriteFully(amfd, &recoverable_gwp_asan_crash_byte,
+                                 sizeof(recoverable_gwp_asan_crash_byte))) {
+    PLOG(ERROR) << "AM recoverable_gwp_asan_crash_byte write failed";
+    return false;
+  }
+
   if (!android::base::WriteFully(amfd, amfd_data.c_str(), amfd_data.size() + 1)) {
     PLOG(ERROR) << "AM data write failed";
     return false;
@@ -215,8 +229,8 @@ static void Initialize(char** argv) {
     // If we abort before we get an output fd, contact tombstoned to let any
     // potential listeners know that we failed.
     if (!g_tombstoned_connected) {
-      if (!tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd, &g_proto_fd,
-                              kDebuggerdAnyIntercept)) {
+      if (!connect_tombstone_server(g_target_thread, &g_tombstoned_socket, &g_output_fd,
+                                    &g_proto_fd, kDebuggerdAnyIntercept)) {
         // We failed to connect, not much we can do.
         LOG(ERROR) << "failed to connected to tombstoned to report failure";
         _exit(1);
@@ -589,8 +603,8 @@ int main(int argc, char** argv) {
   {
     ATRACE_NAME("tombstoned_connect");
     LOG(INFO) << "obtaining output fd from tombstoned, type: " << dump_type;
-    g_tombstoned_connected = tombstoned_connect(g_target_thread, &g_tombstoned_socket, &g_output_fd,
-                                                &g_proto_fd, dump_type);
+    g_tombstoned_connected = connect_tombstone_server(g_target_thread, &g_tombstoned_socket,
+                                                      &g_output_fd, &g_proto_fd, dump_type);
   }
 
   if (g_tombstoned_connected) {
@@ -651,10 +665,10 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (fatal_signal && !recoverable_gwp_asan_crash) {
+  if (fatal_signal) {
     // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
     if (thread_info[target_process].thread_name != "system_server") {
-      activity_manager_notify(target_process, signo, amfd_data);
+      activity_manager_notify(target_process, signo, amfd_data, recoverable_gwp_asan_crash);
     }
   }
 
@@ -673,7 +687,8 @@ int main(int argc, char** argv) {
 
   // Close stdout before we notify tombstoned of completion.
   close(STDOUT_FILENO);
-  if (g_tombstoned_connected && !tombstoned_notify_completion(g_tombstoned_socket.get())) {
+  if (g_tombstoned_connected &&
+      !notify_completion(g_tombstoned_socket.get(), g_output_fd.get(), g_proto_fd.get())) {
     LOG(ERROR) << "failed to notify tombstoned of completion";
   }
 
