@@ -45,28 +45,9 @@ using namespace std::string_literals;
 using android::base::borrowed_fd;
 using android::base::unique_fd;
 
-DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
-    if (input == "init") return DaemonOps::INIT;
-    if (input == "start") return DaemonOps::START;
-    if (input == "stop") return DaemonOps::STOP;
-    if (input == "query") return DaemonOps::QUERY;
-    if (input == "delete") return DaemonOps::DELETE;
-    if (input == "detach") return DaemonOps::DETACH;
-    if (input == "supports") return DaemonOps::SUPPORTS;
-    if (input == "initiate_merge") return DaemonOps::INITIATE;
-    if (input == "merge_percent") return DaemonOps::PERCENTAGE;
-    if (input == "getstatus") return DaemonOps::GETSTATUS;
-    if (input == "update-verify") return DaemonOps::UPDATE_VERIFY;
-
-    return DaemonOps::INVALID;
-}
-
 UserSnapshotServer::UserSnapshotServer() {
-    monitor_merge_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
-    if (monitor_merge_event_fd_ == -1) {
-        PLOG(FATAL) << "monitor_merge_event_fd_: failed to create eventfd";
-    }
     terminating_ = false;
+    handlers_ = std::make_unique<SnapshotHandlerManager>();
 }
 
 UserSnapshotServer::~UserSnapshotServer() {
@@ -99,7 +80,7 @@ void UserSnapshotServer::Parsemsg(std::string const& msg, const char delim,
 
 void UserSnapshotServer::ShutdownThreads() {
     terminating_ = true;
-    JoinAllThreads();
+    handlers_->JoinAllThreads();
 }
 
 HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
@@ -135,226 +116,118 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
 
     std::vector<std::string> out;
     Parsemsg(str, delim, out);
-    DaemonOps op = Resolveop(out[0]);
 
-    switch (op) {
-        case DaemonOps::INIT: {
-            // Message format:
-            // init,<misc_name>,<cow_device_path>,<backing_device>,<base_path_merge>
-            //
-            // Reads the metadata and send the number of sectors
-            if (out.size() != 5) {
-                LOG(ERROR) << "Malformed init message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-
-            auto handler = AddHandler(out[1], out[2], out[3], out[4]);
-            if (!handler) {
-                return Sendmsg(fd, "fail");
-            }
-
-            auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
-            return Sendmsg(fd, retval);
-        }
-        case DaemonOps::START: {
-            // Message format:
-            // start,<misc_name>
-            //
-            // Start the new thread which binds to dm-user misc device
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed start message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-
-            std::lock_guard<std::mutex> lock(lock_);
-            auto iter = FindHandler(&lock, out[1]);
-            if (iter == dm_users_.end()) {
-                LOG(ERROR) << "Could not find handler: " << out[1];
-                return Sendmsg(fd, "fail");
-            }
-            if (!(*iter)->snapuserd() || (*iter)->snapuserd()->IsAttached()) {
-                LOG(ERROR) << "Tried to re-attach control device: " << out[1];
-                return Sendmsg(fd, "fail");
-            }
-            if (!StartHandler(*iter)) {
-                return Sendmsg(fd, "fail");
-            }
-            return Sendmsg(fd, "success");
-        }
-        case DaemonOps::STOP: {
-            // Message format: stop
-            //
-            // Stop all the threads gracefully and then shutdown the
-            // main thread
-            SetTerminating();
-            ShutdownThreads();
-            return true;
-        }
-        case DaemonOps::QUERY: {
-            // Message format: query
-            //
-            // As part of transition, Second stage daemon will be
-            // created before terminating the first stage daemon. Hence,
-            // for a brief period client may have to distiguish between
-            // first stage daemon and second stage daemon.
-            //
-            // Second stage daemon is marked as active and hence will
-            // be ready to receive control message.
-            return Sendmsg(fd, GetDaemonStatus());
-        }
-        case DaemonOps::DELETE: {
-            // Message format:
-            // delete,<misc_name>
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            {
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = FindHandler(&lock, out[1]);
-                if (iter == dm_users_.end()) {
-                    // After merge is completed, we swap dm-user table with
-                    // the underlying dm-linear base device. Hence, worker
-                    // threads would have terminted and was removed from
-                    // the list.
-                    LOG(DEBUG) << "Could not find handler: " << out[1];
-                    return Sendmsg(fd, "success");
-                }
-
-                if (!(*iter)->ThreadTerminated()) {
-                    (*iter)->snapuserd()->NotifyIOTerminated();
-                }
-            }
-            if (!RemoveAndJoinHandler(out[1])) {
-                return Sendmsg(fd, "fail");
-            }
-            return Sendmsg(fd, "success");
-        }
-        case DaemonOps::DETACH: {
-            std::lock_guard<std::mutex> lock(lock_);
-            TerminateMergeThreads(&lock);
-            terminating_ = true;
-            return true;
-        }
-        case DaemonOps::SUPPORTS: {
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed supports message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            if (out[1] == "second_stage_socket_handoff") {
-                return Sendmsg(fd, "success");
-            }
+    const auto& cmd = out[0];
+    if (cmd == "init") {
+        // Message format:
+        // init,<misc_name>,<cow_device_path>,<backing_device>,<base_path_merge>
+        //
+        // Reads the metadata and send the number of sectors
+        if (out.size() != 5) {
+            LOG(ERROR) << "Malformed init message, " << out.size() << " parts";
             return Sendmsg(fd, "fail");
         }
-        case DaemonOps::INITIATE: {
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed initiate-merge message, " << out.size() << " parts";
-                return Sendmsg(fd, "fail");
-            }
-            if (out[0] == "initiate_merge") {
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = FindHandler(&lock, out[1]);
-                if (iter == dm_users_.end()) {
-                    LOG(ERROR) << "Could not find handler: " << out[1];
-                    return Sendmsg(fd, "fail");
-                }
 
-                if (!StartMerge(&lock, *iter)) {
-                    return Sendmsg(fd, "fail");
-                }
-
-                return Sendmsg(fd, "success");
-            }
+        auto handler = AddHandler(out[1], out[2], out[3], out[4]);
+        if (!handler) {
             return Sendmsg(fd, "fail");
         }
-        case DaemonOps::PERCENTAGE: {
-            std::lock_guard<std::mutex> lock(lock_);
-            double percentage = GetMergePercentage(&lock);
 
-            return Sendmsg(fd, std::to_string(percentage));
+        auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
+        return Sendmsg(fd, retval);
+    } else if (cmd == "start") {
+        // Message format:
+        // start,<misc_name>
+        //
+        // Start the new thread which binds to dm-user misc device
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed start message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
         }
-        case DaemonOps::GETSTATUS: {
-            // Message format:
-            // getstatus,<misc_name>
-            if (out.size() != 2) {
-                LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
-                return Sendmsg(fd, "snapshot-merge-failed");
-            }
-            {
-                std::lock_guard<std::mutex> lock(lock_);
-                auto iter = FindHandler(&lock, out[1]);
-                if (iter == dm_users_.end()) {
-                    LOG(ERROR) << "Could not find handler: " << out[1];
-                    return Sendmsg(fd, "snapshot-merge-failed");
-                }
 
-                std::string merge_status = GetMergeStatus(*iter);
-                return Sendmsg(fd, merge_status);
-            }
+        if (!handlers_->StartHandler(out[1])) {
+            return Sendmsg(fd, "fail");
         }
-        case DaemonOps::UPDATE_VERIFY: {
-            std::lock_guard<std::mutex> lock(lock_);
-            if (!UpdateVerification(&lock)) {
-                return Sendmsg(fd, "fail");
-            }
-
+        return Sendmsg(fd, "success");
+    } else if (cmd == "stop") {
+        // Message format: stop
+        //
+        // Stop all the threads gracefully and then shutdown the
+        // main thread
+        SetTerminating();
+        ShutdownThreads();
+        return true;
+    } else if (cmd == "query") {
+        // Message format: query
+        //
+        // As part of transition, Second stage daemon will be
+        // created before terminating the first stage daemon. Hence,
+        // for a brief period client may have to distiguish between
+        // first stage daemon and second stage daemon.
+        //
+        // Second stage daemon is marked as active and hence will
+        // be ready to receive control message.
+        return Sendmsg(fd, GetDaemonStatus());
+    } else if (cmd == "delete") {
+        // Message format:
+        // delete,<misc_name>
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
+        }
+        if (!handlers_->DeleteHandler(out[1])) {
+            return Sendmsg(fd, "fail");
+        }
+        return Sendmsg(fd, "success");
+    } else if (cmd == "detach") {
+        handlers_->TerminateMergeThreads();
+        terminating_ = true;
+        return true;
+    } else if (cmd == "supports") {
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed supports message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
+        }
+        if (out[1] == "second_stage_socket_handoff") {
             return Sendmsg(fd, "success");
         }
-        default: {
-            LOG(ERROR) << "Received unknown message type from client";
-            Sendmsg(fd, "fail");
-            return false;
+        return Sendmsg(fd, "fail");
+    } else if (cmd == "initiate_merge") {
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed initiate-merge message, " << out.size() << " parts";
+            return Sendmsg(fd, "fail");
         }
-    }
-}
-
-void UserSnapshotServer::RunThread(std::shared_ptr<HandlerThread> handler) {
-    LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
-
-    if (!handler->snapuserd()->Start()) {
-        LOG(ERROR) << " Failed to launch all worker threads";
-    }
-
-    handler->snapuserd()->CloseFds();
-    bool merge_completed = handler->snapuserd()->CheckMergeCompletionStatus();
-    handler->snapuserd()->UnmapBufferRegion();
-
-    auto misc_name = handler->misc_name();
-    LOG(INFO) << "Handler thread about to exit: " << misc_name;
-
-    {
-        std::lock_guard<std::mutex> lock(lock_);
-        if (merge_completed) {
-            num_partitions_merge_complete_ += 1;
-            active_merge_threads_ -= 1;
-            WakeupMonitorMergeThread();
+        if (out[0] == "initiate_merge") {
+            if (!handlers_->InitiateMerge(out[1])) {
+                return Sendmsg(fd, "fail");
+            }
+            return Sendmsg(fd, "success");
         }
-        handler->SetThreadTerminated();
-        auto iter = FindHandler(&lock, handler->misc_name());
-        if (iter == dm_users_.end()) {
-            // RemoveAndJoinHandler() already removed us from the list, and is
-            // now waiting on a join(), so just return. Additionally, release
-            // all the resources held by snapuserd object which are shared
-            // by worker threads. This should be done when the last reference
-            // of "handler" is released; but we will explicitly release here
-            // to make sure snapuserd object is freed as it is the biggest
-            // consumer of memory in the daemon.
-            handler->FreeResources();
-            LOG(INFO) << "Exiting handler thread to allow for join: " << misc_name;
-            return;
+        return Sendmsg(fd, "fail");
+    } else if (cmd == "merge_percent") {
+        double percentage = handlers_->GetMergePercentage();
+        return Sendmsg(fd, std::to_string(percentage));
+    } else if (cmd == "getstatus") {
+        // Message format:
+        // getstatus,<misc_name>
+        if (out.size() != 2) {
+            LOG(ERROR) << "Malformed delete message, " << out.size() << " parts";
+            return Sendmsg(fd, "snapshot-merge-failed");
         }
-
-        LOG(INFO) << "Exiting handler thread and freeing resources: " << misc_name;
-
-        if (handler->snapuserd()->IsAttached()) {
-            handler->thread().detach();
+        auto status = handlers_->GetMergeStatus(out[1]);
+        if (status.empty()) {
+            return Sendmsg(fd, "snapshot-merge-failed");
         }
-
-        // Important: free resources within the lock. This ensures that if
-        // WaitForDelete() is called, the handler is either in the list, or
-        // it's not and its resources are guaranteed to be freed.
-        handler->FreeResources();
-        dm_users_.erase(iter);
+        return Sendmsg(fd, status);
+    } else if (cmd == "update-verify") {
+        if (!handlers_->GetVerificationStatus()) {
+            return Sendmsg(fd, "fail");
+        }
+        return Sendmsg(fd, "success");
+    } else {
+        LOG(ERROR) << "Received unknown message type from client";
+        Sendmsg(fd, "fail");
+        return false;
     }
 }
 
@@ -423,26 +296,8 @@ bool UserSnapshotServer::Run() {
         }
     }
 
-    JoinAllThreads();
+    handlers_->JoinAllThreads();
     return true;
-}
-
-void UserSnapshotServer::JoinAllThreads() {
-    // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<HandlerThread>> dm_users;
-    {
-        std::lock_guard<std::mutex> guard(lock_);
-        dm_users = std::move(dm_users_);
-    }
-
-    for (auto& client : dm_users) {
-        auto& th = client->thread();
-
-        if (th.joinable()) th.join();
-    }
-
-    stop_monitor_merge_thread_ = true;
-    WakeupMonitorMergeThread();
 }
 
 void UserSnapshotServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
@@ -506,185 +361,13 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
         perform_verification = false;
     }
 
-    auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge, num_worker_threads,
-                                                       io_uring_enabled_, perform_verification);
-    if (!snapuserd->InitCowDevice()) {
-        LOG(ERROR) << "Failed to initialize Snapuserd";
-        return nullptr;
-    }
-
-    if (!snapuserd->InitializeWorkers()) {
-        LOG(ERROR) << "Failed to initialize workers";
-        return nullptr;
-    }
-
-    auto handler = std::make_shared<HandlerThread>(snapuserd);
-    {
-        std::lock_guard<std::mutex> lock(lock_);
-        if (FindHandler(&lock, misc_name) != dm_users_.end()) {
-            LOG(ERROR) << "Handler already exists: " << misc_name;
-            return nullptr;
-        }
-        dm_users_.push_back(handler);
-    }
-    return handler;
-}
-
-bool UserSnapshotServer::StartHandler(const std::shared_ptr<HandlerThread>& handler) {
-    if (handler->snapuserd()->IsAttached()) {
-        LOG(ERROR) << "Handler already attached";
-        return false;
-    }
-
-    handler->snapuserd()->AttachControlDevice();
-
-    handler->thread() = std::thread(std::bind(&UserSnapshotServer::RunThread, this, handler));
-    return true;
-}
-
-bool UserSnapshotServer::StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
-                                    const std::shared_ptr<HandlerThread>& handler) {
-    CHECK(proof_of_lock);
-
-    if (!handler->snapuserd()->IsAttached()) {
-        LOG(ERROR) << "Handler not attached to dm-user - Merge thread cannot be started";
-        return false;
-    }
-
-    handler->snapuserd()->MonitorMerge();
-
-    if (!is_merge_monitor_started_.has_value()) {
-        std::thread(&UserSnapshotServer::MonitorMerge, this).detach();
-        is_merge_monitor_started_ = true;
-    }
-
-    merge_handlers_.push(handler);
-    WakeupMonitorMergeThread();
-    return true;
-}
-
-auto UserSnapshotServer::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
-                                     const std::string& misc_name) -> HandlerList::iterator {
-    CHECK(proof_of_lock);
-
-    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
-        if ((*iter)->misc_name() == misc_name) {
-            return iter;
-        }
-    }
-    return dm_users_.end();
-}
-
-void UserSnapshotServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of_lock) {
-    CHECK(proof_of_lock);
-
-    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
-        if (!(*iter)->ThreadTerminated()) {
-            (*iter)->snapuserd()->NotifyIOTerminated();
-        }
-    }
-}
-
-std::string UserSnapshotServer::GetMergeStatus(const std::shared_ptr<HandlerThread>& handler) {
-    return handler->snapuserd()->GetMergeStatus();
-}
-
-double UserSnapshotServer::GetMergePercentage(std::lock_guard<std::mutex>* proof_of_lock) {
-    CHECK(proof_of_lock);
-    double percentage = 0.0;
-    int n = 0;
-
-    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
-        auto& th = (*iter)->thread();
-        if (th.joinable()) {
-            // Merge percentage by individual partitions wherein merge is still
-            // in-progress
-            percentage += (*iter)->snapuserd()->GetMergePercentage();
-            n += 1;
-        }
-    }
-
-    // Calculate final merge including those partitions where merge was already
-    // completed - num_partitions_merge_complete_ will track them when each
-    // thread exists in RunThread.
-    int total_partitions = n + num_partitions_merge_complete_;
-
-    if (total_partitions) {
-        percentage = ((num_partitions_merge_complete_ * 100.0) + percentage) / total_partitions;
-    }
-
-    LOG(DEBUG) << "Merge %: " << percentage
-               << " num_partitions_merge_complete_: " << num_partitions_merge_complete_
-               << " total_partitions: " << total_partitions << " n: " << n;
-    return percentage;
-}
-
-bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
-    std::shared_ptr<HandlerThread> handler;
-    {
-        std::lock_guard<std::mutex> lock(lock_);
-
-        auto iter = FindHandler(&lock, misc_name);
-        if (iter == dm_users_.end()) {
-            // Client already deleted.
-            return true;
-        }
-        handler = std::move(*iter);
-        dm_users_.erase(iter);
-    }
-
-    auto& th = handler->thread();
-    if (th.joinable()) {
-        th.join();
-    }
-    return true;
-}
-
-void UserSnapshotServer::WakeupMonitorMergeThread() {
-    uint64_t notify = 1;
-    ssize_t rc = TEMP_FAILURE_RETRY(write(monitor_merge_event_fd_.get(), &notify, sizeof(notify)));
-    if (rc < 0) {
-        PLOG(FATAL) << "failed to notify monitor merge thread";
-    }
-}
-
-void UserSnapshotServer::MonitorMerge() {
-    while (!stop_monitor_merge_thread_) {
-        uint64_t testVal;
-        ssize_t ret =
-                TEMP_FAILURE_RETRY(read(monitor_merge_event_fd_.get(), &testVal, sizeof(testVal)));
-        if (ret == -1) {
-            PLOG(FATAL) << "Failed to read from eventfd";
-        } else if (ret == 0) {
-            LOG(FATAL) << "Hit EOF on eventfd";
-        }
-
-        LOG(INFO) << "MonitorMerge: active-merge-threads: " << active_merge_threads_;
-        {
-            std::lock_guard<std::mutex> lock(lock_);
-            while (active_merge_threads_ < kMaxMergeThreads && merge_handlers_.size() > 0) {
-                auto handler = merge_handlers_.front();
-                merge_handlers_.pop();
-
-                if (!handler->snapuserd()) {
-                    LOG(INFO) << "MonitorMerge: skipping deleted handler: " << handler->misc_name();
-                    continue;
-                }
-
-                LOG(INFO) << "Starting merge for partition: "
-                          << handler->snapuserd()->GetMiscName();
-                handler->snapuserd()->InitiateMerge();
-                active_merge_threads_ += 1;
-            }
-        }
-    }
-
-    LOG(INFO) << "Exiting MonitorMerge: size: " << merge_handlers_.size();
+    return handlers_->AddHandler(misc_name, cow_device_path, backing_device, base_path_merge,
+                                 num_worker_threads, io_uring_enabled_, perform_verification);
 }
 
 bool UserSnapshotServer::WaitForSocket() {
-    auto scope_guard = android::base::make_scope_guard([this]() -> void { JoinAllThreads(); });
+    auto scope_guard =
+            android::base::make_scope_guard([this]() -> void { handlers_->JoinAllThreads(); });
 
     auto socket_path = ANDROID_SOCKET_DIR "/"s + kSnapuserdSocketProxy;
 
@@ -781,21 +464,8 @@ bool UserSnapshotServer::RunForSocketHandoff() {
     return true;
 }
 
-bool UserSnapshotServer::UpdateVerification(std::lock_guard<std::mutex>* proof_of_lock) {
-    CHECK(proof_of_lock);
-
-    bool status = true;
-    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
-        auto& th = (*iter)->thread();
-        if (th.joinable() && status) {
-            status = (*iter)->snapuserd()->CheckPartitionVerification() && status;
-        } else {
-            // return immediately if there is a failure
-            return false;
-        }
-    }
-
-    return status;
+bool UserSnapshotServer::StartHandler(const std::string& misc_name) {
+    return handlers_->StartHandler(misc_name);
 }
 
 }  // namespace snapshot

@@ -13,20 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+package android.trusty.stats.nw.setter;
 
-#pragma once
-#include <stdint.h>
+import android.frameworks.stats.IStats;
 
-namespace android {
-namespace expresslog {
-
-/** Counter encapsulates StatsD write API calls */
-class Counter final {
-public:
-    static void logIncrement(const char* metricId, int64_t amount = 1);
-
-    static void logIncrementWithUid(const char* metricId, int32_t uid, int64_t amount = 1);
-};
-
-}  // namespace expresslog
-}  // namespace android
+interface IStatsSetter {
+    /**
+     * Set the IStats interface facet.
+     *
+     * @param istats The IStats facet provided by the caller for the remote
+     *        service to report IStats' VendorAtom.
+     */
+    void setInterface(in IStats istats);
+}

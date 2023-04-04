@@ -30,6 +30,7 @@ bool should_flash_in_userspace(const android::fs_mgr::LpMetadata& metadata,
                                const std::string& partition_name);
 bool is_sparse_file(android::base::borrowed_fd fd);
 int64_t get_file_size(android::base::borrowed_fd fd);
+std::string fb_fix_numeric_var(std::string var);
 
 class ImageSource {
   public:

@@ -2437,35 +2437,42 @@ TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
 #if defined(__arm__)
     asm volatile(
         "mov r1, %[base]\n"
-        "mov r2, 0\n"
-        "str r3, [r2]\n"
+        "mov r2, #0\n"
+        "str r2, [r2]\n"
         : [base] "+r"(ptr)
         :
-        : "r1", "r2", "r3", "memory");
+        : "r1", "r2", "memory");
 #elif defined(__aarch64__)
     asm volatile(
         "mov x1, %[base]\n"
-        "mov x2, 0\n"
-        "str x3, [x2]\n"
+        "mov x2, #0\n"
+        "str xzr, [x2]\n"
         : [base] "+r"(ptr)
         :
-        : "x1", "x2", "x3", "memory");
+        : "x1", "x2", "memory");
+#elif defined(__riscv)
+    // TODO: x1 is ra (the link register) on riscv64, so this might have
+    // unintended consequences, but we'll need to change the .cfi_escape if so.
+    asm volatile(
+        "mv x1, %[base]\n"
+        "sw zero, 0(zero)\n"
+        : [base] "+r"(ptr)
+        :
+        : "x1", "memory");
 #elif defined(__i386__)
     asm volatile(
         "mov %[base], %%ecx\n"
-        "movl $0, %%edi\n"
-        "movl 0(%%edi), %%edx\n"
+        "movl $0, 0\n"
         : [base] "+r"(ptr)
         :
-        : "edi", "ecx", "edx", "memory");
+        : "ecx", "memory");
 #elif defined(__x86_64__)
     asm volatile(
         "mov %[base], %%rdx\n"
-        "movq 0, %%rdi\n"
-        "movq 0(%%rdi), %%rcx\n"
+        "movq $0, 0\n"
         : [base] "+r"(ptr)
         :
-        : "rcx", "rdx", "rdi", "memory");
+        : "rdx", "memory");
 #else
 #error "Unsupported architecture"
 #endif
