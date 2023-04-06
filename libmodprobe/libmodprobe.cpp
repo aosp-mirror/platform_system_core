@@ -524,11 +524,8 @@ bool Modprobe::LoadModulesParallel(int num_threads) {
 
         std::lock_guard guard(module_loaded_lock_);
         // Remove loaded module form mod_with_deps and soft dependencies of other modules
-        for (const auto& module_loaded : module_loaded_) {
-            if (mod_with_deps.find(module_loaded) != mod_with_deps.end()) {
-                mod_with_deps.erase(module_loaded);
-            }
-        }
+        for (const auto& module_loaded : module_loaded_)
+            mod_with_deps.erase(module_loaded);
 
         // Remove loaded module form dependencies of other modules which are not loaded yet
         for (const auto& module_loaded_path : module_loaded_paths_) {
