@@ -42,8 +42,8 @@ void FlashTask::Run() {
     do_for_partitions(pname_, slot_, flash, true);
 }
 
-RebootTask::RebootTask(FlashingPlan* fp) : fp_(fp){};
-RebootTask::RebootTask(FlashingPlan* fp, const std::string& reboot_target)
+RebootTask::RebootTask(const FlashingPlan* fp) : fp_(fp){};
+RebootTask::RebootTask(const FlashingPlan* fp, const std::string& reboot_target)
     : reboot_target_(reboot_target), fp_(fp){};
 
 void RebootTask::Run() {
@@ -153,7 +153,7 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
                                                   partition_size);
 }
 
-UpdateSuperTask::UpdateSuperTask(FlashingPlan* fp) : fp_(fp) {}
+UpdateSuperTask::UpdateSuperTask(const FlashingPlan* fp) : fp_(fp) {}
 
 void UpdateSuperTask::Run() {
     unique_fd fd = fp_->source->OpenFile("super_empty.img");
@@ -177,7 +177,7 @@ void UpdateSuperTask::Run() {
     fp_->fb->RawCommand(command, "Updating super partition");
 }
 
-ResizeTask::ResizeTask(FlashingPlan* fp, const std::string& pname, const std::string& size,
+ResizeTask::ResizeTask(const FlashingPlan* fp, const std::string& pname, const std::string& size,
                        const std::string& slot)
     : fp_(fp), pname_(pname), size_(size), slot_(slot) {}
 
@@ -190,13 +190,13 @@ void ResizeTask::Run() {
     do_for_partitions(pname_, slot_, resize_partition, false);
 }
 
-DeleteTask::DeleteTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
+DeleteTask::DeleteTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
 
 void DeleteTask::Run() {
     fp_->fb->DeletePartition(pname_);
 }
 
-WipeTask::WipeTask(FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
+WipeTask::WipeTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
 
 void WipeTask::Run() {
     std::string partition_type;
