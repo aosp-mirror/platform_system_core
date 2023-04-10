@@ -46,8 +46,8 @@ class FlashTask : public Task {
 
 class RebootTask : public Task {
   public:
-    RebootTask(FlashingPlan* fp);
-    RebootTask(FlashingPlan* fp, const std::string& reboot_target);
+    RebootTask(const FlashingPlan* fp);
+    RebootTask(const FlashingPlan* fp, const std::string& reboot_target);
     void Run() override;
 
   private:
@@ -73,7 +73,7 @@ class FlashSuperLayoutTask : public Task {
 
 class UpdateSuperTask : public Task {
   public:
-    UpdateSuperTask(FlashingPlan* fp);
+    UpdateSuperTask(const FlashingPlan* fp);
     void Run() override;
 
   private:
@@ -82,7 +82,7 @@ class UpdateSuperTask : public Task {
 
 class ResizeTask : public Task {
   public:
-    ResizeTask(FlashingPlan* fp, const std::string& pname, const std::string& size,
+    ResizeTask(const FlashingPlan* fp, const std::string& pname, const std::string& size,
                const std::string& slot);
     void Run() override;
 
@@ -95,7 +95,7 @@ class ResizeTask : public Task {
 
 class DeleteTask : public Task {
   public:
-    DeleteTask(FlashingPlan* _fp, const std::string& _pname);
+    DeleteTask(const FlashingPlan* _fp, const std::string& _pname);
     void Run() override;
 
   private:
@@ -105,7 +105,7 @@ class DeleteTask : public Task {
 
 class WipeTask : public Task {
   public:
-    WipeTask(FlashingPlan* fp, const std::string& pname);
+    WipeTask(const FlashingPlan* fp, const std::string& pname);
     void Run() override;
 
   private:
