@@ -95,7 +95,7 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
     }
-    if (fp->slot == "all") {
+    if (fp->slot_override == "all") {
         LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
         return nullptr;
     }
