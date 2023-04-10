@@ -190,6 +190,7 @@ static void print_backtrace(CallbackType callback, const Tombstone& tombstone,
 static void print_thread_backtrace(CallbackType callback, const Tombstone& tombstone,
                                    const Thread& thread, bool should_log) {
   CBS("");
+  CB(should_log, "%d total frames", thread.current_backtrace().size());
   CB(should_log, "backtrace:");
   if (!thread.backtrace_note().empty()) {
     CB(should_log, "  NOTE: %s",
