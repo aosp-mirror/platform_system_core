@@ -761,15 +761,7 @@ void SelinuxSetEnforcement() {
 
 constexpr size_t kKlogMessageSize = 1024;
 
-void SelinuxAvcLog(char* buf, size_t buf_len) {
-    CHECK_GT(buf_len, 0u);
-
-    size_t str_len = strnlen(buf, buf_len);
-    // trim newline at end of string
-    if (buf[str_len - 1] == '\n') {
-        buf[str_len - 1] = '\0';
-    }
-
+void SelinuxAvcLog(char* buf) {
     struct NetlinkMessage {
         nlmsghdr hdr;
         char buf[kKlogMessageSize];
@@ -835,8 +827,17 @@ int SelinuxKlogCallback(int type, const char* fmt, ...) {
     if (length_written <= 0) {
         return 0;
     }
+
+    // libselinux log messages usually contain a new line character, while
+    // Android LOG() does not expect it. Remove it to avoid empty lines in
+    // the log buffers.
+    size_t str_len = strlen(buf);
+    if (buf[str_len - 1] == '\n') {
+        buf[str_len - 1] = '\0';
+    }
+
     if (type == SELINUX_AVC) {
-        SelinuxAvcLog(buf, sizeof(buf));
+        SelinuxAvcLog(buf);
     } else {
         android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
     }
