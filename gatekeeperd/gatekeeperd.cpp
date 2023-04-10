@@ -151,7 +151,7 @@ class GateKeeperProxy : public BnGateKeeperService {
     void clear_sid(uint32_t userId) {
         char filename[21];
         snprintf(filename, sizeof(filename), "%u", userId);
-        if (remove(filename) < 0) {
+        if (remove(filename) < 0 && errno != ENOENT) {
             ALOGE("%s: could not remove file [%s], attempting 0 write", __func__, strerror(errno));
             store_sid(userId, 0);
         }

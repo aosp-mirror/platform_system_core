@@ -1,6 +1,4 @@
 .globl crash1
-.globl crashnostack
-
 crash1:
 	movl $0xa5a50000, %eax
 	movl $0xa5a50001, %ebx
@@ -10,6 +8,11 @@ crash1:
 	jmp *%rdx
 
 
+.globl crashnostack
 crashnostack:
-	movl $0, %ebp
-	jmp *%rbp
+	.cfi_startproc
+	movq %rsp, %rax
+	.cfi_def_cfa_register %rax
+	movq $0, %rsp
+	movq (%rsp), %rbx
+	.cfi_endproc

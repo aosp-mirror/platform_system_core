@@ -269,14 +269,19 @@ cc_test {
     defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
 }
 
-sh_test {
-    name: "run_snapshot_tests",
-    src: "run_snapshot_tests.sh",
-    test_suites: [
-        "device-tests",
+cc_test {
+    name: "vab_legacy_tests",
+    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    cppflags: [
+        "-DLIBSNAPSHOT_TEST_VAB_LEGACY",
     ],
-    required: [
-        "vts_libsnapshot_test",
+}
+
+cc_test {
+    name: "vabc_legacy_tests",
+    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    cppflags: [
+        "-DLIBSNAPSHOT_TEST_VABC_LEGACY",
     ],
 }
 
@@ -359,80 +364,6 @@ cc_test {
         "liblog",
     ],
     gtest: false,
-}
-
-cc_defaults {
-    name: "libsnapshot_fuzzer_defaults",
-    defaults: [
-        "libsnapshot_cow_defaults",
-    ],
-    native_coverage : true,
-    srcs: [
-        // Compile the protobuf definition again with type full.
-        "android/snapshot/snapshot_fuzz.proto",
-        "update_engine/update_metadata.proto",
-        "fuzz_utils.cpp",
-        "snapshot_fuzz.cpp",
-        "snapshot_fuzz_utils.cpp",
-
-        // Compile libsnapshot sources directly to avoid dependency
-        // to update_metadata-protos
-        ":libsnapshot_sources",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libc++fs",
-        "libchrome",
-        "libcrypto_static",
-        "libcutils",
-        "libext2_uuid",
-        "libext4_utils",
-        "libfstab",
-        "libfs_mgr",
-        "libgtest", // from libsnapshot_test_helpers
-        "libgmock", // from libsnapshot_test_helpers
-        "liblog",
-        "liblp",
-        "libsnapshot_cow",
-        "libsnapshot_test_helpers",
-        "libprotobuf-mutator",
-        "libz",
-    ],
-    header_libs: [
-        "libfiemap_headers",
-        "libstorage_literals_headers",
-        "libupdate_engine_headers",
-    ],
-    proto: {
-        type: "full",
-        canonical_path_from_root: false,
-        local_include_dirs: ["."],
-    },
-}
-
-cc_fuzz {
-    name: "libsnapshot_fuzzer",
-    defaults: ["libsnapshot_fuzzer_defaults"],
-    corpus: ["corpus/*"],
-    fuzz_config: {
-        cc: ["android-virtual-ab+bugs@google.com"],
-        componentid: 30545,
-        hotlists: ["1646452"],
-        fuzz_on_haiku_host: false,
-        fuzz_on_haiku_device: true,
-    },
-}
-
-cc_test {
-    name: "libsnapshot_fuzzer_test",
-    defaults: ["libsnapshot_fuzzer_defaults"],
-    data: ["corpus/*"],
-    test_suites: [
-        "device-tests",
-    ],
-    auto_gen_config: true,
-    require_root: true,
 }
 
 cc_test {

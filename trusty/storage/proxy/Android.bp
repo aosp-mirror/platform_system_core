@@ -28,6 +28,7 @@ cc_binary {
         "rpmb.c",
         "storage.c",
         "proxy.c",
+        "watchdog.cpp",
     ],
 
     shared_libs: [

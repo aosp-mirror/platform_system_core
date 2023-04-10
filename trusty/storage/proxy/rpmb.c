@@ -321,7 +321,8 @@ static enum scsi_result check_sg_io_hdr(const sg_io_hdr_t* io_hdrp) {
     return SCSI_RES_ERR;
 }
 
-static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req) {
+static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req,
+                             struct watcher* watcher) {
     union {
         struct mmc_ioc_multi_cmd multi;
         uint8_t raw[sizeof(struct mmc_ioc_multi_cmd) + sizeof(struct mmc_ioc_cmd) * 3];
@@ -375,14 +376,17 @@ static int send_mmc_rpmb_req(int mmc_fd, const struct storage_rpmb_send_req* req
         cmd++;
     }
 
+    watch_progress(watcher, "rpmb mmc ioctl");
     rc = ioctl(mmc_fd, MMC_IOC_MULTI_CMD, &mmc.multi);
+    watch_progress(watcher, "rpmb mmc ioctl done");
     if (rc < 0) {
         ALOGE("%s: mmc ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
     }
     return rc;
 }
 
-static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req) {
+static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req,
+                             struct watcher* watcher) {
     int rc;
     int wl_rc;
     const uint8_t* write_buf = req->payload;
@@ -410,7 +414,9 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             set_sg_io_hdr(&io_hdr, SG_DXFER_TO_DEV, sizeof(out_cdb), sizeof(sense_buffer),
                           req->reliable_write_size, (void*)write_buf, (unsigned char*)&out_cdb,
                           sense_buffer);
+            watch_progress(watcher, "rpmb ufs reliable write");
             rc = ioctl(sg_fd, SG_IO, &io_hdr);
+            watch_progress(watcher, "rpmb ufs reliable write done");
             if (rc < 0) {
                 ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
                 goto err_op;
@@ -435,7 +441,9 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
             set_sg_io_hdr(&io_hdr, SG_DXFER_TO_DEV, sizeof(out_cdb), sizeof(sense_buffer),
                           req->write_size, (void*)write_buf, (unsigned char*)&out_cdb,
                           sense_buffer);
+            watch_progress(watcher, "rpmb ufs write");
             rc = ioctl(sg_fd, SG_IO, &io_hdr);
+            watch_progress(watcher, "rpmb ufs write done");
             if (rc < 0) {
                 ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
                 goto err_op;
@@ -450,7 +458,9 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req)
         sg_io_hdr_t io_hdr;
         set_sg_io_hdr(&io_hdr, SG_DXFER_FROM_DEV, sizeof(in_cdb), sizeof(sense_buffer),
                       req->read_size, read_buf, (unsigned char*)&in_cdb, sense_buffer);
+        watch_progress(watcher, "rpmb ufs read");
         rc = ioctl(sg_fd, SG_IO, &io_hdr);
+        watch_progress(watcher, "rpmb ufs read done");
         if (rc < 0) {
             ALOGE("%s: ufs ioctl failed: %d, %s\n", __func__, rc, strerror(errno));
         }
@@ -487,7 +497,7 @@ static int send_virt_rpmb_req(int rpmb_fd, void* read_buf, size_t read_size, con
     return rc;
 }
 
-int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
+int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len, struct watcher* watcher) {
     int rc;
     const struct storage_rpmb_send_req* req = r;
 
@@ -523,13 +533,13 @@ int rpmb_send(struct storage_msg* msg, const void* r, size_t req_len) {
     }
 
     if (dev_type == MMC_RPMB) {
-        rc = send_mmc_rpmb_req(rpmb_fd, req);
+        rc = send_mmc_rpmb_req(rpmb_fd, req, watcher);
         if (rc < 0) {
             msg->result = STORAGE_ERR_GENERIC;
             goto err_response;
         }
     } else if (dev_type == UFS_RPMB) {
-        rc = send_ufs_rpmb_req(rpmb_fd, req);
+        rc = send_ufs_rpmb_req(rpmb_fd, req, watcher);
         if (rc < 0) {
             ALOGE("send_ufs_rpmb_req failed: %d, %s\n", rc, strerror(errno));
             msg->result = STORAGE_ERR_GENERIC;

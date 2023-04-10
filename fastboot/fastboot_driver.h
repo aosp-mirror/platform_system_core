@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/endian.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
@@ -59,6 +60,7 @@ struct DriverCallbacks {
     std::function<void(const std::string&)> prolog = [](const std::string&) {};
     std::function<void(int)> epilog = [](int) {};
     std::function<void(const std::string&)> info = [](const std::string&) {};
+    std::function<void(const std::string&)> text = [](const std::string&) {};
 };
 
 class FastBootDriver {
@@ -168,6 +170,7 @@ class FastBootDriver {
     std::function<void(const std::string&)> prolog_;
     std::function<void(int)> epilog_;
     std::function<void(const std::string&)> info_;
+    std::function<void(const std::string&)> text_;
     bool disable_checks_;
 };
 

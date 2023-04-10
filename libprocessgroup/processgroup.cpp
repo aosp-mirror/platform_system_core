@@ -377,6 +377,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
     std::set<pid_t> pgids;
     pgids.emplace(initialPid);
     std::set<pid_t> pids;
+    int processes = 0;
 
     std::unique_ptr<FILE, decltype(&fclose)> fd(nullptr, fclose);
 
@@ -395,6 +396,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         pid_t pid;
         bool file_is_empty = true;
         while (fscanf(fd.get(), "%d\n", &pid) == 1 && pid >= 0) {
+            processes++;
             file_is_empty = false;
             if (pid == 0) {
                 // Should never happen...  but if it does, trying to kill this
@@ -411,31 +413,25 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
                 pids.emplace(pid);
             }
         }
-        if (file_is_empty) {
-            // This happens when process is already dead
-            return 0;
-        }
-
-        // Erase all pids that will be killed when we kill the process groups.
-        for (auto it = pids.begin(); it != pids.end();) {
-            pid_t pgid = getpgid(*it);
-            if (pgids.count(pgid) == 1) {
-                it = pids.erase(it);
-            } else {
-                ++it;
+        if (!file_is_empty) {
+            // Erase all pids that will be killed when we kill the process groups.
+            for (auto it = pids.begin(); it != pids.end();) {
+                pid_t pgid = getpgid(*it);
+                if (pgids.count(pgid) == 1) {
+                    it = pids.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
     }
 
-    int processes = 0;
     // Kill all process groups.
     for (const auto pgid : pgids) {
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
                      << " as part of process cgroup " << initialPid;
 
-        if (kill(-pgid, signal) == 0) {
-            processes++;
-        } else if (errno != ESRCH) {
+        if (kill(-pgid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << -pgid << ", " << signal << ") failed";
         }
     }
@@ -445,9 +441,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         LOG(VERBOSE) << "Killing pid " << pid << " in uid " << uid << " as part of process cgroup "
                      << initialPid;
 
-        if (kill(pid, signal) == 0) {
-            processes++;
-        } else if (errno != ESRCH) {
+        if (kill(pid, signal) == -1 && errno != ESRCH) {
             PLOG(WARNING) << "kill(" << pid << ", " << signal << ") failed";
         }
     }
@@ -457,6 +451,9 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
 
 static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries,
                             int* max_processes) {
+    CHECK_GE(uid, 0);
+    CHECK_GT(initialPid, 0);
+
     std::string hierarchy_root_path;
     if (CgroupsAvailable()) {
         CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
@@ -593,7 +590,8 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
 }
 
 int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
-    std::string cgroup;
+    CHECK_GE(uid, 0);
+    CHECK_GT(initialPid, 0);
 
     if (memControl && !UsePerAppMemcg()) {
         PLOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
@@ -611,6 +609,7 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
         }
     }
 
+    std::string cgroup;
     CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &cgroup);
     return createProcessGroupInternal(uid, initialPid, cgroup, true);
 }

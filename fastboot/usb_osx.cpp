@@ -456,8 +456,7 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
         }
 
         if (h.success) {
-            handle->reset(new usb_handle);
-            memcpy(handle->get(), &h, sizeof(usb_handle));
+            handle->reset(new usb_handle(h));
             ret = 0;
             break;
         }

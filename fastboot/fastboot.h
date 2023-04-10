@@ -25,8 +25,18 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#pragma once
+
+#include <string>
+#include "fastboot_driver.h"
+#include "super_flash_helper.h"
+#include "util.h"
 
 #include <bootimg.h>
+
+#include "result.h"
+#include "socket.h"
+#include "util.h"
 
 class FastBootTool {
   public:
@@ -36,3 +46,70 @@ class FastBootTool {
     void ParseOsVersion(boot_img_hdr_v1*, const char*);
     unsigned ParseFsOption(const char*);
 };
+
+enum class ImageType {
+    // Must be flashed for device to boot into the kernel.
+    BootCritical,
+    // Normal partition to be flashed during "flashall".
+    Normal,
+    // Partition that is never flashed during "flashall".
+    Extra
+};
+
+struct Image {
+    std::string nickname;
+    std::string img_name;
+    std::string sig_name;
+    std::string part_name;
+    bool optional_if_no_image;
+    ImageType type;
+    bool IsSecondary() const { return nickname.empty(); }
+};
+
+using ImageEntry = std::pair<const Image*, std::string>;
+
+struct FlashingPlan {
+    unsigned fs_options = 0;
+    // If the image uses the default slot, or the user specified "all", then
+    // the paired string will be empty. If the image requests a specific slot
+    // (for example, system_other) it is specified instead.
+    ImageSource* source;
+    bool wants_wipe = false;
+    bool skip_reboot = false;
+    bool wants_set_active = false;
+    bool skip_secondary = false;
+    bool force_flash = false;
+
+    std::string slot;
+    std::string current_slot;
+    std::string secondary_slot;
+    fastboot::FastBootDriver* fb;
+};
+
+bool should_flash_in_userspace(const std::string& partition_name);
+bool is_userspace_fastboot();
+void do_flash(const char* pname, const char* fname, const bool apply_vbmeta);
+void do_for_partitions(const std::string& part, const std::string& slot,
+                       const std::function<void(const std::string&)>& func, bool force_slot);
+std::string find_item(const std::string& item);
+void reboot_to_userspace_fastboot();
+void syntax_error(const char* fmt, ...);
+
+struct NetworkSerial {
+    Socket::Protocol protocol;
+    std::string address;
+    int port;
+};
+
+Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
+bool supports_AB();
+std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot_);
+void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
+int64_t get_sparse_limit(int64_t size);
+std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
+
+bool is_retrofit_device();
+bool is_logical(const std::string& partition);
+void fb_perform_format(const std::string& partition, int skip_if_not_supported,
+                       const std::string& type_override, const std::string& size_override,
+                       const unsigned fs_options);

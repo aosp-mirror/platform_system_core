@@ -22,7 +22,10 @@
       "name": "vts_libsnapshot_test"
     },
     {
-      "name": "libsnapshot_fuzzer_test"
+      "name": "vab_legacy_tests"
+    },
+    {
+      "name": "vabc_legacy_tests"
     },
     {
       "name": "cow_api_test"
@@ -37,6 +40,12 @@
     },
     {
       "name": "vts_libsnapshot_test"
+    },
+    {
+      "name": "vab_legacy_tests"
+    },
+    {
+      "name": "vabc_legacy_tests"
     }
   ]
 }

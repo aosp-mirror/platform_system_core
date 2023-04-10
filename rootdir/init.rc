@@ -925,6 +925,10 @@ on post-fs-data
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
+    # Mkdir and set SELinux security contexts for shutdown-checkpoints.
+    # TODO(b/270286197): remove these after couple releases.
+    mkdir /data/system/shutdown-checkpoints 0700 system system
+    restorecon_recursive /data/system/shutdown-checkpoints
 
     # Create the parent directories of the user CE and DE storage directories.
     # These parent directories must use encryption=None, since each of their
@@ -993,6 +997,7 @@ on post-fs-data
     # Create directories for statsd
     mkdir /data/misc/stats-active-metric/ 0770 statsd system
     mkdir /data/misc/stats-data/ 0770 statsd system
+    mkdir /data/misc/stats-data/restricted-data 0770 statsd system
     mkdir /data/misc/stats-metadata/ 0770 statsd system
     mkdir /data/misc/stats-service/ 0770 statsd system
     mkdir /data/misc/train-info/ 0770 statsd system
@@ -1288,11 +1293,13 @@ service console /system/bin/sh
     shutdown critical
 
 on property:ro.debuggable=1
-    # Give writes to anyone for the trace folder on debug builds.
+    # Give writes to the same group for the trace folder on debug builds,
+    # it's further protected by selinux policy.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
-    # Give reads to anyone for the window trace folder on debug builds.
-    chmod 0775 /data/misc/wmtrace
+    # Give writes and reads to anyone for the window trace folder on debug builds,
+    # it's further protected by selinux policy.
+    chmod 0777 /data/misc/wmtrace
     # Give reads to anyone for the accessibility trace folder on debug builds.
     chmod 0775 /data/misc/a11ytrace
 

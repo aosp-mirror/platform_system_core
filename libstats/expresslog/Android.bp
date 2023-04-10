@@ -18,11 +18,17 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_library {
-    name: "libexpresslog",
+cc_defaults {
+    name: "expresslog_defaults",
     srcs: [
         "Counter.cpp",
+        "Histogram.cpp",
     ],
+}
+
+cc_library {
+    name: "libexpresslog",
+    defaults: ["expresslog_defaults"],
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
         "-Wall",
@@ -37,6 +43,7 @@ cc_library {
     ],
     shared_libs: [
         "libbase",
+        "liblog",
         "libstatssocket",
     ],
     export_include_dirs: ["include"],
@@ -68,4 +75,39 @@ cc_library_static {
     shared_libs: [
         "libstatssocket",
     ],
+}
+
+cc_test {
+    name: "expresslog_test",
+    defaults: ["expresslog_defaults"],
+    test_suites: [
+        "general-tests",
+    ],
+    srcs: [
+        "tests/Histogram_test.cpp",
+    ],
+    local_include_dirs: [
+        "include",
+    ],
+    cflags: [
+        "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
+        "-Wall",
+        "-Wextra",
+        "-Wunused",
+        "-Wpedantic",
+        "-Werror",
+    ],
+    header_libs: [
+        "libtextclassifier_hash_headers",
+    ],
+    static_libs: [
+        "libgmock",
+        "libbase",
+        "liblog",
+        "libstatslog_express",
+        "libtextclassifier_hash_static",
+    ],
+    shared_libs: [
+        "libstatssocket",
+    ]
 }

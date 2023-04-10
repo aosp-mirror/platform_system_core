@@ -33,7 +33,7 @@
  */
 #define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
 
-#define FS_MGR_TAG "[libfs_mgr]"
+#define FS_MGR_TAG "[libfs_mgr] "
 
 // Logs a message to kernel
 #define LINFO    LOG(INFO) << FS_MGR_TAG

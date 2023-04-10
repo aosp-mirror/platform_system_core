@@ -298,13 +298,12 @@ bool CowWriter::Initialize(borrowed_fd fd) {
         return false;
     }
 
-    bool ret = OpenForWrite();
-
-    if (ret) {
-        InitWorkers();
+    if (!OpenForWrite()) {
+        return false;
     }
 
-    return ret;
+    InitWorkers();
+    return true;
 }
 
 bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) {

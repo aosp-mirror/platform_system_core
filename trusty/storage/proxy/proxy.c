@@ -31,6 +31,7 @@
 #include "log.h"
 #include "rpmb.h"
 #include "storage.h"
+#include "watchdog.h"
 
 #define REQ_BUFFER_SIZE 4096
 static uint8_t req_buffer[REQ_BUFFER_SIZE + 1];
@@ -73,6 +74,8 @@ static void show_usage_and_exit(int code) {
 static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) {
     int rc;
 
+    struct watcher* watcher = watch_start("request", msg);
+
     if ((msg->flags & STORAGE_MSG_FLAG_POST_COMMIT) && msg->cmd != STORAGE_RPMB_SEND &&
         msg->cmd != STORAGE_FILE_WRITE) {
         /*
@@ -81,14 +84,14 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
          */
         ALOGE("cmd 0x%x: post commit option is not implemented\n", msg->cmd);
         msg->result = STORAGE_ERR_UNIMPLEMENTED;
-        return ipc_respond(msg, NULL, 0);
+        goto err_response;
     }
 
     if (msg->flags & STORAGE_MSG_FLAG_PRE_COMMIT) {
-        rc = storage_sync_checkpoint();
+        rc = storage_sync_checkpoint(watcher);
         if (rc < 0) {
             msg->result = STORAGE_ERR_SYNC_FAILURE;
-            return ipc_respond(msg, NULL, 0);
+            goto err_response;
         }
     }
 
@@ -99,61 +102,65 @@ static int handle_req(struct storage_msg* msg, const void* req, size_t req_len) 
         if (rc != 0) {
             ALOGE("is_data_checkpoint_active failed in an unexpected way. Aborting.\n");
             msg->result = STORAGE_ERR_GENERIC;
-            return ipc_respond(msg, NULL, 0);
+            goto err_response;
         } else if (is_checkpoint_active) {
             ALOGE("Checkpoint in progress, dropping write ...\n");
             msg->result = STORAGE_ERR_GENERIC;
-            return ipc_respond(msg, NULL, 0);
+            goto err_response;
         }
     }
 
     switch (msg->cmd) {
         case STORAGE_FILE_DELETE:
-            rc = storage_file_delete(msg, req, req_len);
+            rc = storage_file_delete(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_OPEN:
-            rc = storage_file_open(msg, req, req_len);
+            rc = storage_file_open(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_CLOSE:
-            rc = storage_file_close(msg, req, req_len);
+            rc = storage_file_close(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_WRITE:
-            rc = storage_file_write(msg, req, req_len);
+            rc = storage_file_write(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_READ:
-            rc = storage_file_read(msg, req, req_len);
+            rc = storage_file_read(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_GET_SIZE:
-            rc = storage_file_get_size(msg, req, req_len);
+            rc = storage_file_get_size(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_SET_SIZE:
-            rc = storage_file_set_size(msg, req, req_len);
+            rc = storage_file_set_size(msg, req, req_len, watcher);
             break;
 
         case STORAGE_FILE_GET_MAX_SIZE:
-            rc = storage_file_get_max_size(msg, req, req_len);
+            rc = storage_file_get_max_size(msg, req, req_len, watcher);
             break;
 
         case STORAGE_RPMB_SEND:
-            rc = rpmb_send(msg, req, req_len);
+            rc = rpmb_send(msg, req, req_len, watcher);
             break;
 
         default:
             ALOGE("unhandled command 0x%x\n", msg->cmd);
             msg->result = STORAGE_ERR_UNIMPLEMENTED;
-            rc = 1;
+            goto err_response;
     }
 
-    if (rc > 0) {
-        /* still need to send response */
-        rc = ipc_respond(msg, NULL, 0);
-    }
+    /* response was sent in handler */
+    goto finish;
+
+err_response:
+    rc = ipc_respond(msg, NULL, 0);
+
+finish:
+    watch_finish(watcher);
     return rc;
 }
 

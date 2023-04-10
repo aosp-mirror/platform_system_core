@@ -70,11 +70,14 @@ std::shared_ptr<aidl::android::hardware::fastboot::IFastboot> get_fastboot_servi
     using HidlFastboot = android::hardware::fastboot::V1_1::IFastboot;
     using aidl::android::hardware::fastboot::FastbootShim;
     auto service_name = IFastboot::descriptor + "/default"s;
-    ndk::SpAIBinder binder(AServiceManager_getService(service_name.c_str()));
-    std::shared_ptr<IFastboot> fastboot = IFastboot::fromBinder(binder);
-    if (fastboot != nullptr) {
-        LOG(INFO) << "Using AIDL fastboot service";
-        return fastboot;
+    if (AServiceManager_isDeclared(service_name.c_str())) {
+        ndk::SpAIBinder binder(AServiceManager_waitForService(service_name.c_str()));
+        std::shared_ptr<IFastboot> fastboot = IFastboot::fromBinder(binder);
+        if (fastboot != nullptr) {
+            LOG(INFO) << "Found and using AIDL fastboot service";
+            return fastboot;
+        }
+        LOG(WARNING) << "AIDL fastboot service is declared, but it cannot be retrieved.";
     }
     LOG(INFO) << "Unable to get AIDL fastboot service, trying HIDL...";
     android::sp<HidlFastboot> hidl_fastboot = HidlFastboot::getService();

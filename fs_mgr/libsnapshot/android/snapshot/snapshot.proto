@@ -108,6 +108,12 @@ message SnapshotStatus {
 
     // Estimated COW size from OTA manifest.
     uint64 estimated_cow_size = 12;
+
+    // Enable multi-threaded compression
+    bool enable_threading = 13;
+
+    // Enable batching for COW writes
+    bool batched_writes = 14;
 }
 
 // Next: 8

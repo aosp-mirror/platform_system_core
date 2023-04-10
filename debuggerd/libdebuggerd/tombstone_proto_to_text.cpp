@@ -176,8 +176,14 @@ static void print_backtrace(CallbackType callback, const Tombstone& tombstone,
       build_id = StringPrintf(" (BuildId: %s)", frame.build_id().c_str());
     }
 
-    CB(should_log, "      #%02d pc %0*" PRIx64 "  %s%s%s", index++, pointer_width(tombstone) * 2,
-       frame.rel_pc(), frame.file_name().c_str(), function.c_str(), build_id.c_str());
+    std::string line =
+        StringPrintf("      #%02d pc %0*" PRIx64 "  %s", index++, pointer_width(tombstone) * 2,
+                     frame.rel_pc(), frame.file_name().c_str());
+    if (frame.file_map_offset() != 0) {
+      line += StringPrintf(" (offset 0x%" PRIx64 ")", frame.file_map_offset());
+    }
+    line += function + build_id;
+    CB(should_log, "%s", line.c_str());
   }
 }
 
@@ -303,86 +309,8 @@ static void print_tag_dump(CallbackType callback, const Tombstone& tombstone) {
   }
 }
 
-static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
-                              const Thread& thread) {
+static void print_memory_maps(CallbackType callback, const Tombstone& tombstone) {
   int word_size = pointer_width(tombstone);
-  print_thread_header(callback, tombstone, thread, true);
-
-  const Signal& signal_info = tombstone.signal_info();
-  std::string sender_desc;
-
-  if (signal_info.has_sender()) {
-    sender_desc =
-        StringPrintf(" from pid %d, uid %d", signal_info.sender_pid(), signal_info.sender_uid());
-  }
-
-  if (!tombstone.has_signal_info()) {
-    CBL("signal information missing");
-  } else {
-    std::string fault_addr_desc;
-    if (signal_info.has_fault_address()) {
-      fault_addr_desc = StringPrintf("0x%0*" PRIx64, 2 * word_size, signal_info.fault_address());
-    } else {
-      fault_addr_desc = "--------";
-    }
-
-    CBL("signal %d (%s), code %d (%s%s), fault addr %s", signal_info.number(),
-        signal_info.name().c_str(), signal_info.code(), signal_info.code_name().c_str(),
-        sender_desc.c_str(), fault_addr_desc.c_str());
-  }
-
-  if (tombstone.causes_size() == 1) {
-    CBL("Cause: %s", tombstone.causes(0).human_readable().c_str());
-  }
-
-  if (!tombstone.abort_message().empty()) {
-    CBL("Abort message: '%s'", tombstone.abort_message().c_str());
-  }
-
-  print_thread_registers(callback, tombstone, thread, true);
-  print_thread_backtrace(callback, tombstone, thread, true);
-
-  if (tombstone.causes_size() > 1) {
-    CBS("");
-    CBL("Note: multiple potential causes for this crash were detected, listing them in decreasing "
-        "order of likelihood.");
-  }
-
-  for (const Cause& cause : tombstone.causes()) {
-    if (tombstone.causes_size() > 1) {
-      CBS("");
-      CBL("Cause: %s", cause.human_readable().c_str());
-    }
-
-    if (cause.has_memory_error() && cause.memory_error().has_heap()) {
-      const HeapObject& heap_object = cause.memory_error().heap();
-
-      if (heap_object.deallocation_backtrace_size() != 0) {
-        CBS("");
-        CBL("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
-        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), true);
-      }
-
-      if (heap_object.allocation_backtrace_size() != 0) {
-        CBS("");
-        CBL("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
-        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), true);
-      }
-    }
-  }
-
-  print_tag_dump(callback, tombstone);
-
-  print_thread_memory_dump(callback, tombstone, thread);
-
-  CBS("");
-
-  // No memory maps to print.
-  if (tombstone.memory_mappings().empty()) {
-    CBS("No memory maps found");
-    return;
-  }
-
   const auto format_pointer = [word_size](uint64_t ptr) -> std::string {
     if (word_size == 8) {
       uint64_t top = ptr >> 32;
@@ -397,6 +325,7 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
       StringPrintf("memory map (%d %s):", tombstone.memory_mappings().size(),
                    tombstone.memory_mappings().size() == 1 ? "entry" : "entries");
 
+  const Signal& signal_info = tombstone.signal_info();
   bool has_fault_address = signal_info.has_fault_address();
   uint64_t fault_address = untag_address(signal_info.fault_address());
   bool preamble_printed = false;
@@ -453,6 +382,106 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
   if (has_fault_address && !printed_fault_address_marker) {
     CBS("--->Fault address falls at %s after any mapped regions",
         format_pointer(fault_address).c_str());
+  }
+}
+
+static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
+                              const Thread& thread) {
+  print_thread_header(callback, tombstone, thread, true);
+
+  const Signal& signal_info = tombstone.signal_info();
+  std::string sender_desc;
+
+  if (signal_info.has_sender()) {
+    sender_desc =
+        StringPrintf(" from pid %d, uid %d", signal_info.sender_pid(), signal_info.sender_uid());
+  }
+
+  bool is_async_mte_crash = false;
+  bool is_mte_crash = false;
+  if (!tombstone.has_signal_info()) {
+    CBL("signal information missing");
+  } else {
+    std::string fault_addr_desc;
+    if (signal_info.has_fault_address()) {
+      fault_addr_desc =
+          StringPrintf("0x%0*" PRIx64, 2 * pointer_width(tombstone), signal_info.fault_address());
+    } else {
+      fault_addr_desc = "--------";
+    }
+
+    CBL("signal %d (%s), code %d (%s%s), fault addr %s", signal_info.number(),
+        signal_info.name().c_str(), signal_info.code(), signal_info.code_name().c_str(),
+        sender_desc.c_str(), fault_addr_desc.c_str());
+#ifdef SEGV_MTEAERR
+    is_async_mte_crash = signal_info.number() == SIGSEGV && signal_info.code() == SEGV_MTEAERR;
+    is_mte_crash = is_async_mte_crash ||
+                   (signal_info.number() == SIGSEGV && signal_info.code() == SEGV_MTESERR);
+#endif
+  }
+
+  if (tombstone.causes_size() == 1) {
+    CBL("Cause: %s", tombstone.causes(0).human_readable().c_str());
+  }
+
+  if (!tombstone.abort_message().empty()) {
+    CBL("Abort message: '%s'", tombstone.abort_message().c_str());
+  }
+
+  print_thread_registers(callback, tombstone, thread, true);
+  if (is_async_mte_crash) {
+    CBL("Note: This crash is a delayed async MTE crash. Memory corruption has occurred");
+    CBL("      in this process. The stack trace below is the first system call or context");
+    CBL("      switch that was executed after the memory corruption happened.");
+  }
+  print_thread_backtrace(callback, tombstone, thread, true);
+
+  if (tombstone.causes_size() > 1) {
+    CBS("");
+    CBL("Note: multiple potential causes for this crash were detected, listing them in decreasing "
+        "order of likelihood.");
+  }
+
+  for (const Cause& cause : tombstone.causes()) {
+    if (tombstone.causes_size() > 1) {
+      CBS("");
+      CBL("Cause: %s", cause.human_readable().c_str());
+    }
+
+    if (cause.has_memory_error() && cause.memory_error().has_heap()) {
+      const HeapObject& heap_object = cause.memory_error().heap();
+
+      if (heap_object.deallocation_backtrace_size() != 0) {
+        CBS("");
+        CBL("deallocated by thread %" PRIu64 ":", heap_object.deallocation_tid());
+        print_backtrace(callback, tombstone, heap_object.deallocation_backtrace(), true);
+      }
+
+      if (heap_object.allocation_backtrace_size() != 0) {
+        CBS("");
+        CBL("allocated by thread %" PRIu64 ":", heap_object.allocation_tid());
+        print_backtrace(callback, tombstone, heap_object.allocation_backtrace(), true);
+      }
+    }
+  }
+
+  print_tag_dump(callback, tombstone);
+
+  if (is_mte_crash) {
+    CBS("");
+    CBL("Learn more about MTE reports: "
+        "https://source.android.com/docs/security/test/memory-safety/mte-reports");
+  }
+
+  print_thread_memory_dump(callback, tombstone, thread);
+
+  CBS("");
+
+  // No memory maps to print.
+  if (!tombstone.memory_mappings().empty()) {
+    print_memory_maps(callback, tombstone);
+  } else {
+    CBS("No memory maps found");
   }
 }
 

@@ -94,6 +94,21 @@ std::unique_ptr<SnapuserdClient> SnapuserdClient::Connect(const std::string& soc
     return client;
 }
 
+void SnapuserdClient::WaitForServiceToTerminate(std::chrono::milliseconds timeout_ms) {
+    auto start = std::chrono::steady_clock::now();
+    while (android::base::GetProperty("init.svc.snapuserd", "") == "running") {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+        if (elapsed >= timeout_ms) {
+            LOG(ERROR) << "Timed out - Snapuserd service did not stop - Forcefully terminating the "
+                          "service";
+            android::base::SetProperty("ctl.stop", "snapuserd");
+            return;
+        }
+        std::this_thread::sleep_for(100ms);
+    }
+}
+
 bool SnapuserdClient::ValidateConnection() {
     if (!Sendmsg("query")) {
         return false;
@@ -238,6 +253,8 @@ bool SnapuserdClient::DetachSnapuserd() {
         LOG(ERROR) << "Failed to detach snapuserd.";
         return false;
     }
+
+    WaitForServiceToTerminate(3s);
     return true;
 }
 

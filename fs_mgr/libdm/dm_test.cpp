@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -692,7 +693,17 @@ TEST(libdm, CreateEmptyDevice) {
 }
 
 TEST(libdm, UeventAfterLoadTable) {
-    static const char* kDeviceName = "libmd-test-uevent-load-table";
+    static const char* kDeviceName = "libdm-test-uevent-load-table";
+
+    struct utsname u;
+    ASSERT_EQ(uname(&u), 0);
+
+    unsigned int major, minor;
+    ASSERT_EQ(sscanf(u.release, "%u.%u", &major, &minor), 2);
+
+    if (major < 5 || (major == 5 && minor < 15)) {
+        GTEST_SKIP() << "Skipping test on kernel < 5.15";
+    }
 
     DeviceMapper& dm = DeviceMapper::Instance();
     ASSERT_TRUE(dm.CreateEmptyDevice(kDeviceName));
