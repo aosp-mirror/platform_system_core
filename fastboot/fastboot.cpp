@@ -1600,10 +1600,10 @@ void FlashAllTool::Flash() {
 
     // Change the slot first, so we boot into the correct recovery image when
     // using fastbootd.
-    if (fp_->slot == "all") {
+    if (fp_->slot_override == "all") {
         set_active("a");
     } else {
-        set_active(fp_->slot);
+        set_active(fp_->slot_override);
     }
 
     DetermineSlot();
@@ -1654,17 +1654,17 @@ void FlashAllTool::CheckRequirements() {
 }
 
 void FlashAllTool::DetermineSlot() {
-    if (fp_->slot.empty()) {
+    if (fp_->slot_override.empty()) {
         fp_->current_slot = get_current_slot();
     } else {
-        fp_->current_slot = fp_->slot;
+        fp_->current_slot = fp_->slot_override;
     }
 
     if (fp_->skip_secondary) {
         return;
     }
-    if (fp_->slot != "" && fp_->slot != "all") {
-        fp_->secondary_slot = get_other_slot(fp_->slot);
+    if (fp_->slot_override != "" && fp_->slot_override != "all") {
+        fp_->secondary_slot = get_other_slot(fp_->slot_override);
     } else {
         fp_->secondary_slot = get_other_slot();
     }
@@ -1678,7 +1678,7 @@ void FlashAllTool::DetermineSlot() {
 
 void FlashAllTool::CollectImages() {
     for (size_t i = 0; i < images.size(); ++i) {
-        std::string slot = fp_->slot;
+        std::string slot = fp_->slot_override;
         if (images[i].IsSecondary()) {
             if (fp_->skip_secondary) {
                 continue;
@@ -2017,7 +2017,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
     std::unique_ptr<FlashingPlan> fp = std::make_unique<FlashingPlan>();
 
     int longindex;
-    std::string slot_override;
     std::string next_active;
 
     g_boot_img_hdr.kernel_addr = 0x00008000;
@@ -2090,7 +2089,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else if (name == "skip-secondary") {
                 fp->skip_secondary = true;
             } else if (name == "slot") {
-                slot_override = optarg;
+                fp->slot_override = optarg;
             } else if (name == "dtb-offset") {
                 g_boot_img_hdr.dtb_addr = strtoul(optarg, 0, 16);
             } else if (name == "tags-offset") {
@@ -2182,12 +2181,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
     const double start = now();
 
-    if (slot_override != "") slot_override = verify_slot(slot_override);
+    if (fp->slot_override != "") fp->slot_override = verify_slot(fp->slot_override);
     if (next_active != "") next_active = verify_slot(next_active, false);
 
     if (fp->wants_set_active) {
         if (next_active == "") {
-            if (slot_override == "") {
+            if (fp->slot_override == "") {
                 std::string current_slot;
                 if (fb->GetVar("current-slot", &current_slot) == fastboot::SUCCESS) {
                     if (current_slot[0] == '_') current_slot.erase(0, 1);
@@ -2196,7 +2195,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                     fp->wants_set_active = false;
                 }
             } else {
-                next_active = verify_slot(slot_override, false);
+                next_active = verify_slot(fp->slot_override, false);
             }
         }
     }
@@ -2221,7 +2220,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
 
                 fb->Erase(partition);
             };
-            do_for_partitions(partition, slot_override, erase, true);
+            do_for_partitions(partition, fp->slot_override, erase, true);
         } else if (android::base::StartsWith(command, "format")) {
             // Parsing for: "format[:[type][:[size]]]"
             // Some valid things:
@@ -2241,7 +2240,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             auto format = [&](const std::string& partition) {
                 fb_perform_format(partition, 0, type_override, size_override, fp->fs_options);
             };
-            do_for_partitions(partition, slot_override, format, true);
+            do_for_partitions(partition, fp->slot_override, format, true);
         } else if (command == "signature") {
             std::string filename = next_arg(&args);
             std::vector<char> data;
@@ -2286,7 +2285,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             if (fname.empty()) die("cannot determine image filename for '%s'", pname.c_str());
 
-            FlashTask task(slot_override, pname, fname, is_vbmeta_partition(pname));
+            FlashTask task(fp->slot_override, pname, fname, is_vbmeta_partition(pname));
             task.Run();
         } else if (command == "flash:raw") {
             std::string partition = next_arg(&args);
@@ -2300,9 +2299,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
             auto flashraw = [&data](const std::string& partition) {
                 fb->FlashPartition(partition, data);
             };
-            do_for_partitions(partition, slot_override, flashraw, true);
+            do_for_partitions(partition, fp->slot_override, flashraw, true);
         } else if (command == "flashall") {
-            if (slot_override == "all") {
+            if (fp->slot_override == "all") {
                 fprintf(stderr,
                         "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
                 fp->skip_secondary = true;
@@ -2312,7 +2311,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             reboot_task = std::make_unique<RebootTask>(fp.get());
         } else if (command == "update") {
-            bool slot_all = (slot_override == "all");
+            bool slot_all = (fp->slot_override == "all");
             if (slot_all) {
                 fprintf(stderr,
                         "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
@@ -2361,7 +2360,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
             std::unique_ptr<ResizeTask> resize_task =
-                    std::make_unique<ResizeTask>(fp.get(), partition, size, slot_override);
+                    std::make_unique<ResizeTask>(fp.get(), partition, size, fp->slot_override);
             resize_task->Run();
         } else if (command == "gsi") {
             std::string arg = next_arg(&args);
@@ -2379,7 +2378,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             } else {
                 image = next_arg(&args);
             }
-            do_wipe_super(image, slot_override);
+            do_wipe_super(image, fp->slot_override);
         } else if (command == "snapshot-update") {
             std::string arg;
             if (!args.empty()) {
@@ -2392,7 +2391,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == FB_CMD_FETCH) {
             std::string partition = next_arg(&args);
             std::string outfile = next_arg(&args);
-            do_fetch(partition, slot_override, outfile);
+            do_fetch(partition, fp->slot_override, outfile);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }
