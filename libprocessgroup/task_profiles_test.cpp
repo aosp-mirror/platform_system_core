@@ -43,7 +43,7 @@ bool IsCgroupV2Mounted() {
     }
     struct mntent* mnt;
     while ((mnt = getmntent(mnts.get()))) {
-        if (strcmp(mnt->mnt_fsname, "cgroup2") == 0) {
+        if (strcmp(mnt->mnt_type, "cgroup2") == 0) {
             return true;
         }
     }
