@@ -204,6 +204,10 @@ TEST(init, StartConsole) {
         GTEST_SKIP() << "Must run on userdebug/eng builds. b/262090304";
         return;
     }
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
     std::string init_script = R"init(
 service console /system/bin/sh
     class core
