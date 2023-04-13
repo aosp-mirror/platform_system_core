@@ -2199,7 +2199,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
         }
     }
-    std::unique_ptr<Task> reboot_task = nullptr;
+    std::vector<std::unique_ptr<Task>> tasks;
     std::vector<std::string> args(argv, argv + argc);
     while (!args.empty()) {
         std::string command = next_arg(&args);
@@ -2253,17 +2253,17 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == FB_CMD_REBOOT) {
             if (args.size() == 1) {
                 std::string reboot_target = next_arg(&args);
-                reboot_task = std::make_unique<RebootTask>(fp.get(), reboot_target);
+                tasks.emplace_back(std::make_unique<RebootTask>(fp.get(), reboot_target));
             } else if (!fp->skip_reboot) {
-                reboot_task = std::make_unique<RebootTask>(fp.get());
+                tasks.emplace_back(std::make_unique<RebootTask>(fp.get()));
             }
             if (!args.empty()) syntax_error("junk after reboot command");
         } else if (command == FB_CMD_REBOOT_BOOTLOADER) {
-            reboot_task = std::make_unique<RebootTask>(fp.get(), "bootloader");
+            tasks.emplace_back(std::make_unique<RebootTask>(fp.get(), "bootloader"));
         } else if (command == FB_CMD_REBOOT_RECOVERY) {
-            reboot_task = std::make_unique<RebootTask>(fp.get(), "recovery");
+            tasks.emplace_back(std::make_unique<RebootTask>(fp.get(), "recovery"));
         } else if (command == FB_CMD_REBOOT_FASTBOOT) {
-            reboot_task = std::make_unique<RebootTask>(fp.get(), "fastboot");
+            tasks.emplace_back(std::make_unique<RebootTask>(fp.get(), "fastboot"));
         } else if (command == FB_CMD_CONTINUE) {
             fb->Continue();
         } else if (command == FB_CMD_BOOT) {
@@ -2305,12 +2305,11 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 fprintf(stderr,
                         "Warning: slot set to 'all'. Secondary slots will not be flashed.\n");
                 fp->skip_secondary = true;
-                do_flashall(fp.get());
-            } else {
-                do_flashall(fp.get());
             }
+            do_flashall(fp.get());
+
             if (!fp->skip_reboot) {
-                reboot_task = std::make_unique<RebootTask>(fp.get());
+                tasks.emplace_back(std::make_unique<RebootTask>(fp.get()));
             }
         } else if (command == "update") {
             bool slot_all = (fp->slot_override == "all");
@@ -2324,7 +2323,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             }
             do_update(filename.c_str(), fp.get());
             if (!fp->skip_reboot) {
-                reboot_task = std::make_unique<RebootTask>(fp.get());
+                tasks.emplace_back(std::make_unique<RebootTask>(fp.get()));
             }
         } else if (command == FB_CMD_SET_ACTIVE) {
             std::string slot = verify_slot(next_arg(&args), false);
@@ -2358,8 +2357,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             fb->CreatePartition(partition, size);
         } else if (command == FB_CMD_DELETE_PARTITION) {
             std::string partition = next_arg(&args);
-            auto delete_task = std::make_unique<DeleteTask>(fp.get(), partition);
-            fb->DeletePartition(partition);
+            tasks.emplace_back(std::make_unique<DeleteTask>(fp.get(), partition));
         } else if (command == FB_CMD_RESIZE_PARTITION) {
             std::string partition = next_arg(&args);
             std::string size = next_arg(&args);
@@ -2407,15 +2405,14 @@ int FastBootTool::Main(int argc, char* argv[]) {
         }
         std::vector<std::string> partitions = {"userdata", "cache", "metadata"};
         for (const auto& partition : partitions) {
-            std::unique_ptr<WipeTask> wipe_task = std::make_unique<WipeTask>(fp.get(), partition);
-            wipe_task->Run();
+            tasks.emplace_back(std::make_unique<WipeTask>(fp.get(), partition));
         }
     }
     if (fp->wants_set_active) {
         fb->SetActive(next_active);
     }
-    if (reboot_task) {
-        reboot_task->Run();
+    for (auto& task : tasks) {
+        task->Run();
     }
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
 
