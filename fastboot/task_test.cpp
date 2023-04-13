@@ -53,6 +53,11 @@ static std::vector<std::unique_ptr<Task>> collectTasks(FlashingPlan* fp,
     return tasks;
 }
 
+std::unique_ptr<Task> ParseCommand(FlashingPlan* fp, std::string command) {
+    std::vector<std::string> vec_command = android::base::Split(command, " ");
+    return ParseFastbootInfoLine(fp, vec_command);
+}
+
 TEST_F(ParseTest, CORRECT_FlASH_TASK_FORMED) {
     std::vector<std::string> commands = {"flash dtbo", "flash --slot-other system system_other.img",
                                          "flash system", "flash --apply-vbmeta vbmeta"};
@@ -97,4 +102,22 @@ TEST_F(ParseTest, VERSION_CHECK_CORRRECT) {
     for (auto& version : bad_versions) {
         ASSERT_FALSE(CheckFastbootInfoRequirements(android::base::Split(version, " "))) << version;
     }
+}
+
+TEST_F(ParseTest, BAD_FASTBOOT_INFO_INPUT) {
+    ASSERT_EQ(ParseCommand(fp.get(), "flash"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "flash --slot-other --apply-vbmeta"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "flash --apply-vbmeta"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "if-wipe"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "if-wipe flash"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "wipe dtbo"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "update-super dtbo"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "flash system system.img system"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "reboot bootloader fastboot"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(),
+                           "flash --slot-other --apply-vbmeta system system_other.img system"),
+              nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "erase"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "erase dtbo dtbo"), nullptr);
+    ASSERT_EQ(ParseCommand(fp.get(), "wipe this"), nullptr);
 }
