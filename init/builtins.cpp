@@ -60,6 +60,8 @@
 #include <cutils/android_reboot.h>
 #include <fs_mgr.h>
 #include <fscrypt/fscrypt.h>
+#include <libdm/dm.h>
+#include <libdm/loop_control.h>
 #include <libgsi/libgsi.h>
 #include <logwrap/logwrap.h>
 #include <private/android_filesystem_config.h>
@@ -506,29 +508,29 @@ static Result<void> do_mount(const BuiltinArguments& args) {
 
     if (android::base::StartsWith(source, "loop@")) {
         int mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
-        unique_fd fd(TEMP_FAILURE_RETRY(open(source + 5, mode | O_CLOEXEC)));
-        if (fd < 0) return ErrnoError() << "open(" << source + 5 << ", " << mode << ") failed";
+        const char* file_path = source + strlen("loop@");
 
-        for (size_t n = 0;; n++) {
-            std::string tmp = android::base::StringPrintf("/dev/block/loop%zu", n);
-            unique_fd loop(TEMP_FAILURE_RETRY(open(tmp.c_str(), mode | O_CLOEXEC)));
-            if (loop < 0) return ErrnoError() << "open(" << tmp << ", " << mode << ") failed";
-
-            loop_info info;
-            /* if it is a blank loop device */
-            if (ioctl(loop.get(), LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
-                /* if it becomes our loop device */
-                if (ioctl(loop.get(), LOOP_SET_FD, fd.get()) >= 0) {
-                    if (mount(tmp.c_str(), target, system, flags, options) < 0) {
-                        ioctl(loop.get(), LOOP_CLR_FD, 0);
-                        return ErrnoError() << "mount() failed";
-                    }
-                    return {};
-                }
-            }
+        // Open source file
+        if (wait) {
+            wait_for_file(file_path, kCommandRetryTimeout);
         }
 
-        return Error() << "out of loopback devices";
+        unique_fd fd(TEMP_FAILURE_RETRY(open(file_path, mode | O_CLOEXEC)));
+        if (fd < 0) {
+            return ErrnoError() << "open(" << file_path << ", " << mode << ") failed";
+        }
+
+        // Allocate loop device and attach it to file_path.
+        android::dm::LoopControl loop_control;
+        std::string loop_device;
+        if (!loop_control.Attach(fd.get(), 5s, &loop_device)) {
+            return ErrnoError() << "loop_control.Attach " << file_path << " failed";
+        }
+
+        if (mount(loop_device.c_str(), target, system, flags, options) < 0) {
+            loop_control.Detach(loop_device);
+            return ErrnoError() << "mount() failed";
+        }
     } else {
         if (wait)
             wait_for_file(source, kCommandRetryTimeout);
