@@ -16,9 +16,11 @@ service mte_upgrade_test_helper /system/bin/mte_upgrade_test_helper ${sys.mte_cr
   class late_start
   disabled
   seclabel u:r:su:s0
+  user root
 
 service mte_upgrade_test_helper_overridden /system/bin/mte_upgrade_test_helper ${sys.mte_crash_test_uuid}
   class late_start
   disabled
   seclabel u:r:su:s0
+  user root
   setenv BIONIC_MEMTAG_UPGRADE_SECS 0
