@@ -363,24 +363,6 @@ cc_binary {
 }
 
 cc_test {
-    name: "snapshot_power_test",
-    srcs: [
-        "power_test.cpp",
-    ],
-    static_libs: [
-        "libc++fs",
-        "libsnapshot",
-        "update_metadata-protos",
-    ],
-    shared_libs: [
-        "libbase",
-        "libfs_mgr_binder",
-        "liblog",
-    ],
-    gtest: false,
-}
-
-cc_test {
     name: "cow_api_test",
     defaults: [
         "fs_mgr_defaults",
@@ -414,78 +396,6 @@ cc_test {
     auto_gen_config: true,
     require_root: false,
     host_supported: true,
-}
-
-cc_binary {
-    name: "make_cow_from_ab_ota",
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbspatch",
-        "libbrotli",
-        "libbz",
-        "libchrome",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libprotobuf-cpp-lite",
-        "libpuffpatch",
-        "libsnapshot_cow",
-        "libsparse",
-        "libxz",
-        "libz",
-        "liblz4",
-        "libziparchive",
-        "update_metadata-protos",
-    ],
-    srcs: [
-        "make_cow_from_ab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
-}
-
-cc_binary {
-    name: "estimate_cow_from_nonab_ota",
-    defaults: [
-        "libsnapshot_cow_defaults",
-    ],
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libbz",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libsnapshot_cow",
-        "libsparse",
-        "libz",
-        "libziparchive",
-    ],
-    srcs: [
-        "estimate_cow_from_nonab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
 }
 
 cc_binary {
