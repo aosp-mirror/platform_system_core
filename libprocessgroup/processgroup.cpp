@@ -200,6 +200,11 @@ extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_pr
     return SetProcessProfiles(uid, pid, std::span<const std::string_view>(profiles_));
 }
 
+bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
+    return TaskProfiles::GetInstance().SetUserProfiles(uid, std::span<const std::string>(profiles),
+                                                       false);
+}
+
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
     return StringPrintf("%s/uid_%d", cgroup, uid);
 }
@@ -535,6 +540,15 @@ int killProcessGroup(uid_t uid, int initialPid, int signal, int* max_processes) 
 
 int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_processes) {
     return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/, max_processes);
+}
+
+int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal) {
+    std::string hierarchy_root_path;
+    if (CgroupsAvailable()) {
+        CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+    }
+    const char* cgroup = hierarchy_root_path.c_str();
+    return DoKillProcessGroupOnce(cgroup, uid, initialPid, signal);
 }
 
 static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
