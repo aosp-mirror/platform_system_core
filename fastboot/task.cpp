@@ -14,12 +14,15 @@
 // limitations under the License.
 //
 #include "task.h"
+
 #include <iostream>
+
+#include <android-base/logging.h>
+#include <android-base/parseint.h>
+
 #include "fastboot.h"
 #include "filesystem.h"
 #include "super_flash_helper.h"
-
-#include <android-base/parseint.h>
 
 using namespace std::string_literals;
 FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
