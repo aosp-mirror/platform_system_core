@@ -53,6 +53,7 @@ static int Usage(void) {
     std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  getuuid <dm-name>" << std::endl;
     std::cerr << "  info <dm-name>" << std::endl;
+    std::cerr << "  replace <dm-name> <targets...>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
     std::cerr << "  resume <dm-name>" << std::endl;
     std::cerr << "  suspend <dm-name>" << std::endl;

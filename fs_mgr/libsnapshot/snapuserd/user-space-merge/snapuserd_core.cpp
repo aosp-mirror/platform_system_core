@@ -433,11 +433,6 @@ bool SnapshotHandler::IsIouringSupported() {
     struct utsname uts;
     unsigned int major, minor;
 
-    if (android::base::GetBoolProperty("snapuserd.test.io_uring.force_disable", false)) {
-        SNAP_LOG(INFO) << "io_uring disabled for testing";
-        return false;
-    }
-
     if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
         SNAP_LOG(ERROR) << "Could not parse the kernel version from uname. "
                         << " io_uring not supported";
