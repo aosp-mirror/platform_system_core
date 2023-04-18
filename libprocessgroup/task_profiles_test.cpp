@@ -43,7 +43,7 @@ bool IsCgroupV2Mounted() {
     }
     struct mntent* mnt;
     while ((mnt = getmntent(mnts.get()))) {
-        if (strcmp(mnt->mnt_fsname, "cgroup2") == 0) {
+        if (strcmp(mnt->mnt_type, "cgroup2") == 0) {
             return true;
         }
     }
@@ -120,6 +120,10 @@ class ProfileAttributeMock : public IProfileAttribute {
         *path += file_name_;
         return true;
     };
+
+    bool GetPathForUID(uid_t, std::string*) const override {
+        return false;
+    }
 
   private:
     const std::string file_name_;
