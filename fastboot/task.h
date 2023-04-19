@@ -18,10 +18,13 @@
 #include <sstream>
 #include <string>
 
-#include "fastboot.h"
 #include "fastboot_driver.h"
 #include "super_flash_helper.h"
 #include "util.h"
+
+struct FlashingPlan;
+struct Image;
+using ImageEntry = std::pair<const Image*, std::string>;
 
 class Task {
   public:
