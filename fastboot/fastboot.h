@@ -29,6 +29,7 @@
 
 #include <string>
 #include "fastboot_driver.h"
+#include "fastboot_driver_interface.h"
 #include "filesystem.h"
 #include "super_flash_helper.h"
 #include "util.h"
