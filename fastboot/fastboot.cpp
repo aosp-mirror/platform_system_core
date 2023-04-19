@@ -115,19 +115,6 @@ static bool g_disable_verification = false;
 
 fastboot::FastBootDriver* fb = nullptr;
 
-enum fb_buffer_type {
-    FB_BUFFER_FD,
-    FB_BUFFER_SPARSE,
-};
-
-struct fastboot_buffer {
-    enum fb_buffer_type type;
-    std::vector<SparsePtr> files;
-    int64_t sz;
-    unique_fd fd;
-    int64_t image_size;
-};
-
 static std::vector<Image> images = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
@@ -1783,25 +1770,6 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp, std
     }
     return ParseFastbootInfo(fp, file);
 }
-
-class FlashAllTool {
-  public:
-    FlashAllTool(FlashingPlan* fp);
-
-    void Flash();
-
-  private:
-    void CheckRequirements();
-    void DetermineSlot();
-    void CollectImages();
-    void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
-    void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
-    void HardcodedFlash();
-
-    std::vector<ImageEntry> boot_images_;
-    std::vector<ImageEntry> os_images_;
-    FlashingPlan* fp_;
-};
 
 FlashAllTool::FlashAllTool(FlashingPlan* fp) : fp_(fp) {}
 
