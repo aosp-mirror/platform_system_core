@@ -29,6 +29,7 @@
 
 #include <string>
 #include "fastboot_driver.h"
+#include "filesystem.h"
 #include "super_flash_helper.h"
 #include "util.h"
 
@@ -45,6 +46,19 @@ class FastBootTool {
     void ParseOsPatchLevel(boot_img_hdr_v1*, const char*);
     void ParseOsVersion(boot_img_hdr_v1*, const char*);
     unsigned ParseFsOption(const char*);
+};
+
+enum fb_buffer_type {
+    FB_BUFFER_FD,
+    FB_BUFFER_SPARSE,
+};
+
+struct fastboot_buffer {
+    enum fb_buffer_type type;
+    std::vector<SparsePtr> files;
+    int64_t sz;
+    unique_fd fd;
+    int64_t image_size;
 };
 
 enum class ImageType {
@@ -85,6 +99,25 @@ struct FlashingPlan {
     std::string secondary_slot;
 
     fastboot::FastBootDriver* fb;
+};
+
+class FlashAllTool {
+  public:
+    FlashAllTool(FlashingPlan* fp);
+
+    void Flash();
+
+  private:
+    void CheckRequirements();
+    void DetermineSlot();
+    void CollectImages();
+    void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
+    void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
+    void HardcodedFlash();
+
+    std::vector<ImageEntry> boot_images_;
+    std::vector<ImageEntry> os_images_;
+    FlashingPlan* fp_;
 };
 
 bool should_flash_in_userspace(const std::string& partition_name);
