@@ -25,16 +25,15 @@
 namespace android {
 namespace snapshot {
 
-class BufferSink : public IByteSink {
+class BufferSink final {
   public:
     void Initialize(size_t size);
     void* GetBufPtr() { return buffer_.get(); }
     void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
     void* GetPayloadBuffer(size_t size);
-    void* GetBuffer(size_t requested, size_t* actual) override;
+    void* GetBuffer(size_t requested, size_t* actual);
     void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
     struct dm_user_header* GetHeaderPtr();
-    bool ReturnData(void*, size_t) override { return true; }
     void ResetBufferOffset() { buffer_offset_ = 0; }
     void* GetPayloadBufPtr();
 
@@ -44,12 +43,12 @@ class BufferSink : public IByteSink {
     size_t buffer_size_;
 };
 
-class XorSink : public IByteSink {
+class XorSink final {
   public:
     void Initialize(BufferSink* sink, size_t size);
     void Reset();
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    bool ReturnData(void* buffer, size_t len) override;
+    void* GetBuffer(size_t requested, size_t* actual);
+    bool ReturnData(void* buffer, size_t len);
 
   private:
     BufferSink* bufsink_;

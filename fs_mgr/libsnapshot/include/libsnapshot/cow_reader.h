@@ -29,35 +29,6 @@ namespace snapshot {
 
 class ICowOpIter;
 
-// A ByteSink object handles requests for a buffer of a specific size. It
-// always owns the underlying buffer. It's designed to minimize potential
-// copying as we parse or decompress the COW.
-class IByteSink {
-  public:
-    virtual ~IByteSink() {}
-
-    // Called when the reader has data. The size of the request is given. The
-    // sink must return a valid pointer (or null on failure), and return the
-    // maximum number of bytes that can be written to the returned buffer.
-    //
-    // The returned buffer is owned by IByteSink, but must remain valid until
-    // the read operation has completed (or the entire buffer has been
-    // covered by calls to ReturnData).
-    //
-    // After calling GetBuffer(), all previous buffers returned are no longer
-    // valid.
-    //
-    // GetBuffer() is intended to be sequential. A returned size of N indicates
-    // that the output stream will advance by N bytes, and the ReturnData call
-    // indicates that those bytes have been fulfilled. Therefore, it is
-    // possible to have ReturnBuffer do nothing, if the implementation doesn't
-    // care about incremental writes.
-    virtual void* GetBuffer(size_t requested, size_t* actual) = 0;
-
-    // Called when a section returned by |GetBuffer| has been filled with data.
-    virtual bool ReturnData(void* buffer, size_t length) = 0;
-};
-
 // Interface for reading from a snapuserd COW.
 class ICowReader {
   public:
@@ -82,10 +53,6 @@ class ICowReader {
 
     // Return an iterator for retrieving CowOperation entries in merge order
     virtual std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress) = 0;
-
-    // Get decoded bytes from the data section, handling any decompression.
-    // All retrieved data is passed to the sink.
-    virtual bool ReadData(const CowOperation& op, IByteSink* sink) = 0;
 
     // Get decoded bytes from the data section, handling any decompression.
     //
@@ -153,7 +120,6 @@ class CowReader final : public ICowReader {
     std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
     std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
-    bool ReadData(const CowOperation& op, IByteSink* sink) override;
     ssize_t ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
                      size_t ignore_bytes = 0) override;
 
