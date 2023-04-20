@@ -5,6 +5,7 @@ libamidi.so
 libbinder_ndk.so
 libc.so
 libcamera2ndk.so
+libclang_rt.hwasan-aarch64-android.so 64 nopreload
 libdl.so
 libEGL.so
 libGLESv1_CM.so

@@ -36,6 +36,7 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::s
 
 bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
+bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles);
 
 __END_DECLS
 
@@ -74,6 +75,11 @@ int killProcessGroup(uid_t uid, int initialPid, int signal, int* max_processes =
 // Returns the same as killProcessGroup(), however it does not retry, which means
 // that it only returns 0 in the case that the cgroup exists and it contains no processes.
 int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_processes = nullptr);
+
+// Sends the provided signal to all members of a process group, but does not wait for processes to
+// exit, or for the cgroup to be removed. Callers should also ensure that killProcessGroup is called
+// later to ensure the cgroup is fully removed, otherwise system resources may leak.
+int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal);
 
 int createProcessGroup(uid_t uid, int initialPid, bool memControl = false);
 

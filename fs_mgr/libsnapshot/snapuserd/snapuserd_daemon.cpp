@@ -110,11 +110,11 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
     for (int i = arg_start; i < argc; i++) {
         auto parts = android::base::Split(argv[i], ",");
         if (parts.size() != 4) {
-            LOG(ERROR) << "Malformed message, expected three sub-arguments.";
+            LOG(ERROR) << "Malformed message, expected four sub-arguments.";
             return false;
         }
         auto handler = user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3]);
-        if (!handler || !user_server_.StartHandler(handler)) {
+        if (!handler || !user_server_.StartHandler(parts[0])) {
             return false;
         }
     }
