@@ -16,6 +16,7 @@
 
 #include "task_profiles.h"
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 #include <mntent.h>
 #include <processgroup/processgroup.h>
@@ -29,13 +30,14 @@ using ::android::base::LogFunction;
 using ::android::base::LogId;
 using ::android::base::LogSeverity;
 using ::android::base::SetLogger;
+using ::android::base::Split;
 using ::android::base::VERBOSE;
 using ::testing::TestWithParam;
 using ::testing::Values;
 
 namespace {
 
-bool IsCgroupV2Mounted() {
+bool IsCgroupV2MountedRw() {
     std::unique_ptr<FILE, int (*)(FILE*)> mnts(setmntent("/proc/mounts", "re"), endmntent);
     if (!mnts) {
         LOG(ERROR) << "Failed to open /proc/mounts";
@@ -43,9 +45,11 @@ bool IsCgroupV2Mounted() {
     }
     struct mntent* mnt;
     while ((mnt = getmntent(mnts.get()))) {
-        if (strcmp(mnt->mnt_type, "cgroup2") == 0) {
-            return true;
+        if (strcmp(mnt->mnt_type, "cgroup2") != 0) {
+            continue;
         }
+        const std::vector<std::string> options = Split(mnt->mnt_opts, ",");
+        return std::count(options.begin(), options.end(), "ro") == 0;
     }
     return false;
 }
@@ -145,8 +149,9 @@ class SetAttributeFixture : public TestWithParam<TestParam> {
 };
 
 TEST_P(SetAttributeFixture, SetAttribute) {
-    // Treehugger runs host tests inside a container without cgroupv2 support.
-    if (!IsCgroupV2Mounted()) {
+    // Treehugger runs host tests inside a container either without cgroupv2
+    // support or with the cgroup filesystem mounted read-only.
+    if (!IsCgroupV2MountedRw()) {
         GTEST_SKIP();
         return;
     }
