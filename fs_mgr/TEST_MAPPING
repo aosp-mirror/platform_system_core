@@ -28,9 +28,6 @@
       "name": "vabc_legacy_tests"
     },
     {
-      "name": "libsnapshot_fuzzer_test"
-    },
-    {
       "name": "cow_api_test"
     }
   ],

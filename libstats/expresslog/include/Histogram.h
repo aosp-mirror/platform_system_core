@@ -72,6 +72,11 @@ public:
      */
     void logSample(float sample) const;
 
+    /**
+     * Logs increment sample count for automatically calculated bin with uid
+     */
+    void logSampleWithUid(int32_t uid, float sample) const;
+
 private:
     const int64_t mMetricIdHash;
     const std::shared_ptr<BinOptions> mBinOptions;

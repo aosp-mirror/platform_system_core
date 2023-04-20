@@ -77,7 +77,7 @@ class Parser {
     void AddSingleLineParser(const std::string& prefix, LineCallback callback);
 
     // Host init verifier check file permissions.
-    bool ParseConfigFileInsecure(const std::string& path);
+    bool ParseConfigFileInsecure(const std::string& path, bool follow_symlinks);
 
     size_t parse_error_count() const { return parse_error_count_; }
 
