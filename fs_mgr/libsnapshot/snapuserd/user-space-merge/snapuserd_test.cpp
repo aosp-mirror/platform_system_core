@@ -37,9 +37,9 @@
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
 #include <libsnapshot/cow_writer.h>
-#include <snapuserd/snapuserd_client.h>
 #include <storage_literals/storage_literals.h>
 
+#include "handler_manager.h"
 #include "snapuserd_core.h"
 
 DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
@@ -54,8 +54,6 @@ using namespace std::chrono_literals;
 using namespace android::dm;
 using namespace std;
 
-static constexpr char kSnapuserdSocketTest[] = "snapuserdTest";
-
 class Tempdevice {
   public:
     Tempdevice(const std::string& name, const DmTable& table)
@@ -68,15 +66,15 @@ class Tempdevice {
     }
     ~Tempdevice() {
         if (valid_) {
-            dm_.DeleteDevice(name_);
+            dm_.DeleteDeviceIfExists(name_);
         }
     }
     bool Destroy() {
         if (!valid_) {
-            return false;
+            return true;
         }
         valid_ = false;
-        return dm_.DeleteDevice(name_);
+        return dm_.DeleteDeviceIfExists(name_);
     }
     const std::string& path() const { return path_; }
     const std::string& name() const { return name_; }
@@ -138,7 +136,6 @@ class SnapuserdTest : public ::testing::Test {
     void SetDeviceControlName();
     void InitDaemon();
     void CreateDmUserDevice();
-    void StartSnapuserdDaemon();
 
     unique_ptr<LoopDevice> base_loop_;
     unique_ptr<Tempdevice> dmuser_dev_;
@@ -148,9 +145,9 @@ class SnapuserdTest : public ::testing::Test {
 
     unique_fd base_fd_;
     std::unique_ptr<TemporaryFile> cow_system_;
-    std::unique_ptr<SnapuserdClient> client_;
     std::unique_ptr<uint8_t[]> orig_buffer_;
     std::unique_ptr<uint8_t[]> merged_buffer_;
+    SnapshotHandlerManager handlers_;
     bool setup_ok_ = false;
     bool merge_ok_ = false;
     size_t size_ = 100_MiB;
@@ -180,9 +177,9 @@ void SnapuserdTest::Shutdown() {
     ASSERT_TRUE(dmuser_dev_->Destroy());
 
     auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
-    ASSERT_TRUE(client_->WaitForDeviceDelete(system_device_ctrl_name_));
+    ASSERT_TRUE(handlers_.DeleteHandler(system_device_ctrl_name_));
     ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
-    ASSERT_TRUE(client_->DetachSnapuserd());
+    handlers_.TerminateMergeThreads();
 }
 
 bool SnapuserdTest::SetupDefault() {
@@ -217,8 +214,6 @@ bool SnapuserdTest::SetupCopyOverlap_2() {
 bool SnapuserdTest::SetupDaemon() {
     SetDeviceControlName();
 
-    StartSnapuserdDaemon();
-
     CreateDmUserDevice();
     InitCowDevice();
     InitDaemon();
@@ -226,20 +221,6 @@ bool SnapuserdTest::SetupDaemon() {
     setup_ok_ = true;
 
     return setup_ok_;
-}
-
-void SnapuserdTest::StartSnapuserdDaemon() {
-    pid_t pid = fork();
-    ASSERT_GE(pid, 0);
-    if (pid == 0) {
-        std::string arg0 = "/system/bin/snapuserd";
-        std::string arg1 = "-socket="s + kSnapuserdSocketTest;
-        char* const argv[] = {arg0.data(), arg1.data(), nullptr};
-        ASSERT_GE(execv(arg0.c_str(), argv), 0);
-    } else {
-        client_ = SnapuserdClient::Connect(kSnapuserdSocketTest, 10s);
-        ASSERT_NE(client_, nullptr);
-    }
 }
 
 void SnapuserdTest::CreateBaseDevice() {
@@ -606,9 +587,17 @@ void SnapuserdTest::CreateCowDevice() {
 }
 
 void SnapuserdTest::InitCowDevice() {
-    uint64_t num_sectors = client_->InitDmUserCow(system_device_ctrl_name_, cow_system_->path,
-                                                  base_loop_->device(), base_loop_->device());
-    ASSERT_NE(num_sectors, 0);
+    bool use_iouring = true;
+    if (FLAGS_force_config == "iouring_disabled") {
+        use_iouring = false;
+    }
+
+    auto handler =
+            handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_loop_->device(),
+                                 base_loop_->device(), 1, use_iouring, false);
+    ASSERT_NE(handler, nullptr);
+    ASSERT_NE(handler->snapuserd(), nullptr);
+    ASSERT_NE(handler->snapuserd()->GetNumSectors(), 0);
 }
 
 void SnapuserdTest::SetDeviceControlName() {
@@ -646,13 +635,12 @@ void SnapuserdTest::CreateDmUserDevice() {
 }
 
 void SnapuserdTest::InitDaemon() {
-    bool ok = client_->AttachDmUser(system_device_ctrl_name_);
-    ASSERT_TRUE(ok);
+    ASSERT_TRUE(handlers_.StartHandler(system_device_ctrl_name_));
 }
 
 void SnapuserdTest::CheckMergeCompletion() {
     while (true) {
-        double percentage = client_->GetMergePercent();
+        double percentage = handlers_.GetMergePercentage();
         if ((int)percentage == 100) {
             break;
         }
@@ -666,8 +654,6 @@ void SnapuserdTest::SetupImpl() {
     CreateCowDevice();
 
     SetDeviceControlName();
-
-    StartSnapuserdDaemon();
 
     CreateDmUserDevice();
     InitCowDevice();
@@ -684,8 +670,7 @@ bool SnapuserdTest::Merge() {
 }
 
 void SnapuserdTest::StartMerge() {
-    bool ok = client_->InitiateMerge(system_device_ctrl_name_);
-    ASSERT_TRUE(ok);
+    ASSERT_TRUE(handlers_.InitiateMerge(system_device_ctrl_name_));
 }
 
 void SnapuserdTest::ValidateMerge() {
@@ -699,7 +684,6 @@ void SnapuserdTest::SimulateDaemonRestart() {
     Shutdown();
     std::this_thread::sleep_for(500ms);
     SetDeviceControlName();
-    StartSnapuserdDaemon();
     CreateDmUserDevice();
     InitCowDevice();
     InitDaemon();
@@ -859,20 +843,5 @@ int main(int argc, char** argv) {
 
     gflags::ParseCommandLineFlags(&argc, &argv, false);
 
-    android::base::SetProperty("ctl.stop", "snapuserd");
-
-    if (FLAGS_force_config == "iouring_disabled") {
-        if (!android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1")) {
-            return testing::AssertionFailure()
-                   << "Failed to disable property: snapuserd.test.io_uring.disabled";
-        }
-    }
-
-    int ret = RUN_ALL_TESTS();
-
-    if (FLAGS_force_config == "iouring_disabled") {
-        android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0");
-    }
-
-    return ret;
+    return RUN_ALL_TESTS();
 }
