@@ -80,3 +80,21 @@ TEST_F(ParseTest, CORRECT_FlASH_TASK_FORMED) {
         ASSERT_EQ(task->GetImageName(), expected_values[i][3]);
     }
 }
+
+TEST_F(ParseTest, VERSION_CHECK_CORRRECT) {
+    std::vector<std::string> correct_versions = {
+            "version 1.0",
+            "version 22.00",
+    };
+
+    std::vector<std::string> bad_versions = {"version",        "version .01", "version x1",
+                                             "version 1.0.1",  "version 1.",  "s 1.0",
+                                             "version 1.0 2.0"};
+
+    for (auto& version : correct_versions) {
+        ASSERT_TRUE(CheckFastbootInfoRequirements(android::base::Split(version, " "))) << version;
+    }
+    for (auto& version : bad_versions) {
+        ASSERT_FALSE(CheckFastbootInfoRequirements(android::base::Split(version, " "))) << version;
+    }
+}
