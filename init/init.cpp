@@ -247,47 +247,20 @@ static class ShutdownState {
         WakeMainInitThread();
     }
 
-    std::optional<std::string> CheckShutdown() {
+    std::optional<std::string> CheckShutdown() __attribute__((warn_unused_result)) {
         auto lock = std::lock_guard{shutdown_command_lock_};
         if (do_shutdown_ && !IsShuttingDown()) {
+            do_shutdown_ = false;
             return shutdown_command_;
         }
         return {};
     }
-
-    bool do_shutdown() const { return do_shutdown_; }
-    void set_do_shutdown(bool value) { do_shutdown_ = value; }
 
   private:
     std::mutex shutdown_command_lock_;
     std::string shutdown_command_ GUARDED_BY(shutdown_command_lock_);
     bool do_shutdown_ = false;
 } shutdown_state;
-
-static void UnwindMainThreadStack() {
-    unwindstack::AndroidLocalUnwinder unwinder;
-    unwindstack::AndroidUnwinderData data;
-    if (!unwinder.Unwind(data)) {
-        LOG(ERROR) << __FUNCTION__
-                   << "sys.powerctl: Failed to unwind callstack: " << data.GetErrorString();
-    }
-    for (const auto& frame : data.frames) {
-        LOG(ERROR) << "sys.powerctl: " << unwinder.FormatFrame(frame);
-    }
-}
-
-void DebugRebootLogging() {
-    LOG(INFO) << "sys.powerctl: do_shutdown: " << shutdown_state.do_shutdown()
-              << " IsShuttingDown: " << IsShuttingDown();
-    if (shutdown_state.do_shutdown()) {
-        LOG(ERROR) << "sys.powerctl set while a previous shutdown command has not been handled";
-        UnwindMainThreadStack();
-    }
-    if (IsShuttingDown()) {
-        LOG(ERROR) << "sys.powerctl set while init is already shutting down";
-        UnwindMainThreadStack();
-    }
-}
 
 void DumpState() {
     ServiceList::GetInstance().DumpState();
@@ -1109,36 +1082,43 @@ int SecondStageMain(int argc, char** argv) {
     // Restore prio before main loop
     setpriority(PRIO_PROCESS, 0, 0);
     while (true) {
-        // By default, sleep until something happens.
-        std::optional<std::chrono::milliseconds> epoll_timeout;
+        // By default, sleep until something happens. Do not convert far_future into
+        // std::chrono::milliseconds because that would trigger an overflow. The unit of boot_clock
+        // is 1ns.
+        const boot_clock::time_point far_future = boot_clock::time_point::max();
+        boot_clock::time_point next_action_time = far_future;
 
         auto shutdown_command = shutdown_state.CheckShutdown();
         if (shutdown_command) {
             LOG(INFO) << "Got shutdown_command '" << *shutdown_command
                       << "' Calling HandlePowerctlMessage()";
             HandlePowerctlMessage(*shutdown_command);
-            shutdown_state.set_do_shutdown(false);
         }
 
         if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {
             am.ExecuteOneCommand();
+            // If there's more work to do, wake up again immediately.
+            if (am.HasMoreCommands()) {
+                next_action_time = boot_clock::now();
+            }
         }
+        // Since the above code examined pending actions, no new actions must be
+        // queued by the code between this line and the Epoll::Wait() call below
+        // without calling WakeMainInitThread().
         if (!IsShuttingDown()) {
             auto next_process_action_time = HandleProcessActions();
 
             // If there's a process that needs restarting, wake up in time for that.
             if (next_process_action_time) {
-                epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
-                        *next_process_action_time - boot_clock::now());
-                if (epoll_timeout < 0ms) epoll_timeout = 0ms;
+                next_action_time = std::min(next_action_time, *next_process_action_time);
             }
         }
 
-        if (!(prop_waiter_state.MightBeWaiting() || Service::is_exec_service_running())) {
-            // If there's more work to do, wake up again immediately.
-            if (am.HasMoreCommands()) epoll_timeout = 0ms;
+        std::optional<std::chrono::milliseconds> epoll_timeout;
+        if (next_action_time != far_future) {
+            epoll_timeout = std::chrono::ceil<std::chrono::milliseconds>(
+                    std::max(next_action_time - boot_clock::now(), 0ns));
         }
-
         auto epoll_result = epoll.Wait(epoll_timeout);
         if (!epoll_result.ok()) {
             LOG(ERROR) << epoll_result.error();

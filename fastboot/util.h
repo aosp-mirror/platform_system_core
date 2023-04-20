@@ -6,28 +6,10 @@
 #include <string>
 #include <vector>
 
-#include <android-base/logging.h>
-#include <android-base/result.h>
 #include <android-base/unique_fd.h>
 #include <bootimg.h>
 #include <liblp/liblp.h>
 #include <sparse/sparse.h>
-
-using android::base::ErrnoError;
-using android::base::Error;
-using android::base::Result;
-using android::base::ResultError;
-
-template <typename T, typename U>
-inline T Expect(Result<T, U> r) {
-    if (r.ok()) {
-        return r.value();
-    }
-
-    LOG(FATAL) << r.error().message();
-
-    return r.value();
-}
 
 using SparsePtr = std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)>;
 
@@ -48,6 +30,7 @@ bool should_flash_in_userspace(const android::fs_mgr::LpMetadata& metadata,
                                const std::string& partition_name);
 bool is_sparse_file(android::base::borrowed_fd fd);
 int64_t get_file_size(android::base::borrowed_fd fd);
+std::string fb_fix_numeric_var(std::string var);
 
 class ImageSource {
   public:
