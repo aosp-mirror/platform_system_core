@@ -54,9 +54,9 @@ enum class DaemonOps {
     INVALID,
 };
 
-class UserSnapshotDmUserHandler {
+class HandlerThread {
   public:
-    explicit UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd);
+    explicit HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd);
 
     void FreeResources() {
         // Each worker thread holds a reference to snapuserd.
@@ -99,9 +99,9 @@ class UserSnapshotServer {
 
     std::mutex lock_;
 
-    using HandlerList = std::vector<std::shared_ptr<UserSnapshotDmUserHandler>>;
+    using HandlerList = std::vector<std::shared_ptr<HandlerThread>>;
     HandlerList dm_users_;
-    std::queue<std::shared_ptr<UserSnapshotDmUserHandler>> merge_handlers_;
+    std::queue<std::shared_ptr<HandlerThread>> merge_handlers_;
 
     void AddWatchedFd(android::base::borrowed_fd fd, int events);
     void AcceptClient();
@@ -118,13 +118,13 @@ class UserSnapshotServer {
 
     bool IsTerminating() { return terminating_; }
 
-    void RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler);
+    void RunThread(std::shared_ptr<HandlerThread> handler);
     void MonitorMerge();
 
     void JoinAllThreads();
     bool StartWithSocket(bool start_listening);
 
-    // Find a UserSnapshotDmUserHandler within a lock.
+    // Find a HandlerThread within a lock.
     HandlerList::iterator FindHandler(std::lock_guard<std::mutex>* proof_of_lock,
                                       const std::string& misc_name);
 
@@ -143,14 +143,14 @@ class UserSnapshotServer {
     bool RunForSocketHandoff();
     bool WaitForSocket();
 
-    std::shared_ptr<UserSnapshotDmUserHandler> AddHandler(const std::string& misc_name,
-                                                          const std::string& cow_device_path,
-                                                          const std::string& backing_device,
-                                                          const std::string& base_path_merge);
-    bool StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
+    std::shared_ptr<HandlerThread> AddHandler(const std::string& misc_name,
+                                              const std::string& cow_device_path,
+                                              const std::string& backing_device,
+                                              const std::string& base_path_merge);
+    bool StartHandler(const std::shared_ptr<HandlerThread>& handler);
     bool StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
-                    const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
-    std::string GetMergeStatus(const std::shared_ptr<UserSnapshotDmUserHandler>& handler);
+                    const std::shared_ptr<HandlerThread>& handler);
+    std::string GetMergeStatus(const std::shared_ptr<HandlerThread>& handler);
 
     void WakeupMonitorMergeThread();
     void SetTerminating() { terminating_ = true; }

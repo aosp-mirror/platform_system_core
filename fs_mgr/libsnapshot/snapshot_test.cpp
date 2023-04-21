@@ -124,6 +124,10 @@ class SnapshotTest : public ::testing::Test {
         SKIP_IF_NON_VIRTUAL_AB();
 
         SetupProperties();
+        if (!DeviceSupportsMode()) {
+            GTEST_SKIP() << "Mode not supported on this device";
+        }
+
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
@@ -159,7 +163,13 @@ class SnapshotTest : public ::testing::Test {
         IPropertyFetcher::OverrideForTesting(std::move(fetcher));
 
         if (GetLegacyCompressionEnabledProperty() || CanUseUserspaceSnapshots()) {
-            snapuserd_required_ = true;
+            // If we're asked to test the device's actual configuration, then it
+            // may be misconfigured, so check for kernel support as libsnapshot does.
+            if (FLAGS_force_mode.empty()) {
+                snapuserd_required_ = KernelSupportsCompressedSnapshots();
+            } else {
+                snapuserd_required_ = true;
+            }
         }
     }
 
@@ -174,6 +184,16 @@ class SnapshotTest : public ::testing::Test {
         SnapshotTestPropertyFetcher::TearDown();
 
         LOG(INFO) << "Teardown complete for test: " << test_name_;
+    }
+
+    bool DeviceSupportsMode() {
+        if (FLAGS_force_mode.empty()) {
+            return true;
+        }
+        if (snapuserd_required_ && !KernelSupportsCompressedSnapshots()) {
+            return false;
+        }
+        return true;
     }
 
     void InitializeState() {
@@ -192,6 +212,11 @@ class SnapshotTest : public ::testing::Test {
         // completing a merge, the snapshot stops existing, so we can't
         // get an accurate list to remove.
         lock_ = nullptr;
+
+        // If there is no image manager, the test was skipped.
+        if (!image_manager_) {
+            return;
+        }
 
         std::vector<std::string> snapshots = {"test-snapshot", "test_partition_a",
                                               "test_partition_b"};
@@ -946,6 +971,11 @@ class SnapshotUpdateTest : public SnapshotTest {
         SKIP_IF_NON_VIRTUAL_AB();
 
         SnapshotTest::SetUp();
+        if (!image_manager_) {
+            // Test was skipped.
+            return;
+        }
+
         Cleanup();
 
         // Cleanup() changes slot suffix, so initialize it again.
@@ -2680,6 +2710,9 @@ class ImageManagerTest : public SnapshotTest {
         CleanUp();
     }
     void CleanUp() {
+        if (!image_manager_) {
+            return;
+        }
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
     }

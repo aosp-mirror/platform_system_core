@@ -877,11 +877,11 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> p
                 profile->EnableResourceCaching(ProfileAction::RCT_PROCESS);
             }
             if (!profile->ExecuteForProcess(uid, pid)) {
-                PLOG(WARNING) << "Failed to apply " << name << " process profile";
+                LOG(WARNING) << "Failed to apply " << name << " process profile";
                 success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << " process profile";
+            LOG(WARNING) << "Failed to find " << name << " process profile";
             success = false;
         }
     }
@@ -898,11 +898,11 @@ bool TaskProfiles::SetTaskProfiles(int tid, std::span<const T> profiles, bool us
                 profile->EnableResourceCaching(ProfileAction::RCT_TASK);
             }
             if (!profile->ExecuteForTask(tid)) {
-                PLOG(WARNING) << "Failed to apply " << name << " task profile";
+                LOG(WARNING) << "Failed to apply " << name << " task profile";
                 success = false;
             }
         } else {
-            PLOG(WARNING) << "Failed to find " << name << " task profile";
+            LOG(WARNING) << "Failed to find " << name << " task profile";
             success = false;
         }
     }

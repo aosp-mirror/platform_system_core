@@ -326,7 +326,9 @@ int main(int argc, char** argv) {
             }
         }
     } else {
-        if (!parser.ParseConfigFileInsecure(*argv)) {
+        if (!parser.ParseConfigFileInsecure(*argv, true /* follow_symlinks */)) {
+          // Follow symlinks as inputs during build execution in Bazel's
+          // execution root are symlinks, unlike Soong or Make.
             LOG(ERROR) << "Failed to open init rc script '" << *argv << "'";
             return EXIT_FAILURE;
         }

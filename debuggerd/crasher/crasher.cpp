@@ -159,11 +159,13 @@ noinline void sigsegv_non_null() {
 }
 
 noinline void fprintf_null() {
-    fprintf(nullptr, "oops");
+    FILE* sneaky_null = nullptr;
+    fprintf(sneaky_null, "oops");
 }
 
 noinline void readdir_null() {
-    readdir(nullptr);
+    DIR* sneaky_null = nullptr;
+    readdir(sneaky_null);
 }
 
 noinline int strlen_null() {

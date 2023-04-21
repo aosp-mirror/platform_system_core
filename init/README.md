@@ -642,17 +642,17 @@ provides the `aidl_lazy_test_1` interface.
   the current SELinux policy or its parent if not specified in the policy. If
   the directory exists, its security context will not be changed (even if
   different from the policy).
-
-  > _action_ can be one of:
-  * `None`: take no encryption action; directory will be encrypted if parent is.
-  * `Require`: encrypt directory, abort boot process if encryption fails
-  * `Attempt`: try to set an encryption policy, but continue if it fails
-  * `DeleteIfNecessary`: recursively delete directory if necessary to set
-  encryption policy.
-
-  > _key_ can be one of:
-  * `ref`: use the systemwide DE key
-  * `per_boot_ref`: use the key freshly generated on each boot.
+>
+> _action_ can be one of:
+>  * `None`: take no encryption action; directory will be encrypted if parent is.
+>  * `Require`: encrypt directory, abort boot process if encryption fails
+>  * `Attempt`: try to set an encryption policy, but continue if it fails
+>  * `DeleteIfNecessary`: recursively delete directory if necessary to set
+>  encryption policy.
+>
+> _key_ can be one of:
+>  * `ref`: use the systemwide DE key
+>  * `per_boot_ref`: use the key freshly generated on each boot.
 
 `mount_all [ <fstab> ] [--<option>]`
 > Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab with optional
