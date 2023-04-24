@@ -534,7 +534,7 @@ Result<void> ServiceParser::ParseUser(std::vector<std::string>&& args) {
     if (!uid.ok()) {
         return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
     }
-    service_->proc_attr_.uid = *uid;
+    service_->proc_attr_.parsed_uid = *uid;
     return {};
 }
 
@@ -675,6 +675,11 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
 Result<void> ServiceParser::EndSection() {
     if (!service_) {
         return {};
+    }
+
+    if (service_->proc_attr_.parsed_uid == std::nullopt) {
+        LOG(WARNING) << "No user specified for service '" << service_->name()
+                     << "'. Defaults to root.";
     }
 
     if (interface_inheritance_hierarchy_) {
