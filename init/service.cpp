@@ -140,9 +140,10 @@ bool Service::is_exec_service_running_ = false;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)
-    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, filename, args) {}
+    : Service(name, 0, std::nullopt, 0, {}, 0, "", subcontext_for_restart_commands, filename,
+              args) {}
 
-Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
+Service::Service(const std::string& name, unsigned flags, std::optional<uid_t> uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)
@@ -153,7 +154,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       crash_count_(0),
       proc_attr_{.ioprio_class = IoSchedClass_NONE,
                  .ioprio_pri = 0,
-                 .uid = uid,
+                 .parsed_uid = uid,
                  .gid = gid,
                  .supp_gids = supp_gids,
                  .priority = 0},
@@ -205,9 +206,9 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
         int max_processes = 0;
         int r;
         if (signal == SIGTERM) {
-            r = killProcessGroupOnce(proc_attr_.uid, pid_, signal, &max_processes);
+            r = killProcessGroupOnce(uid(), pid_, signal, &max_processes);
         } else {
-            r = killProcessGroup(proc_attr_.uid, pid_, signal, &max_processes);
+            r = killProcessGroup(uid(), pid_, signal, &max_processes);
         }
 
         if (report_oneshot && max_processes > 0) {
@@ -228,7 +229,7 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
 
 void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
     // Keep capabilites on uid change.
-    if (capabilities_ && proc_attr_.uid) {
+    if (capabilities_ && uid()) {
         // If Android is running in a container, some securebits might already
         // be locked, so don't change those.
         unsigned long securebits = prctl(PR_GET_SECUREBITS);
@@ -255,7 +256,7 @@ void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
         if (!SetCapsForExec(*capabilities_)) {
             LOG(FATAL) << "cannot set capabilities for " << name_;
         }
-    } else if (proc_attr_.uid) {
+    } else if (uid()) {
         // Inheritable caps can be non-zero when running in a container.
         if (!DropInheritableCaps()) {
             LOG(FATAL) << "cannot drop inheritable caps for " << name_;
@@ -434,8 +435,8 @@ Result<void> Service::ExecStart() {
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
 
-    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
-              << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
+    LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << uid() << " gid "
+              << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
               << (!seclabel_.empty() ? seclabel_ : "default") << ") started; waiting...";
 
     reboot_on_failure.Disable();
@@ -475,13 +476,13 @@ Result<void> Service::CheckConsole() {
 // Configures the memory cgroup properties for the service.
 void Service::ConfigureMemcg() {
     if (swappiness_ != -1) {
-        if (!setProcessGroupSwappiness(proc_attr_.uid, pid_, swappiness_)) {
+        if (!setProcessGroupSwappiness(uid(), pid_, swappiness_)) {
             PLOG(ERROR) << "setProcessGroupSwappiness failed";
         }
     }
 
     if (soft_limit_in_bytes_ != -1) {
-        if (!setProcessGroupSoftLimit(proc_attr_.uid, pid_, soft_limit_in_bytes_)) {
+        if (!setProcessGroupSoftLimit(uid(), pid_, soft_limit_in_bytes_)) {
             PLOG(ERROR) << "setProcessGroupSoftLimit failed";
         }
     }
@@ -508,7 +509,7 @@ void Service::ConfigureMemcg() {
     }
 
     if (computed_limit_in_bytes != size_t(-1)) {
-        if (!setProcessGroupLimit(proc_attr_.uid, pid_, computed_limit_in_bytes)) {
+        if (!setProcessGroupLimit(uid(), pid_, computed_limit_in_bytes)) {
             PLOG(ERROR) << "setProcessGroupLimit failed";
         }
     }
@@ -705,21 +706,20 @@ Result<void> Service::Start() {
     if (CgroupsAvailable()) {
         bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
                          limit_percent_ != -1 || !limit_property_.empty();
-        errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
+        errno = -createProcessGroup(uid(), pid_, use_memcg);
         if (errno != 0) {
             Result<void> result = cgroups_activated.Write(kActivatingCgroupsFailed);
             if (!result.ok()) {
                 return Error() << "Sending notification failed: " << result.error();
             }
-            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_ << ", "
-                           << use_memcg << ") failed for service '" << name_
-                           << "': " << strerror(errno);
+            return Error() << "createProcessGroup(" << uid() << ", " << pid_ << ", " << use_memcg
+                           << ") failed for service '" << name_ << "': " << strerror(errno);
         }
 
         // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
         // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
         // NormalIoPriority profile has to be applied explicitly.
-        SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+        SetProcessProfiles(uid(), pid_, {"NormalIoPriority"});
 
         if (use_memcg) {
             ConfigureMemcg();
@@ -727,7 +727,7 @@ Result<void> Service::Start() {
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
-        LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
+        LmkdRegister(name_, uid(), pid_, oom_score_adjust_);
     }
 
     if (Result<void> result = cgroups_activated.Write(kCgroupsActivated); !result.ok()) {
