@@ -216,7 +216,6 @@ static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
 static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
     int ret = 0;
     auto uid_pid_path = ConvertUidPidToPath(cgroup, uid, pid);
-    auto uid_path = ConvertUidToPath(cgroup, uid);
 
     while (retries--) {
         ret = rmdir(uid_pid_path.c_str());
