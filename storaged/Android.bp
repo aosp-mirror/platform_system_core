@@ -136,3 +136,27 @@ filegroup {
     ],
     path: "binder",
 }
+
+cc_fuzz {
+    name: "storaged_service_fuzzer",
+    defaults: [
+        "storaged_defaults",
+        "service_fuzzer_defaults",
+    ],
+    srcs: ["tests/fuzzers/storaged_service_fuzzer.cpp"],
+    static_libs: [
+        "libstoraged",
+    ],
+}
+
+cc_fuzz {
+    name: "storaged_private_service_fuzzer",
+    defaults: [
+        "storaged_defaults",
+        "service_fuzzer_defaults",
+    ],
+    srcs: ["tests/fuzzers/storaged_private_service_fuzzer.cpp"],
+    static_libs: [
+        "libstoraged",
+    ],
+}
