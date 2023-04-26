@@ -125,6 +125,10 @@ class SnapshotTest : public ::testing::Test {
         sm->set_use_first_stage_snapuserd(false);
     }
 
+    bool DeviceSupportsCompression() {
+        return IsCompressionEnabled() && KernelSupportsCompressedSnapshots();
+    }
+
     void CleanupTestArtifacts() {
         // Normally cancelling inside a merge is not allowed. Since these
         // are tests, we don't care, destroy everything that might exist.
@@ -327,7 +331,7 @@ class SnapshotTest : public ::testing::Test {
         DeltaArchiveManifest manifest;
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(DeviceSupportsCompression());
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         auto group = dynamic_partition_metadata->add_groups();
@@ -366,7 +370,7 @@ class SnapshotTest : public ::testing::Test {
             if (!res) {
                 return res;
             }
-        } else if (!IsCompressionEnabled()) {
+        } else if (!DeviceSupportsCompression()) {
             std::string ignore;
             if (!MapUpdateSnapshot("test_partition_b", &ignore)) {
                 return AssertionFailure() << "Failed to map test_partition_b";
@@ -425,7 +429,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = IsCompressionEnabled();
+    cow_creator.compression_enabled = DeviceSupportsCompression();
     if (cow_creator.compression_enabled) {
         cow_creator.compression_algorithm = "gz";
     } else {
@@ -466,7 +470,7 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = IsCompressionEnabled();
+    cow_creator.compression_enabled = DeviceSupportsCompression();
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -585,7 +589,7 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
-    if (IsCompressionEnabled()) {
+    if (DeviceSupportsCompression()) {
         ASSERT_EQ(status.compression_algorithm(), "gz");
     } else {
         ASSERT_EQ(status.compression_algorithm(), "none");
@@ -855,7 +859,7 @@ class SnapshotUpdateTest : public SnapshotTest {
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(DeviceSupportsCompression());
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
 
         // Create a fake update package metadata.
@@ -975,7 +979,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
-        if (IsCompressionEnabled()) {
+        if (DeviceSupportsCompression()) {
             std::unique_ptr<ISnapshotWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
@@ -985,7 +989,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult WriteSnapshotAndHash(const std::string& name) {
-        if (IsCompressionEnabled()) {
+        if (DeviceSupportsCompression()) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
@@ -1158,7 +1162,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsCompressionEnabled());
+    ASSERT_EQ(init->IsSnapuserdRequired(), DeviceSupportsCompression());
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1187,7 +1191,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
-    if (!IsCompressionEnabled()) {
+    if (!DeviceSupportsCompression()) {
         // b/179111359
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
     }
@@ -1255,7 +1259,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsCompressionEnabled());
+    ASSERT_EQ(init->IsSnapuserdRequired(), DeviceSupportsCompression());
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1879,8 +1883,8 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
         ASSERT_TRUE(AcquireLock());
 
         PartitionCowCreator cow_creator = {
-                .compression_enabled = IsCompressionEnabled(),
-                .compression_algorithm = IsCompressionEnabled() ? "gz" : "none",
+                .compression_enabled = DeviceSupportsCompression(),
+                .compression_algorithm = DeviceSupportsCompression() ? "gz" : "none",
         };
         SnapshotStatus status;
         status.set_name("sys_a");
@@ -1974,7 +1978,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
-    if (IsCompressionEnabled()) {
+    if (DeviceSupportsCompression()) {
         GTEST_SKIP() << "No overflow bit set for userspace COWs";
     }
 
@@ -2040,7 +2044,7 @@ class AutoKill final {
 };
 
 TEST_F(SnapshotUpdateTest, DaemonTransition) {
-    if (!IsCompressionEnabled()) {
+    if (!DeviceSupportsCompression()) {
         GTEST_SKIP() << "Skipping Virtual A/B Compression test";
     }
 
