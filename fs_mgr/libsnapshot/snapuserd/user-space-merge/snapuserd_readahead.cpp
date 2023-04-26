@@ -809,7 +809,7 @@ void ReadAhead::InitializeRAIter() {
 }
 
 bool ReadAhead::RAIterDone() {
-    if (cowop_iter_->Done()) {
+    if (cowop_iter_->AtEnd()) {
         return true;
     }
 
@@ -827,7 +827,7 @@ void ReadAhead::RAIterNext() {
 }
 
 void ReadAhead::RAResetIter(uint64_t num_blocks) {
-    while (num_blocks && !cowop_iter_->RDone()) {
+    while (num_blocks && !cowop_iter_->AtBegin()) {
         cowop_iter_->Prev();
         num_blocks -= 1;
     }

@@ -406,7 +406,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
 
     auto iter = reader->GetOpIter();
 
-    while (!iter->Done()) {
+    while (!iter->AtEnd()) {
         AddOperation(iter->Get());
         iter->Next();
     }

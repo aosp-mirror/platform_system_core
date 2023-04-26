@@ -390,7 +390,7 @@ bool Snapuserd::ReadMetadata() {
     // this memset will ensure that metadata read is completed.
     memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-    while (!cowop_rm_iter->Done()) {
+    while (!cowop_rm_iter->AtEnd()) {
         const CowOperation* cow_op = &cowop_rm_iter->Get();
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
@@ -437,7 +437,7 @@ bool Snapuserd::ReadMetadata() {
                                                  sizeof(struct disk_exception));
             memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-            if (cowop_rm_iter->Done()) {
+            if (cowop_rm_iter->AtEnd()) {
                 vec_.push_back(std::move(de_ptr));
             }
         }
@@ -457,7 +457,7 @@ bool Snapuserd::ReadMetadata() {
                     << " Number of replace/zero ops completed in this area: " << num_ops
                     << " Pending copy ops for this area: " << pending_ordered_ops;
 
-    while (!cowop_rm_iter->Done()) {
+    while (!cowop_rm_iter->AtEnd()) {
         do {
             const CowOperation* cow_op = &cowop_rm_iter->Get();
 
@@ -526,7 +526,7 @@ bool Snapuserd::ReadMetadata() {
             source_blocks.insert(cow_op->new_block);
             prev_id = cow_op->new_block;
             cowop_rm_iter->Next();
-        } while (!cowop_rm_iter->Done() && pending_ordered_ops);
+        } while (!cowop_rm_iter->AtEnd() && pending_ordered_ops);
 
         data_chunk_id = GetNextAllocatableChunkId(data_chunk_id);
         SNAP_LOG(DEBUG) << "Batch Merge copy-ops of size: " << vec.size()
@@ -569,7 +569,7 @@ bool Snapuserd::ReadMetadata() {
                                                      sizeof(struct disk_exception));
                 memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
-                if (cowop_rm_iter->Done()) {
+                if (cowop_rm_iter->AtEnd()) {
                     vec_.push_back(std::move(de_ptr));
                     SNAP_LOG(DEBUG) << "ReadMetadata() completed; Number of Areas: " << vec_.size();
                 }

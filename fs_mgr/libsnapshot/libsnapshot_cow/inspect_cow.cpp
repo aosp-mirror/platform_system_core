@@ -136,7 +136,7 @@ static bool Inspect(const std::string& path, Options opt) {
 
     bool success = true;
     uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
-    while (!iter->Done()) {
+    while (!iter->AtEnd()) {
         const CowOperation& op = iter->Get();
 
         if (!opt.silent && opt.show_ops) std::cout << op << "\n";

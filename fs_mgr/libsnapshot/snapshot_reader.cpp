@@ -85,7 +85,7 @@ bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
 
     // Populate the operation map.
     op_iter_ = cow_->GetOpIter();
-    while (!op_iter_->Done()) {
+    while (!op_iter_->AtEnd()) {
         const CowOperation* op = &op_iter_->Get();
         if (IsMetadataOp(*op)) {
             op_iter_->Next();
