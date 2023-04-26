@@ -25,7 +25,9 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
+#include <libdm/dm.h>
 
+using android::dm::DeviceMapper;
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
@@ -193,6 +195,11 @@ std::string GetOtherPartitionName(const std::string& name) {
 
     auto other_suffix = (suffix == "_a") ? "_b" : "_a";
     return name.substr(0, name.size() - suffix.size()) + other_suffix;
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
 }
 
 }  // namespace snapshot
