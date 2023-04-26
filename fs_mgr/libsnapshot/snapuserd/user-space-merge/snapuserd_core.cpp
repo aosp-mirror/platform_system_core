@@ -98,8 +98,7 @@ bool SnapshotHandler::CommitMerge(int num_merge_ops) {
         }
     } else {
         reader_->UpdateMergeOpsCompleted(num_merge_ops);
-        CowHeader header;
-        reader_->GetHeader(&header);
+        const auto& header = reader_->GetHeader();
 
         if (lseek(cow_fd_.get(), 0, SEEK_SET) < 0) {
             SNAP_PLOG(ERROR) << "lseek failed";
@@ -154,7 +153,6 @@ bool SnapshotHandler::CheckMergeCompletionStatus() {
 
 bool SnapshotHandler::ReadMetadata() {
     reader_ = std::make_unique<CowReader>(CowReader::ReaderFlags::USERSPACE_MERGE, true);
-    CowHeader header;
     CowOptions options;
 
     SNAP_LOG(DEBUG) << "ReadMetadata: Parsing cow file";
@@ -164,11 +162,7 @@ bool SnapshotHandler::ReadMetadata() {
         return false;
     }
 
-    if (!reader_->GetHeader(&header)) {
-        SNAP_LOG(ERROR) << "Failed to get header";
-        return false;
-    }
-
+    const auto& header = reader_->GetHeader();
     if (!(header.block_size == BLOCK_SZ)) {
         SNAP_LOG(ERROR) << "Invalid header block size found: " << header.block_size;
         return false;
@@ -244,8 +238,7 @@ bool SnapshotHandler::ReadMetadata() {
 }
 
 bool SnapshotHandler::MmapMetadata() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     total_mapped_addr_length_ = header.header_size + BUFFER_REGION_DEFAULT_SIZE;
 
@@ -367,8 +360,7 @@ bool SnapshotHandler::Start() {
 }
 
 uint64_t SnapshotHandler::GetBufferMetadataOffset() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     return (header.header_size + sizeof(BufferState));
 }
@@ -383,8 +375,7 @@ uint64_t SnapshotHandler::GetBufferMetadataOffset() {
  *
  */
 size_t SnapshotHandler::GetBufferMetadataSize() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
     size_t buffer_size = header.buffer_size;
 
     // If there is no scratch space, then just use the
@@ -397,8 +388,7 @@ size_t SnapshotHandler::GetBufferMetadataSize() {
 }
 
 size_t SnapshotHandler::GetBufferDataOffset() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     return (header.header_size + GetBufferMetadataSize());
 }
@@ -407,8 +397,7 @@ size_t SnapshotHandler::GetBufferDataOffset() {
  * (2MB - 8K = 2088960 bytes) will be the buffer region to hold the data.
  */
 size_t SnapshotHandler::GetBufferDataSize() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
     size_t buffer_size = header.buffer_size;
 
     // If there is no scratch space, then just use the
@@ -421,8 +410,7 @@ size_t SnapshotHandler::GetBufferDataSize() {
 }
 
 struct BufferState* SnapshotHandler::GetBufferState() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     struct BufferState* ra_state =
             reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);

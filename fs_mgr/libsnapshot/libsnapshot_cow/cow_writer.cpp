@@ -392,10 +392,11 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     auto reader = std::make_unique<CowReader>();
     std::queue<CowOperation> toAdd;
 
-    if (!reader->Parse(fd_, {label}) || !reader->GetHeader(&header_)) {
+    if (!reader->Parse(fd_, {label})) {
         return false;
     }
 
+    header_ = reader->GetHeader();
     options_.block_size = header_.block_size;
     options_.cluster_ops = header_.cluster_ops;
 

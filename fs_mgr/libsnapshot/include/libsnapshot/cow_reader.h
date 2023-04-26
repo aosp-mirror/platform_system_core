@@ -35,7 +35,6 @@ class ICowReader {
     virtual ~ICowReader() {}
 
     // Return the file header.
-    virtual bool GetHeader(CowHeader* header) = 0;
     virtual CowHeader& GetHeader() = 0;
 
     // Return the file footer.
@@ -107,7 +106,6 @@ class CowReader final : public ICowReader {
     bool InitForMerge(android::base::unique_fd&& fd);
     bool VerifyMergeOps() override;
 
-    bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
 
     bool GetLastLabel(uint64_t* label) override;

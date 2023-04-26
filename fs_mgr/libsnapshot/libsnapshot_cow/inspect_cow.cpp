@@ -94,11 +94,7 @@ static bool Inspect(const std::string& path, Options opt) {
         return false;
     }
 
-    CowHeader header;
-    if (!reader.GetHeader(&header)) {
-        LOG(ERROR) << "could not get header: " << path;
-        return false;
-    }
+    const CowHeader& header = reader.GetHeader();
     CowFooter footer;
     bool has_footer = false;
     if (reader.GetFooter(&footer)) has_footer = true;

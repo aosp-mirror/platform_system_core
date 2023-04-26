@@ -62,15 +62,16 @@ TEST_F(CowTest, CopyContiguous) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 100);
 
     auto iter = reader.GetOpIter();
@@ -110,15 +111,16 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 4);
 
     auto iter = reader.GetOpIter();
@@ -188,15 +190,16 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 4);
 
     auto iter = reader.GetOpIter();
@@ -1065,8 +1068,7 @@ AssertionResult WriteDataBlock(CowWriter* writer, uint64_t new_block, std::strin
 
 AssertionResult CompareDataBlock(CowReader* reader, const CowOperation& op,
                                  const std::string& data) {
-    CowHeader header;
-    reader->GetHeader(&header);
+    const auto& header = reader->GetHeader();
 
     std::string cmp = data;
     cmp.resize(header.block_size, '\0');

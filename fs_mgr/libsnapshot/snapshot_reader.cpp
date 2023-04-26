@@ -80,10 +80,7 @@ bool ReadFdFileDescriptor::Flush() {
 bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
     cow_ = std::move(cow);
 
-    CowHeader header;
-    if (!cow_->GetHeader(&header)) {
-        return false;
-    }
+    const auto& header = cow_->GetHeader();
     block_size_ = header.block_size;
 
     // Populate the operation map.

@@ -347,7 +347,6 @@ void Snapuserd::CheckMergeCompletionStatus() {
  */
 bool Snapuserd::ReadMetadata() {
     reader_ = std::make_unique<CowReader>();
-    CowHeader header;
     CowOptions options;
     bool metadata_found = false;
     int replace_ops = 0, zero_ops = 0, copy_ops = 0;
@@ -359,11 +358,7 @@ bool Snapuserd::ReadMetadata() {
         return false;
     }
 
-    if (!reader_->GetHeader(&header)) {
-        SNAP_LOG(ERROR) << "Failed to get header";
-        return false;
-    }
-
+    const auto& header = reader_->GetHeader();
     if (!(header.block_size == BLOCK_SZ)) {
         SNAP_LOG(ERROR) << "Invalid header block size found: " << header.block_size;
         return false;
@@ -636,8 +631,7 @@ bool Snapuserd::ReadMetadata() {
 }
 
 bool Snapuserd::MmapMetadata() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     if (header.major_version >= 2 && header.buffer_size > 0) {
         total_mapped_addr_length_ = header.header_size + BUFFER_REGION_DEFAULT_SIZE;
@@ -832,8 +826,7 @@ bool Snapuserd::Start() {
 }
 
 uint64_t Snapuserd::GetBufferMetadataOffset() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     size_t size = header.header_size + sizeof(BufferState);
     return size;
@@ -848,16 +841,14 @@ uint64_t Snapuserd::GetBufferMetadataOffset() {
  *
  */
 size_t Snapuserd::GetBufferMetadataSize() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     size_t metadata_bytes = (header.buffer_size * sizeof(struct ScratchMetadata)) / BLOCK_SZ;
     return metadata_bytes;
 }
 
 size_t Snapuserd::GetBufferDataOffset() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     return (header.header_size + GetBufferMetadataSize());
 }
@@ -866,16 +857,14 @@ size_t Snapuserd::GetBufferDataOffset() {
  * (2MB - 8K = 2088960 bytes) will be the buffer region to hold the data.
  */
 size_t Snapuserd::GetBufferDataSize() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     size_t size = header.buffer_size - GetBufferMetadataSize();
     return size;
 }
 
 struct BufferState* Snapuserd::GetBufferState() {
-    CowHeader header;
-    reader_->GetHeader(&header);
+    const auto& header = reader_->GetHeader();
 
     struct BufferState* ra_state =
             reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);

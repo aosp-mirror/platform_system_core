@@ -544,11 +544,6 @@ bool CowReader::VerifyMergeOps() {
     return true;
 }
 
-bool CowReader::GetHeader(CowHeader* header) {
-    *header = header_;
-    return true;
-}
-
 bool CowReader::GetFooter(CowFooter* footer) {
     if (!footer_) return false;
     *footer = footer_.value();
