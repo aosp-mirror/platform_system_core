@@ -32,6 +32,21 @@
 
 namespace android {
 namespace snapshot {
+
+std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::string_view name) {
+    if (name == "gz") {
+        return {kCowCompressGz};
+    } else if (name == "brotli") {
+        return {kCowCompressBrotli};
+    } else if (name == "lz4") {
+        return {kCowCompressLz4};
+    } else if (name == "none" || name.empty()) {
+        return {kCowCompressNone};
+    } else {
+        return {};
+    }
+}
+
 std::basic_string<uint8_t> CompressWorker::Compress(const void* data, size_t length) {
     return Compress(compression_, data, length);
 }

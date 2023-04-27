@@ -37,6 +37,14 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+// The info messages here are spammy, but as useful for update_engine. Disable
+// them when running on the host.
+#ifdef __ANDROID__
+#define LOG_INFO LOG(INFO)
+#else
+#define LOG_INFO LOG(VERBOSE)
+#endif
+
 namespace android {
 namespace snapshot {
 
@@ -194,18 +202,13 @@ void CowWriter::SetupHeaders() {
 }
 
 bool CowWriter::ParseOptions() {
-    if (options_.compression == "gz") {
-        compression_ = kCowCompressGz;
-    } else if (options_.compression == "brotli") {
-        compression_ = kCowCompressBrotli;
-    } else if (options_.compression == "lz4") {
-        compression_ = kCowCompressLz4;
-    } else if (options_.compression == "none") {
-        compression_ = kCowCompressNone;
-    } else if (!options_.compression.empty()) {
+    auto algorithm = CompressionAlgorithmFromString(options_.compression);
+    if (!algorithm) {
         LOG(ERROR) << "unrecognized compression: " << options_.compression;
         return false;
     }
+    compression_ = *algorithm;
+
     if (options_.cluster_ops == 1) {
         LOG(ERROR) << "Clusters must contain at least two operations to function.";
         return false;
@@ -239,10 +242,10 @@ bool CowWriter::SetFd(android::base::borrowed_fd fd) {
                 return false;
             }
             cow_image_size_ = size_in_bytes;
-            LOG(INFO) << "COW image " << file_path << " has size " << size_in_bytes;
+            LOG_INFO << "COW image " << file_path << " has size " << size_in_bytes;
         } else {
-            LOG(INFO) << "COW image " << file_path
-                      << " is not a block device, assuming unlimited space.";
+            LOG_INFO << "COW image " << file_path
+                     << " is not a block device, assuming unlimited space.";
         }
     }
     return true;
@@ -271,12 +274,12 @@ void CowWriter::InitBatchWrites() {
     }
 
     std::string batch_write = batch_write_ ? "enabled" : "disabled";
-    LOG(INFO) << "Batch writes: " << batch_write;
+    LOG_INFO << "Batch writes: " << batch_write;
 }
 
 void CowWriter::InitWorkers() {
     if (num_compress_threads_ <= 1) {
-        LOG(INFO) << "Not creating new threads for compression.";
+        LOG_INFO << "Not creating new threads for compression.";
         return;
     }
     for (int i = 0; i < num_compress_threads_; i++) {
@@ -285,7 +288,7 @@ void CowWriter::InitWorkers() {
         compress_threads_.push_back(std::move(wt));
     }
 
-    LOG(INFO) << num_compress_threads_ << " thread used for compression";
+    LOG_INFO << num_compress_threads_ << " thread used for compression";
 }
 
 bool CowWriter::Initialize(unique_fd&& fd) {
