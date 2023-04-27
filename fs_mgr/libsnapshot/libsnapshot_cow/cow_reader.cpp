@@ -517,8 +517,8 @@ bool CowReader::VerifyMergeOps() {
             block = op.source;
             offset = false;
         } else if (op.type == kCowXorOp) {
-            block = op.source / BLOCK_SZ;
-            offset = (op.source % BLOCK_SZ) != 0;
+            block = op.source / header_.block_size;
+            offset = (op.source % header_.block_size) != 0;
         } else {
             itr->Next();
             continue;
