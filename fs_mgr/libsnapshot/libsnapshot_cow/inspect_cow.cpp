@@ -63,24 +63,6 @@ struct Options {
     bool include_merged;
 };
 
-// Sink that always appends to the end of a string.
-class StringSink : public IByteSink {
-  public:
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        size_t old_size = stream_.size();
-        stream_.resize(old_size + requested, '\0');
-        *actual = requested;
-        return stream_.data() + old_size;
-    }
-    bool ReturnData(void*, size_t) override { return true; }
-    void Reset() { stream_.clear(); }
-
-    std::string& stream() { return stream_; }
-
-  private:
-    std::string stream_;
-};
-
 static void ShowBad(CowReader& reader, const struct CowOperation& op) {
     size_t count;
     auto buffer = std::make_unique<uint8_t[]>(op.data_length);
@@ -153,7 +135,9 @@ static bool Inspect(const std::string& path, Options opt) {
     } else if (opt.iter_type == Merge) {
         iter = reader.GetMergeOpIter(opt.include_merged);
     }
-    StringSink sink;
+
+    std::string buffer(header.block_size, '\0');
+
     bool success = true;
     uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
     while (!iter->Done()) {
@@ -162,12 +146,11 @@ static bool Inspect(const std::string& path, Options opt) {
         if (!opt.silent && opt.show_ops) std::cout << op << "\n";
 
         if (opt.decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
-            if (!reader.ReadData(op, &sink)) {
+            if (reader.ReadData(op, buffer.data(), buffer.size()) < 0) {
                 std::cerr << "Failed to decompress for :" << op << "\n";
                 success = false;
                 if (opt.show_bad) ShowBad(reader, op);
             }
-            sink.Reset();
         }
 
         if (op.type == kCowSequenceOp && opt.show_seq) {

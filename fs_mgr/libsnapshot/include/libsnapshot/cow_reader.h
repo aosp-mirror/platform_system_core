@@ -65,6 +65,7 @@ class ICowReader {
 
     // Return the file header.
     virtual bool GetHeader(CowHeader* header) = 0;
+    virtual CowHeader& GetHeader() = 0;
 
     // Return the file footer.
     virtual bool GetFooter(CowFooter* footer) = 0;
@@ -85,6 +86,19 @@ class ICowReader {
     // Get decoded bytes from the data section, handling any decompression.
     // All retrieved data is passed to the sink.
     virtual bool ReadData(const CowOperation& op, IByteSink* sink) = 0;
+
+    // Get decoded bytes from the data section, handling any decompression.
+    //
+    // If ignore_bytes is non-zero, it specifies the initial number of bytes
+    // to skip writing to |buffer|.
+    //
+    // Returns the number of bytes written to |buffer|, or -1 on failure.
+    // errno is NOT set.
+    //
+    // Partial reads are not possible unless |buffer_size| is less than the
+    // operation block size.
+    virtual ssize_t ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
+                             size_t ignore_bytes = 0) = 0;
 };
 
 // Iterate over a sequence of COW operations.
@@ -140,6 +154,10 @@ class CowReader final : public ICowReader {
     std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
     bool ReadData(const CowOperation& op, IByteSink* sink) override;
+    ssize_t ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
+                     size_t ignore_bytes = 0) override;
+
+    CowHeader& GetHeader() override { return header_; }
 
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 

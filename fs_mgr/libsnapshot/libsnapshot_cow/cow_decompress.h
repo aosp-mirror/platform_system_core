@@ -26,11 +26,16 @@ class IByteStream {
     virtual ~IByteStream() {}
 
     // Read up to |length| bytes, storing the number of bytes read in the out-
-    // parameter. If the end of the stream is reached, 0 is returned.
-    virtual bool Read(void* buffer, size_t length, size_t* read) = 0;
+    // parameter. If the end of the stream is reached, 0 is returned. On error,
+    // -1 is returned. errno is NOT set.
+    virtual ssize_t Read(void* buffer, size_t length) = 0;
 
     // Size of the stream.
     virtual size_t Size() const = 0;
+
+    // Helper for Read(). Read the entire stream into |buffer|, up to |length|
+    // bytes.
+    ssize_t ReadFully(void* buffer, size_t length);
 };
 
 class IDecompressor {
@@ -43,8 +48,20 @@ class IDecompressor {
     static std::unique_ptr<IDecompressor> Brotli();
     static std::unique_ptr<IDecompressor> Lz4();
 
+    static std::unique_ptr<IDecompressor> FromString(std::string_view compressor);
+
     // |output_bytes| is the expected total number of bytes to sink.
     virtual bool Decompress(size_t output_bytes) = 0;
+
+    // Decompress at most |buffer_size| bytes, ignoring the first |ignore_bytes|
+    // of the decoded stream. |buffer_size| must be at least one byte.
+    // |decompressed_size| is the expected total size if the entire stream were
+    // decompressed.
+    //
+    // Returns the number of bytes written to |buffer|, or -1 on error. errno
+    // is NOT set.
+    virtual ssize_t Decompress(void* buffer, size_t buffer_size, size_t decompressed_size,
+                               size_t ignore_bytes = 0) = 0;
 
     void set_stream(IByteStream* stream) { stream_ = stream; }
     void set_sink(IByteSink* sink) { sink_ = sink; }
