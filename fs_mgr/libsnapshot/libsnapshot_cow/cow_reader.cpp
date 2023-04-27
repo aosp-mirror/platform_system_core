@@ -747,18 +747,18 @@ class CowDataStream final : public IByteStream {
         remaining_ = data_length_;
     }
 
-    bool Read(void* buffer, size_t length, size_t* read) override {
+    ssize_t Read(void* buffer, size_t length) override {
         size_t to_read = std::min(length, remaining_);
         if (!to_read) {
-            *read = 0;
-            return true;
+            return 0;
         }
-        if (!reader_->GetRawBytes(offset_, buffer, to_read, read)) {
-            return false;
+        size_t read;
+        if (!reader_->GetRawBytes(offset_, buffer, to_read, &read)) {
+            return -1;
         }
-        offset_ += *read;
-        remaining_ -= *read;
-        return true;
+        offset_ += read;
+        remaining_ -= read;
+        return read;
     }
 
     size_t Size() const override { return data_length_; }
@@ -800,6 +800,45 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
     decompressor->set_stream(&stream);
     decompressor->set_sink(sink);
     return decompressor->Decompress(header_.block_size);
+}
+
+ssize_t CowReader::ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
+                            size_t ignore_bytes) {
+    std::unique_ptr<IDecompressor> decompressor;
+    switch (op.compression) {
+        case kCowCompressNone:
+            break;
+        case kCowCompressGz:
+            decompressor = IDecompressor::Gz();
+            break;
+        case kCowCompressBrotli:
+            decompressor = IDecompressor::Brotli();
+            break;
+        case kCowCompressLz4:
+            if (header_.block_size != op.data_length) {
+                decompressor = IDecompressor::Lz4();
+            }
+            break;
+        default:
+            LOG(ERROR) << "Unknown compression type: " << op.compression;
+            return -1;
+    }
+
+    uint64_t offset;
+    if (op.type == kCowXorOp) {
+        offset = data_loc_->at(op.new_block);
+    } else {
+        offset = op.source;
+    }
+
+    if (!decompressor) {
+        CowDataStream stream(this, offset + ignore_bytes, op.data_length - ignore_bytes);
+        return stream.ReadFully(buffer, buffer_size);
+    }
+
+    CowDataStream stream(this, offset, op.data_length);
+    decompressor->set_stream(&stream);
+    return decompressor->Decompress(buffer, buffer_size, header_.block_size, ignore_bytes);
 }
 
 }  // namespace snapshot
