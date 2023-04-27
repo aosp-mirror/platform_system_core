@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -38,16 +39,16 @@ void MyLogger(android::base::LogId, android::base::LogSeverity severity, const c
 }
 
 static void usage(void) {
-    LOG(ERROR) << "Usage: inspect_cow [-sd] <COW_FILE>";
-    LOG(ERROR) << "\t -s Run Silent";
-    LOG(ERROR) << "\t -d Attempt to decompress";
-    LOG(ERROR) << "\t -b Show data for failed decompress";
-    LOG(ERROR) << "\t -l Show ops";
-    LOG(ERROR) << "\t -m Show ops in reverse merge order";
-    LOG(ERROR) << "\t -n Show ops in merge order";
-    LOG(ERROR) << "\t -a Include merged ops in any merge order listing";
-    LOG(ERROR) << "\t -o Shows sequence op block order";
-    LOG(ERROR) << "\t -v Verifies merge order has no conflicts\n";
+    std::cerr << "Usage: inspect_cow [-sd] <COW_FILE>\n";
+    std::cerr << "\t -s Run Silent\n";
+    std::cerr << "\t -d Attempt to decompress\n";
+    std::cerr << "\t -b Show data for failed decompress\n";
+    std::cerr << "\t -l Show ops\n";
+    std::cerr << "\t -m Show ops in reverse merge order\n";
+    std::cerr << "\t -n Show ops in merge order\n";
+    std::cerr << "\t -a Include merged ops in any merge order listing\n";
+    std::cerr << "\t -o Shows sequence op block order\n";
+    std::cerr << "\t -v Verifies merge order has no conflicts\n";
 }
 
 enum OpIter { Normal, RevMerge, Merge };
@@ -89,10 +90,13 @@ static bool Inspect(const std::string& path, Options opt) {
     }
 
     CowReader reader;
+
+    auto start_time = std::chrono::steady_clock::now();
     if (!reader.Parse(fd)) {
         LOG(ERROR) << "parse failed: " << path;
         return false;
     }
+    std::chrono::duration<double> parse_time = std::chrono::steady_clock::now() - start_time;
 
     const CowHeader& header = reader.GetHeader();
     CowFooter footer;
@@ -100,22 +104,26 @@ static bool Inspect(const std::string& path, Options opt) {
     if (reader.GetFooter(&footer)) has_footer = true;
 
     if (!opt.silent) {
-        std::cout << "Major version: " << header.major_version << "\n";
-        std::cout << "Minor version: " << header.minor_version << "\n";
+        std::cout << "Version: " << header.major_version << "." << header.minor_version << "\n";
         std::cout << "Header size: " << header.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
-        std::cout << "Num merge ops: " << header.num_merge_ops << "\n";
-        std::cout << "RA buffer size: " << header.buffer_size << "\n";
-        std::cout << "\n";
+        std::cout << "Merge ops: " << header.num_merge_ops << "\n";
+        std::cout << "Readahead buffer: " << header.buffer_size << " bytes\n";
         if (has_footer) {
-            std::cout << "Total Ops size: " << footer.op.ops_size << "\n";
-            std::cout << "Number of Ops: " << footer.op.num_ops << "\n";
-            std::cout << "\n";
+            std::cout << "Footer: ops usage: " << footer.op.ops_size << " bytes\n";
+            std::cout << "Footer: op count: " << footer.op.num_ops << "\n";
+        } else {
+            std::cout << "Footer: none\n";
         }
     }
 
+    if (!opt.silent) {
+        std::cout << "Parse time: " << (parse_time.count() * 1000) << "ms\n";
+    }
+
     if (opt.verify_sequence) {
+        std::cout << "\n";
         if (reader.VerifyMergeOps()) {
             std::cout << "\nMerge sequence is consistent.\n";
         } else {
@@ -182,9 +190,11 @@ static bool Inspect(const std::string& path, Options opt) {
 
     if (!opt.silent) {
         auto total_ops = replace_ops + zero_ops + copy_ops + xor_ops;
-        std::cout << "Total-data-ops: " << total_ops << "Replace-ops: " << replace_ops
-                  << " Zero-ops: " << zero_ops << " Copy-ops: " << copy_ops
-                  << " Xor_ops: " << xor_ops << std::endl;
+        std::cout << "Data ops: " << total_ops << "\n";
+        std::cout << "Replace ops: " << replace_ops << "\n";
+        std::cout << "Zero ops: " << zero_ops << "\n";
+        std::cout << "Copy ops: " << copy_ops << "\n";
+        std::cout << "Xor ops: " << xor_ops << "\n";
     }
 
     return success;
@@ -233,14 +243,16 @@ int main(int argc, char** argv) {
                 break;
             default:
                 android::snapshot::usage();
+                return 1;
         }
     }
-    android::base::InitLogging(argv, android::snapshot::MyLogger);
 
     if (argc < optind + 1) {
         android::snapshot::usage();
         return 1;
     }
+
+    android::base::InitLogging(argv, android::snapshot::MyLogger);
 
     if (!android::snapshot::Inspect(argv[optind], opt)) {
         return 1;
