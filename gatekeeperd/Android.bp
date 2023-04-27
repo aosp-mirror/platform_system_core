@@ -98,3 +98,20 @@ cc_library_shared {
         "libbinder",
     ],
 }
+
+cc_fuzz {
+    name: "gatekeeperd_service_fuzzer",
+    defaults: [
+        "gatekeeperd_defaults",
+        "service_fuzzer_defaults"
+    ],
+    srcs: [
+        "fuzzer/GateKeeperServiceFuzzer.cpp",
+    ],
+    fuzz_config: {
+        cc: [
+            "subrahmanyaman@google.com",
+            "swillden@google.com",
+        ],
+    },
+}
