@@ -60,7 +60,7 @@ std::unique_ptr<Task> ParseCommand(FlashingPlan* fp, std::string command) {
     return ParseFastbootInfoLine(fp, vec_command);
 }
 
-TEST_F(ParseTest, CORRECT_FlASH_TASK_FORMED) {
+TEST_F(ParseTest, CorrectFlashTaskFormed) {
     std::vector<std::string> commands = {"flash dtbo", "flash --slot-other system system_other.img",
                                          "flash system", "flash --apply-vbmeta vbmeta"};
 
@@ -88,7 +88,7 @@ TEST_F(ParseTest, CORRECT_FlASH_TASK_FORMED) {
     }
 }
 
-TEST_F(ParseTest, VERSION_CHECK_CORRRECT) {
+TEST_F(ParseTest, VersionCheckCorrect) {
     std::vector<std::string> correct_versions = {
             "version 1.0",
             "version 22.00",
@@ -106,7 +106,7 @@ TEST_F(ParseTest, VERSION_CHECK_CORRRECT) {
     }
 }
 
-TEST_F(ParseTest, BAD_FASTBOOT_INFO_INPUT) {
+TEST_F(ParseTest, BadFastbootInput) {
     ASSERT_EQ(ParseCommand(fp.get(), "flash"), nullptr);
     ASSERT_EQ(ParseCommand(fp.get(), "flash --slot-other --apply-vbmeta"), nullptr);
     ASSERT_EQ(ParseCommand(fp.get(), "flash --apply-vbmeta"), nullptr);
@@ -124,7 +124,7 @@ TEST_F(ParseTest, BAD_FASTBOOT_INFO_INPUT) {
     ASSERT_EQ(ParseCommand(fp.get(), "wipe this"), nullptr);
 }
 
-TEST_F(ParseTest, CORRECT_TASK_FORMED) {
+TEST_F(ParseTest, CorrectTaskFormed) {
     std::vector<std::string> commands = {"flash dtbo", "flash --slot-other system system_other.img",
                                          "reboot bootloader", "update-super", "erase cache"};
     std::vector<std::unique_ptr<Task>> tasks = collectTasks(fp.get(), commands);
