@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
             android::String16("android.service.gatekeeper.IGateKeeperService"), proxy);
     if (ret != android::OK) {
         ALOGE("Couldn't register binder service!");
-        return -1;
+        return 1;
     }
 
     /*
@@ -46,5 +46,5 @@ int main(int argc, char* argv[]) {
      * Binder transaction as a single-threaded program.
      */
     android::IPCThreadState::self()->joinThreadPool();
-    return 0;
+    return 1;
 }
