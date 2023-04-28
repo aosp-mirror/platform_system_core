@@ -128,37 +128,6 @@ borrowed_fd CompressedSnapshotReader::GetSourceFd() {
     return source_fd_;
 }
 
-class MemoryByteSink : public IByteSink {
-  public:
-    MemoryByteSink(void* buf, size_t count) {
-        buf_ = reinterpret_cast<uint8_t*>(buf);
-        pos_ = buf_;
-        end_ = buf_ + count;
-    }
-
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        *actual = std::min(remaining(), requested);
-        if (!*actual) {
-            return nullptr;
-        }
-
-        uint8_t* start = pos_;
-        pos_ += *actual;
-        return start;
-    }
-
-    bool ReturnData(void*, size_t) override { return true; }
-
-    uint8_t* buf() const { return buf_; }
-    uint8_t* pos() const { return pos_; }
-    size_t remaining() const { return end_ - pos_; }
-
-  private:
-    uint8_t* buf_;
-    uint8_t* pos_;
-    uint8_t* end_;
-};
-
 ssize_t CompressedSnapshotReader::Read(void* buf, size_t count) {
     // Find the start and end chunks, inclusive.
     uint64_t start_chunk = offset_ / block_size_;
@@ -167,69 +136,48 @@ ssize_t CompressedSnapshotReader::Read(void* buf, size_t count) {
     // Chop off the first N bytes if the position is not block-aligned.
     size_t start_offset = offset_ % block_size_;
 
-    MemoryByteSink sink(buf, count);
+    uint8_t* buf_pos = reinterpret_cast<uint8_t*>(buf);
+    size_t buf_remaining = count;
 
-    size_t initial_bytes = std::min(block_size_ - start_offset, sink.remaining());
-    ssize_t rv = ReadBlock(start_chunk, &sink, start_offset, initial_bytes);
+    size_t initial_bytes = std::min(block_size_ - start_offset, buf_remaining);
+    ssize_t rv = ReadBlock(start_chunk, start_offset, buf_pos, initial_bytes);
     if (rv < 0) {
         return -1;
     }
     offset_ += rv;
+    buf_pos += rv;
+    buf_remaining -= rv;
 
     for (uint64_t chunk = start_chunk + 1; chunk < end_chunk; chunk++) {
-        ssize_t rv = ReadBlock(chunk, &sink, 0);
+        ssize_t rv = ReadBlock(chunk, 0, buf_pos, buf_remaining);
         if (rv < 0) {
             return -1;
         }
         offset_ += rv;
+        buf_pos += rv;
+        buf_remaining -= rv;
     }
 
-    if (sink.remaining()) {
-        ssize_t rv = ReadBlock(end_chunk, &sink, 0, {sink.remaining()});
+    if (buf_remaining) {
+        ssize_t rv = ReadBlock(end_chunk, 0, buf_pos, buf_remaining);
         if (rv < 0) {
             return -1;
         }
         offset_ += rv;
+        buf_pos += rv;
+        buf_remaining -= rv;
     }
+
+    CHECK_EQ(buf_pos - reinterpret_cast<uint8_t*>(buf), count);
+    CHECK_EQ(buf_remaining, 0);
 
     errno = 0;
-
-    DCHECK(sink.pos() - sink.buf() == count);
     return count;
 }
 
-// Discard the first N bytes of a sink request, or any excess bytes.
-class PartialSink : public MemoryByteSink {
-  public:
-    PartialSink(void* buffer, size_t size, size_t ignore_start)
-        : MemoryByteSink(buffer, size), ignore_start_(ignore_start) {}
-
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        // Throw away the first N bytes if needed.
-        if (ignore_start_) {
-            *actual = std::min({requested, ignore_start_, sizeof(discard_)});
-            ignore_start_ -= *actual;
-            return discard_;
-        }
-        // Throw away any excess bytes if needed.
-        if (remaining() == 0) {
-            *actual = std::min(requested, sizeof(discard_));
-            return discard_;
-        }
-        return MemoryByteSink::GetBuffer(requested, actual);
-    }
-
-  private:
-    size_t ignore_start_;
-    char discard_[BLOCK_SZ];
-};
-
-ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, size_t start_offset,
-                                            const std::optional<uint64_t>& max_bytes) {
-    size_t bytes_to_read = block_size_;
-    if (max_bytes) {
-        bytes_to_read = *max_bytes;
-    }
+ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset, void* buffer,
+                                            size_t buffer_size) {
+    size_t bytes_to_read = std::min(static_cast<size_t>(block_size_), buffer_size);
 
     // The offset is relative to the chunk; we should be reading no more than
     // one chunk.
@@ -238,17 +186,6 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, siz
     const CowOperation* op = nullptr;
     if (chunk < ops_.size()) {
         op = ops_[chunk];
-    }
-
-    size_t actual;
-    void* buffer = sink->GetBuffer(bytes_to_read, &actual);
-    if (!buffer || actual < bytes_to_read) {
-        // This should never happen unless we calculated the read size wrong
-        // somewhere. MemoryByteSink always fulfills the entire requested
-        // region unless there's not enough buffer remaining.
-        LOG(ERROR) << "Asked for buffer of size " << bytes_to_read << ", got " << actual;
-        errno = EINVAL;
-        return -1;
     }
 
     if (!op || op->type == kCowCopyOp) {
@@ -271,8 +208,7 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, siz
     } else if (op->type == kCowZeroOp) {
         memset(buffer, 0, bytes_to_read);
     } else if (op->type == kCowReplaceOp) {
-        PartialSink partial_sink(buffer, bytes_to_read, start_offset);
-        if (!cow_->ReadData(*op, &partial_sink)) {
+        if (cow_->ReadData(*op, buffer, bytes_to_read, start_offset) < bytes_to_read) {
             LOG(ERROR) << "CompressedSnapshotReader failed to read replace op";
             errno = EIO;
             return -1;
@@ -285,18 +221,20 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, IByteSink* sink, siz
         }
 
         off64_t offset = op->source + start_offset;
-        char data[BLOCK_SZ];
-        if (!android::base::ReadFullyAtOffset(fd, &data, bytes_to_read, offset)) {
+
+        std::string data(bytes_to_read, '\0');
+        if (!android::base::ReadFullyAtOffset(fd, data.data(), data.size(), offset)) {
             PLOG(ERROR) << "read " << *source_device_;
             // ReadFullyAtOffset sets errno.
             return -1;
         }
-        PartialSink partial_sink(buffer, bytes_to_read, start_offset);
-        if (!cow_->ReadData(*op, &partial_sink)) {
+
+        if (cow_->ReadData(*op, buffer, bytes_to_read, start_offset) < bytes_to_read) {
             LOG(ERROR) << "CompressedSnapshotReader failed to read xor op";
             errno = EIO;
             return -1;
         }
+
         for (size_t i = 0; i < bytes_to_read; i++) {
             ((char*)buffer)[i] ^= data[i];
         }

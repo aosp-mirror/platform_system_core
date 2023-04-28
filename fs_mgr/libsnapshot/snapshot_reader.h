@@ -65,8 +65,7 @@ class CompressedSnapshotReader : public ReadOnlyFileDescriptor {
     bool Flush() override;
 
   private:
-    ssize_t ReadBlock(uint64_t chunk, IByteSink* sink, size_t start_offset,
-                      const std::optional<uint64_t>& max_bytes = {});
+    ssize_t ReadBlock(uint64_t chunk, size_t start_offset, void* buffer, size_t size);
     android::base::borrowed_fd GetSourceFd();
 
     std::unique_ptr<CowReader> cow_;
