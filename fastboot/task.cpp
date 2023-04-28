@@ -14,12 +14,16 @@
 // limitations under the License.
 //
 #include "task.h"
+
 #include <iostream>
+
+#include <android-base/logging.h>
+#include <android-base/parseint.h>
+
 #include "fastboot.h"
 #include "filesystem.h"
 #include "super_flash_helper.h"
-
-#include <android-base/parseint.h>
+#include "util.h"
 
 using namespace std::string_literals;
 FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
@@ -40,6 +44,20 @@ void FlashTask::Run() {
         do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_);
     };
     do_for_partitions(pname_, slot_, flash, true);
+}
+
+std::string FlashTask::GetPartitionAndSlot() {
+    auto slot = slot_;
+    if (slot.empty()) {
+        slot = get_current_slot();
+    }
+    if (slot.empty()) {
+        return pname_;
+    }
+    if (slot == "all") {
+        LOG(FATAL) << "Cannot retrieve a singular name when using all slots";
+    }
+    return pname_ + "_" + slot;
 }
 
 RebootTask::RebootTask(const FlashingPlan* fp) : fp_(fp){};
@@ -90,7 +108,7 @@ void FlashSuperLayoutTask::Run() {
 }
 
 std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
-        FlashingPlan* fp, std::vector<ImageEntry>& os_images) {
+        const FlashingPlan* fp, std::vector<ImageEntry>& os_images) {
     if (!supports_AB()) {
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
@@ -149,6 +167,77 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
     };
     os_images.erase(std::remove_if(os_images.begin(), os_images.end(), remove_if_callback),
                     os_images.end());
+    return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s),
+                                                  partition_size);
+}
+
+std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
+        const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks) {
+    if (!supports_AB()) {
+        LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
+        return nullptr;
+    }
+    if (fp->slot_override == "all") {
+        LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
+        return nullptr;
+    }
+
+    // Does this device use dynamic partitions at all?
+    unique_fd fd = fp->source->OpenFile("super_empty.img");
+
+    if (fd < 0) {
+        LOG(VERBOSE) << "could not open super_empty.img";
+        return nullptr;
+    }
+
+    std::string super_name;
+    // Try to find whether there is a super partition.
+    if (fp->fb->GetVar("super-partition-name", &super_name) != fastboot::SUCCESS) {
+        super_name = "super";
+    }
+    uint64_t partition_size;
+    std::string partition_size_str;
+    if (fp->fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
+        LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
+        return nullptr;
+    }
+    partition_size_str = fb_fix_numeric_var(partition_size_str);
+    if (!android::base::ParseUint(partition_size_str, &partition_size)) {
+        LOG(VERBOSE) << "Could not parse " << super_name << " size: " << partition_size_str;
+        return nullptr;
+    }
+
+    std::unique_ptr<SuperFlashHelper> helper = std::make_unique<SuperFlashHelper>(*fp->source);
+    if (!helper->Open(fd)) {
+        return nullptr;
+    }
+
+    for (const auto& task : tasks) {
+        if (auto flash_task = task->AsFlashTask()) {
+            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
+                auto partition = flash_task->GetPartitionAndSlot();
+                if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
+                    return nullptr;
+                }
+            }
+        }
+    }
+
+    auto s = helper->GetSparseLayout();
+    if (!s) return nullptr;
+    // Remove images that we already flashed, just in case we have non-dynamic OS images.
+    auto remove_if_callback = [&](const auto& task) -> bool {
+        if (auto flash_task = task->AsFlashTask()) {
+            return helper->WillFlash(flash_task->GetPartitionAndSlot());
+        } else if (auto update_super_task = task->AsUpdateSuperTask()) {
+            return true;
+        } else if (auto reboot_task = task->AsRebootTask()) {
+            return true;
+        }
+        return false;
+    };
+    tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
+
     return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s),
                                                   partition_size);
 }

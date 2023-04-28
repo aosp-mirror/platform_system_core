@@ -29,7 +29,10 @@
 
 #include <string>
 #include "fastboot_driver.h"
+#include "fastboot_driver_interface.h"
+#include "filesystem.h"
 #include "super_flash_helper.h"
+#include "task.h"
 #include "util.h"
 
 #include <bootimg.h>
@@ -45,6 +48,19 @@ class FastBootTool {
     void ParseOsPatchLevel(boot_img_hdr_v1*, const char*);
     void ParseOsVersion(boot_img_hdr_v1*, const char*);
     unsigned ParseFsOption(const char*);
+};
+
+enum fb_buffer_type {
+    FB_BUFFER_FD,
+    FB_BUFFER_SPARSE,
+};
+
+struct fastboot_buffer {
+    enum fb_buffer_type type;
+    std::vector<SparsePtr> files;
+    int64_t sz;
+    unique_fd fd;
+    int64_t image_size;
 };
 
 enum class ImageType {
@@ -83,7 +99,27 @@ struct FlashingPlan {
     std::string slot_override;
     std::string current_slot;
     std::string secondary_slot;
-    fastboot::FastBootDriver* fb;
+
+    fastboot::IFastBootDriver* fb;
+};
+
+class FlashAllTool {
+  public:
+    FlashAllTool(FlashingPlan* fp);
+
+    void Flash();
+
+  private:
+    void CheckRequirements();
+    void DetermineSlot();
+    void CollectImages();
+    void FlashImages(const std::vector<std::pair<const Image*, std::string>>& images);
+    void FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf);
+    void HardcodedFlash();
+
+    std::vector<ImageEntry> boot_images_;
+    std::vector<ImageEntry> os_images_;
+    FlashingPlan* fp_;
 };
 
 bool should_flash_in_userspace(const std::string& partition_name);
@@ -94,6 +130,21 @@ void do_for_partitions(const std::string& part, const std::string& slot,
 std::string find_item(const std::string& item);
 void reboot_to_userspace_fastboot();
 void syntax_error(const char* fmt, ...);
+std::string get_current_slot();
+
+// Code for Parsing fastboot-info.txt
+bool CheckFastbootInfoRequirements(const std::vector<std::string>& command);
+std::unique_ptr<FlashTask> ParseFlashCommand(const FlashingPlan* fp,
+                                             const std::vector<std::string>& parts);
+std::unique_ptr<RebootTask> ParseRebootCommand(const FlashingPlan* fp,
+                                               const std::vector<std::string>& parts);
+std::unique_ptr<WipeTask> ParseWipeCommand(const FlashingPlan* fp,
+                                           const std::vector<std::string>& parts);
+std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
+                                            const std::vector<std::string>& command);
+void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
+std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
+                                                     const std::vector<std::string>& file);
 
 struct NetworkSerial {
     Socket::Protocol protocol;
@@ -103,7 +154,7 @@ struct NetworkSerial {
 
 Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
 bool supports_AB();
-std::string GetPartitionName(const ImageEntry& entry, std::string& current_slot_);
+std::string GetPartitionName(const ImageEntry& entry, const std::string& current_slot_);
 void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
 int64_t get_sparse_limit(int64_t size);
 std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
