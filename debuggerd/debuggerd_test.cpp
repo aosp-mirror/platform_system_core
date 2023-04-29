@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <linux/prctl.h>
 #include <malloc.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <sys/capability.h>
 #include <sys/mman.h>
@@ -2702,4 +2703,59 @@ TEST_F(CrasherTest, verify_build_id) {
     found_valid_elf = true;
   }
   ASSERT_TRUE(found_valid_elf) << "Did not find any elf files with valid BuildIDs to check.";
+}
+
+const char kLogMessage[] = "Should not see this log message.";
+
+// Verify that the logd process does not read the log.
+TEST_F(CrasherTest, logd_skips_reading_logs) {
+  StartProcess([]() {
+    pthread_setname_np(pthread_self(), "logd");
+    LOG(INFO) << kLogMessage;
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  // logd should not contain our log message.
+  ASSERT_NOT_MATCH(result, kLogMessage);
+}
+
+// Verify that the logd process does not read the log when the non-main
+// thread crashes.
+TEST_F(CrasherTest, logd_skips_reading_logs_not_main_thread) {
+  StartProcess([]() {
+    pthread_setname_np(pthread_self(), "logd");
+    LOG(INFO) << kLogMessage;
+
+    std::thread thread([]() {
+      pthread_setname_np(pthread_self(), "not_logd_thread");
+      // Raise the signal on the side thread.
+      raise_debugger_signal(kDebuggerdTombstone);
+    });
+    thread.join();
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd, kDebuggerdTombstone);
+  FinishCrasher();
+  AssertDeath(0);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_NOT_MATCH(result, kLogMessage);
 }
