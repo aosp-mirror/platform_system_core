@@ -95,11 +95,17 @@ void WorkerThread::ConstructKernelCowHeader() {
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
 bool WorkerThread::ProcessReplaceOp(const CowOperation* cow_op) {
-    if (!reader_->ReadData(*cow_op, &bufsink_)) {
-        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
+    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+    if (!buffer) {
+        SNAP_LOG(ERROR) << "No space in buffer sink";
         return false;
     }
-
+    ssize_t rv = reader_->ReadData(*cow_op, buffer, BLOCK_SZ);
+    if (rv != BLOCK_SZ) {
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block
+                        << ", return = " << rv;
+        return false;
+    }
     return true;
 }
 
