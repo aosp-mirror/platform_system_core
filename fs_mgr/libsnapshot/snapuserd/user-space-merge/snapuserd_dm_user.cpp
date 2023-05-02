@@ -76,11 +76,15 @@ bool Worker::InitReader() {
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
 bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
-    if (!reader_->ReadData(*cow_op, &bufsink_)) {
+    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+    if (!buffer) {
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed to allocate buffer";
+        return false;
+    }
+    if (!reader_->ReadData(*cow_op, buffer, BLOCK_SZ)) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
         return false;
     }
-
     return true;
 }
 
@@ -125,12 +129,26 @@ bool Worker::ProcessXorOp(const CowOperation* cow_op) {
     if (!ReadFromSourceDevice(cow_op)) {
         return false;
     }
+
     xorsink_.Reset();
-    if (!reader_->ReadData(*cow_op, &xorsink_)) {
-        SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block;
+
+    size_t actual = 0;
+    void* buffer = xorsink_.GetBuffer(BLOCK_SZ, &actual);
+    if (!buffer || actual < BLOCK_SZ) {
+        SNAP_LOG(ERROR) << "ProcessXorOp failed to get buffer of " << BLOCK_SZ << " size, got "
+                        << actual;
         return false;
     }
-
+    ssize_t size = reader_->ReadData(*cow_op, buffer, BLOCK_SZ);
+    if (size != BLOCK_SZ) {
+        SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block
+                        << ", return value: " << size;
+        return false;
+    }
+    if (!xorsink_.ReturnData(buffer, size)) {
+        SNAP_LOG(ERROR) << "ProcessXorOp failed to return data";
+        return false;
+    }
     return true;
 }
 
