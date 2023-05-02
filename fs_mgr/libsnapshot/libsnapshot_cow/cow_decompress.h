@@ -50,9 +50,6 @@ class IDecompressor {
 
     static std::unique_ptr<IDecompressor> FromString(std::string_view compressor);
 
-    // |output_bytes| is the expected total number of bytes to sink.
-    virtual bool Decompress(size_t output_bytes) = 0;
-
     // Decompress at most |buffer_size| bytes, ignoring the first |ignore_bytes|
     // of the decoded stream. |buffer_size| must be at least one byte.
     // |decompressed_size| is the expected total size if the entire stream were
@@ -64,11 +61,9 @@ class IDecompressor {
                                size_t ignore_bytes = 0) = 0;
 
     void set_stream(IByteStream* stream) { stream_ = stream; }
-    void set_sink(IByteSink* sink) { sink_ = sink; }
 
   protected:
     IByteStream* stream_ = nullptr;
-    IByteSink* sink_ = nullptr;
 };
 
 }  // namespace snapshot
