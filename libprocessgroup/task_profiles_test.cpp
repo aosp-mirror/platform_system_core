@@ -175,6 +175,32 @@ TEST_P(SetAttributeFixture, SetAttribute) {
     }
 }
 
+class TaskProfileFixture : public TestWithParam<TestParam> {
+  public:
+    ~TaskProfileFixture() = default;
+};
+
+TEST_P(TaskProfileFixture, TaskProfile) {
+    // Treehugger runs host tests inside a container without cgroupv2 support.
+    if (!IsCgroupV2MountedRw()) {
+        GTEST_SKIP();
+        return;
+    }
+    const TestParam params = GetParam();
+    ProfileAttributeMock pa(params.attr_name);
+    // Test simple profile with one action
+    std::shared_ptr<TaskProfile> tp = std::make_shared<TaskProfile>("test_profile");
+    tp->Add(std::make_unique<SetAttributeAction>(&pa, params.attr_value, params.optional_attr));
+    EXPECT_EQ(tp->IsValidForProcess(getuid(), getpid()), params.result);
+    EXPECT_EQ(tp->IsValidForTask(getpid()), params.result);
+    // Test aggregate profile
+    TaskProfile tp2("meta_profile");
+    std::vector<std::shared_ptr<TaskProfile>> profiles = {tp};
+    tp2.Add(std::make_unique<ApplyProfileAction>(profiles));
+    EXPECT_EQ(tp2.IsValidForProcess(getuid(), getpid()), params.result);
+    EXPECT_EQ(tp2.IsValidForTask(getpid()), params.result);
+}
+
 // Test the four combinations of optional_attr {false, true} and cgroup attribute { does not exist,
 // exists }.
 INSTANTIATE_TEST_SUITE_P(
@@ -215,4 +241,28 @@ INSTANTIATE_TEST_SUITE_P(
                         .log_prefix = "Failed to write",
                         .log_suffix = geteuid() == 0 ? "Invalid argument" : "Permission denied"}));
 
+// Test TaskProfile IsValid calls.
+INSTANTIATE_TEST_SUITE_P(
+        TaskProfileTestSuite, TaskProfileFixture,
+        Values(
+                // Test operating on non-existing cgroup attribute fails.
+                TestParam{.attr_name = "no-such-attribute",
+                          .attr_value = ".",
+                          .optional_attr = false,
+                          .result = false},
+                // Test operating on optional non-existing cgroup attribute succeeds.
+                TestParam{.attr_name = "no-such-attribute",
+                          .attr_value = ".",
+                          .optional_attr = true,
+                          .result = true},
+                // Test operating on existing cgroup attribute succeeds.
+                TestParam{.attr_name = "cgroup.procs",
+                          .attr_value = ".",
+                          .optional_attr = false,
+                          .result = true},
+                // Test operating on optional existing cgroup attribute succeeds.
+                TestParam{.attr_name = "cgroup.procs",
+                          .attr_value = ".",
+                          .optional_attr = true,
+                          .result = true}));
 }  // namespace
