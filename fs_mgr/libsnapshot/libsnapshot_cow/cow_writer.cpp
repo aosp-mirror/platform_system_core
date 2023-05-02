@@ -186,10 +186,10 @@ void CowWriter::SetupWriteOptions() {
 
 void CowWriter::SetupHeaders() {
     header_ = {};
-    header_.magic = kCowMagicNumber;
-    header_.major_version = kCowVersionMajor;
-    header_.minor_version = kCowVersionMinor;
-    header_.header_size = sizeof(CowHeader);
+    header_.prefix.magic = kCowMagicNumber;
+    header_.prefix.major_version = kCowVersionMajor;
+    header_.prefix.minor_version = kCowVersionMinor;
+    header_.prefix.header_size = sizeof(CowHeader);
     header_.footer_size = sizeof(CowFooter);
     header_.op_size = sizeof(CowOperation);
     header_.block_size = options_.block_size;
@@ -614,17 +614,6 @@ bool CowWriter::EmitClusterIfNeeded() {
     return true;
 }
 
-// TODO: Fix compilation issues when linking libcrypto library
-// when snapuserd is compiled as part of ramdisk.
-static void SHA256(const void*, size_t, uint8_t[]) {
-#if 0
-    SHA256_CTX c;
-    SHA256_Init(&c);
-    SHA256_Update(&c, data, length);
-    SHA256_Final(out, &c);
-#endif
-}
-
 bool CowWriter::Finalize() {
     if (!FlushCluster()) {
         LOG(ERROR) << "Finalize: FlushCluster() failed";
@@ -665,10 +654,8 @@ bool CowWriter::Finalize() {
         PLOG(ERROR) << "Failed to seek to footer position.";
         return false;
     }
-    memset(&footer_.data.ops_checksum, 0, sizeof(uint8_t) * 32);
-    memset(&footer_.data.footer_checksum, 0, sizeof(uint8_t) * 32);
+    memset(&footer_.unused, 0, sizeof(footer_.unused));
 
-    SHA256(&footer_.op, sizeof(footer_.op), footer_.data.footer_checksum);
     // Write out footer at end of file
     if (!android::base::WriteFully(fd_, reinterpret_cast<const uint8_t*>(&footer_),
                                    sizeof(footer_))) {

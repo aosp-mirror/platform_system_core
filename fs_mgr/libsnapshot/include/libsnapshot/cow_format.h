@@ -52,13 +52,15 @@ static constexpr uint32_t kCowVersionManifest = 2;
 // between writing the last operation/data pair, or the footer itself. In this
 // case, the safest way to proceed is to assume the last operation is faulty.
 
-struct CowHeader {
+struct CowHeaderPrefix {
     uint64_t magic;
     uint16_t major_version;
     uint16_t minor_version;
+    uint16_t header_size;  // size of CowHeader.
+} __attribute__((packed));
 
-    // Size of this struct.
-    uint16_t header_size;
+struct CowHeader {
+    CowHeaderPrefix prefix;
 
     // Size of footer struct
     uint16_t footer_size;
@@ -88,7 +90,7 @@ struct CowFooterOperation {
     // the compression type of that data (see constants below).
     uint8_t compression;
 
-    // Length of Footer Data. Currently 64 for both checksums
+    // Length of Footer Data. Currently 64.
     uint16_t data_length;
 
     // The amount of file space used by Cow operations
@@ -96,14 +98,6 @@ struct CowFooterOperation {
 
     // The number of cow operations in the file
     uint64_t num_ops;
-} __attribute__((packed));
-
-struct CowFooterData {
-    // SHA256 checksums of Footer op
-    uint8_t footer_checksum[32];
-
-    // SHA256 of the operation sequence.
-    uint8_t ops_checksum[32];
 } __attribute__((packed));
 
 // Cow operations are currently fixed-size entries, but this may change if
@@ -167,7 +161,7 @@ static constexpr uint8_t kCowReadAheadDone = 2;
 
 struct CowFooter {
     CowFooterOperation op;
-    CowFooterData data;
+    uint8_t unused[64];
 } __attribute__((packed));
 
 struct ScratchMetadata {
