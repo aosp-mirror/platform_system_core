@@ -2646,6 +2646,11 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
 
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
+
     // Simulate a reboot that tries the merge again, with the non-failing dm.
     ASSERT_TRUE(UnmapAll());
     init = NewManagerForFirstStageMount("_b");
