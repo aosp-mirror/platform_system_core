@@ -770,38 +770,6 @@ class CowDataStream final : public IByteStream {
     size_t remaining_;
 };
 
-bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
-    std::unique_ptr<IDecompressor> decompressor;
-    switch (op.compression) {
-        case kCowCompressNone:
-            decompressor = IDecompressor::Uncompressed();
-            break;
-        case kCowCompressGz:
-            decompressor = IDecompressor::Gz();
-            break;
-        case kCowCompressBrotli:
-            decompressor = IDecompressor::Brotli();
-            break;
-        case kCowCompressLz4:
-            decompressor = IDecompressor::Lz4();
-            break;
-        default:
-            LOG(ERROR) << "Unknown compression type: " << op.compression;
-            return false;
-    }
-
-    uint64_t offset;
-    if (op.type == kCowXorOp) {
-        offset = data_loc_->at(op.new_block);
-    } else {
-        offset = op.source;
-    }
-    CowDataStream stream(this, offset, op.data_length);
-    decompressor->set_stream(&stream);
-    decompressor->set_sink(sink);
-    return decompressor->Decompress(header_.block_size);
-}
-
 ssize_t CowReader::ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
                             size_t ignore_bytes) {
     std::unique_ptr<IDecompressor> decompressor;
