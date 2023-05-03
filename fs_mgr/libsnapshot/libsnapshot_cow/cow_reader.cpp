@@ -509,7 +509,7 @@ bool CowReader::PrepMergeOps() {
 bool CowReader::VerifyMergeOps() {
     auto itr = GetMergeOpIter(true);
     std::unordered_map<uint64_t, CowOperation> overwritten_blocks;
-    while (!itr->Done()) {
+    while (!itr->AtEnd()) {
         CowOperation op = itr->Get();
         uint64_t block;
         bool offset;
@@ -544,11 +544,6 @@ bool CowReader::VerifyMergeOps() {
     return true;
 }
 
-bool CowReader::GetHeader(CowHeader* header) {
-    *header = header_;
-    return true;
-}
-
 bool CowReader::GetFooter(CowFooter* footer) {
     if (!footer_) return false;
     *footer = footer_.value();
@@ -565,12 +560,12 @@ class CowOpIter final : public ICowOpIter {
   public:
     CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t start);
 
-    bool Done() override;
+    bool AtEnd() override;
     const CowOperation& Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -582,26 +577,26 @@ CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t s
     op_iter_ = ops_->begin() + start;
 }
 
-bool CowOpIter::RDone() {
+bool CowOpIter::AtBegin() {
     return op_iter_ == ops_->begin();
 }
 
 void CowOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     op_iter_--;
 }
 
-bool CowOpIter::Done() {
+bool CowOpIter::AtEnd() {
     return op_iter_ == ops_->end();
 }
 
 void CowOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     op_iter_++;
 }
 
 const CowOperation& CowOpIter::Get() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     return (*op_iter_);
 }
 
@@ -610,12 +605,12 @@ class CowRevMergeOpIter final : public ICowOpIter {
     explicit CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
                                std::shared_ptr<std::vector<int>> block_pos_index, uint64_t start);
 
-    bool Done() override;
+    bool AtEnd() override;
     const CowOperation& Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -629,12 +624,12 @@ class CowMergeOpIter final : public ICowOpIter {
     explicit CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
                             std::shared_ptr<std::vector<int>> block_pos_index, uint64_t start);
 
-    bool Done() override;
+    bool AtEnd() override;
     const CowOperation& Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -651,26 +646,26 @@ CowMergeOpIter::CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
     block_iter_ = cow_op_index_vec_->begin() + start;
 }
 
-bool CowMergeOpIter::RDone() {
+bool CowMergeOpIter::AtBegin() {
     return block_iter_ == cow_op_index_vec_->begin();
 }
 
 void CowMergeOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     block_iter_--;
 }
 
-bool CowMergeOpIter::Done() {
+bool CowMergeOpIter::AtEnd() {
     return block_iter_ == cow_op_index_vec_->end();
 }
 
 void CowMergeOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     block_iter_++;
 }
 
 const CowOperation& CowMergeOpIter::Get() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     return ops_->data()[*block_iter_];
 }
 
@@ -683,26 +678,26 @@ CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> 
     block_riter_ = cow_op_index_vec_->rbegin();
 }
 
-bool CowRevMergeOpIter::RDone() {
+bool CowRevMergeOpIter::AtBegin() {
     return block_riter_ == cow_op_index_vec_->rbegin();
 }
 
 void CowRevMergeOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     block_riter_--;
 }
 
-bool CowRevMergeOpIter::Done() {
+bool CowRevMergeOpIter::AtEnd() {
     return block_riter_ == cow_op_index_vec_->rend() - start_;
 }
 
 void CowRevMergeOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     block_riter_++;
 }
 
 const CowOperation& CowRevMergeOpIter::Get() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     return ops_->data()[*block_riter_];
 }
 
