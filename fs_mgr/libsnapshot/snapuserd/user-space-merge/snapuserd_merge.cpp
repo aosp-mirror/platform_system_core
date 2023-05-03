@@ -30,7 +30,7 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
     bool checkOrderedOp = (replace_zero_vec == nullptr);
 
     do {
-        if (!cowop_iter_->Done() && num_ops) {
+        if (!cowop_iter_->AtEnd() && num_ops) {
             const CowOperation* cow_op = &cowop_iter_->Get();
             if (checkOrderedOp && !IsOrderedOp(*cow_op)) {
                 break;
@@ -45,7 +45,7 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
             num_ops -= 1;
             nr_consecutive = 1;
 
-            while (!cowop_iter_->Done() && num_ops) {
+            while (!cowop_iter_->AtEnd() && num_ops) {
                 const CowOperation* op = &cowop_iter_->Get();
                 if (checkOrderedOp && !IsOrderedOp(*op)) {
                     break;
@@ -85,7 +85,7 @@ bool Worker::MergeReplaceZeroOps() {
 
     SNAP_LOG(INFO) << "MergeReplaceZeroOps started....";
 
-    while (!cowop_iter_->Done()) {
+    while (!cowop_iter_->AtEnd()) {
         int num_ops = PAYLOAD_BUFFER_SZ / BLOCK_SZ;
         std::vector<const CowOperation*> replace_zero_vec;
         uint64_t source_offset;
@@ -93,7 +93,7 @@ bool Worker::MergeReplaceZeroOps() {
         int linear_blocks = PrepareMerge(&source_offset, &num_ops, &replace_zero_vec);
         if (linear_blocks == 0) {
             // Merge complete
-            CHECK(cowop_iter_->Done());
+            CHECK(cowop_iter_->AtEnd());
             break;
         }
 
@@ -180,7 +180,7 @@ bool Worker::MergeOrderedOpsAsync() {
 
     SNAP_LOG(INFO) << "MergeOrderedOpsAsync started....";
 
-    while (!cowop_iter_->Done()) {
+    while (!cowop_iter_->AtEnd()) {
         const CowOperation* cow_op = &cowop_iter_->Get();
         if (!IsOrderedOp(*cow_op)) {
             break;
@@ -361,7 +361,7 @@ bool Worker::MergeOrderedOps() {
 
     SNAP_LOG(INFO) << "MergeOrderedOps started....";
 
-    while (!cowop_iter_->Done()) {
+    while (!cowop_iter_->AtEnd()) {
         const CowOperation* cow_op = &cowop_iter_->Get();
         if (!IsOrderedOp(*cow_op)) {
             break;
@@ -443,7 +443,7 @@ bool Worker::AsyncMerge() {
     if (!MergeOrderedOpsAsync()) {
         SNAP_LOG(ERROR) << "MergeOrderedOpsAsync failed - Falling back to synchronous I/O";
         // Reset the iter so that we retry the merge
-        while (blocks_merged_in_group_ && !cowop_iter_->RDone()) {
+        while (blocks_merged_in_group_ && !cowop_iter_->AtBegin()) {
             cowop_iter_->Prev();
             blocks_merged_in_group_ -= 1;
         }
