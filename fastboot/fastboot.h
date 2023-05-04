@@ -133,7 +133,8 @@ void syntax_error(const char* fmt, ...);
 std::string get_current_slot();
 
 // Code for Parsing fastboot-info.txt
-bool CheckFastbootInfoRequirements(const std::vector<std::string>& command);
+bool CheckFastbootInfoRequirements(const std::vector<std::string>& command,
+                                   uint32_t host_tool_version);
 std::unique_ptr<FlashTask> ParseFlashCommand(const FlashingPlan* fp,
                                              const std::vector<std::string>& parts);
 std::unique_ptr<RebootTask> ParseRebootCommand(const FlashingPlan* fp,
