@@ -64,19 +64,19 @@ struct Options {
     bool include_merged;
 };
 
-static void ShowBad(CowReader& reader, const struct CowOperation& op) {
+static void ShowBad(CowReader& reader, const struct CowOperation* op) {
     size_t count;
-    auto buffer = std::make_unique<uint8_t[]>(op.data_length);
+    auto buffer = std::make_unique<uint8_t[]>(op->data_length);
 
-    if (!reader.GetRawBytes(op.source, buffer.get(), op.data_length, &count)) {
+    if (!reader.GetRawBytes(op->source, buffer.get(), op->data_length, &count)) {
         std::cerr << "Failed to read at all!\n";
     } else {
         std::cout << "The Block data is:\n";
-        for (int i = 0; i < op.data_length; i++) {
+        for (int i = 0; i < op->data_length; i++) {
             std::cout << std::hex << (int)buffer[i];
         }
         std::cout << std::dec << "\n\n";
-        if (op.data_length >= sizeof(CowOperation)) {
+        if (op->data_length >= sizeof(CowOperation)) {
             std::cout << "The start, as an op, would be " << *(CowOperation*)buffer.get() << "\n";
         }
     }
@@ -145,29 +145,29 @@ static bool Inspect(const std::string& path, Options opt) {
     bool success = true;
     uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
     while (!iter->AtEnd()) {
-        const CowOperation& op = iter->Get();
+        const CowOperation* op = iter->Get();
 
-        if (!opt.silent && opt.show_ops) std::cout << op << "\n";
+        if (!opt.silent && opt.show_ops) std::cout << *op << "\n";
 
-        if (opt.decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
+        if (opt.decompress && op->type == kCowReplaceOp && op->compression != kCowCompressNone) {
             if (reader.ReadData(op, buffer.data(), buffer.size()) < 0) {
-                std::cerr << "Failed to decompress for :" << op << "\n";
+                std::cerr << "Failed to decompress for :" << *op << "\n";
                 success = false;
                 if (opt.show_bad) ShowBad(reader, op);
             }
         }
 
-        if (op.type == kCowSequenceOp && opt.show_seq) {
+        if (op->type == kCowSequenceOp && opt.show_seq) {
             size_t read;
             std::vector<uint32_t> merge_op_blocks;
-            size_t seq_len = op.data_length / sizeof(uint32_t);
+            size_t seq_len = op->data_length / sizeof(uint32_t);
             merge_op_blocks.resize(seq_len);
-            if (!reader.GetRawBytes(op.source, merge_op_blocks.data(), op.data_length, &read)) {
+            if (!reader.GetRawBytes(op->source, merge_op_blocks.data(), op->data_length, &read)) {
                 PLOG(ERROR) << "Failed to read sequence op!";
                 return false;
             }
             if (!opt.silent) {
-                std::cout << "Sequence for " << op << " is :\n";
+                std::cout << "Sequence for " << *op << " is :\n";
                 for (size_t i = 0; i < seq_len; i++) {
                     std::cout << std::setfill('0') << std::setw(6) << merge_op_blocks[i] << ", ";
                     if ((i + 1) % 10 == 0 || i + 1 == seq_len) std::cout << "\n";
@@ -175,13 +175,13 @@ static bool Inspect(const std::string& path, Options opt) {
             }
         }
 
-        if (op.type == kCowCopyOp) {
+        if (op->type == kCowCopyOp) {
             copy_ops++;
-        } else if (op.type == kCowReplaceOp) {
+        } else if (op->type == kCowReplaceOp) {
             replace_ops++;
-        } else if (op.type == kCowZeroOp) {
+        } else if (op->type == kCowZeroOp) {
             zero_ops++;
-        } else if (op.type == kCowXorOp) {
+        } else if (op->type == kCowXorOp) {
             xor_ops++;
         }
 

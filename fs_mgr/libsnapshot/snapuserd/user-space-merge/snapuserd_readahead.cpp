@@ -492,7 +492,7 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
                                     << xor_op->new_block;
                     return false;
                 }
-                if (ssize_t rv = reader_->ReadData(*xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
+                if (ssize_t rv = reader_->ReadData(xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
                     SNAP_LOG(ERROR)
                             << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block
                             << ", return value: " << rv;
@@ -592,7 +592,7 @@ bool ReadAhead::ReadAheadSyncIO() {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer";
                     return false;
                 }
-                if (ssize_t rv = reader_->ReadData(*xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
+                if (ssize_t rv = reader_->ReadData(xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
                     SNAP_LOG(ERROR)
                             << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block
                             << ", return value: " << rv;
@@ -834,8 +834,7 @@ void ReadAhead::RAResetIter(uint64_t num_blocks) {
 }
 
 const CowOperation* ReadAhead::GetRAOpIter() {
-    const CowOperation* cow_op = &cowop_iter_->Get();
-    return cow_op;
+    return cowop_iter_->Get();
 }
 
 void ReadAhead::InitializeBuffer() {

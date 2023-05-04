@@ -81,7 +81,7 @@ bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed to allocate buffer";
         return false;
     }
-    if (!reader_->ReadData(*cow_op, buffer, BLOCK_SZ)) {
+    if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
         return false;
     }
@@ -139,7 +139,7 @@ bool Worker::ProcessXorOp(const CowOperation* cow_op) {
                         << actual;
         return false;
     }
-    ssize_t size = reader_->ReadData(*cow_op, buffer, BLOCK_SZ);
+    ssize_t size = reader_->ReadData(cow_op, buffer, BLOCK_SZ);
     if (size != BLOCK_SZ) {
         SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block
                         << ", return value: " << size;
