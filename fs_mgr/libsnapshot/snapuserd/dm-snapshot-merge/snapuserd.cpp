@@ -509,10 +509,8 @@ bool Snapuserd::ReadMetadata() {
             // in the file.
             //===========================================================
             uint64_t block_source = cow_op->source;
-            uint64_t block_offset = 0;
             if (prev_id.has_value()) {
-                if (dest_blocks.count(cow_op->new_block) || source_blocks.count(block_source) ||
-                    (block_offset > 0 && source_blocks.count(block_source + 1))) {
+                if (dest_blocks.count(cow_op->new_block) || source_blocks.count(block_source)) {
                     break;
                 }
             }
@@ -520,9 +518,6 @@ bool Snapuserd::ReadMetadata() {
             pending_ordered_ops -= 1;
             vec.push_back(cow_op);
             dest_blocks.insert(block_source);
-            if (block_offset > 0) {
-                dest_blocks.insert(block_source + 1);
-            }
             source_blocks.insert(cow_op->new_block);
             prev_id = cow_op->new_block;
             cowop_rm_iter->Next();
