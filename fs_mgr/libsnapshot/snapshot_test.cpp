@@ -2688,6 +2688,24 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 }
 
+TEST_F(SnapshotUpdateTest, BadCowVersion) {
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "VABC only";
+    }
+
+    ASSERT_TRUE(sm->BeginUpdate());
+
+    auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
+    dynamic_partition_metadata->set_cow_version(kMinCowVersion - 1);
+    ASSERT_FALSE(sm->CreateUpdateSnapshots(manifest_));
+
+    dynamic_partition_metadata->set_cow_version(kMaxCowVersion + 1);
+    ASSERT_FALSE(sm->CreateUpdateSnapshots(manifest_));
+
+    dynamic_partition_metadata->set_cow_version(kMaxCowVersion);
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+}
+
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
                              public WithParamInterface<std::tuple<uint32_t, bool>> {
   public:
