@@ -31,7 +31,7 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
 
     do {
         if (!cowop_iter_->AtEnd() && num_ops) {
-            const CowOperation* cow_op = &cowop_iter_->Get();
+            const CowOperation* cow_op = cowop_iter_->Get();
             if (checkOrderedOp && !IsOrderedOp(*cow_op)) {
                 break;
             }
@@ -46,7 +46,7 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
             nr_consecutive = 1;
 
             while (!cowop_iter_->AtEnd() && num_ops) {
-                const CowOperation* op = &cowop_iter_->Get();
+                const CowOperation* op = cowop_iter_->Get();
                 if (checkOrderedOp && !IsOrderedOp(*op)) {
                     break;
                 }
@@ -181,7 +181,7 @@ bool Worker::MergeOrderedOpsAsync() {
     SNAP_LOG(INFO) << "MergeOrderedOpsAsync started....";
 
     while (!cowop_iter_->AtEnd()) {
-        const CowOperation* cow_op = &cowop_iter_->Get();
+        const CowOperation* cow_op = cowop_iter_->Get();
         if (!IsOrderedOp(*cow_op)) {
             break;
         }
@@ -362,7 +362,7 @@ bool Worker::MergeOrderedOps() {
     SNAP_LOG(INFO) << "MergeOrderedOps started....";
 
     while (!cowop_iter_->AtEnd()) {
-        const CowOperation* cow_op = &cowop_iter_->Get();
+        const CowOperation* cow_op = cowop_iter_->Get();
         if (!IsOrderedOp(*cow_op)) {
             break;
         }
