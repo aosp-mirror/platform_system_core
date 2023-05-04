@@ -35,7 +35,6 @@ class ICowReader {
     virtual ~ICowReader() {}
 
     // Return the file header.
-    virtual bool GetHeader(CowHeader* header) = 0;
     virtual CowHeader& GetHeader() = 0;
 
     // Return the file footer.
@@ -68,13 +67,14 @@ class ICowReader {
                              size_t ignore_bytes = 0) = 0;
 };
 
-// Iterate over a sequence of COW operations.
+// Iterate over a sequence of COW operations. The iterator is bidirectional.
 class ICowOpIter {
   public:
     virtual ~ICowOpIter() {}
 
-    // True if there are no more items to read forward, false otherwise.
-    virtual bool Done() = 0;
+    // Returns true if the iterator is at the end of the operation list.
+    // If true, Get() and Next() must not be called.
+    virtual bool AtEnd() = 0;
 
     // Read the current operation.
     virtual const CowOperation& Get() = 0;
@@ -82,11 +82,13 @@ class ICowOpIter {
     // Advance to the next item.
     virtual void Next() = 0;
 
+    // Returns true if the iterator is at the beginning of the operation list.
+    // If true, Prev() must not be called; Get() however will be valid if
+    // AtEnd() is not true.
+    virtual bool AtBegin() = 0;
+
     // Advance to the previous item.
     virtual void Prev() = 0;
-
-    // True if there are no more items to read backwards, false otherwise
-    virtual bool RDone() = 0;
 };
 
 class CowReader final : public ICowReader {
@@ -107,7 +109,6 @@ class CowReader final : public ICowReader {
     bool InitForMerge(android::base::unique_fd&& fd);
     bool VerifyMergeOps() override;
 
-    bool GetHeader(CowHeader* header) override;
     bool GetFooter(CowFooter* footer) override;
 
     bool GetLastLabel(uint64_t* label) override;
