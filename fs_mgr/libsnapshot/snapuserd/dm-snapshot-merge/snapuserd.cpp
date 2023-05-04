@@ -391,7 +391,7 @@ bool Snapuserd::ReadMetadata() {
     memset(de_ptr.get(), 0, (exceptions_per_area_ * sizeof(struct disk_exception)));
 
     while (!cowop_rm_iter->AtEnd()) {
-        const CowOperation* cow_op = &cowop_rm_iter->Get();
+        const CowOperation* cow_op = cowop_rm_iter->Get();
         struct disk_exception* de =
                 reinterpret_cast<struct disk_exception*>((char*)de_ptr.get() + offset);
 
@@ -459,7 +459,7 @@ bool Snapuserd::ReadMetadata() {
 
     while (!cowop_rm_iter->AtEnd()) {
         do {
-            const CowOperation* cow_op = &cowop_rm_iter->Get();
+            const CowOperation* cow_op = cowop_rm_iter->Get();
 
             // We have two cases specific cases:
             //

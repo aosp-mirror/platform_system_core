@@ -100,7 +100,7 @@ bool WorkerThread::ProcessReplaceOp(const CowOperation* cow_op) {
         SNAP_LOG(ERROR) << "No space in buffer sink";
         return false;
     }
-    ssize_t rv = reader_->ReadData(*cow_op, buffer, BLOCK_SZ);
+    ssize_t rv = reader_->ReadData(cow_op, buffer, BLOCK_SZ);
     if (rv != BLOCK_SZ) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block
                         << ", return = " << rv;
