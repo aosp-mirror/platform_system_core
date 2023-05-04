@@ -63,7 +63,9 @@ class ICowReader {
     //
     // Partial reads are not possible unless |buffer_size| is less than the
     // operation block size.
-    virtual ssize_t ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
+    //
+    // The operation pointer must derive from ICowOpIter::Get().
+    virtual ssize_t ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
                              size_t ignore_bytes = 0) = 0;
 };
 
@@ -77,7 +79,7 @@ class ICowOpIter {
     virtual bool AtEnd() = 0;
 
     // Read the current operation.
-    virtual const CowOperation& Get() = 0;
+    virtual const CowOperation* Get() = 0;
 
     // Advance to the next item.
     virtual void Next() = 0;
@@ -121,7 +123,7 @@ class CowReader final : public ICowReader {
     std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
     std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
-    ssize_t ReadData(const CowOperation& op, void* buffer, size_t buffer_size,
+    ssize_t ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
                      size_t ignore_bytes = 0) override;
 
     CowHeader& GetHeader() override { return header_; }
