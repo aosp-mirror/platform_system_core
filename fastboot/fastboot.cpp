@@ -1724,8 +1724,6 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         auto task = ParseFastbootInfoLine(fp, command);
         if (!task) {
-            LOG(ERROR) << "Error when parsing fastboot-info.txt, falling back on Hardcoded list: "
-                       << text;
             return {};
         }
         tasks.emplace_back(std::move(task));
@@ -1751,8 +1749,6 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
 }
 
 std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp, std::ifstream& fs) {
-    if (!fs || fs.eof()) return {};
-
     std::string text;
     std::vector<std::string> file;
     // Get os_partitions that need to be resized
@@ -1783,12 +1779,16 @@ void FlashAllTool::Flash() {
 
     std::string path = find_item_given_name("fastboot-info.txt");
     std::ifstream stream(path);
-    std::vector<std::unique_ptr<Task>> tasks = ParseFastbootInfo(fp_, stream);
-    if (tasks.empty()) {
+    if (!stream || stream.eof()) {
         LOG(VERBOSE) << "Flashing from hardcoded images. fastboot-info.txt is empty or does not "
                         "exist";
         HardcodedFlash();
         return;
+    }
+
+    std::vector<std::unique_ptr<Task>> tasks = ParseFastbootInfo(fp_, stream);
+    if (tasks.empty()) {
+        LOG(FATAL) << "Invalid fastboot-info.txt file.";
     }
     LOG(VERBOSE) << "Flashing from fastboot-info.txt";
     for (auto& task : tasks) {
