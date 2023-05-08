@@ -137,26 +137,36 @@ filegroup {
     path: "binder",
 }
 
-cc_fuzz {
-    name: "storaged_service_fuzzer",
+cc_defaults {
+    name: "storaged_service_fuzzer_defaults",
     defaults: [
         "storaged_defaults",
         "service_fuzzer_defaults",
+        "fuzzer_disable_leaks",
     ],
-    srcs: ["tests/fuzzers/storaged_service_fuzzer.cpp"],
     static_libs: [
         "libstoraged",
     ],
+    fuzz_config: {
+        cc: [
+            "dvander@google.com",
+        ],
+        triage_assignee: "waghpawan@google.com",
+    },
+}
+
+cc_fuzz {
+    name: "storaged_service_fuzzer",
+    defaults: [
+        "storaged_service_fuzzer_defaults",
+    ],
+    srcs: ["tests/fuzzers/storaged_service_fuzzer.cpp"],
 }
 
 cc_fuzz {
     name: "storaged_private_service_fuzzer",
     defaults: [
-        "storaged_defaults",
-        "service_fuzzer_defaults",
+        "storaged_service_fuzzer_defaults",
     ],
     srcs: ["tests/fuzzers/storaged_private_service_fuzzer.cpp"],
-    static_libs: [
-        "libstoraged",
-    ],
 }
