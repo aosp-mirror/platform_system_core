@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
+#include "cow_decompress.h"
 
 using testing::AssertionFailure;
 using testing::AssertionResult;
@@ -44,23 +45,10 @@ class CowTest : public ::testing::Test {
     std::unique_ptr<TemporaryFile> cow_;
 };
 
-// Sink that always appends to the end of a string.
-class StringSink : public IByteSink {
-  public:
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        size_t old_size = stream_.size();
-        stream_.resize(old_size + requested, '\0');
-        *actual = requested;
-        return stream_.data() + old_size;
-    }
-    bool ReturnData(void*, size_t) override { return true; }
-    void Reset() { stream_.clear(); }
-
-    std::string& stream() { return stream_; }
-
-  private:
-    std::string stream_;
-};
+// Helper to check read sizes.
+static inline bool ReadData(CowReader& reader, const CowOperation* op, void* buffer, size_t size) {
+    return reader.ReadData(op, buffer, size) == size;
+}
 
 TEST_F(CowTest, CopyContiguous) {
     CowOptions options;
@@ -74,24 +62,25 @@ TEST_F(CowTest, CopyContiguous) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 100);
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
+    ASSERT_FALSE(iter->AtEnd());
 
     size_t i = 0;
-    while (!iter->Done()) {
-        auto op = &iter->Get();
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
         ASSERT_EQ(op->type, kCowCopyOp);
         ASSERT_EQ(op->compression, kCowCompressNone);
         ASSERT_EQ(op->data_length, 0);
@@ -122,21 +111,22 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 4);
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
 
     ASSERT_EQ(op->type, kCowCopyOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
@@ -144,22 +134,22 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(op->new_block, 10);
     ASSERT_EQ(op->source, 20);
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowReplaceOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     // Note: the zero operation gets split into two blocks.
     ASSERT_EQ(op->type, kCowZeroOp);
@@ -169,8 +159,8 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(op->source, 0);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowZeroOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
@@ -179,7 +169,7 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_EQ(op->source, 0);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, ReadWriteXor) {
@@ -200,21 +190,22 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
     CowReader reader;
-    CowHeader header;
-    CowFooter footer;
     ASSERT_TRUE(reader.Parse(cow_->fd));
-    ASSERT_TRUE(reader.GetHeader(&header));
-    ASSERT_TRUE(reader.GetFooter(&footer));
+
+    const auto& header = reader.GetHeader();
     ASSERT_EQ(header.magic, kCowMagicNumber);
     ASSERT_EQ(header.major_version, kCowVersionMajor);
     ASSERT_EQ(header.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
     ASSERT_EQ(footer.op.num_ops, 4);
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
 
     ASSERT_EQ(op->type, kCowCopyOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
@@ -222,23 +213,23 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_EQ(op->new_block, 10);
     ASSERT_EQ(op->source, 20);
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowXorOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
     ASSERT_EQ(op->source, 98314);  // 4096 * 24 + 10
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     // Note: the zero operation gets split into two blocks.
     ASSERT_EQ(op->type, kCowZeroOp);
@@ -248,8 +239,8 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_EQ(op->source, 0);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowZeroOp);
     ASSERT_EQ(op->compression, kCowCompressNone);
@@ -258,7 +249,7 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_EQ(op->source, 0);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, CompressGz) {
@@ -282,25 +273,25 @@ TEST_F(CowTest, CompressGz) {
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
     ASSERT_EQ(op->compression, kCowCompressGz);
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
-class CompressionRWTest : public CowTest, public testing::WithParamInterface<const char*> {};
+class CompressionTest : public CowTest, public testing::WithParamInterface<const char*> {};
 
-TEST_P(CompressionRWTest, ThreadedBatchWrites) {
+TEST_P(CompressionTest, ThreadedBatchWrites) {
     CowOptions options;
     options.compression = GetParam();
     options.num_compress_threads = 2;
@@ -337,36 +328,37 @@ TEST_P(CompressionRWTest, ThreadedBatchWrites) {
     ASSERT_NE(iter, nullptr);
 
     int total_blocks = 0;
-    while (!iter->Done()) {
-        auto op = &iter->Get();
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
 
         if (op->type == kCowXorOp) {
             total_blocks += 1;
-            StringSink sink;
+            std::string sink(xor_data.size(), '\0');
             ASSERT_EQ(op->new_block, 50);
             ASSERT_EQ(op->source, 98314);  // 4096 * 24 + 10
-            ASSERT_TRUE(reader.ReadData(*op, &sink));
-            ASSERT_EQ(sink.stream(), xor_data);
+            ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+            ASSERT_EQ(sink, xor_data);
         }
 
         if (op->type == kCowReplaceOp) {
             total_blocks += 1;
             if (op->new_block == 100) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
                 data.resize(options.block_size);
-                ASSERT_EQ(sink.stream(), data);
+                std::string sink(data.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink.size(), data.size());
+                ASSERT_EQ(sink, data);
             }
             if (op->new_block == 6000) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
                 data2.resize(options.block_size);
-                ASSERT_EQ(sink.stream(), data2);
+                std::string sink(data2.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink, data2);
             }
             if (op->new_block == 9000) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
-                ASSERT_EQ(sink.stream(), data3);
+                std::string sink(data3.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink, data3);
             }
         }
 
@@ -376,7 +368,7 @@ TEST_P(CompressionRWTest, ThreadedBatchWrites) {
     ASSERT_EQ(total_blocks, expected_blocks);
 }
 
-TEST_P(CompressionRWTest, NoBatchWrites) {
+TEST_P(CompressionTest, NoBatchWrites) {
     CowOptions options;
     options.compression = GetParam();
     options.num_compress_threads = 1;
@@ -410,27 +402,27 @@ TEST_P(CompressionRWTest, NoBatchWrites) {
     ASSERT_NE(iter, nullptr);
 
     int total_blocks = 0;
-    while (!iter->Done()) {
-        auto op = &iter->Get();
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
 
         if (op->type == kCowReplaceOp) {
             total_blocks += 1;
             if (op->new_block == 50) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
                 data.resize(options.block_size);
-                ASSERT_EQ(sink.stream(), data);
+                std::string sink(data.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink, data);
             }
             if (op->new_block == 3000) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
                 data2.resize(options.block_size);
-                ASSERT_EQ(sink.stream(), data2);
+                std::string sink(data2.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink, data2);
             }
             if (op->new_block == 5000) {
-                StringSink sink;
-                ASSERT_TRUE(reader.ReadData(*op, &sink));
-                ASSERT_EQ(sink.stream(), data3);
+                std::string sink(data3.size(), '\0');
+                ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+                ASSERT_EQ(sink, data3);
             }
         }
 
@@ -440,7 +432,66 @@ TEST_P(CompressionRWTest, NoBatchWrites) {
     ASSERT_EQ(total_blocks, expected_blocks);
 }
 
-INSTANTIATE_TEST_SUITE_P(CowApi, CompressionRWTest, testing::Values("none", "gz", "brotli", "lz4"));
+template <typename T>
+class HorribleStream : public IByteStream {
+  public:
+    HorribleStream(const std::basic_string<T>& input) : input_(input) {}
+
+    ssize_t Read(void* buffer, size_t length) override {
+        if (pos_ >= input_.size()) {
+            return 0;
+        }
+        if (length) {
+            *reinterpret_cast<char*>(buffer) = input_[pos_];
+        }
+        pos_++;
+        return 1;
+    }
+    size_t Size() const override { return input_.size(); }
+
+  private:
+    std::basic_string<T> input_;
+    size_t pos_ = 0;
+};
+
+TEST(HorribleStream, ReadFully) {
+    std::string expected = "this is some data";
+
+    HorribleStream<char> stream(expected);
+
+    std::string buffer(expected.size(), '\0');
+    ASSERT_TRUE(stream.ReadFully(buffer.data(), buffer.size()));
+    ASSERT_EQ(buffer, expected);
+}
+
+TEST_P(CompressionTest, HorribleStream) {
+    if (strcmp(GetParam(), "none") == 0) {
+        GTEST_SKIP();
+    }
+
+    auto algorithm = CompressionAlgorithmFromString(GetParam());
+    ASSERT_TRUE(algorithm.has_value());
+
+    std::string expected = "The quick brown fox jumps over the lazy dog.";
+    expected.resize(4096, '\0');
+
+    auto result = CompressWorker::Compress(*algorithm, expected.data(), expected.size());
+    ASSERT_FALSE(result.empty());
+
+    HorribleStream<uint8_t> stream(result);
+    auto decomp = IDecompressor::FromString(GetParam());
+    ASSERT_NE(decomp, nullptr);
+    decomp->set_stream(&stream);
+
+    expected = expected.substr(10, 500);
+
+    std::string buffer(expected.size(), '\0');
+    ASSERT_EQ(decomp->Decompress(buffer.data(), 500, 4096, 10), 500);
+    ASSERT_EQ(buffer, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(AllCompressors, CompressionTest,
+                         testing::Values("none", "gz", "brotli", "lz4"));
 
 TEST_F(CowTest, ClusterCompressGz) {
     CowOptions options;
@@ -467,43 +518,44 @@ TEST_F(CowTest, ClusterCompressGz) {
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
     ASSERT_EQ(op->compression, kCowCompressGz);
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowClusterOp);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
-    sink.Reset();
+    sink = {};
+    sink.resize(data2.size(), '\0');
     ASSERT_EQ(op->compression, kCowCompressGz);
     ASSERT_EQ(op->data_length, 41);  // compressed!
     ASSERT_EQ(op->new_block, 51);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data2);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data2);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
 
     ASSERT_EQ(op->type, kCowClusterOp);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, CompressTwoBlocks) {
@@ -527,58 +579,18 @@ TEST_F(CowTest, CompressTwoBlocks) {
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
+    ASSERT_FALSE(iter->AtEnd());
     iter->Next();
-    ASSERT_FALSE(iter->Done());
+    ASSERT_FALSE(iter->AtEnd());
 
-    StringSink sink;
+    std::string sink(options.block_size, '\0');
 
-    auto op = &iter->Get();
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
     ASSERT_EQ(op->compression, kCowCompressGz);
     ASSERT_EQ(op->new_block, 51);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
 }
-
-// Only return 1-byte buffers, to stress test the partial read logic in
-// CowReader.
-class HorribleStringSink : public StringSink {
-  public:
-    void* GetBuffer(size_t, size_t* actual) override { return StringSink::GetBuffer(1, actual); }
-};
-
-class CompressionTest : public CowTest, public testing::WithParamInterface<const char*> {};
-
-TEST_P(CompressionTest, HorribleSink) {
-    CowOptions options;
-    options.compression = GetParam();
-    options.cluster_ops = 0;
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
-
-    std::string data = "This is some data, believe it";
-    data.resize(options.block_size, '\0');
-
-    ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
-    ASSERT_TRUE(writer.Finalize());
-
-    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
-
-    CowReader reader;
-    ASSERT_TRUE(reader.Parse(cow_->fd));
-
-    auto iter = reader.GetOpIter();
-    ASSERT_NE(iter, nullptr);
-    ASSERT_FALSE(iter->Done());
-
-    HorribleStringSink sink;
-    auto op = &iter->Get();
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
-}
-
-INSTANTIATE_TEST_SUITE_P(CowApi, CompressionTest, testing::Values("none", "gz", "brotli"));
 
 TEST_F(CowTest, GetSize) {
     CowOptions options;
@@ -641,35 +653,36 @@ TEST_F(CowTest, AppendLabelSmall) {
     ASSERT_TRUE(reader.GetLastLabel(&label));
     ASSERT_EQ(label, 3);
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
 
     iter->Next();
-    sink.Reset();
+    sink = {};
+    sink.resize(data2.size(), '\0');
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 3);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data2);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data2);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, AppendLabelMissing) {
@@ -705,25 +718,23 @@ TEST_F(CowTest, AppendLabelMissing) {
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
-    StringSink sink;
-
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 0);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
     iter->Next();
 
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, AppendExtendedCorrupted) {
@@ -765,18 +776,16 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
-    StringSink sink;
-
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 5);
 
     iter->Next();
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, AppendbyLabel) {
@@ -816,55 +825,55 @@ TEST_F(CowTest, AppendbyLabel) {
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
-    StringSink sink;
+    std::string sink(options.block_size, '\0');
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data.substr(0, options.block_size));
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data.substr(0, options.block_size));
 
     iter->Next();
-    sink.Reset();
+    sink = {};
+    sink.resize(options.block_size, '\0');
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data.substr(options.block_size, 2 * options.block_size));
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data.substr(options.block_size, 2 * options.block_size));
 
     iter->Next();
-    sink.Reset();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 4);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
     iter->Next();
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 5);
 
     iter->Next();
 
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, ClusterTest) {
@@ -897,72 +906,71 @@ TEST_F(CowTest, ClusterTest) {
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
-    StringSink sink;
+    std::string sink(data.size(), '\0');
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data.substr(0, options.block_size));
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data.substr(0, options.block_size));
 
     iter->Next();
-    sink.Reset();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 4);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowClusterOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowZeroOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 5);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowCopyOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowClusterOp);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 6);
 
     iter->Next();
 
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, ClusterAppendTest) {
@@ -997,33 +1005,33 @@ TEST_F(CowTest, ClusterAppendTest) {
     ASSERT_TRUE(reader.GetLastLabel(&label));
     ASSERT_EQ(label, 50);
 
-    StringSink sink;
+    std::string sink(data2.size(), '\0');
 
     auto iter = reader.GetOpIter();
     ASSERT_NE(iter, nullptr);
 
-    ASSERT_FALSE(iter->Done());
-    auto op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
     ASSERT_EQ(op->source, 50);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(reader.ReadData(*op, &sink));
-    ASSERT_EQ(sink.stream(), data2);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data2);
 
     iter->Next();
 
-    ASSERT_FALSE(iter->Done());
-    op = &iter->Get();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
     ASSERT_EQ(op->type, kCowClusterOp);
 
     iter->Next();
 
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, AppendAfterFinalize) {
@@ -1058,21 +1066,20 @@ AssertionResult WriteDataBlock(CowWriter* writer, uint64_t new_block, std::strin
     return AssertionSuccess();
 }
 
-AssertionResult CompareDataBlock(CowReader* reader, const CowOperation& op,
+AssertionResult CompareDataBlock(CowReader* reader, const CowOperation* op,
                                  const std::string& data) {
-    CowHeader header;
-    reader->GetHeader(&header);
+    const auto& header = reader->GetHeader();
 
     std::string cmp = data;
     cmp.resize(header.block_size, '\0');
 
-    StringSink sink;
-    if (!reader->ReadData(op, &sink)) {
+    std::string sink(cmp.size(), '\0');
+    if (!reader->ReadData(op, sink.data(), sink.size())) {
         return AssertionFailure() << "Failed to read data block";
     }
-    if (cmp != sink.stream()) {
+    if (cmp != sink) {
         return AssertionFailure() << "Data blocks did not match, expected " << cmp << ", got "
-                                  << sink.stream();
+                                  << sink;
     }
 
     return AssertionSuccess();
@@ -1111,18 +1118,18 @@ TEST_F(CowTest, ResumeMidCluster) {
     size_t max_in_cluster = 0;
     size_t num_in_cluster = 0;
     size_t num_clusters = 0;
-    while (!iter->Done()) {
+    while (!iter->AtEnd()) {
         const auto& op = iter->Get();
 
         num_in_cluster++;
         max_in_cluster = std::max(max_in_cluster, num_in_cluster);
 
-        if (op.type == kCowReplaceOp) {
+        if (op->type == kCowReplaceOp) {
             num_replace++;
 
-            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_EQ(op->new_block, num_replace);
             ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
-        } else if (op.type == kCowClusterOp) {
+        } else if (op->type == kCowClusterOp) {
             num_in_cluster = 0;
             num_clusters++;
         }
@@ -1172,18 +1179,18 @@ TEST_F(CowTest, ResumeEndCluster) {
     size_t max_in_cluster = 0;
     size_t num_in_cluster = 0;
     size_t num_clusters = 0;
-    while (!iter->Done()) {
+    while (!iter->AtEnd()) {
         const auto& op = iter->Get();
 
         num_in_cluster++;
         max_in_cluster = std::max(max_in_cluster, num_in_cluster);
 
-        if (op.type == kCowReplaceOp) {
+        if (op->type == kCowReplaceOp) {
             num_replace++;
 
-            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_EQ(op->new_block, num_replace);
             ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
-        } else if (op.type == kCowClusterOp) {
+        } else if (op->type == kCowClusterOp) {
             num_in_cluster = 0;
             num_clusters++;
         }
@@ -1224,17 +1231,17 @@ TEST_F(CowTest, DeleteMidCluster) {
     size_t max_in_cluster = 0;
     size_t num_in_cluster = 0;
     size_t num_clusters = 0;
-    while (!iter->Done()) {
+    while (!iter->AtEnd()) {
         const auto& op = iter->Get();
 
         num_in_cluster++;
         max_in_cluster = std::max(max_in_cluster, num_in_cluster);
-        if (op.type == kCowReplaceOp) {
+        if (op->type == kCowReplaceOp) {
             num_replace++;
 
-            ASSERT_EQ(op.new_block, num_replace);
+            ASSERT_EQ(op->new_block, num_replace);
             ASSERT_TRUE(CompareDataBlock(&reader, op, "Block " + std::to_string(num_replace)));
-        } else if (op.type == kCowClusterOp) {
+        } else if (op->type == kCowClusterOp) {
             num_in_cluster = 0;
             num_clusters++;
         }
@@ -1268,14 +1275,14 @@ TEST_F(CowTest, BigSeqOp) {
     auto iter = reader.GetRevMergeOpIter();
 
     for (int i = 0; i < seq_len; i++) {
-        ASSERT_TRUE(!iter->Done());
+        ASSERT_TRUE(!iter->AtEnd());
         const auto& op = iter->Get();
 
-        ASSERT_EQ(op.new_block, seq_len - i);
+        ASSERT_EQ(op->new_block, seq_len - i);
 
         iter->Next();
     }
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, MissingSeqOp) {
@@ -1319,7 +1326,7 @@ TEST_F(CowTest, ResumeSeqOp) {
     auto reader = std::make_unique<CowReader>();
     ASSERT_TRUE(reader->Parse(cow_->fd, 1));
     auto itr = reader->GetRevMergeOpIter();
-    ASSERT_TRUE(itr->Done());
+    ASSERT_TRUE(itr->AtEnd());
 
     writer = std::make_unique<CowWriter>(options);
     ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
@@ -1334,17 +1341,17 @@ TEST_F(CowTest, ResumeSeqOp) {
     auto iter = reader->GetRevMergeOpIter();
 
     uint64_t expected_block = 10;
-    while (!iter->Done() && expected_block > 0) {
-        ASSERT_FALSE(iter->Done());
+    while (!iter->AtEnd() && expected_block > 0) {
+        ASSERT_FALSE(iter->AtEnd());
         const auto& op = iter->Get();
 
-        ASSERT_EQ(op.new_block, expected_block);
+        ASSERT_EQ(op->new_block, expected_block);
 
         iter->Next();
         expected_block--;
     }
     ASSERT_EQ(expected_block, 0);
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, RevMergeOpItrTest) {
@@ -1385,16 +1392,16 @@ TEST_F(CowTest, RevMergeOpItrTest) {
     auto iter = reader.GetRevMergeOpIter();
     auto expected_new_block = revMergeOpSequence.begin();
 
-    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+    while (!iter->AtEnd() && expected_new_block != revMergeOpSequence.end()) {
         const auto& op = iter->Get();
 
-        ASSERT_EQ(op.new_block, *expected_new_block);
+        ASSERT_EQ(op->new_block, *expected_new_block);
 
         iter->Next();
         expected_new_block++;
     }
     ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, LegacyRevMergeOpItrTest) {
@@ -1434,16 +1441,16 @@ TEST_F(CowTest, LegacyRevMergeOpItrTest) {
     auto iter = reader.GetRevMergeOpIter();
     auto expected_new_block = revMergeOpSequence.begin();
 
-    while (!iter->Done() && expected_new_block != revMergeOpSequence.end()) {
+    while (!iter->AtEnd() && expected_new_block != revMergeOpSequence.end()) {
         const auto& op = iter->Get();
 
-        ASSERT_EQ(op.new_block, *expected_new_block);
+        ASSERT_EQ(op->new_block, *expected_new_block);
 
         iter->Next();
         expected_new_block++;
     }
     ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
-    ASSERT_TRUE(iter->Done());
+    ASSERT_TRUE(iter->AtEnd());
 }
 
 TEST_F(CowTest, InvalidMergeOrderTest) {

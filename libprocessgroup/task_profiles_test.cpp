@@ -16,6 +16,7 @@
 
 #include "task_profiles.h"
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 #include <gtest/gtest.h>
 #include <mntent.h>
 #include <processgroup/processgroup.h>
@@ -29,13 +30,14 @@ using ::android::base::LogFunction;
 using ::android::base::LogId;
 using ::android::base::LogSeverity;
 using ::android::base::SetLogger;
+using ::android::base::Split;
 using ::android::base::VERBOSE;
 using ::testing::TestWithParam;
 using ::testing::Values;
 
 namespace {
 
-bool IsCgroupV2Mounted() {
+bool IsCgroupV2MountedRw() {
     std::unique_ptr<FILE, int (*)(FILE*)> mnts(setmntent("/proc/mounts", "re"), endmntent);
     if (!mnts) {
         LOG(ERROR) << "Failed to open /proc/mounts";
@@ -43,9 +45,11 @@ bool IsCgroupV2Mounted() {
     }
     struct mntent* mnt;
     while ((mnt = getmntent(mnts.get()))) {
-        if (strcmp(mnt->mnt_type, "cgroup2") == 0) {
-            return true;
+        if (strcmp(mnt->mnt_type, "cgroup2") != 0) {
+            continue;
         }
+        const std::vector<std::string> options = Split(mnt->mnt_opts, ",");
+        return std::count(options.begin(), options.end(), "ro") == 0;
     }
     return false;
 }
@@ -145,8 +149,9 @@ class SetAttributeFixture : public TestWithParam<TestParam> {
 };
 
 TEST_P(SetAttributeFixture, SetAttribute) {
-    // Treehugger runs host tests inside a container without cgroupv2 support.
-    if (!IsCgroupV2Mounted()) {
+    // Treehugger runs host tests inside a container either without cgroupv2
+    // support or with the cgroup filesystem mounted read-only.
+    if (!IsCgroupV2MountedRw()) {
         GTEST_SKIP();
         return;
     }
@@ -168,6 +173,32 @@ TEST_P(SetAttributeFixture, SetAttribute) {
     } else {
         ASSERT_EQ(log.size(), 0);
     }
+}
+
+class TaskProfileFixture : public TestWithParam<TestParam> {
+  public:
+    ~TaskProfileFixture() = default;
+};
+
+TEST_P(TaskProfileFixture, TaskProfile) {
+    // Treehugger runs host tests inside a container without cgroupv2 support.
+    if (!IsCgroupV2MountedRw()) {
+        GTEST_SKIP();
+        return;
+    }
+    const TestParam params = GetParam();
+    ProfileAttributeMock pa(params.attr_name);
+    // Test simple profile with one action
+    std::shared_ptr<TaskProfile> tp = std::make_shared<TaskProfile>("test_profile");
+    tp->Add(std::make_unique<SetAttributeAction>(&pa, params.attr_value, params.optional_attr));
+    EXPECT_EQ(tp->IsValidForProcess(getuid(), getpid()), params.result);
+    EXPECT_EQ(tp->IsValidForTask(getpid()), params.result);
+    // Test aggregate profile
+    TaskProfile tp2("meta_profile");
+    std::vector<std::shared_ptr<TaskProfile>> profiles = {tp};
+    tp2.Add(std::make_unique<ApplyProfileAction>(profiles));
+    EXPECT_EQ(tp2.IsValidForProcess(getuid(), getpid()), params.result);
+    EXPECT_EQ(tp2.IsValidForTask(getpid()), params.result);
 }
 
 // Test the four combinations of optional_attr {false, true} and cgroup attribute { does not exist,
@@ -210,4 +241,28 @@ INSTANTIATE_TEST_SUITE_P(
                         .log_prefix = "Failed to write",
                         .log_suffix = geteuid() == 0 ? "Invalid argument" : "Permission denied"}));
 
+// Test TaskProfile IsValid calls.
+INSTANTIATE_TEST_SUITE_P(
+        TaskProfileTestSuite, TaskProfileFixture,
+        Values(
+                // Test operating on non-existing cgroup attribute fails.
+                TestParam{.attr_name = "no-such-attribute",
+                          .attr_value = ".",
+                          .optional_attr = false,
+                          .result = false},
+                // Test operating on optional non-existing cgroup attribute succeeds.
+                TestParam{.attr_name = "no-such-attribute",
+                          .attr_value = ".",
+                          .optional_attr = true,
+                          .result = true},
+                // Test operating on existing cgroup attribute succeeds.
+                TestParam{.attr_name = "cgroup.procs",
+                          .attr_value = ".",
+                          .optional_attr = false,
+                          .result = true},
+                // Test operating on optional existing cgroup attribute succeeds.
+                TestParam{.attr_name = "cgroup.procs",
+                          .attr_value = ".",
+                          .optional_attr = true,
+                          .result = true}));
 }  // namespace

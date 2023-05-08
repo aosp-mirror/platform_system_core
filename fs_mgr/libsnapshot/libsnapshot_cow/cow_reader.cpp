@@ -508,44 +508,39 @@ bool CowReader::PrepMergeOps() {
 
 bool CowReader::VerifyMergeOps() {
     auto itr = GetMergeOpIter(true);
-    std::unordered_map<uint64_t, CowOperation> overwritten_blocks;
-    while (!itr->Done()) {
-        CowOperation op = itr->Get();
+    std::unordered_map<uint64_t, const CowOperation*> overwritten_blocks;
+    while (!itr->AtEnd()) {
+        const auto& op = itr->Get();
         uint64_t block;
         bool offset;
-        if (op.type == kCowCopyOp) {
-            block = op.source;
+        if (op->type == kCowCopyOp) {
+            block = op->source;
             offset = false;
-        } else if (op.type == kCowXorOp) {
-            block = op.source / BLOCK_SZ;
-            offset = (op.source % BLOCK_SZ) != 0;
+        } else if (op->type == kCowXorOp) {
+            block = op->source / header_.block_size;
+            offset = (op->source % header_.block_size) != 0;
         } else {
             itr->Next();
             continue;
         }
 
-        CowOperation* overwrite = nullptr;
+        const CowOperation* overwrite = nullptr;
         if (overwritten_blocks.count(block)) {
-            overwrite = &overwritten_blocks[block];
+            overwrite = overwritten_blocks[block];
             LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
                        << op << "\noverwritten by previously merged op:\n"
                        << *overwrite;
         }
         if (offset && overwritten_blocks.count(block + 1)) {
-            overwrite = &overwritten_blocks[block + 1];
+            overwrite = overwritten_blocks[block + 1];
             LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
                        << op << "\noverwritten by previously merged op:\n"
                        << *overwrite;
         }
         if (overwrite != nullptr) return false;
-        overwritten_blocks[op.new_block] = op;
+        overwritten_blocks[op->new_block] = op;
         itr->Next();
     }
-    return true;
-}
-
-bool CowReader::GetHeader(CowHeader* header) {
-    *header = header_;
     return true;
 }
 
@@ -565,12 +560,12 @@ class CowOpIter final : public ICowOpIter {
   public:
     CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t start);
 
-    bool Done() override;
-    const CowOperation& Get() override;
+    bool AtEnd() override;
+    const CowOperation* Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -582,27 +577,27 @@ CowOpIter::CowOpIter(std::shared_ptr<std::vector<CowOperation>>& ops, uint64_t s
     op_iter_ = ops_->begin() + start;
 }
 
-bool CowOpIter::RDone() {
+bool CowOpIter::AtBegin() {
     return op_iter_ == ops_->begin();
 }
 
 void CowOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     op_iter_--;
 }
 
-bool CowOpIter::Done() {
+bool CowOpIter::AtEnd() {
     return op_iter_ == ops_->end();
 }
 
 void CowOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     op_iter_++;
 }
 
-const CowOperation& CowOpIter::Get() {
-    CHECK(!Done());
-    return (*op_iter_);
+const CowOperation* CowOpIter::Get() {
+    CHECK(!AtEnd());
+    return &(*op_iter_);
 }
 
 class CowRevMergeOpIter final : public ICowOpIter {
@@ -610,12 +605,12 @@ class CowRevMergeOpIter final : public ICowOpIter {
     explicit CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
                                std::shared_ptr<std::vector<int>> block_pos_index, uint64_t start);
 
-    bool Done() override;
-    const CowOperation& Get() override;
+    bool AtEnd() override;
+    const CowOperation* Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -629,12 +624,12 @@ class CowMergeOpIter final : public ICowOpIter {
     explicit CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
                             std::shared_ptr<std::vector<int>> block_pos_index, uint64_t start);
 
-    bool Done() override;
-    const CowOperation& Get() override;
+    bool AtEnd() override;
+    const CowOperation* Get() override;
     void Next() override;
 
     void Prev() override;
-    bool RDone() override;
+    bool AtBegin() override;
 
   private:
     std::shared_ptr<std::vector<CowOperation>> ops_;
@@ -651,27 +646,27 @@ CowMergeOpIter::CowMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
     block_iter_ = cow_op_index_vec_->begin() + start;
 }
 
-bool CowMergeOpIter::RDone() {
+bool CowMergeOpIter::AtBegin() {
     return block_iter_ == cow_op_index_vec_->begin();
 }
 
 void CowMergeOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     block_iter_--;
 }
 
-bool CowMergeOpIter::Done() {
+bool CowMergeOpIter::AtEnd() {
     return block_iter_ == cow_op_index_vec_->end();
 }
 
 void CowMergeOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     block_iter_++;
 }
 
-const CowOperation& CowMergeOpIter::Get() {
-    CHECK(!Done());
-    return ops_->data()[*block_iter_];
+const CowOperation* CowMergeOpIter::Get() {
+    CHECK(!AtEnd());
+    return &ops_->data()[*block_iter_];
 }
 
 CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> ops,
@@ -683,27 +678,27 @@ CowRevMergeOpIter::CowRevMergeOpIter(std::shared_ptr<std::vector<CowOperation>> 
     block_riter_ = cow_op_index_vec_->rbegin();
 }
 
-bool CowRevMergeOpIter::RDone() {
+bool CowRevMergeOpIter::AtBegin() {
     return block_riter_ == cow_op_index_vec_->rbegin();
 }
 
 void CowRevMergeOpIter::Prev() {
-    CHECK(!RDone());
+    CHECK(!AtBegin());
     block_riter_--;
 }
 
-bool CowRevMergeOpIter::Done() {
+bool CowRevMergeOpIter::AtEnd() {
     return block_riter_ == cow_op_index_vec_->rend() - start_;
 }
 
 void CowRevMergeOpIter::Next() {
-    CHECK(!Done());
+    CHECK(!AtEnd());
     block_riter_++;
 }
 
-const CowOperation& CowRevMergeOpIter::Get() {
-    CHECK(!Done());
-    return ops_->data()[*block_riter_];
+const CowOperation* CowRevMergeOpIter::Get() {
+    CHECK(!AtEnd());
+    return &ops_->data()[*block_riter_];
 }
 
 std::unique_ptr<ICowOpIter> CowReader::GetOpIter(bool merge_progress) {
@@ -747,18 +742,18 @@ class CowDataStream final : public IByteStream {
         remaining_ = data_length_;
     }
 
-    bool Read(void* buffer, size_t length, size_t* read) override {
+    ssize_t Read(void* buffer, size_t length) override {
         size_t to_read = std::min(length, remaining_);
         if (!to_read) {
-            *read = 0;
-            return true;
+            return 0;
         }
-        if (!reader_->GetRawBytes(offset_, buffer, to_read, read)) {
-            return false;
+        size_t read;
+        if (!reader_->GetRawBytes(offset_, buffer, to_read, &read)) {
+            return -1;
         }
-        offset_ += *read;
-        remaining_ -= *read;
-        return true;
+        offset_ += read;
+        remaining_ -= read;
+        return read;
     }
 
     size_t Size() const override { return data_length_; }
@@ -770,11 +765,11 @@ class CowDataStream final : public IByteStream {
     size_t remaining_;
 };
 
-bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
+ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
+                            size_t ignore_bytes) {
     std::unique_ptr<IDecompressor> decompressor;
-    switch (op.compression) {
+    switch (op->compression) {
         case kCowCompressNone:
-            decompressor = IDecompressor::Uncompressed();
             break;
         case kCowCompressGz:
             decompressor = IDecompressor::Gz();
@@ -783,23 +778,30 @@ bool CowReader::ReadData(const CowOperation& op, IByteSink* sink) {
             decompressor = IDecompressor::Brotli();
             break;
         case kCowCompressLz4:
-            decompressor = IDecompressor::Lz4();
+            if (header_.block_size != op->data_length) {
+                decompressor = IDecompressor::Lz4();
+            }
             break;
         default:
-            LOG(ERROR) << "Unknown compression type: " << op.compression;
-            return false;
+            LOG(ERROR) << "Unknown compression type: " << op->compression;
+            return -1;
     }
 
     uint64_t offset;
-    if (op.type == kCowXorOp) {
-        offset = data_loc_->at(op.new_block);
+    if (op->type == kCowXorOp) {
+        offset = data_loc_->at(op->new_block);
     } else {
-        offset = op.source;
+        offset = op->source;
     }
-    CowDataStream stream(this, offset, op.data_length);
+
+    if (!decompressor) {
+        CowDataStream stream(this, offset + ignore_bytes, op->data_length - ignore_bytes);
+        return stream.ReadFully(buffer, buffer_size);
+    }
+
+    CowDataStream stream(this, offset, op->data_length);
     decompressor->set_stream(&stream);
-    decompressor->set_sink(sink);
-    return decompressor->Decompress(header_.block_size);
+    return decompressor->Decompress(buffer, buffer_size, header_.block_size, ignore_bytes);
 }
 
 }  // namespace snapshot
