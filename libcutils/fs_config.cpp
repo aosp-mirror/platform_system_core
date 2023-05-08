@@ -84,14 +84,12 @@ static const struct fs_path_config android_dirs[] = {
     { 00777, AID_ROOT,         AID_ROOT,         0, "sdcard" },
     { 00751, AID_ROOT,         AID_SDCARD_R,     0, "storage" },
     { 00750, AID_ROOT,         AID_SYSTEM,       0, "system/apex/com.android.tethering/bin/for-system" },
-    { 00750, AID_ROOT,         AID_SYSTEM,       0, "system/apex/com.android.tethering.inprocess/bin/for-system" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/bin" },
     { 00755, AID_ROOT,         AID_ROOT,         0, "system/etc/ppp" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "system/vendor" },
     { 00750, AID_ROOT,         AID_SHELL,        0, "system/xbin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system/apex/*/bin" },
     { 00750, AID_ROOT,         AID_SYSTEM,       0, "system_ext/apex/com.android.tethering/bin/for-system" },
-    { 00750, AID_ROOT,         AID_SYSTEM,       0, "system_ext/apex/com.android.tethering.inprocess/bin/for-system" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system_ext/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "system_ext/apex/*/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
@@ -199,9 +197,7 @@ static const struct fs_path_config android_files[] = {
     // the following files have enhanced capabilities and ARE included
     // in user builds.
     { 06755, AID_CLAT,      AID_CLAT,      0, "system/apex/com.android.tethering/bin/for-system/clatd" },
-    { 06755, AID_CLAT,      AID_CLAT,      0, "system/apex/com.android.tethering.inprocess/bin/for-system/clatd" },
     { 06755, AID_CLAT,      AID_CLAT,      0, "system_ext/apex/com.android.tethering/bin/for-system/clatd" },
-    { 06755, AID_CLAT,      AID_CLAT,      0, "system_ext/apex/com.android.tethering.inprocess/bin/for-system/clatd" },
     { 00700, AID_SYSTEM,    AID_SHELL,     CAP_MASK_LONG(CAP_BLOCK_SUSPEND),
                                               "system/bin/inputflinger" },
     { 00750, AID_ROOT,      AID_SHELL,     CAP_MASK_LONG(CAP_SETUID) |

@@ -41,6 +41,9 @@ static constexpr uint32_t SNAPSHOT_VALID = 1;
  */
 static constexpr uint32_t SECTOR_SHIFT = 9;
 
+static constexpr size_t BLOCK_SZ = 4096;
+static constexpr size_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
+
 typedef __u64 sector_t;
 typedef sector_t chunk_t;
 
