@@ -25,7 +25,9 @@
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 #include "cow_decompress.h"
+#include "writer_v2.h"
 
+using android::base::unique_fd;
 using testing::AssertionFailure;
 using testing::AssertionResult;
 using testing::AssertionSuccess;
@@ -42,6 +44,8 @@ class CowTest : public ::testing::Test {
 
     virtual void TearDown() override { cow_ = nullptr; }
 
+    unique_fd GetCowFd() { return unique_fd{dup(cow_->fd)}; }
+
     std::unique_ptr<TemporaryFile> cow_;
 };
 
@@ -53,9 +57,9 @@ static inline bool ReadData(CowReader& reader, const CowOperation* op, void* buf
 TEST_F(CowTest, CopyContiguous) {
     CowOptions options;
     options.cluster_ops = 0;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     ASSERT_TRUE(writer.AddCopy(10, 1000, 100));
     ASSERT_TRUE(writer.Finalize());
@@ -96,9 +100,9 @@ TEST_F(CowTest, CopyContiguous) {
 TEST_F(CowTest, ReadWrite) {
     CowOptions options;
     options.cluster_ops = 0;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -175,9 +179,9 @@ TEST_F(CowTest, ReadWrite) {
 TEST_F(CowTest, ReadWriteXor) {
     CowOptions options;
     options.cluster_ops = 0;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -256,9 +260,9 @@ TEST_F(CowTest, CompressGz) {
     CowOptions options;
     options.cluster_ops = 0;
     options.compression = "gz";
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -296,9 +300,9 @@ TEST_P(CompressionTest, ThreadedBatchWrites) {
     options.compression = GetParam();
     options.num_compress_threads = 2;
 
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string xor_data = "This is test data-1. Testing xor";
     xor_data.resize(options.block_size, '\0');
@@ -374,9 +378,9 @@ TEST_P(CompressionTest, NoBatchWrites) {
     options.num_compress_threads = 1;
     options.cluster_ops = 0;
 
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "Testing replace ops without batch writes";
     data.resize(options.block_size * 1024, '\0');
@@ -497,9 +501,9 @@ TEST_F(CowTest, ClusterCompressGz) {
     CowOptions options;
     options.compression = "gz";
     options.cluster_ops = 2;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -562,9 +566,9 @@ TEST_F(CowTest, CompressTwoBlocks) {
     CowOptions options;
     options.compression = "gz";
     options.cluster_ops = 0;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size * 2, '\0');
@@ -595,12 +599,12 @@ TEST_F(CowTest, CompressTwoBlocks) {
 TEST_F(CowTest, GetSize) {
     CowOptions options;
     options.cluster_ops = 0;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
     if (ftruncate(cow_->fd, 0) < 0) {
         perror("Fails to set temp file size");
         FAIL();
     }
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -621,8 +625,8 @@ TEST_F(CowTest, GetSize) {
 TEST_F(CowTest, AppendLabelSmall) {
     CowOptions options;
     options.cluster_ops = 0;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -632,8 +636,8 @@ TEST_F(CowTest, AppendLabelSmall) {
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 3));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({3}));
 
     std::string data2 = "More data!";
     data2.resize(options.block_size, '\0');
@@ -688,8 +692,8 @@ TEST_F(CowTest, AppendLabelSmall) {
 TEST_F(CowTest, AppendLabelMissing) {
     CowOptions options;
     options.cluster_ops = 0;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(writer->AddLabel(0));
     std::string data = "This is some data, believe it";
@@ -701,9 +705,9 @@ TEST_F(CowTest, AppendLabelMissing) {
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_FALSE(writer->InitializeAppend(cow_->fd, 1));
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 0));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_FALSE(writer->Initialize({1}));
+    ASSERT_TRUE(writer->Initialize({0}));
 
     ASSERT_TRUE(writer->AddZeroBlocks(51, 1));
     ASSERT_TRUE(writer->Finalize());
@@ -740,8 +744,8 @@ TEST_F(CowTest, AppendLabelMissing) {
 TEST_F(CowTest, AppendExtendedCorrupted) {
     CowOptions options;
     options.cluster_ops = 0;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(writer->AddLabel(5));
 
@@ -763,8 +767,8 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 5));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({5}));
 
     ASSERT_TRUE(writer->Finalize());
 
@@ -791,8 +795,8 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
 TEST_F(CowTest, AppendbyLabel) {
     CowOptions options;
     options.cluster_ops = 0;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size * 2, '\0');
@@ -810,9 +814,9 @@ TEST_F(CowTest, AppendbyLabel) {
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_FALSE(writer->InitializeAppend(cow_->fd, 12));
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 5));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_FALSE(writer->Initialize({12}));
+    ASSERT_TRUE(writer->Initialize({5}));
 
     // This should drop label 6
     ASSERT_TRUE(writer->Finalize());
@@ -879,8 +883,8 @@ TEST_F(CowTest, AppendbyLabel) {
 TEST_F(CowTest, ClusterTest) {
     CowOptions options;
     options.cluster_ops = 4;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -976,16 +980,16 @@ TEST_F(CowTest, ClusterTest) {
 TEST_F(CowTest, ClusterAppendTest) {
     CowOptions options;
     options.cluster_ops = 3;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(writer->AddLabel(50));
     ASSERT_TRUE(writer->Finalize());  // Adds a cluster op, should be dropped on append
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 50));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({50}));
 
     std::string data2 = "More data!";
     data2.resize(options.block_size, '\0');
@@ -1037,8 +1041,8 @@ TEST_F(CowTest, ClusterAppendTest) {
 TEST_F(CowTest, AppendAfterFinalize) {
     CowOptions options;
     options.cluster_ops = 0;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
@@ -1058,8 +1062,8 @@ TEST_F(CowTest, AppendAfterFinalize) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
 }
 
-AssertionResult WriteDataBlock(CowWriter* writer, uint64_t new_block, std::string data) {
-    data.resize(writer->options().block_size, '\0');
+AssertionResult WriteDataBlock(ICowWriter* writer, uint64_t new_block, std::string data) {
+    data.resize(writer->GetBlockSize(), '\0');
     if (!writer->AddRawBlocks(new_block, data.data(), data.size())) {
         return AssertionFailure() << "Failed to add raw block";
     }
@@ -1088,8 +1092,8 @@ AssertionResult CompareDataBlock(CowReader* reader, const CowOperation* op,
 TEST_F(CowTest, ResumeMidCluster) {
     CowOptions options;
     options.cluster_ops = 7;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
@@ -1099,8 +1103,8 @@ TEST_F(CowTest, ResumeMidCluster) {
     ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({1}));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
@@ -1145,8 +1149,8 @@ TEST_F(CowTest, ResumeEndCluster) {
     CowOptions options;
     int cluster_ops = 5;
     options.cluster_ops = cluster_ops;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
@@ -1160,8 +1164,8 @@ TEST_F(CowTest, ResumeEndCluster) {
     ASSERT_TRUE(WriteDataBlock(writer.get(), 8, "Block 8"));
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({1}));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 4, "Block 4"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 5, "Block 5"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
@@ -1205,8 +1209,8 @@ TEST_F(CowTest, ResumeEndCluster) {
 TEST_F(CowTest, DeleteMidCluster) {
     CowOptions options;
     options.cluster_ops = 7;
-    auto writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(WriteDataBlock(writer.get(), 1, "Block 1"));
     ASSERT_TRUE(WriteDataBlock(writer.get(), 2, "Block 2"));
@@ -1218,8 +1222,8 @@ TEST_F(CowTest, DeleteMidCluster) {
     ASSERT_TRUE(WriteDataBlock(writer.get(), 6, "Block 6"));
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({1}));
     ASSERT_TRUE(writer->Finalize());
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -1255,14 +1259,14 @@ TEST_F(CowTest, DeleteMidCluster) {
 
 TEST_F(CowTest, BigSeqOp) {
     CowOptions options;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
     const int seq_len = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t) + 1;
     uint32_t sequence[seq_len];
     for (int i = 0; i < seq_len; i++) {
         sequence[i] = i + 1;
     }
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
     ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len));
@@ -1287,14 +1291,14 @@ TEST_F(CowTest, BigSeqOp) {
 
 TEST_F(CowTest, MissingSeqOp) {
     CowOptions options;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
     const int seq_len = 10;
     uint32_t sequence[seq_len];
     for (int i = 0; i < seq_len; i++) {
         sequence[i] = i + 1;
     }
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     ASSERT_TRUE(writer.AddSequenceData(seq_len, sequence));
     ASSERT_TRUE(writer.AddZeroBlocks(1, seq_len - 1));
@@ -1308,14 +1312,14 @@ TEST_F(CowTest, MissingSeqOp) {
 
 TEST_F(CowTest, ResumeSeqOp) {
     CowOptions options;
-    auto writer = std::make_unique<CowWriter>(options);
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
     const int seq_len = 10;
     uint32_t sequence[seq_len];
     for (int i = 0; i < seq_len; i++) {
         sequence[i] = i + 1;
     }
 
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(writer->AddSequenceData(seq_len, sequence));
     ASSERT_TRUE(writer->AddZeroBlocks(1, seq_len / 2));
@@ -1328,8 +1332,8 @@ TEST_F(CowTest, ResumeSeqOp) {
     auto itr = reader->GetRevMergeOpIter();
     ASSERT_TRUE(itr->AtEnd());
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize({1}));
     ASSERT_TRUE(writer->AddZeroBlocks(1 + seq_len / 2, seq_len / 2));
     ASSERT_TRUE(writer->Finalize());
 
@@ -1358,10 +1362,10 @@ TEST_F(CowTest, RevMergeOpItrTest) {
     CowOptions options;
     options.cluster_ops = 5;
     options.num_merge_ops = 1;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
     uint32_t sequence[] = {2, 10, 6, 7, 3, 5};
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     ASSERT_TRUE(writer.AddSequenceData(6, sequence));
     ASSERT_TRUE(writer.AddCopy(6, 13));
@@ -1408,9 +1412,9 @@ TEST_F(CowTest, LegacyRevMergeOpItrTest) {
     CowOptions options;
     options.cluster_ops = 5;
     options.num_merge_ops = 1;
-    CowWriter writer(options);
+    CowWriterV2 writer(options, GetCowFd());
 
-    ASSERT_TRUE(writer.Initialize(cow_->fd));
+    ASSERT_TRUE(writer.Initialize());
 
     ASSERT_TRUE(writer.AddCopy(2, 11));
     ASSERT_TRUE(writer.AddCopy(10, 12));
@@ -1459,10 +1463,10 @@ TEST_F(CowTest, InvalidMergeOrderTest) {
     options.num_merge_ops = 1;
     std::string data = "This is some data, believe it";
     data.resize(options.block_size, '\0');
-    auto writer = std::make_unique<CowWriter>(options);
+    auto writer = std::make_unique<CowWriterV2>(options, GetCowFd());
     CowReader reader;
 
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    ASSERT_TRUE(writer->Initialize());
 
     ASSERT_TRUE(writer->AddCopy(3, 2));
     ASSERT_TRUE(writer->AddCopy(2, 1));
@@ -1471,14 +1475,14 @@ TEST_F(CowTest, InvalidMergeOrderTest) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
     ASSERT_TRUE(reader.VerifyMergeOps());
 
-    ASSERT_TRUE(writer->InitializeAppend(cow_->fd, 1));
+    ASSERT_TRUE(writer->Initialize({1}));
     ASSERT_TRUE(writer->AddCopy(4, 2));
     ASSERT_TRUE(writer->Finalize());
     ASSERT_TRUE(reader.Parse(cow_->fd));
     ASSERT_FALSE(reader.VerifyMergeOps());
 
-    writer = std::make_unique<CowWriter>(options);
-    ASSERT_TRUE(writer->Initialize(cow_->fd));
+    writer = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer->Initialize());
     ASSERT_TRUE(writer->AddCopy(2, 1));
     ASSERT_TRUE(writer->AddXorBlocks(3, &data, data.size(), 1, 1));
     ASSERT_TRUE(writer->Finalize());
