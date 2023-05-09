@@ -26,36 +26,16 @@
 namespace android {
 namespace snapshot {
 
-class ReadOnlyFileDescriptor : public chromeos_update_engine::FileDescriptor {
+class CompressedSnapshotReader : public chromeos_update_engine::FileDescriptor {
   public:
+    CompressedSnapshotReader(std::unique_ptr<ICowReader>&& cow,
+                             const std::optional<std::string>& source_device,
+                             std::optional<uint64_t> block_dev_size);
+
     bool Open(const char* path, int flags, mode_t mode) override;
     bool Open(const char* path, int flags) override;
     ssize_t Write(const void* buf, size_t count) override;
     bool BlkIoctl(int request, uint64_t start, uint64_t length, int* result) override;
-};
-
-class ReadFdFileDescriptor : public ReadOnlyFileDescriptor {
-  public:
-    explicit ReadFdFileDescriptor(android::base::unique_fd&& fd);
-
-    ssize_t Read(void* buf, size_t count) override;
-    off64_t Seek(off64_t offset, int whence) override;
-    uint64_t BlockDevSize() override;
-    bool Close() override;
-    bool IsSettingErrno() override;
-    bool IsOpen() override;
-    bool Flush() override;
-
-  private:
-    android::base::unique_fd fd_;
-};
-
-class CompressedSnapshotReader : public ReadOnlyFileDescriptor {
-  public:
-    bool SetCow(std::unique_ptr<CowReader>&& cow);
-    void SetSourceDevice(const std::string& source_device);
-    void SetBlockDeviceSize(uint64_t block_device_size);
-
     ssize_t Read(void* buf, size_t count) override;
     off64_t Seek(off64_t offset, int whence) override;
     uint64_t BlockDevSize() override;
@@ -68,7 +48,7 @@ class CompressedSnapshotReader : public ReadOnlyFileDescriptor {
     ssize_t ReadBlock(uint64_t chunk, size_t start_offset, void* buffer, size_t size);
     android::base::borrowed_fd GetSourceFd();
 
-    std::unique_ptr<CowReader> cow_;
+    std::unique_ptr<ICowReader> cow_;
     std::unique_ptr<ICowOpIter> op_iter_;
     uint32_t block_size_ = 0;
 

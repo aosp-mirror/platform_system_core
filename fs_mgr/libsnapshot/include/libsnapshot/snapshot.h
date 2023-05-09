@@ -33,12 +33,11 @@
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
 #include <liblp/liblp.h>
-#include <update_engine/update_metadata.pb.h>
-
 #include <libsnapshot/auto_device.h>
+#include <libsnapshot/cow_writer.h>
 #include <libsnapshot/return.h>
-#include <libsnapshot/snapshot_writer.h>
 #include <snapuserd/snapuserd_client.h>
+#include <update_engine/update_metadata.pb.h>
 
 #ifndef FRIEND_TEST
 #define FRIEND_TEST(test_set_name, individual_test) \
@@ -211,16 +210,13 @@ class ISnapshotManager {
     virtual bool MapUpdateSnapshot(const android::fs_mgr::CreateLogicalPartitionParams& params,
                                    std::string* snapshot_path) = 0;
 
-    // Create an ISnapshotWriter to build a snapshot against a target partition. The partition name
+    // Create an ICowWriter to build a snapshot against a target partition. The partition name
     // must be suffixed. If a source partition exists, it must be specified as well. The source
     // partition will only be used if raw bytes are needed. The source partition should be an
     // absolute path to the device, not a partition name.
-    //
-    // After calling OpenSnapshotWriter, the caller must invoke Initialize or InitializeForAppend
-    // before invoking write operations.
-    virtual std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
+    virtual std::unique_ptr<ICowWriter> OpenSnapshotWriter(
             const android::fs_mgr::CreateLogicalPartitionParams& params,
-            const std::optional<std::string>& source_device) = 0;
+            std::optional<uint64_t> label = {}) = 0;
 
     // Unmap a snapshot device or CowWriter that was previously opened with MapUpdateSnapshot,
     // OpenSnapshotWriter. All outstanding open descriptors, writers, or
@@ -362,9 +358,9 @@ class SnapshotManager final : public ISnapshotManager {
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
-    std::unique_ptr<ISnapshotWriter> OpenSnapshotWriter(
+    std::unique_ptr<ICowWriter> OpenSnapshotWriter(
             const android::fs_mgr::CreateLogicalPartitionParams& params,
-            const std::optional<std::string>& source_device) override;
+            std::optional<uint64_t> label) override;
     bool UnmapUpdateSnapshot(const std::string& target_partition_name) override;
     bool NeedSnapshotsInFirstStageMount() override;
     bool CreateLogicalAndSnapshotPartitions(
@@ -693,10 +689,10 @@ class SnapshotManager final : public ISnapshotManager {
     };
 
     // Helpers for OpenSnapshotWriter.
-    std::unique_ptr<ISnapshotWriter> OpenCompressedSnapshotWriter(
-            LockedFile* lock, const std::optional<std::string>& source_device,
-            const std::string& partition_name, const SnapshotStatus& status,
-            const SnapshotPaths& paths);
+    std::unique_ptr<ICowWriter> OpenCompressedSnapshotWriter(LockedFile* lock,
+                                                             const SnapshotStatus& status,
+                                                             const SnapshotPaths& paths,
+                                                             std::optional<uint64_t> label);
 
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,
@@ -743,7 +739,7 @@ class SnapshotManager final : public ISnapshotManager {
     // Initialize snapshots so that they can be mapped later.
     // Map the COW partition and zero-initialize the header.
     Return InitializeUpdateSnapshots(
-            LockedFile* lock, MetadataBuilder* target_metadata,
+            LockedFile* lock, uint32_t cow_version, MetadataBuilder* target_metadata,
             const LpMetadata* exported_target_metadata, const std::string& target_suffix,
             const std::map<std::string, SnapshotStatus>& all_snapshot_status);
 

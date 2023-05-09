@@ -18,73 +18,24 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <ext4_utils/ext4_utils.h>
 
 namespace android {
 namespace snapshot {
 
 using android::base::borrowed_fd;
 
-// Not supported.
-bool ReadOnlyFileDescriptor::Open(const char*, int, mode_t) {
-    errno = EINVAL;
-    return false;
-}
-
-bool ReadOnlyFileDescriptor::Open(const char*, int) {
-    errno = EINVAL;
-    return false;
-}
-
-ssize_t ReadOnlyFileDescriptor::Write(const void*, size_t) {
-    errno = EINVAL;
-    return false;
-}
-
-bool ReadOnlyFileDescriptor::BlkIoctl(int, uint64_t, uint64_t, int*) {
-    errno = EINVAL;
-    return false;
-}
-
-ReadFdFileDescriptor::ReadFdFileDescriptor(android::base::unique_fd&& fd) : fd_(std::move(fd)) {}
-
-ssize_t ReadFdFileDescriptor::Read(void* buf, size_t count) {
-    return read(fd_.get(), buf, count);
-}
-
-off64_t ReadFdFileDescriptor::Seek(off64_t offset, int whence) {
-    return lseek(fd_.get(), offset, whence);
-}
-
-uint64_t ReadFdFileDescriptor::BlockDevSize() {
-    return get_block_device_size(fd_.get());
-}
-
-bool ReadFdFileDescriptor::Close() {
-    fd_ = {};
-    return true;
-}
-
-bool ReadFdFileDescriptor::IsSettingErrno() {
-    return true;
-}
-
-bool ReadFdFileDescriptor::IsOpen() {
-    return fd_ >= 0;
-}
-
-bool ReadFdFileDescriptor::Flush() {
-    return true;
-}
-
-bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
-    cow_ = std::move(cow);
-
+CompressedSnapshotReader::CompressedSnapshotReader(std::unique_ptr<ICowReader>&& cow,
+                                                   const std::optional<std::string>& source_device,
+                                                   std::optional<uint64_t> block_dev_size)
+    : cow_(std::move(cow)),
+      block_size_(cow_->GetHeader().block_size),
+      source_device_(source_device),
+      block_device_size_(block_dev_size.value_or(0)) {
     const auto& header = cow_->GetHeader();
     block_size_ = header.block_size;
 
     // Populate the operation map.
-    op_iter_ = cow_->GetOpIter();
+    op_iter_ = cow_->GetOpIter(false);
     while (!op_iter_->AtEnd()) {
         const CowOperation* op = op_iter_->Get();
         if (IsMetadataOp(*op)) {
@@ -97,16 +48,27 @@ bool CompressedSnapshotReader::SetCow(std::unique_ptr<CowReader>&& cow) {
         ops_[op->new_block] = op;
         op_iter_->Next();
     }
-
-    return true;
 }
 
-void CompressedSnapshotReader::SetSourceDevice(const std::string& source_device) {
-    source_device_ = {source_device};
+// Not supported.
+bool CompressedSnapshotReader::Open(const char*, int, mode_t) {
+    errno = EINVAL;
+    return false;
 }
 
-void CompressedSnapshotReader::SetBlockDeviceSize(uint64_t block_device_size) {
-    block_device_size_ = block_device_size;
+bool CompressedSnapshotReader::Open(const char*, int) {
+    errno = EINVAL;
+    return false;
+}
+
+ssize_t CompressedSnapshotReader::Write(const void*, size_t) {
+    errno = EINVAL;
+    return false;
+}
+
+bool CompressedSnapshotReader::BlkIoctl(int, uint64_t, uint64_t, int*) {
+    errno = EINVAL;
+    return false;
 }
 
 borrowed_fd CompressedSnapshotReader::GetSourceFd() {

@@ -61,6 +61,8 @@ struct CowOptions {
 // will occur in the sequence they were added to the COW.
 class ICowWriter {
   public:
+    using FileDescriptor = chromeos_update_engine::FileDescriptor;
+
     virtual ~ICowWriter() {}
 
     // Encode an operation that copies the contents of |old_block| to the
@@ -93,6 +95,17 @@ class ICowWriter {
 
     virtual uint32_t GetBlockSize() const = 0;
     virtual std::optional<uint32_t> GetMaxBlocks() const = 0;
+
+    // Open an ICowReader for this writer. The reader will be a snapshot of the
+    // current operations in the writer; new writes after OpenReader() will not
+    // be reflected.
+    virtual std::unique_ptr<ICowReader> OpenReader() = 0;
+
+    // Open a file descriptor. This allows reading and seeing through the cow
+    // as if it were a normal file. The optional source_device must be a valid
+    // path if the CowReader contains any copy or xor operations.
+    virtual std::unique_ptr<FileDescriptor> OpenFileDescriptor(
+            const std::optional<std::string>& source_device) = 0;
 };
 
 class CompressWorker {
