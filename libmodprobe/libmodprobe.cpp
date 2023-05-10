@@ -562,7 +562,7 @@ std::vector<std::string> Modprobe::ListModules(const std::string& pattern) {
         // Attempt to match both the canonical module name and the module filename.
         if (!fnmatch(pattern.c_str(), module.c_str(), 0)) {
             rv.emplace_back(module);
-        } else if (!fnmatch(pattern.c_str(), basename(deps[0].c_str()), 0)) {
+        } else if (!fnmatch(pattern.c_str(), android::base::Basename(deps[0]).c_str(), 0)) {
             rv.emplace_back(deps[0]);
         }
     }

@@ -31,30 +31,21 @@ using namespace android::dm;
 using android::base::unique_fd;
 
 SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
-                                 std::string backing_device, std::string base_path_merge) {
+                                 std::string backing_device, std::string base_path_merge,
+                                 int num_worker_threads, bool use_iouring,
+                                 bool perform_verification) {
     misc_name_ = std::move(misc_name);
     cow_device_ = std::move(cow_device);
     backing_store_device_ = std::move(backing_device);
     control_device_ = "/dev/dm-user/" + misc_name_;
     base_path_merge_ = std::move(base_path_merge);
+    num_worker_threads_ = num_worker_threads;
+    is_io_uring_enabled_ = use_iouring;
+    perform_verification_ = perform_verification;
 }
 
 bool SnapshotHandler::InitializeWorkers() {
-    int num_worker_threads = kNumWorkerThreads;
-
-    // We will need multiple worker threads only during
-    // device boot after OTA. For all other purposes,
-    // one thread is sufficient. We don't want to consume
-    // unnecessary memory especially during OTA install phase
-    // when daemon will be up during entire post install phase.
-    //
-    // During boot up, we need multiple threads primarily for
-    // update-verification.
-    if (is_socket_present_) {
-        num_worker_threads = 1;
-    }
-
-    for (int i = 0; i < num_worker_threads; i++) {
+    for (int i = 0; i < num_worker_threads_; i++) {
         std::unique_ptr<Worker> wt =
                 std::make_unique<Worker>(cow_device_, backing_store_device_, control_device_,
                                          misc_name_, base_path_merge_, GetSharedPtr());
@@ -331,19 +322,11 @@ bool SnapshotHandler::Start() {
                 std::async(std::launch::async, &Worker::RunThread, worker_threads_[i].get()));
     }
 
-    bool partition_verification = true;
-
-    // We don't want to read the blocks during first stage init or
-    // during post-install phase.
-    if (android::base::EndsWith(misc_name_, "-init") || is_socket_present_) {
-        partition_verification = false;
-    }
-
     std::future<bool> merge_thread =
             std::async(std::launch::async, &Worker::RunMergeThread, merge_thread_.get());
 
     // Now that the worker threads are up, scan the partitions.
-    if (partition_verification) {
+    if (perform_verification_) {
         update_verify_->VerifyUpdatePartition();
     }
 

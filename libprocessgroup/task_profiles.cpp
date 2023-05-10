@@ -259,6 +259,31 @@ bool SetAttributeAction::ExecuteForUID(uid_t uid) const {
     return true;
 }
 
+bool SetAttributeAction::IsValidForProcess(uid_t, pid_t pid) const {
+    return IsValidForTask(pid);
+}
+
+bool SetAttributeAction::IsValidForTask(int tid) const {
+    std::string path;
+
+    if (!attribute_->GetPathForTask(tid, &path)) {
+        return false;
+    }
+
+    if (!access(path.c_str(), W_OK)) {
+        // operation will succeed
+        return true;
+    }
+
+    if (!access(path.c_str(), F_OK)) {
+        // file exists but not writable
+        return false;
+    }
+
+    // file does not exist, ignore if optional
+    return optional_;
+}
+
 SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p)
     : controller_(c), path_(p) {
     FdCacheHelper::Init(controller_.GetTasksFilePath(path_), fd_[ProfileAction::RCT_TASK]);
@@ -394,6 +419,39 @@ void SetCgroupAction::EnableResourceCaching(ResourceCacheType cache_type) {
 void SetCgroupAction::DropResourceCaching(ResourceCacheType cache_type) {
     std::lock_guard<std::mutex> lock(fd_mutex_);
     FdCacheHelper::Drop(fd_[cache_type]);
+}
+
+bool SetCgroupAction::IsValidForProcess(uid_t uid, pid_t pid) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_[ProfileAction::RCT_PROCESS])) {
+        return true;
+    }
+
+    if (fd_[ProfileAction::RCT_PROCESS] == FdCacheHelper::FDS_INACCESSIBLE) {
+        return false;
+    }
+
+    std::string procs_path = controller()->GetProcsFilePath(path_, uid, pid);
+    return access(procs_path.c_str(), W_OK) == 0;
+}
+
+bool SetCgroupAction::IsValidForTask(int) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_[ProfileAction::RCT_TASK])) {
+        return true;
+    }
+
+    if (fd_[ProfileAction::RCT_TASK] == FdCacheHelper::FDS_INACCESSIBLE) {
+        return false;
+    }
+
+    if (fd_[ProfileAction::RCT_TASK] == FdCacheHelper::FDS_APP_DEPENDENT) {
+        // application-dependent path can't be used with tid
+        return false;
+    }
+
+    std::string tasks_path = controller()->GetTasksFilePath(path_);
+    return access(tasks_path.c_str(), W_OK) == 0;
 }
 
 WriteFileAction::WriteFileAction(const std::string& task_path, const std::string& proc_path,
@@ -532,6 +590,37 @@ void WriteFileAction::DropResourceCaching(ResourceCacheType cache_type) {
     FdCacheHelper::Drop(fd_[cache_type]);
 }
 
+bool WriteFileAction::IsValidForProcess(uid_t, pid_t) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_[ProfileAction::RCT_PROCESS])) {
+        return true;
+    }
+
+    if (fd_[ProfileAction::RCT_PROCESS] == FdCacheHelper::FDS_INACCESSIBLE) {
+        return false;
+    }
+
+    return access(proc_path_.empty() ? task_path_.c_str() : proc_path_.c_str(), W_OK) == 0;
+}
+
+bool WriteFileAction::IsValidForTask(int) const {
+    std::lock_guard<std::mutex> lock(fd_mutex_);
+    if (FdCacheHelper::IsCached(fd_[ProfileAction::RCT_TASK])) {
+        return true;
+    }
+
+    if (fd_[ProfileAction::RCT_TASK] == FdCacheHelper::FDS_INACCESSIBLE) {
+        return false;
+    }
+
+    if (fd_[ProfileAction::RCT_TASK] == FdCacheHelper::FDS_APP_DEPENDENT) {
+        // application-dependent path can't be used with tid
+        return false;
+    }
+
+    return access(task_path_.c_str(), W_OK) == 0;
+}
+
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& profile : profiles_) {
         profile->ExecuteForProcess(uid, pid);
@@ -556,6 +645,24 @@ void ApplyProfileAction::DropResourceCaching(ResourceCacheType cache_type) {
     for (const auto& profile : profiles_) {
         profile->DropResourceCaching(cache_type);
     }
+}
+
+bool ApplyProfileAction::IsValidForProcess(uid_t uid, pid_t pid) const {
+    for (const auto& profile : profiles_) {
+        if (!profile->IsValidForProcess(uid, pid)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ApplyProfileAction::IsValidForTask(int tid) const {
+    for (const auto& profile : profiles_) {
+        if (!profile->IsValidForTask(tid)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void TaskProfile::MoveTo(TaskProfile* profile) {
@@ -618,6 +725,20 @@ void TaskProfile::DropResourceCaching(ProfileAction::ResourceCacheType cache_typ
     }
 
     res_cached_ = false;
+}
+
+bool TaskProfile::IsValidForProcess(uid_t uid, pid_t pid) const {
+    for (const auto& element : elements_) {
+        if (!element->IsValidForProcess(uid, pid)) return false;
+    }
+    return true;
+}
+
+bool TaskProfile::IsValidForTask(int tid) const {
+    for (const auto& element : elements_) {
+        if (!element->IsValidForTask(tid)) return false;
+    }
+    return true;
 }
 
 void TaskProfiles::DropResourceCaching(ProfileAction::ResourceCacheType cache_type) const {

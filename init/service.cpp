@@ -453,6 +453,7 @@ Result<void> Service::CheckConsole() {
     // disable services requiring the console. For older kernels and boot
     // images, not setting this at all will fall back to the old behavior
     if (GetProperty("ro.boot.serialconsole", "") == "0") {
+        flags_ |= SVC_DISABLED;
         return {};
     }
 

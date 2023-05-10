@@ -381,6 +381,7 @@ cc_test_host {
         "socket_mock.cpp",
         "socket_test.cpp",
         "super_flash_helper_test.cpp",
+        "task_test.cpp",
         "tcp_test.cpp",
         "udp_test.cpp",
     ],

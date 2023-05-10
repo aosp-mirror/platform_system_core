@@ -5,6 +5,18 @@
       },
       {
         "name": "VtsHalRemotelyProvisionedComponentTargetTest"
+      },
+      {
+        "name": "RkpdAppUnitTests"
+      },
+      {
+        "name": "RkpdAppGoogleUnitTests"
+      },
+      {
+        "name": "RkpdAppIntegrationTests"
+      },
+      {
+        "name": "RkpdAppGoogleIntegrationTests"
       }
   ]
 }
