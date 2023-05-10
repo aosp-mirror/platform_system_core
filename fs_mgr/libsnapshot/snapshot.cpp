@@ -3133,6 +3133,7 @@ static Return AddRequiredSpace(Return orig,
     for (auto&& [name, status] : all_snapshot_status) {
         sum += status.cow_file_size();
     }
+    LOG(INFO) << "Calculated needed COW space: " << sum << " bytes";
     return Return::NoSpace(sum);
 }
 
@@ -3279,7 +3280,10 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
-    if (!ret.is_ok()) return ret;
+    if (!ret.is_ok()) {
+        LOG(ERROR) << "CreateUpdateSnapshotsInternal failed: " << ret.string();
+        return ret;
+    }
 
     auto exported_target_metadata = target_metadata->Export();
     if (exported_target_metadata == nullptr) {
@@ -3496,7 +3500,10 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
         // Create the backing COW image if necessary.
         if (snapshot_status.cow_file_size() > 0) {
             auto ret = CreateCowImage(lock, name);
-            if (!ret.is_ok()) return AddRequiredSpace(ret, *all_snapshot_status);
+            if (!ret.is_ok()) {
+                LOG(ERROR) << "CreateCowImage failed: " << ret.string();
+                return AddRequiredSpace(ret, *all_snapshot_status);
+            }
         }
 
         LOG(INFO) << "Successfully created snapshot for " << name;
