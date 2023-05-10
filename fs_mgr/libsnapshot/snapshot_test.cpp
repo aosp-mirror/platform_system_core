@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 
 #include <chrono>
@@ -2371,20 +2372,44 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-TEST_F(SnapshotUpdateTest, LowSpace) {
-    static constexpr auto kMaxFree = 10_MiB;
-    auto userdata = std::make_unique<LowSpaceUserdata>();
-    ASSERT_TRUE(userdata->Init(kMaxFree));
+// Get max file size and free space.
+std::pair<uint64_t, uint64_t> GetBigFileLimit() {
+    struct statvfs fs;
+    if (statvfs("/data", &fs) < 0) {
+        PLOG(ERROR) << "statfs failed";
+        return {0, 0};
+    }
 
-    // Grow all partitions to 10_MiB, total 30_MiB. This requires 30 MiB of CoW space. After
-    // using the empty space in super (< 1 MiB), it uses 30 MiB of /userdata space.
+    auto fs_limit = static_cast<uint64_t>(fs.f_blocks) * (fs.f_bsize - 1);
+    auto fs_free = static_cast<uint64_t>(fs.f_bfree) * fs.f_bsize;
+
+    LOG(INFO) << "Big file limit: " << fs_limit << ", free space: " << fs_free;
+
+    return {fs_limit, fs_free};
+}
+
+TEST_F(SnapshotUpdateTest, LowSpace) {
+    // To make the low space test more reliable, we force a large cow estimate.
+    // However legacy VAB ignores the COW estimate and uses InstallOperations
+    // to compute the exact size required for dm-snapshot. It's difficult to
+    // make this work reliably (we'd need to somehow fake an extremely large
+    // super partition, and we don't have that level of dependency injection).
+    //
+    // For now, just skip this test on legacy VAB.
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "Skipping test on legacy VAB";
+    }
+
+    auto fs = GetBigFileLimit();
+    ASSERT_NE(fs.first, 0);
+
     constexpr uint64_t partition_size = 10_MiB;
     SetSize(sys_, partition_size);
     SetSize(vnd_, partition_size);
     SetSize(prd_, partition_size);
-    sys_->set_estimate_cow_size(partition_size);
-    vnd_->set_estimate_cow_size(partition_size);
-    prd_->set_estimate_cow_size(partition_size);
+    sys_->set_estimate_cow_size(fs.first);
+    vnd_->set_estimate_cow_size(fs.first);
+    prd_->set_estimate_cow_size(fs.first);
 
     AddOperationForPartitions();
 
@@ -2393,8 +2418,12 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     auto res = sm->CreateUpdateSnapshots(manifest_);
     ASSERT_FALSE(res);
     ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
-    ASSERT_GE(res.required_size(), 14_MiB);
-    ASSERT_LT(res.required_size(), 40_MiB);
+
+    // It's hard to predict exactly how much free space is needed, since /data
+    // is writable and the test is not the only process running. Divide by two
+    // as a rough lower bound, and adjust this in the future as necessary.
+    auto expected_delta = fs.first - fs.second;
+    ASSERT_GE(res.required_size(), expected_delta / 2);
 }
 
 TEST_F(SnapshotUpdateTest, AddPartition) {
@@ -2776,6 +2805,7 @@ class ImageManagerTest : public SnapshotTest {
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
         CleanUp();
+        SnapshotTest::TearDown();
     }
     void CleanUp() {
         if (!image_manager_) {
@@ -2789,26 +2819,13 @@ class ImageManagerTest : public SnapshotTest {
 };
 
 TEST_F(ImageManagerTest, CreateImageNoSpace) {
-    bool at_least_one_failure = false;
-    for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        auto userdata = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata->Init(size));
+    auto fs = GetBigFileLimit();
+    ASSERT_NE(fs.first, 0);
 
-        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
-
-        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                      IImageManager::CREATE_IMAGE_DEFAULT);
-        if (!res) {
-            at_least_one_failure = true;
-        } else {
-            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
-        }
-
-        CleanUp();
-    }
-
-    ASSERT_TRUE(at_least_one_failure)
-            << "We should have failed to allocate at least one over-sized image";
+    auto res = image_manager_->CreateBackingImage(kImageName, fs.first,
+                                                  IImageManager::CREATE_IMAGE_DEFAULT);
+    ASSERT_FALSE(res);
+    ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
 }
 
 bool Mkdir(const std::string& path) {
