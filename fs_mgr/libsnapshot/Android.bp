@@ -252,13 +252,6 @@ cc_defaults {
     header_libs: [
         "libstorage_literals_headers",
     ],
-    test_suites: [
-        "vts",
-        "device-tests"
-    ],
-    test_options: {
-        min_shipping_api_level: 29,
-    },
     auto_gen_config: true,
     require_root: true,
     compile_multilib: "first",
@@ -267,6 +260,13 @@ cc_defaults {
 cc_test {
     name: "vts_libsnapshot_test",
     defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    test_suites: [
+        "vts",
+        "device-tests"
+    ],
+    test_options: {
+        min_shipping_api_level: 30,
+    },
 }
 
 cc_test {
@@ -275,6 +275,13 @@ cc_test {
     cppflags: [
         "-DLIBSNAPSHOT_TEST_VAB_LEGACY",
     ],
+    test_suites: [
+        "device-tests"
+    ],
+    test_options: {
+        // Legacy VAB launched in Android R.
+        min_shipping_api_level: 30,
+    },
 }
 
 cc_test {
@@ -283,6 +290,13 @@ cc_test {
     cppflags: [
         "-DLIBSNAPSHOT_TEST_VABC_LEGACY",
     ],
+    test_suites: [
+        "device-tests"
+    ],
+    test_options: {
+        // Legacy VABC launched in Android S.
+        min_shipping_api_level: 31,
+    },
 }
 
 cc_test {
@@ -349,24 +363,6 @@ cc_binary {
 }
 
 cc_test {
-    name: "snapshot_power_test",
-    srcs: [
-        "power_test.cpp",
-    ],
-    static_libs: [
-        "libc++fs",
-        "libsnapshot",
-        "update_metadata-protos",
-    ],
-    shared_libs: [
-        "libbase",
-        "libfs_mgr_binder",
-        "liblog",
-    ],
-    gtest: false,
-}
-
-cc_test {
     name: "cow_api_test",
     defaults: [
         "fs_mgr_defaults",
@@ -400,78 +396,6 @@ cc_test {
     auto_gen_config: true,
     require_root: false,
     host_supported: true,
-}
-
-cc_binary {
-    name: "make_cow_from_ab_ota",
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbspatch",
-        "libbrotli",
-        "libbz",
-        "libchrome",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libprotobuf-cpp-lite",
-        "libpuffpatch",
-        "libsnapshot_cow",
-        "libsparse",
-        "libxz",
-        "libz",
-        "liblz4",
-        "libziparchive",
-        "update_metadata-protos",
-    ],
-    srcs: [
-        "make_cow_from_ab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
-}
-
-cc_binary {
-    name: "estimate_cow_from_nonab_ota",
-    defaults: [
-        "libsnapshot_cow_defaults",
-    ],
-    host_supported: true,
-    device_supported: false,
-    cflags: [
-        "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
-    ],
-    static_libs: [
-        "libbase",
-        "libbrotli",
-        "libbz",
-        "libcrypto",
-        "libgflags",
-        "liblog",
-        "libsnapshot_cow",
-        "libsparse",
-        "libz",
-        "libziparchive",
-    ],
-    srcs: [
-        "estimate_cow_from_nonab_ota.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-    },
 }
 
 cc_binary {

@@ -542,6 +542,15 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_process
     return KillProcessGroup(uid, initialPid, signal, 0 /*retries*/, max_processes);
 }
 
+int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal) {
+    std::string hierarchy_root_path;
+    if (CgroupsAvailable()) {
+        CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+    }
+    const char* cgroup = hierarchy_root_path.c_str();
+    return DoKillProcessGroupOnce(cgroup, uid, initialPid, signal);
+}
+
 static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
                                       bool activate_controllers) {
     auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
@@ -647,4 +656,14 @@ bool setProcessGroupLimit(uid_t, int pid, int64_t limit_in_bytes) {
 
 bool getAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
     return CgroupGetAttributePathForTask(attr_name, tid, path);
+}
+
+bool isProfileValidForProcess(const std::string& profile_name, int uid, int pid) {
+    const TaskProfile* tp = TaskProfiles::GetInstance().GetProfile(profile_name);
+
+    if (tp == nullptr) {
+        return false;
+    }
+
+    return tp->IsValidForProcess(uid, pid);
 }
