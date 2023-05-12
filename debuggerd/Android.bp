@@ -14,9 +14,15 @@ cc_defaults {
         "-Wno-nullability-completeness",
         "-Os",
         "-fno-finite-loops",
+        "-DANDROID_DEBUGGABLE=0",
     ],
 
     local_include_dirs: ["include"],
+    product_variables: {
+        debuggable: {
+            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
+        }
+    },
 }
 
 cc_library_headers {
