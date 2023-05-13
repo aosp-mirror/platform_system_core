@@ -1024,6 +1024,11 @@ on post-fs-data
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
 
+    # Start ART's oneshot boot service to propagate boot experiment flags to
+    # dalvik.vm.*. This needs to be done before odsign since odrefresh uses and
+    # validates those properties against the signed cache-info.xml.
+    exec_start art_boot
+
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
     # Must start after 'derive_classpath' to have *CLASSPATH variables set.
