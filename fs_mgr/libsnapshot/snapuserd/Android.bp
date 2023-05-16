@@ -111,6 +111,7 @@ cc_defaults {
         "liblz4",
         "libext4_utils",
         "liburing",
+        "libzstd",
     ],
 
     header_libs: [

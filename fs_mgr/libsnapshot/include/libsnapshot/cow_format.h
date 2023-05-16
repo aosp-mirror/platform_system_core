@@ -157,7 +157,8 @@ enum CowCompressionAlgorithm : uint8_t {
     kCowCompressNone = 0,
     kCowCompressGz = 1,
     kCowCompressBrotli = 2,
-    kCowCompressLz4 = 3
+    kCowCompressLz4 = 3,
+    kCowCompressZstd = 4,
 };
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;

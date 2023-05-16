@@ -196,6 +196,7 @@ cc_binary {
         "libfastbootshim",
         "libsnapshot_cow",
         "liblz4",
+        "libzstd",
         "libsnapshot_nobinder",
         "update_metadata-protos",
         "liburing",
