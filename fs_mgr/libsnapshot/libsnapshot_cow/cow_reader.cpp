@@ -30,6 +30,7 @@
 #include <zlib.h>
 
 #include "cow_decompress.h"
+#include "libsnapshot/cow_format.h"
 
 namespace android {
 namespace snapshot {
@@ -776,6 +777,11 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
             break;
         case kCowCompressBrotli:
             decompressor = IDecompressor::Brotli();
+            break;
+        case kCowCompressZstd:
+            if (header_.block_size != op->data_length) {
+                decompressor = IDecompressor::Zstd();
+            }
             break;
         case kCowCompressLz4:
             if (header_.block_size != op->data_length) {
