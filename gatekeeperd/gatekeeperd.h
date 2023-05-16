@@ -47,7 +47,7 @@ class GateKeeperProxy : public BnGateKeeperService {
 
     // This should only be called on userIds being passed to the GateKeeper HAL. It ensures that
     // secure storage shared across a GSI image and a host image will not overlap.
-    uint32_t adjust_userId(uint32_t userId);
+    Status adjust_userId(uint32_t userId, uint32_t* hw_userId);
 
 #define GK_ERROR *gkResponse = GKResponse::error(), Status::ok()
 
