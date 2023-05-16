@@ -47,6 +47,7 @@ class IDecompressor {
     static std::unique_ptr<IDecompressor> Gz();
     static std::unique_ptr<IDecompressor> Brotli();
     static std::unique_ptr<IDecompressor> Lz4();
+    static std::unique_ptr<IDecompressor> Zstd();
 
     static std::unique_ptr<IDecompressor> FromString(std::string_view compressor);
 
