@@ -298,6 +298,8 @@ class DeviceMapper final : public IDeviceMapper {
     // a placeholder table containing dm-error.
     bool CreatePlaceholderDevice(const std::string& name);
 
+    bool GetDeviceNameAndUuid(dev_t dev, std::string* name, std::string* uuid);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
