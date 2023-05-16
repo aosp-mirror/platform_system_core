@@ -26,7 +26,8 @@ cc_fuzz {
         "-DTRUSTY_APP_FILENAME=\"confirmationui.syms.elf\"",
     ],
     fuzz_config: {
-       cc: ["trong@google.com"],
+       cc: ["mikemcternan@google.com"],
+       componentid: 1290237,
     },
 
 }
@@ -40,7 +41,8 @@ cc_fuzz {
         "libdmabufheap",
     ],
     fuzz_config: {
-       cc: ["trong@google.com"],
+       cc: ["mikemcternan@google.com"],
+       componentid: 1290237,
     },
 
     // The initial corpus for this fuzzer was derived by dumping messages from/to
