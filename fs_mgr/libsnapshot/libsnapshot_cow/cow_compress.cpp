@@ -29,6 +29,7 @@
 #include <libsnapshot/cow_writer.h>
 #include <lz4.h>
 #include <zlib.h>
+#include <zstd.h>
 
 namespace android {
 namespace snapshot {
@@ -40,6 +41,8 @@ std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::strin
         return {kCowCompressBrotli};
     } else if (name == "lz4") {
         return {kCowCompressLz4};
+    } else if (name == "zstd") {
+        return {kCowCompressZstd};
     } else if (name == "none" || name.empty()) {
         return {kCowCompressNone};
     } else {
@@ -101,6 +104,23 @@ std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm comp
             if (compressed_size <= 0) {
                 LOG(ERROR) << "LZ4_compress_default failed, input size: " << length
                            << ", compression bound: " << bound << ", ret: " << compressed_size;
+                return {};
+            }
+            // Don't run compression if the compressed output is larger
+            if (compressed_size >= length) {
+                buffer.resize(length);
+                memcpy(buffer.data(), data, length);
+            } else {
+                buffer.resize(compressed_size);
+            }
+            return buffer;
+        }
+        case kCowCompressZstd: {
+            std::basic_string<uint8_t> buffer(ZSTD_compressBound(length), '\0');
+            const auto compressed_size =
+                    ZSTD_compress(buffer.data(), buffer.size(), data, length, 0);
+            if (compressed_size <= 0) {
+                LOG(ERROR) << "ZSTD compression failed " << compressed_size;
                 return {};
             }
             // Don't run compression if the compressed output is larger
