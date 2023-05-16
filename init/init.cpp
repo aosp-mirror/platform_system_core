@@ -1043,6 +1043,12 @@ int SecondStageMain(int argc, char** argv) {
     SetProperty(gsi::kGsiBootedProp, is_running);
     auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
     SetProperty(gsi::kGsiInstalledProp, is_installed);
+    if (android::gsi::IsGsiRunning()) {
+        std::string dsu_slot;
+        if (android::gsi::GetActiveDsu(&dsu_slot)) {
+            SetProperty(gsi::kDsuSlotProp, dsu_slot);
+        }
+    }
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
