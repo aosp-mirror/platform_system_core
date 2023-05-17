@@ -3175,7 +3175,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
               << " writer.GetCowVersion(): " << writer.GetCowVersion();
 
     bool use_compression = IsCompressionEnabled() && dap_metadata.vabc_enabled() &&
-                           !device_->IsRecovery() && cow_format_support;
+                           !device_->IsRecovery() && cow_format_support &&
+                           KernelSupportsCompressedSnapshots();
 
     std::string compression_algorithm;
     if (use_compression) {

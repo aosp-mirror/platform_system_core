@@ -2760,7 +2760,7 @@ bool IsDaemonRequired() {
         return true;
     }
 
-    return IsUserspaceSnapshotsEnabled();
+    return IsUserspaceSnapshotsEnabled() && KernelSupportsCompressedSnapshots();
 }
 
 bool ShouldUseCompression() {
@@ -2770,7 +2770,7 @@ bool ShouldUseCompression() {
     if (FLAGS_force_config == "vabc") {
         return true;
     }
-    return IsCompressionEnabled();
+    return IsCompressionEnabled() && KernelSupportsCompressedSnapshots();
 }
 
 }  // namespace snapshot
