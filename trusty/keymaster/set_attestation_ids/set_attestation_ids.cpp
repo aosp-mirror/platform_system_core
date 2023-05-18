@@ -17,8 +17,10 @@
 #include <getopt.h>
 
 #include <string>
+#include <vector>
 
 #include <android-base/properties.h>
+#include <android-base/strings.h>
 #include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 
 namespace {
@@ -34,14 +36,66 @@ const struct option lopts[] = {
         {"model", required_argument, nullptr, 'm'},
         {"imei", required_argument, nullptr, 'i'},
         {"meid", required_argument, nullptr, 'c'},
+        {"imei2", required_argument, nullptr, '2'},
         {0, 0, 0, 0},
 };
+
+std::string TELEPHONY_CMD_GET_IMEI = "cmd phone get-imei ";
+
+// Run a shell command and collect the output of it. If any error, set an empty string as the
+// output.
+std::string exec_command(const std::string& command) {
+    char buffer[128];
+    std::string result = "";
+
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        fprintf(stderr, "popen('%s') failed\n", command.c_str());
+        return result;
+    }
+
+    while (!feof(pipe)) {
+        if (fgets(buffer, 128, pipe) != NULL) {
+            result += buffer;
+        }
+    }
+
+    pclose(pipe);
+    return result;
+}
+
+// Get IMEI using Telephony service shell command. If any error while executing the command
+// then empty string will be returned as output.
+std::string get_imei(int slot) {
+    std::string cmd = TELEPHONY_CMD_GET_IMEI + std::to_string(slot);
+    std::string output = exec_command(cmd);
+
+    if (output.empty()) {
+        fprintf(stderr, "Retrieve IMEI command ('%s') failed\n", cmd.c_str());
+        return "";
+    }
+
+    std::vector<std::string> out =
+            ::android::base::Tokenize(::android::base::Trim(output), "Device IMEI:");
+
+    if (out.size() != 1) {
+        fprintf(stderr, "Error parsing command ('%s') output '%s'\n", cmd.c_str(), output.c_str());
+        return "";
+    }
+
+    std::string imei = ::android::base::Trim(out[0]);
+    if (imei.compare("null") == 0) {
+        fprintf(stderr, "IMEI value from command ('%s') is null, skipping", cmd.c_str());
+        return "";
+    }
+    return imei;
+}
 
 std::string buf2string(const keymaster::Buffer& buf) {
     return std::string(reinterpret_cast<const char*>(buf.peek_read()), buf.available_read());
 }
 
-void print_usage(const char* prog, const keymaster::SetAttestationIdsRequest& req) {
+void print_usage(const char* prog, const keymaster::SetAttestationIdsKM3Request& req) {
     fprintf(stderr,
             "Usage: %s [options]\n"
             "\n"
@@ -55,34 +109,53 @@ void print_usage(const char* prog, const keymaster::SetAttestationIdsRequest& re
             "  -m, --model <val>          set model (default '%s')\n"
             "  -i, --imei <val>           set IMEI (default '%s')\n"
             "  -c, --meid <val>           set MEID (default '%s')\n"
+            "  -2, --imei2 <val>          set second IMEI (default '%s')\n"
             "\n",
-            prog, buf2string(req.brand).c_str(), buf2string(req.device).c_str(),
-            buf2string(req.product).c_str(), buf2string(req.serial).c_str(),
-            buf2string(req.manufacturer).c_str(), buf2string(req.model).c_str(),
-            buf2string(req.imei).c_str(), buf2string(req.meid).c_str());
+            prog, buf2string(req.base.brand).c_str(), buf2string(req.base.device).c_str(),
+            buf2string(req.base.product).c_str(), buf2string(req.base.serial).c_str(),
+            buf2string(req.base.manufacturer).c_str(), buf2string(req.base.model).c_str(),
+            buf2string(req.base.imei).c_str(), buf2string(req.base.meid).c_str(),
+            buf2string(req.second_imei).c_str());
+}
+
+void set_to(keymaster::Buffer* buf, const std::string& value) {
+    if (!value.empty()) {
+        buf->Reinitialize(value.data(), value.size());
+    }
 }
 
 void set_from_prop(keymaster::Buffer* buf, const std::string& prop) {
     std::string prop_value = ::android::base::GetProperty(prop, /* default_value = */ "");
-    if (!prop_value.empty()) {
-        buf->Reinitialize(prop_value.data(), prop_value.size());
-    }
+    set_to(buf, prop_value);
 }
 
-void populate_ids(keymaster::SetAttestationIdsRequest* req) {
+void populate_base_ids(keymaster::SetAttestationIdsRequest* req) {
     set_from_prop(&req->brand, "ro.product.brand");
     set_from_prop(&req->device, "ro.product.device");
     set_from_prop(&req->product, "ro.product.name");
     set_from_prop(&req->serial, "ro.serialno");
     set_from_prop(&req->manufacturer, "ro.product.manufacturer");
     set_from_prop(&req->model, "ro.product.model");
+    std::string imei = get_imei(0);
+    set_to(&req->imei, imei);
+}
+
+void populate_ids(keymaster::SetAttestationIdsKM3Request* req) {
+    populate_base_ids(&req->base);
+
+    // - "What about IMEI?"
+    // - "You've already had it."
+    // - "We've had one, yes. What about second IMEI?"
+    // - "I don't think he knows about second IMEI, Pip."
+    std::string imei2 = get_imei(1);
+    set_to(&req->second_imei, imei2);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     // By default, set attestation IDs to the values in userspace properties.
-    keymaster::SetAttestationIdsRequest req(/* ver = */ 4);
+    keymaster::SetAttestationIdsKM3Request req(/* ver = */ 4);
     populate_ids(&req);
 
     while (true) {
@@ -94,28 +167,31 @@ int main(int argc, char** argv) {
 
         switch (c) {
             case 'b':
-                req.brand.Reinitialize(optarg, strlen(optarg));
+                req.base.brand.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'd':
-                req.device.Reinitialize(optarg, strlen(optarg));
+                req.base.device.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'p':
-                req.product.Reinitialize(optarg, strlen(optarg));
+                req.base.product.Reinitialize(optarg, strlen(optarg));
                 break;
             case 's':
-                req.serial.Reinitialize(optarg, strlen(optarg));
+                req.base.serial.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'M':
-                req.manufacturer.Reinitialize(optarg, strlen(optarg));
+                req.base.manufacturer.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'm':
-                req.model.Reinitialize(optarg, strlen(optarg));
+                req.base.model.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'i':
-                req.imei.Reinitialize(optarg, strlen(optarg));
+                req.base.imei.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'c':
-                req.meid.Reinitialize(optarg, strlen(optarg));
+                req.base.meid.Reinitialize(optarg, strlen(optarg));
+                break;
+            case '2':
+                req.second_imei.Reinitialize(optarg, strlen(optarg));
                 break;
             case 'h':
                 print_usage(argv[0], req);
@@ -144,19 +220,33 @@ int main(int argc, char** argv) {
            "  manufacturer: %s\n"
            "  model:        %s\n"
            "  IMEI:         %s\n"
-           "  MEID:         %s\n",
-           buf2string(req.brand).c_str(), buf2string(req.device).c_str(),
-           buf2string(req.product).c_str(), buf2string(req.serial).c_str(),
-           buf2string(req.manufacturer).c_str(), buf2string(req.model).c_str(),
-           buf2string(req.imei).c_str(), buf2string(req.meid).c_str());
+           "  MEID:         %s\n"
+           "  SECOND_IMEI:  %s\n\n",
+           buf2string(req.base.brand).c_str(), buf2string(req.base.device).c_str(),
+           buf2string(req.base.product).c_str(), buf2string(req.base.serial).c_str(),
+           buf2string(req.base.manufacturer).c_str(), buf2string(req.base.model).c_str(),
+           buf2string(req.base.imei).c_str(), buf2string(req.base.meid).c_str(),
+           buf2string(req.second_imei).c_str());
+    fflush(stdout);
 
     keymaster::EmptyKeymasterResponse rsp(/* ver = */ 4);
-    ret = trusty_keymaster_send(KM_SET_ATTESTATION_IDS, req, &rsp);
-    if (ret) {
-        fprintf(stderr, "SET_ATTESTATION_IDS failed: %d\n", ret);
-        trusty_keymaster_disconnect();
-        return EXIT_FAILURE;
+    const char* msg;
+    if (req.second_imei.available_read() == 0) {
+        // No SECOND_IMEI set, use base command.
+        ret = trusty_keymaster_send(KM_SET_ATTESTATION_IDS, req.base, &rsp);
+        msg = "SET_ATTESTATION_IDS";
+    } else {
+        // SECOND_IMEI is set, use updated command.
+        ret = trusty_keymaster_send(KM_SET_ATTESTATION_IDS_KM3, req, &rsp);
+        msg = "SET_ATTESTATION_IDS_KM3";
     }
+    trusty_keymaster_disconnect();
 
-    return EXIT_SUCCESS;
+    if (ret) {
+        fprintf(stderr, "%s failed: %d\n", msg, ret);
+        return EXIT_FAILURE;
+    } else {
+        printf("done\n");
+        return EXIT_SUCCESS;
+    }
 }
