@@ -243,6 +243,25 @@ bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* pat
     return true;
 }
 
+bool DeviceMapper::GetDeviceNameAndUuid(dev_t dev, std::string* name, std::string* uuid) {
+    struct dm_ioctl io;
+    InitIo(&io, {});
+    io.dev = dev;
+
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(ERROR) << "Failed to find device dev: " << major(dev) << ":" << minor(dev);
+        return false;
+    }
+
+    if (name) {
+        *name = io.name;
+    }
+    if (uuid) {
+        *uuid = io.uuid;
+    }
+    return true;
+}
+
 std::optional<DeviceMapper::Info> DeviceMapper::GetDetailedInfo(const std::string& name) const {
     struct dm_ioctl io;
     InitIo(&io, name);
