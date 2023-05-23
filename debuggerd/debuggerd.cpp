@@ -41,22 +41,6 @@ static void usage(int exit_code) {
   _exit(exit_code);
 }
 
-static std::thread spawn_redirect_thread(unique_fd fd) {
-  return std::thread([fd{ std::move(fd) }]() {
-    while (true) {
-      char buf[BUFSIZ];
-      ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), buf, sizeof(buf)));
-      if (rc <= 0) {
-        return;
-      }
-
-      if (!android::base::WriteFully(STDOUT_FILENO, buf, rc)) {
-        return;
-      }
-    }
-  });
-}
-
 int main(int argc, char* argv[]) {
   if (argc <= 1) usage(0);
   if (argc > 3) usage(1);
@@ -107,14 +91,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  unique_fd piperead, pipewrite;
-  if (!Pipe(&piperead, &pipewrite)) {
-    err(1, "failed to create pipe");
+  unique_fd output_fd(fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0));
+  if (output_fd.get() == -1) {
+    err(1, "failed to fcntl dup stdout");
   }
-
-  std::thread redirect_thread = spawn_redirect_thread(std::move(piperead));
-  if (!debuggerd_trigger_dump(proc_info.pid, dump_type, 0, std::move(pipewrite))) {
-    redirect_thread.join();
+  if (!debuggerd_trigger_dump(proc_info.pid, dump_type, 0, std::move(output_fd))) {
     if (pid == proc_info.pid) {
       errx(1, "failed to dump process %d", pid);
     } else {
@@ -122,6 +103,5 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  redirect_thread.join();
   return 0;
 }
