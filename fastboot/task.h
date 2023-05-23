@@ -46,7 +46,7 @@ class Task {
 class FlashTask : public Task {
   public:
     FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
-              const bool apply_vbmeta);
+              const bool apply_vbmeta, const FlashingPlan* fp);
     virtual FlashTask* AsFlashTask() override { return this; }
 
     std::string GetPartition() { return pname_; }
@@ -60,6 +60,7 @@ class FlashTask : public Task {
     const std::string fname_;
     const std::string slot_;
     const bool apply_vbmeta_;
+    const FlashingPlan* fp_;
 };
 
 class RebootTask : public Task {
