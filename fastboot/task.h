@@ -118,7 +118,7 @@ class ResizeTask : public Task {
 
 class DeleteTask : public Task {
   public:
-    DeleteTask(const FlashingPlan* _fp, const std::string& _pname);
+    DeleteTask(const FlashingPlan* fp, const std::string& pname);
     void Run() override;
 
   private:
