@@ -70,6 +70,9 @@
 
 using android::base::StringPrintf;
 
+// The maximum number of messages to save in the protobuf per file.
+static constexpr size_t kMaxLogMessages = 500;
+
 // Use the demangler from libc++.
 extern "C" char* __cxa_demangle(const char*, char*, size_t*, int* status);
 
@@ -491,8 +494,8 @@ static void dump_mappings(Tombstone* tombstone, unwindstack::Maps* maps,
 }
 
 static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
-  logger_list* logger_list =
-      android_logger_list_open(android_name_to_log_id(logger), ANDROID_LOG_NONBLOCK, 0, pid);
+  logger_list* logger_list = android_logger_list_open(android_name_to_log_id(logger),
+                                                      ANDROID_LOG_NONBLOCK, kMaxLogMessages, pid);
 
   LogBuffer buffer;
 
