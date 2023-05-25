@@ -775,7 +775,7 @@ static int make_temporary_fd(const char* what) {
 
 #endif
 
-static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
+static unique_fd UnzipToFile(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
 
     ZipEntry64 zip_entry;
@@ -1928,7 +1928,7 @@ bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) c
 }
 
 unique_fd ZipImageSource::OpenFile(const std::string& name) const {
-    return unzip_to_file(zip_, name.c_str());
+    return UnzipToFile(zip_, name.c_str());
 }
 
 static void do_update(const char* filename, FlashingPlan* fp) {
