@@ -214,11 +214,9 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
 
     for (const auto& task : tasks) {
         if (auto flash_task = task->AsFlashTask()) {
-            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
-                auto partition = flash_task->GetPartitionAndSlot();
-                if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
-                    return nullptr;
-                }
+            auto partition = flash_task->GetPartitionAndSlot();
+            if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
+                return nullptr;
             }
         }
     }
