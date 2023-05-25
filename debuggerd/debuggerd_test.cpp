@@ -2759,3 +2759,48 @@ TEST_F(CrasherTest, logd_skips_reading_logs_not_main_thread) {
   ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
   ASSERT_NOT_MATCH(result, kLogMessage);
 }
+
+// Disable this test since there is a high liklihood that this would
+// be flaky since it requires 500 messages being in the log.
+TEST_F(CrasherTest, DISABLED_max_log_messages) {
+  StartProcess([]() {
+    for (size_t i = 0; i < 600; i++) {
+      LOG(INFO) << "Message number " << i;
+    }
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, "Message number 99");
+  ASSERT_MATCH(result, "Message number 100");
+  ASSERT_MATCH(result, "Message number 599");
+}
+
+TEST_F(CrasherTest, log_with_newline) {
+  StartProcess([]() {
+    LOG(INFO) << "This line has a newline.\nThis is on the next line.";
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, ":\\s*This line has a newline.");
+  ASSERT_MATCH(result, ":\\s*This is on the next line.");
+}
