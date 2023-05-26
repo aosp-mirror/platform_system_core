@@ -62,6 +62,7 @@ class BatteryMonitor {
         BH_MARGINAL,
         BH_NEEDS_REPLACEMENT,
         BH_FAILED,
+        BH_NOT_AVAILABLE,
     };
 
     BatteryMonitor();

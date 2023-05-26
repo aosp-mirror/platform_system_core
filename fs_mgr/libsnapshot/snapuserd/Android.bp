@@ -25,8 +25,6 @@ cc_defaults {
     ],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
-        "-Wall",
-        "-Werror",
     ],
     export_include_dirs: ["include"],
     srcs: [
@@ -54,6 +52,39 @@ cc_library_static {
     vendor_ramdisk_available: true,
 }
 
+cc_library_static {
+    name: "libsnapuserd",
+    defaults: [
+        "fs_mgr_defaults",
+    ],
+    srcs: [
+        "dm-snapshot-merge/snapuserd.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+        "dm-snapshot-merge/snapuserd_readahead.cpp",
+        "snapuserd_buffer.cpp",
+        "user-space-merge/snapuserd_core.cpp",
+        "user-space-merge/snapuserd_dm_user.cpp",
+        "user-space-merge/snapuserd_merge.cpp",
+        "user-space-merge/snapuserd_readahead.cpp",
+        "user-space-merge/snapuserd_transitions.cpp",
+        "user-space-merge/snapuserd_verify.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libdm",
+        "libext4_utils",
+        "libsnapshot_cow",
+        "liburing",
+    ],
+    include_dirs: ["bionic/libc/kernel"],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
+    recovery_available: true,
+}
+
 cc_defaults {
     name: "snapuserd_defaults",
     defaults: [
@@ -61,23 +92,8 @@ cc_defaults {
     ],
     srcs: [
         "dm-snapshot-merge/snapuserd_server.cpp",
-        "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
-        "dm-snapshot-merge/snapuserd_readahead.cpp",
         "snapuserd_daemon.cpp",
-        "snapuserd_buffer.cpp",
-        "user-space-merge/snapuserd_core.cpp",
-        "user-space-merge/snapuserd_dm_user.cpp",
-        "user-space-merge/snapuserd_merge.cpp",
-        "user-space-merge/snapuserd_readahead.cpp",
-        "user-space-merge/snapuserd_transitions.cpp",
         "user-space-merge/snapuserd_server.cpp",
-        "user-space-merge/snapuserd_verify.cpp",
-    ],
-
-    cflags: [
-        "-Wall",
-        "-Werror",
     ],
 
     static_libs: [
@@ -90,6 +106,7 @@ cc_defaults {
         "liblog",
         "libsnapshot_cow",
         "libsnapshot_snapuserd",
+        "libsnapuserd",
         "libz",
         "liblz4",
         "libext4_utils",
@@ -125,7 +142,6 @@ cc_binary {
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
-    recovery_available: true,
 }
 
 // This target will install to /system/bin/snapuserd_ramdisk 
@@ -157,10 +173,6 @@ cc_test {
         "dm-snapshot-merge/snapuserd.cpp",
         "dm-snapshot-merge/snapuserd_worker.cpp",
         "snapuserd_buffer.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
     ],
     shared_libs: [
         "libbase",
@@ -196,10 +208,6 @@ cc_test {
     ],
     srcs: [
         "user-space-merge/snapuserd_test.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
     ],
     shared_libs: [
         "libbase",

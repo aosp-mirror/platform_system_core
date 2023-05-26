@@ -368,6 +368,7 @@ cc_binary {
     name: "crash_dump",
     srcs: [
         "crash_dump.cpp",
+        "tombstone_handler.cpp",
         "util.cpp",
     ],
     defaults: ["debuggerd_defaults"],
@@ -508,6 +509,9 @@ prebuilt_etc {
         },
         arm64: {
             src: "seccomp_policy/crash_dump.arm.policy",
+        },
+        riscv64: {
+            enabled: false,
         },
         x86: {
             src: "seccomp_policy/crash_dump.x86_64.policy",
