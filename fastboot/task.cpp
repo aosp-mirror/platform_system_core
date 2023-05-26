@@ -27,8 +27,8 @@
 
 using namespace std::string_literals;
 FlashTask::FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
-                     const bool apply_vbmeta)
-    : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta) {}
+                     const bool apply_vbmeta, const FlashingPlan* fp)
+    : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta), fp_(fp) {}
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
@@ -41,7 +41,7 @@ void FlashTask::Run() {
                 "And try again. If you are intentionally trying to "
                 "overwrite a fixed partition, use --force.");
         }
-        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_);
+        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_, fp_);
     };
     do_for_partitions(pname_, slot_, flash, true);
 }

@@ -124,7 +124,8 @@ class FlashAllTool {
 
 bool should_flash_in_userspace(const std::string& partition_name);
 bool is_userspace_fastboot();
-void do_flash(const char* pname, const char* fname, const bool apply_vbmeta);
+void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
+              const FlashingPlan* fp);
 void do_for_partitions(const std::string& part, const std::string& slot,
                        const std::function<void(const std::string&)>& func, bool force_slot);
 std::string find_item(const std::string& item);
