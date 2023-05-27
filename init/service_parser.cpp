@@ -25,6 +25,7 @@
 
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <hidl-util/FQName.h>
 #include <processgroup/processgroup.h>
@@ -534,7 +535,7 @@ Result<void> ServiceParser::ParseUser(std::vector<std::string>&& args) {
     if (!uid.ok()) {
         return Error() << "Unable to find UID for '" << args[1] << "': " << uid.error();
     }
-    service_->proc_attr_.uid = *uid;
+    service_->proc_attr_.parsed_uid = *uid;
     return {};
 }
 
@@ -675,6 +676,16 @@ Result<void> ServiceParser::ParseLineSection(std::vector<std::string>&& args, in
 Result<void> ServiceParser::EndSection() {
     if (!service_) {
         return {};
+    }
+
+    if (service_->proc_attr_.parsed_uid == std::nullopt) {
+        if (android::base::GetIntProperty("ro.vendor.api_level", 0) > __ANDROID_API_U__) {
+            return Error() << "No user specified for service '" << service_->name()
+                           << "'. Defaults to root.";
+        } else {
+            LOG(WARNING) << "No user specified for service '" << service_->name()
+                         << "'. Defaults to root.";
+        }
     }
 
     if (interface_inheritance_hierarchy_) {

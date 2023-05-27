@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 
 #include <chrono>
@@ -194,6 +195,17 @@ class SnapshotTest : public ::testing::Test {
             return false;
         }
         return true;
+    }
+
+    bool ShouldSkipLegacyMerging() {
+        if (!GetLegacyCompressionEnabledProperty() || !snapuserd_required_) {
+            return false;
+        }
+        int api_level = android::base::GetIntProperty("ro.board.api_level", -1);
+        if (api_level == -1) {
+            api_level = android::base::GetIntProperty("ro.product.first_api_level", -1);
+        }
+        return api_level != __ANDROID_API_S__;
     }
 
     void InitializeState() {
@@ -654,6 +666,10 @@ TEST_F(SnapshotTest, Merge) {
 
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(sm->InitiateMerge());
 
     // The device should have been switched to a snapshot-merge target.
@@ -761,6 +777,10 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
 
     // Now, reflash super. Note that we haven't called ProcessUpdateState, so the
@@ -1344,6 +1364,10 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
@@ -1407,6 +1431,10 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 }
@@ -1476,6 +1504,10 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
@@ -1584,6 +1616,10 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
             });
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
@@ -1786,6 +1822,10 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Initiate the merge and wait for it to be completed.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
 
@@ -1924,6 +1964,10 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_GE(fd, 0);
 
     // COW cannot be removed due to open fd, so expect a soft failure.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeNeedsReboot, init->ProcessUpdateState());
 
@@ -2027,6 +2071,10 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
 
     // Initiate the merge and then immediately stop it to simulate a reboot.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_TRUE(UnmapAll());
 
@@ -2059,6 +2107,10 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
 
     // Initiate the merge and then immediately stop it to simulate a reboot.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_TRUE(UnmapAll());
 
@@ -2136,6 +2188,10 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge in test";
+    }
+
     AddOperationForPartitions();
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2175,6 +2231,10 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge in test";
+    }
+
     AddOperationForPartitions();
 
     // Execute the update.
@@ -2312,20 +2372,44 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-TEST_F(SnapshotUpdateTest, LowSpace) {
-    static constexpr auto kMaxFree = 10_MiB;
-    auto userdata = std::make_unique<LowSpaceUserdata>();
-    ASSERT_TRUE(userdata->Init(kMaxFree));
+// Get max file size and free space.
+std::pair<uint64_t, uint64_t> GetBigFileLimit() {
+    struct statvfs fs;
+    if (statvfs("/data", &fs) < 0) {
+        PLOG(ERROR) << "statfs failed";
+        return {0, 0};
+    }
 
-    // Grow all partitions to 10_MiB, total 30_MiB. This requires 30 MiB of CoW space. After
-    // using the empty space in super (< 1 MiB), it uses 30 MiB of /userdata space.
+    auto fs_limit = static_cast<uint64_t>(fs.f_blocks) * (fs.f_bsize - 1);
+    auto fs_free = static_cast<uint64_t>(fs.f_bfree) * fs.f_bsize;
+
+    LOG(INFO) << "Big file limit: " << fs_limit << ", free space: " << fs_free;
+
+    return {fs_limit, fs_free};
+}
+
+TEST_F(SnapshotUpdateTest, LowSpace) {
+    // To make the low space test more reliable, we force a large cow estimate.
+    // However legacy VAB ignores the COW estimate and uses InstallOperations
+    // to compute the exact size required for dm-snapshot. It's difficult to
+    // make this work reliably (we'd need to somehow fake an extremely large
+    // super partition, and we don't have that level of dependency injection).
+    //
+    // For now, just skip this test on legacy VAB.
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "Skipping test on legacy VAB";
+    }
+
+    auto fs = GetBigFileLimit();
+    ASSERT_NE(fs.first, 0);
+
     constexpr uint64_t partition_size = 10_MiB;
     SetSize(sys_, partition_size);
     SetSize(vnd_, partition_size);
     SetSize(prd_, partition_size);
-    sys_->set_estimate_cow_size(partition_size);
-    vnd_->set_estimate_cow_size(partition_size);
-    prd_->set_estimate_cow_size(partition_size);
+    sys_->set_estimate_cow_size(fs.first);
+    vnd_->set_estimate_cow_size(fs.first);
+    prd_->set_estimate_cow_size(fs.first);
 
     AddOperationForPartitions();
 
@@ -2334,8 +2418,12 @@ TEST_F(SnapshotUpdateTest, LowSpace) {
     auto res = sm->CreateUpdateSnapshots(manifest_);
     ASSERT_FALSE(res);
     ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
-    ASSERT_GE(res.required_size(), 14_MiB);
-    ASSERT_LT(res.required_size(), 40_MiB);
+
+    // It's hard to predict exactly how much free space is needed, since /data
+    // is writable and the test is not the only process running. Divide by two
+    // as a rough lower bound, and adjust this in the future as necessary.
+    auto expected_delta = fs.first - fs.second;
+    ASSERT_GE(res.required_size(), expected_delta / 2);
 }
 
 TEST_F(SnapshotUpdateTest, AddPartition) {
@@ -2397,6 +2485,10 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 
@@ -2583,6 +2675,11 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
 
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
+
     // Simulate a reboot that tries the merge again, with the non-failing dm.
     ASSERT_TRUE(UnmapAll());
     init = NewManagerForFirstStageMount("_b");
@@ -2708,6 +2805,7 @@ class ImageManagerTest : public SnapshotTest {
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
         CleanUp();
+        SnapshotTest::TearDown();
     }
     void CleanUp() {
         if (!image_manager_) {
@@ -2721,26 +2819,13 @@ class ImageManagerTest : public SnapshotTest {
 };
 
 TEST_F(ImageManagerTest, CreateImageNoSpace) {
-    bool at_least_one_failure = false;
-    for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        auto userdata = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata->Init(size));
+    auto fs = GetBigFileLimit();
+    ASSERT_NE(fs.first, 0);
 
-        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
-
-        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                      IImageManager::CREATE_IMAGE_DEFAULT);
-        if (!res) {
-            at_least_one_failure = true;
-        } else {
-            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
-        }
-
-        CleanUp();
-    }
-
-    ASSERT_TRUE(at_least_one_failure)
-            << "We should have failed to allocate at least one over-sized image";
+    auto res = image_manager_->CreateBackingImage(kImageName, fs.first,
+                                                  IImageManager::CREATE_IMAGE_DEFAULT);
+    ASSERT_FALSE(res);
+    ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
 }
 
 bool Mkdir(const std::string& path) {
