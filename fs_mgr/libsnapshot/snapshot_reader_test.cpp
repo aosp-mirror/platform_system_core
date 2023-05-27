@@ -140,6 +140,18 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_EQ(reader->Seek(offset, SEEK_SET), offset);
         ASSERT_EQ(reader->Read(&value, sizeof(value)), sizeof(value));
         ASSERT_EQ(value, MakeNewBlockString()[1000]);
+
+        // Test a sequence of one byte reads.
+        offset = 5 * kBlockSize + 10;
+        std::string expected = MakeNewBlockString().substr(10, 20);
+        ASSERT_EQ(reader->Seek(offset, SEEK_SET), offset);
+
+        std::string got;
+        while (got.size() < expected.size()) {
+            ASSERT_EQ(reader->Read(&value, sizeof(value)), sizeof(value));
+            got.push_back(value);
+        }
+        ASSERT_EQ(got, expected);
     }
 
     void TestReads(ISnapshotWriter* writer) {
