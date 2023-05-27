@@ -566,20 +566,23 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     process_info = g_callbacks.get_process_info();
   }
 
-  // GWP-ASan catches use-after-free and heap-buffer-overflow by using PROT_NONE
-  // guard pages, which lead to SEGV. Normally, debuggerd prints a bug report
-  // and the process terminates, but in some cases, we actually want to print
-  // the bug report and let the signal handler return, and restart the process.
-  // In order to do that, we need to disable GWP-ASan's guard pages. The
-  // following callbacks handle this case.
-  gwp_asan_callbacks_t gwp_asan_callbacks = g_callbacks.get_gwp_asan_callbacks();
-  if (signal_number == SIGSEGV && signal_has_si_addr(info) &&
-      gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery &&
-      gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report &&
-      gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report &&
-      gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery(info->si_addr)) {
-    gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report(info->si_addr);
-    process_info.recoverable_gwp_asan_crash = true;
+  gwp_asan_callbacks_t gwp_asan_callbacks = {};
+  if (g_callbacks.get_gwp_asan_callbacks != nullptr) {
+    // GWP-ASan catches use-after-free and heap-buffer-overflow by using PROT_NONE
+    // guard pages, which lead to SEGV. Normally, debuggerd prints a bug report
+    // and the process terminates, but in some cases, we actually want to print
+    // the bug report and let the signal handler return, and restart the process.
+    // In order to do that, we need to disable GWP-ASan's guard pages. The
+    // following callbacks handle this case.
+    gwp_asan_callbacks = g_callbacks.get_gwp_asan_callbacks();
+    if (signal_number == SIGSEGV && signal_has_si_addr(info) &&
+        gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery &&
+        gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report &&
+        gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report &&
+        gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery(info->si_addr)) {
+      gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report(info->si_addr);
+      process_info.recoverable_gwp_asan_crash = true;
+    }
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
@@ -764,6 +767,7 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
 bool debuggerd_handle_signal(int signal_number, siginfo_t* info, void* context) {
   if (signal_number != SIGSEGV || !signal_has_si_addr(info)) return false;
 
+  if (g_callbacks.get_gwp_asan_callbacks == nullptr) return false;
   gwp_asan_callbacks_t gwp_asan_callbacks = g_callbacks.get_gwp_asan_callbacks();
   if (gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery == nullptr ||
       gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report == nullptr ||
