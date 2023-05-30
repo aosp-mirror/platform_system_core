@@ -1646,14 +1646,22 @@ std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
     return task;
 }
 
-void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* tasks) {
+bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* tasks) {
     // expands "resize-partitions" into individual commands : resize {os_partition_1}, resize
     // {os_partition_2}, etc.
     std::vector<std::unique_ptr<Task>> resize_tasks;
     std::optional<size_t> loc;
+    std::vector<char> contents;
+    if (!fp->source->ReadFile("super_empty.img", &contents)) {
+        return false;
+    }
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
+    if (!metadata) {
+        return false;
+    }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
+            if (should_flash_in_userspace(*metadata.get(), flash_task->GetPartitionAndSlot())) {
                 if (!loc) {
                     loc = i;
                 }
@@ -1665,11 +1673,11 @@ void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     // if no logical partitions (although should never happen since system will always need to be
     // flashed)
     if (!loc) {
-        return;
+        return false;
     }
     tasks->insert(tasks->begin() + loc.value(), std::make_move_iterator(resize_tasks.begin()),
                   std::make_move_iterator(resize_tasks.end()));
-    return;
+    return true;
 }
 
 static bool IsIgnore(const std::vector<std::string>& command) {
@@ -1750,7 +1758,9 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         tasks.insert(it, std::move(flash_super_task));
     } else {
-        AddResizeTasks(fp, &tasks);
+        if (!AddResizeTasks(fp, &tasks)) {
+            LOG(WARNING) << "Failed to add resize tasks";
+        };
     }
     return tasks;
 }

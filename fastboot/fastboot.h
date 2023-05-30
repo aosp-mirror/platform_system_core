@@ -144,7 +144,7 @@ std::unique_ptr<WipeTask> ParseWipeCommand(const FlashingPlan* fp,
                                            const std::vector<std::string>& parts);
 std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
                                             const std::vector<std::string>& command);
-void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
+bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
 std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
                                                      const std::vector<std::string>& file);
 
