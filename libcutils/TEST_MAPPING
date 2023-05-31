@@ -12,6 +12,9 @@
   "kernel-presubmit": [
     {
       "name": "libcutils_test"
+    },
+    {
+      "name": "KernelLibcutilsTest"
     }
   ]
 }
