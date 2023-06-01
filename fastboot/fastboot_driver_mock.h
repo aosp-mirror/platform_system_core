@@ -22,8 +22,7 @@ namespace fastboot {
 
 class MockFastbootDriver : public IFastBootDriver {
   public:
-    MOCK_METHOD(RetCode, FlashPartition,
-                (const std::string& partition, android::base::borrowed_fd fd, uint32_t sz),
+    MOCK_METHOD(RetCode, FlashPartition, (const std::string&, android::base::borrowed_fd, uint32_t),
                 (override));
     MOCK_METHOD(RetCode, DeletePartition, (const std::string&), (override));
     MOCK_METHOD(RetCode, Reboot, (std::string*, std::vector<std::string>*), (override));

@@ -242,6 +242,10 @@ BatteryHealth getBatteryHealthStatus(int status) {
         value = BatteryHealth::DEAD;
     else if (status == BatteryMonitor::BH_FAILED)
         value = BatteryHealth::UNSPECIFIED_FAILURE;
+    else if (status == BatteryMonitor::BH_NOT_AVAILABLE)
+        value = BatteryHealth::NOT_AVAILABLE;
+    else if (status == BatteryMonitor::BH_INCONSISTENT)
+        value = BatteryHealth::INCONSISTENT;
     else
         value = BatteryHealth::UNKNOWN;
 

@@ -58,6 +58,12 @@ namespace init {
 
 namespace {
 
+enum class BootMode {
+    NORMAL_MODE,
+    RECOVERY_MODE,
+    CHARGER_MODE,
+};
+
 void FreeRamdisk(DIR* dir, dev_t dev) {
     int dfd = dirfd(dir);
 
@@ -149,13 +155,27 @@ void PrepareSwitchRoot() {
 }
 }  // namespace
 
-std::string GetModuleLoadList(bool recovery, const std::string& dir_path) {
-    auto module_load_file = "modules.load";
-    if (recovery) {
-        struct stat fileStat;
-        std::string recovery_load_path = dir_path + "/modules.load.recovery";
-        if (!stat(recovery_load_path.c_str(), &fileStat)) {
+std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
+    std::string module_load_file;
+
+    switch (boot_mode) {
+        case BootMode::NORMAL_MODE:
+            module_load_file = "modules.load";
+            break;
+        case BootMode::RECOVERY_MODE:
             module_load_file = "modules.load.recovery";
+            break;
+        case BootMode::CHARGER_MODE:
+            module_load_file = "modules.load.charger";
+            break;
+    }
+
+    if (module_load_file != "modules.load") {
+        struct stat fileStat;
+        std::string load_path = dir_path + "/" + module_load_file;
+        // Fall back to modules.load if the other files aren't accessible
+        if (stat(load_path.c_str(), &fileStat)) {
+            module_load_file = "modules.load";
         }
     }
 
@@ -163,7 +183,8 @@ std::string GetModuleLoadList(bool recovery, const std::string& dir_path) {
 }
 
 #define MODULE_BASE_DIR "/lib/modules"
-bool LoadKernelModules(bool recovery, bool want_console, bool want_parallel, int& modules_loaded) {
+bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel,
+                       int& modules_loaded) {
     struct utsname uts;
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
@@ -203,7 +224,7 @@ bool LoadKernelModules(bool recovery, bool want_console, bool want_parallel, int
     for (const auto& module_dir : module_dirs) {
         std::string dir_path = MODULE_BASE_DIR "/";
         dir_path.append(module_dir);
-        Modprobe m({dir_path}, GetModuleLoadList(recovery, dir_path));
+        Modprobe m({dir_path}, GetModuleLoadList(boot_mode, dir_path));
         bool retval = m.LoadListedModules(!want_console);
         modules_loaded = m.GetModuleCount();
         if (modules_loaded > 0) {
@@ -211,7 +232,7 @@ bool LoadKernelModules(bool recovery, bool want_console, bool want_parallel, int
         }
     }
 
-    Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(recovery, MODULE_BASE_DIR));
+    Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(boot_mode, MODULE_BASE_DIR));
     bool retval = (want_parallel) ? m.LoadModulesParallel(std::thread::hardware_concurrency())
                                   : m.LoadListedModules(!want_console);
     modules_loaded = m.GetModuleCount();
@@ -219,6 +240,21 @@ bool LoadKernelModules(bool recovery, bool want_console, bool want_parallel, int
         return retval;
     }
     return true;
+}
+
+static bool IsChargerMode(const std::string& cmdline, const std::string& bootconfig) {
+    return bootconfig.find("androidboot.mode = \"charger\"") != std::string::npos ||
+            cmdline.find("androidboot.mode=charger") != std::string::npos;
+}
+
+static BootMode GetBootMode(const std::string& cmdline, const std::string& bootconfig)
+{
+    if (IsChargerMode(cmdline, bootconfig))
+        return BootMode::CHARGER_MODE;
+    else if (IsRecoveryMode() && !ForceNormalBoot(cmdline, bootconfig))
+        return BootMode::RECOVERY_MODE;
+
+    return BootMode::NORMAL_MODE;
 }
 
 int FirstStageMain(int argc, char** argv) {
@@ -328,7 +364,8 @@ int FirstStageMain(int argc, char** argv) {
 
     boot_clock::time_point module_start_time = boot_clock::now();
     int module_count = 0;
-    if (!LoadKernelModules(IsRecoveryMode() && !ForceNormalBoot(cmdline, bootconfig), want_console,
+    BootMode boot_mode = GetBootMode(cmdline, bootconfig);
+    if (!LoadKernelModules(boot_mode, want_console,
                            want_parallel, module_count)) {
         if (want_console != FirstStageConsoleParam::DISABLED) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
