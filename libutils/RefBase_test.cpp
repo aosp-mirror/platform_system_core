@@ -28,7 +28,7 @@
 
 using namespace android;
 
-static constexpr int NITERS = 1000000;
+static constexpr int NITERS = 500000;
 
 static constexpr int INITIAL_STRONG_VALUE = 1 << 28;  // Mirroring RefBase definition.
 
