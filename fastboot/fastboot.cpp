@@ -1784,28 +1784,8 @@ void FlashAllTool::Flash() {
 
     CancelSnapshotIfNeeded();
 
-    std::vector<char> contents;
-    if (!fp_->source->ReadFile("fastboot-info.txt", &contents)) {
-        LOG(VERBOSE) << "Flashing from hardcoded images. fastboot-info.txt is empty or does not "
-                        "exist";
-        HardcodedFlash();
-        return;
-    }
-
-    std::vector<std::unique_ptr<Task>> tasks =
-            ParseFastbootInfo(fp_, Split({contents.data(), contents.size()}, "\n"));
-
-    if (tasks.empty()) {
-        LOG(FATAL) << "Invalid fastboot-info.txt file.";
-    }
-    LOG(VERBOSE) << "Flashing from fastboot-info.txt";
-    for (auto& task : tasks) {
-        task->Run();
-    }
-    if (fp_->wants_wipe) {
-        // avoid adding duplicate wipe tasks in fastboot main code.
-        fp_->wants_wipe = false;
-    }
+    HardcodedFlash();
+    return;
 }
 
 void FlashAllTool::CheckRequirements() {
