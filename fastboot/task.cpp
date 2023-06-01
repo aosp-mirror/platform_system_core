@@ -26,9 +26,9 @@
 #include "util.h"
 
 using namespace std::string_literals;
-FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
-                     const bool apply_vbmeta)
-    : pname_(_pname), fname_(_fname), slot_(_slot), apply_vbmeta_(apply_vbmeta) {}
+FlashTask::FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
+                     const bool apply_vbmeta, const FlashingPlan* fp)
+    : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta), fp_(fp) {}
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
@@ -41,7 +41,7 @@ void FlashTask::Run() {
                 "And try again. If you are intentionally trying to "
                 "overwrite a fixed partition, use --force.");
         }
-        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_);
+        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_, fp_);
     };
     do_for_partitions(pname_, slot_, flash, true);
 }
@@ -65,7 +65,7 @@ RebootTask::RebootTask(const FlashingPlan* fp, const std::string& reboot_target)
     : reboot_target_(reboot_target), fp_(fp){};
 
 void RebootTask::Run() {
-    if ((reboot_target_ == "userspace" || reboot_target_ == "fastboot")) {
+    if (reboot_target_ == "fastboot") {
         if (!is_userspace_fastboot()) {
             reboot_to_userspace_fastboot();
             fp_->fb->WaitForDisconnect();
@@ -214,11 +214,9 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
 
     for (const auto& task : tasks) {
         if (auto flash_task = task->AsFlashTask()) {
-            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
-                auto partition = flash_task->GetPartitionAndSlot();
-                if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
-                    return nullptr;
-                }
+            auto partition = flash_task->GetPartitionAndSlot();
+            if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
+                return nullptr;
             }
         }
     }

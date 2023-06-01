@@ -276,6 +276,13 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
       return false;
     }
 
+    // WARNING: It's not possible to replace the below with a splice call.
+    // Due to the way debuggerd does many small writes across the pipe,
+    // this would cause splice to copy a page for each write. The second
+    // pipe fills up based on the number of pages being copied, even
+    // though there is not much data being transferred per page. When
+    // the second pipe is full, everything stops since there is nothing
+    // reading the second pipe to clear it.
     char buf[1024];
     rc = TEMP_FAILURE_RETRY(read(pipe_read.get(), buf, sizeof(buf)));
     if (rc == 0) {

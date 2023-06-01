@@ -70,6 +70,9 @@
 
 using android::base::StringPrintf;
 
+// The maximum number of messages to save in the protobuf per file.
+static constexpr size_t kMaxLogMessages = 500;
+
 // Use the demangler from libc++.
 extern "C" char* __cxa_demangle(const char*, char*, size_t*, int* status);
 
@@ -491,8 +494,8 @@ static void dump_mappings(Tombstone* tombstone, unwindstack::Maps* maps,
 }
 
 static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
-  logger_list* logger_list =
-      android_logger_list_open(android_name_to_log_id(logger), ANDROID_LOG_NONBLOCK, 0, pid);
+  logger_list* logger_list = android_logger_list_open(android_name_to_log_id(logger),
+                                                      ANDROID_LOG_NONBLOCK, kMaxLogMessages, pid);
 
   LogBuffer buffer;
 
@@ -690,7 +693,14 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
 
   // Only dump logs on debuggable devices.
   if (android::base::GetBoolProperty("ro.debuggable", false)) {
-    dump_logcat(&result, main_thread.pid);
+    // Get the thread that corresponds to the main pid of the process.
+    const ThreadInfo& thread = threads.at(main_thread.pid);
+
+    // Do not attempt to dump logs of the logd process because the gathering
+    // of logs can hang until a timeout occurs.
+    if (thread.thread_name != "logd") {
+      dump_logcat(&result, main_thread.pid);
+    }
   }
 
   dump_open_fds(&result, open_files);

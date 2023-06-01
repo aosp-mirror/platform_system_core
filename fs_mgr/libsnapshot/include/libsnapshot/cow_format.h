@@ -15,7 +15,9 @@
 #pragma once
 
 #include <stdint.h>
-#include <string>
+
+#include <optional>
+#include <string_view>
 
 namespace android {
 namespace snapshot {
@@ -25,9 +27,6 @@ static constexpr uint32_t kCowVersionMajor = 2;
 static constexpr uint32_t kCowVersionMinor = 0;
 
 static constexpr uint32_t kCowVersionManifest = 2;
-
-static constexpr size_t BLOCK_SZ = 4096;
-static constexpr size_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
 
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
@@ -158,7 +157,8 @@ enum CowCompressionAlgorithm : uint8_t {
     kCowCompressNone = 0,
     kCowCompressGz = 1,
     kCowCompressBrotli = 2,
-    kCowCompressLz4 = 3
+    kCowCompressLz4 = 3,
+    kCowCompressZstd = 4,
 };
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
@@ -195,6 +195,9 @@ int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
 bool IsMetadataOp(const CowOperation& op);
 // Ops that have dependencies on old blocks, and must take care in their merge order
 bool IsOrderedOp(const CowOperation& op);
+
+// Convert compression name to internal value.
+std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::string_view name);
 
 }  // namespace snapshot
 }  // namespace android
