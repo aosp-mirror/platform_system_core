@@ -86,32 +86,6 @@ on early-init
     mkdir /dev/sys/fs 0755 system system
     mkdir /dev/sys/block 0755 system system
 
-# Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
-on early-init && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test32
-on early-init && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test64
-on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test_apex32
-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test_apex64
-
-service boringssl_self_test32 /system/bin/boringssl_self_test32
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test64 /system/bin/boringssl_self_test64
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
 on init
     sysclktz 0
 
@@ -501,6 +475,33 @@ on init
     start servicemanager
     start hwservicemanager
     start vndservicemanager
+
+# Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
+on init && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test32
+on init && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test_apex32
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test_apex64
+
+service boringssl_self_test32 /system/bin/boringssl_self_test32
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test64 /system/bin/boringssl_self_test64
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
+service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+
 
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
@@ -1269,11 +1270,13 @@ service console /system/bin/sh
     setenv HOSTNAME console
 
 on property:ro.debuggable=1
-    # Give writes to anyone for the trace folder on debug builds.
+    # Give writes to the same group for the trace folder on debug builds,
+    # it's further protected by selinux policy.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
-    # Give reads to anyone for the window trace folder on debug builds.
-    chmod 0775 /data/misc/wmtrace
+    # Give writes and reads to anyone for the window trace folder on debug builds,
+    # it's further protected by selinux policy.
+    chmod 0777 /data/misc/wmtrace
     # Give reads to anyone for the accessibility trace folder on debug builds.
     chmod 0775 /data/misc/a11ytrace
 
