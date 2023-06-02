@@ -396,7 +396,7 @@ static Transport* NetworkDeviceConnected(bool print = false) {
 
     ConnectedDevicesStorage storage;
     std::set<std::string> devices;
-    {
+    if (storage.Exists()) {
         FileLock lock = storage.Lock();
         devices = storage.ReadDevices(lock);
     }
