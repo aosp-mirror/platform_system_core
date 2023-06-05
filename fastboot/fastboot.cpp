@@ -2583,10 +2583,13 @@ int FastBootTool::Main(int argc, char* argv[]) {
         if (fp->force_flash) {
             CancelSnapshotIfNeeded();
         }
+        std::vector<std::unique_ptr<Task>> wipe_tasks;
         std::vector<std::string> partitions = {"userdata", "cache", "metadata"};
         for (const auto& partition : partitions) {
-            tasks.emplace_back(std::make_unique<WipeTask>(fp.get(), partition));
+            wipe_tasks.emplace_back(std::make_unique<WipeTask>(fp.get(), partition));
         }
+        tasks.insert(tasks.begin(), std::make_move_iterator(wipe_tasks.begin()),
+                     std::make_move_iterator(wipe_tasks.end()));
     }
     if (fp->wants_set_active) {
         fb->SetActive(next_active);
