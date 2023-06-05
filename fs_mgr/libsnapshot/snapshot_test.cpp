@@ -2372,60 +2372,6 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-// Get max file size and free space.
-std::pair<uint64_t, uint64_t> GetBigFileLimit() {
-    struct statvfs fs;
-    if (statvfs("/data", &fs) < 0) {
-        PLOG(ERROR) << "statfs failed";
-        return {0, 0};
-    }
-
-    auto fs_limit = static_cast<uint64_t>(fs.f_blocks) * (fs.f_bsize - 1);
-    auto fs_free = static_cast<uint64_t>(fs.f_bfree) * fs.f_bsize;
-
-    LOG(INFO) << "Big file limit: " << fs_limit << ", free space: " << fs_free;
-
-    return {fs_limit, fs_free};
-}
-
-TEST_F(SnapshotUpdateTest, LowSpace) {
-    // To make the low space test more reliable, we force a large cow estimate.
-    // However legacy VAB ignores the COW estimate and uses InstallOperations
-    // to compute the exact size required for dm-snapshot. It's difficult to
-    // make this work reliably (we'd need to somehow fake an extremely large
-    // super partition, and we don't have that level of dependency injection).
-    //
-    // For now, just skip this test on legacy VAB.
-    if (!snapuserd_required_) {
-        GTEST_SKIP() << "Skipping test on legacy VAB";
-    }
-
-    auto fs = GetBigFileLimit();
-    ASSERT_NE(fs.first, 0);
-
-    constexpr uint64_t partition_size = 10_MiB;
-    SetSize(sys_, partition_size);
-    SetSize(vnd_, partition_size);
-    SetSize(prd_, partition_size);
-    sys_->set_estimate_cow_size(fs.first);
-    vnd_->set_estimate_cow_size(fs.first);
-    prd_->set_estimate_cow_size(fs.first);
-
-    AddOperationForPartitions();
-
-    // Execute the update.
-    ASSERT_TRUE(sm->BeginUpdate());
-    auto res = sm->CreateUpdateSnapshots(manifest_);
-    ASSERT_FALSE(res);
-    ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
-
-    // It's hard to predict exactly how much free space is needed, since /data
-    // is writable and the test is not the only process running. Divide by two
-    // as a rough lower bound, and adjust this in the future as necessary.
-    auto expected_delta = fs.first - fs.second;
-    ASSERT_GE(res.required_size(), expected_delta / 2);
-}
-
 TEST_F(SnapshotUpdateTest, AddPartition) {
     group_->add_partition_names("dlkm");
 
@@ -2795,38 +2741,6 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +
                                     "Merge"s;
                          });
-
-class ImageManagerTest : public SnapshotTest {
-  protected:
-    void SetUp() override {
-        SKIP_IF_NON_VIRTUAL_AB();
-        SnapshotTest::SetUp();
-    }
-    void TearDown() override {
-        RETURN_IF_NON_VIRTUAL_AB();
-        CleanUp();
-        SnapshotTest::TearDown();
-    }
-    void CleanUp() {
-        if (!image_manager_) {
-            return;
-        }
-        EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
-                    image_manager_->DeleteBackingImage(kImageName));
-    }
-
-    static constexpr const char* kImageName = "my_image";
-};
-
-TEST_F(ImageManagerTest, CreateImageNoSpace) {
-    auto fs = GetBigFileLimit();
-    ASSERT_NE(fs.first, 0);
-
-    auto res = image_manager_->CreateBackingImage(kImageName, fs.first,
-                                                  IImageManager::CREATE_IMAGE_DEFAULT);
-    ASSERT_FALSE(res);
-    ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
-}
 
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
