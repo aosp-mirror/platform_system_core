@@ -3202,39 +3202,20 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     CHECK(current_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
           target_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME);
 
-    std::map<std::string, SnapshotStatus> all_snapshot_status;
-
-    // In case of error, automatically delete devices that are created along the way.
-    // Note that "lock" is destroyed after "created_devices", so it is safe to use |lock| for
-    // these devices.
-    AutoDeviceList created_devices;
-
     const auto& dap_metadata = manifest.dynamic_partition_metadata();
-    CowOptions options;
-    CowWriter writer(options);
-    bool cow_format_support = true;
-    if (dap_metadata.cow_version() < writer.GetCowVersion()) {
-        cow_format_support = false;
-    }
-
-    LOG(INFO) << " dap_metadata.cow_version(): " << dap_metadata.cow_version()
-              << " writer.GetCowVersion(): " << writer.GetCowVersion();
-
-    // Deduce supported features.
-    bool userspace_snapshots = CanUseUserspaceSnapshots();
-    bool legacy_compression = GetLegacyCompressionEnabledProperty();
 
     std::string vabc_disable_reason;
     if (!dap_metadata.vabc_enabled()) {
         vabc_disable_reason = "not enabled metadata";
     } else if (device_->IsRecovery()) {
         vabc_disable_reason = "recovery";
-    } else if (!cow_format_support) {
-        vabc_disable_reason = "cow format not supported";
     } else if (!KernelSupportsCompressedSnapshots()) {
         vabc_disable_reason = "kernel missing userspace block device support";
     }
 
+    // Deduce supported features.
+    bool userspace_snapshots = CanUseUserspaceSnapshots();
+    bool legacy_compression = GetLegacyCompressionEnabledProperty();
     if (!vabc_disable_reason.empty()) {
         if (userspace_snapshots) {
             LOG(INFO) << "Userspace snapshots disabled: " << vabc_disable_reason;
@@ -3244,6 +3225,16 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
         userspace_snapshots = false;
         legacy_compression = false;
+    }
+
+    if (legacy_compression || userspace_snapshots) {
+        if (dap_metadata.cow_version() < kMinCowVersion ||
+            dap_metadata.cow_version() > kMaxCowVersion) {
+            LOG(ERROR) << "Manifest cow version is out of bounds (got: "
+                       << dap_metadata.cow_version() << ", min: " << kMinCowVersion
+                       << ", max: " << kMaxCowVersion << ")";
+            return Return::Error();
+        }
     }
 
     const bool using_snapuserd = userspace_snapshots || legacy_compression;
@@ -3278,6 +3269,11 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         cow_creator.batched_writes = dap_metadata.vabc_feature_set().batch_writes();
     }
 
+    // In case of error, automatically delete devices that are created along the way.
+    // Note that "lock" is destroyed after "created_devices", so it is safe to use |lock| for
+    // these devices.
+    AutoDeviceList created_devices;
+    std::map<std::string, SnapshotStatus> all_snapshot_status;
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
     if (!ret.is_ok()) {
