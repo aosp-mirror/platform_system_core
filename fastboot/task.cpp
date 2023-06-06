@@ -46,6 +46,14 @@ void FlashTask::Run() {
     do_for_partitions(pname_, slot_, flash, true);
 }
 
+std::string FlashTask::ToString() {
+    std::string apply_vbmeta_string = "";
+    if (apply_vbmeta_) {
+        apply_vbmeta_string = " --apply_vbmeta";
+    }
+    return "flash" + apply_vbmeta_string + " " + pname_ + " " + fname_;
+}
+
 std::string FlashTask::GetPartitionAndSlot() {
     auto slot = slot_;
     if (slot.empty()) {
@@ -84,6 +92,10 @@ void RebootTask::Run() {
     }
 }
 
+std::string RebootTask::ToString() {
+    return "reboot " + reboot_target_;
+}
+
 FlashSuperLayoutTask::FlashSuperLayoutTask(const std::string& super_name,
                                            std::unique_ptr<SuperFlashHelper> helper,
                                            SparsePtr sparse_layout, uint64_t super_size)
@@ -105,6 +117,9 @@ void FlashSuperLayoutTask::Run() {
 
     // Send the data to the device.
     flash_partition_files(super_name_, files);
+}
+std::string FlashSuperLayoutTask::ToString() {
+    return "optimized-flash-super";
 }
 
 std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
@@ -263,6 +278,9 @@ void UpdateSuperTask::Run() {
     }
     fp_->fb->RawCommand(command, "Updating super partition");
 }
+std::string UpdateSuperTask::ToString() {
+    return "update-super";
+}
 
 ResizeTask::ResizeTask(const FlashingPlan* fp, const std::string& pname, const std::string& size,
                        const std::string& slot)
@@ -277,10 +295,18 @@ void ResizeTask::Run() {
     do_for_partitions(pname_, slot_, resize_partition, false);
 }
 
+std::string ResizeTask::ToString() {
+    return "resize " + pname_;
+}
+
 DeleteTask::DeleteTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
 
 void DeleteTask::Run() {
     fp_->fb->DeletePartition(pname_);
+}
+
+std::string DeleteTask::ToString() {
+    return "delete " + pname_;
 }
 
 WipeTask::WipeTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
@@ -297,4 +323,8 @@ void WipeTask::Run() {
         return;
     }
     fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options);
+}
+
+std::string WipeTask::ToString() {
+    return "erase " + pname_;
 }
