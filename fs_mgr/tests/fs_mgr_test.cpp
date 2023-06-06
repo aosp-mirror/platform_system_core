@@ -497,6 +497,7 @@ source none1       swap   defaults      fileencryption=,keydirectory=,length=,sw
     EXPECT_EQ("none0", entry->mount_point);
     {
         FstabEntry::FsMgrFlags flags = {};
+        flags.file_encryption = true;
         EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     }
     EXPECT_EQ("", entry->metadata_key_dir);
