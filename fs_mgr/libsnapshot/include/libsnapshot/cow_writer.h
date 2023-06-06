@@ -171,8 +171,6 @@ class CowWriter : public ICowWriter {
 
     uint64_t GetCowSize() override;
 
-    uint32_t GetCowVersion() { return header_.major_version; }
-
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) override;
     virtual bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
