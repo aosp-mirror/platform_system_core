@@ -242,7 +242,9 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
                 }
             }
-        } else if (StartsWith(flag, "fileencryption=")) {
+        } else if (StartsWith(flag, "fileencryption=") || flag == "fileencryption") {
+            // "fileencryption" enables file-based encryption.  It's normally followed by an = and
+            // then the encryption options.  But that can be omitted to use the default options.
             ParseFileEncryption(arg, entry);
         } else if (StartsWith(flag, "max_comp_streams=")) {
             if (!ParseInt(arg, &entry->max_comp_streams)) {
