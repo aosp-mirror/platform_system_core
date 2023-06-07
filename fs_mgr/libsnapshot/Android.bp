@@ -179,6 +179,7 @@ cc_library_static {
         "libsnapshot_cow/cow_writer.cpp",
         "libsnapshot_cow/cow_format.cpp",
         "libsnapshot_cow/cow_compress.cpp",
+        "libsnapshot_cow/parser_v2.cpp",
     ],
     host_supported: true,
     recovery_available: true,
