@@ -89,38 +89,5 @@ class CompressedSnapshotWriter final : public ISnapshotWriter {
     std::unique_ptr<CowWriter> cow_;
 };
 
-// Write directly to a dm-snapshot device.
-class OnlineKernelSnapshotWriter final : public ISnapshotWriter {
-  public:
-    OnlineKernelSnapshotWriter(const CowOptions& options);
-
-    // Set the device used for all writes.
-    void SetSnapshotDevice(android::base::unique_fd&& snapshot_fd, uint64_t cow_size);
-
-    bool Initialize() override { return true; }
-    bool InitializeAppend(uint64_t) override { return true; }
-
-    bool Finalize() override;
-    uint64_t GetCowSize() override { return cow_size_; }
-    std::unique_ptr<FileDescriptor> OpenReader() override;
-
-    // Online kernel snapshot writer doesn't care about merge sequences.
-    // So ignore.
-    bool VerifyMergeOps() const noexcept override { return true; }
-
-  protected:
-    bool EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
-    bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
-    bool EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size, uint32_t old_block,
-                       uint16_t offset) override;
-    bool EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) override;
-    bool EmitLabel(uint64_t label) override;
-    bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
-
-  private:
-    android::base::unique_fd snapshot_fd_;
-    uint64_t cow_size_ = 0;
-};
-
 }  // namespace snapshot
 }  // namespace android
