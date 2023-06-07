@@ -396,7 +396,7 @@ static Transport* NetworkDeviceConnected(bool print = false) {
 
     ConnectedDevicesStorage storage;
     std::set<std::string> devices;
-    {
+    if (storage.Exists()) {
         FileLock lock = storage.Lock();
         devices = storage.ReadDevices(lock);
     }
@@ -775,7 +775,7 @@ static int make_temporary_fd(const char* what) {
 
 #endif
 
-static unique_fd unzip_to_file(ZipArchiveHandle zip, const char* entry_name) {
+static unique_fd UnzipToFile(ZipArchiveHandle zip, const char* entry_name) {
     unique_fd fd(make_temporary_fd(entry_name));
 
     ZipEntry64 zip_entry;
@@ -1646,14 +1646,22 @@ std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
     return task;
 }
 
-void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* tasks) {
+bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* tasks) {
     // expands "resize-partitions" into individual commands : resize {os_partition_1}, resize
     // {os_partition_2}, etc.
     std::vector<std::unique_ptr<Task>> resize_tasks;
     std::optional<size_t> loc;
+    std::vector<char> contents;
+    if (!fp->source->ReadFile("super_empty.img", &contents)) {
+        return false;
+    }
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
+    if (!metadata) {
+        return false;
+    }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
+            if (should_flash_in_userspace(*metadata.get(), flash_task->GetPartitionAndSlot())) {
                 if (!loc) {
                     loc = i;
                 }
@@ -1665,11 +1673,11 @@ void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     // if no logical partitions (although should never happen since system will always need to be
     // flashed)
     if (!loc) {
-        return;
+        return false;
     }
     tasks->insert(tasks->begin() + loc.value(), std::make_move_iterator(resize_tasks.begin()),
                   std::make_move_iterator(resize_tasks.end()));
-    return;
+    return true;
 }
 
 static bool IsIgnore(const std::vector<std::string>& command) {
@@ -1750,7 +1758,9 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         tasks.insert(it, std::move(flash_super_task));
     } else {
-        AddResizeTasks(fp, &tasks);
+        if (!AddResizeTasks(fp, &tasks)) {
+            LOG(WARNING) << "Failed to add resize tasks";
+        };
     }
     return tasks;
 }
@@ -1774,28 +1784,8 @@ void FlashAllTool::Flash() {
 
     CancelSnapshotIfNeeded();
 
-    std::vector<char> contents;
-    if (!fp_->source->ReadFile("fastboot-info.txt", &contents)) {
-        LOG(VERBOSE) << "Flashing from hardcoded images. fastboot-info.txt is empty or does not "
-                        "exist";
-        HardcodedFlash();
-        return;
-    }
-
-    std::vector<std::unique_ptr<Task>> tasks =
-            ParseFastbootInfo(fp_, Split({contents.data(), contents.size()}, "\n"));
-
-    if (tasks.empty()) {
-        LOG(FATAL) << "Invalid fastboot-info.txt file.";
-    }
-    LOG(VERBOSE) << "Flashing from fastboot-info.txt";
-    for (auto& task : tasks) {
-        task->Run();
-    }
-    if (fp_->wants_wipe) {
-        // avoid adding duplicate wipe tasks in fastboot main code.
-        fp_->wants_wipe = false;
-    }
+    HardcodedFlash();
+    return;
 }
 
 void FlashAllTool::CheckRequirements() {
@@ -1928,7 +1918,7 @@ bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) c
 }
 
 unique_fd ZipImageSource::OpenFile(const std::string& name) const {
-    return unzip_to_file(zip_, name.c_str());
+    return UnzipToFile(zip_, name.c_str());
 }
 
 static void do_update(const char* filename, FlashingPlan* fp) {
@@ -2593,10 +2583,13 @@ int FastBootTool::Main(int argc, char* argv[]) {
         if (fp->force_flash) {
             CancelSnapshotIfNeeded();
         }
+        std::vector<std::unique_ptr<Task>> wipe_tasks;
         std::vector<std::string> partitions = {"userdata", "cache", "metadata"};
         for (const auto& partition : partitions) {
-            tasks.emplace_back(std::make_unique<WipeTask>(fp.get(), partition));
+            wipe_tasks.emplace_back(std::make_unique<WipeTask>(fp.get(), partition));
         }
+        tasks.insert(tasks.begin(), std::make_move_iterator(wipe_tasks.begin()),
+                     std::make_move_iterator(wipe_tasks.end()));
     }
     if (fp->wants_set_active) {
         fb->SetActive(next_active);
