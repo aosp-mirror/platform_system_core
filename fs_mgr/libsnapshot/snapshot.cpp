@@ -3647,12 +3647,13 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    if (status.using_snapuserd()) {
-        return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
-                                            status, paths);
+    if (!status.using_snapuserd()) {
+        LOG(ERROR) << "Can only create snapshot writers with userspace or compressed snapshots";
+        return nullptr;
     }
-    return OpenKernelSnapshotWriter(lock.get(), source_device, params.GetPartitionName(), status,
-                                    paths);
+
+    return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
+                                        status, paths);
 #endif
 }
 
@@ -3697,34 +3698,6 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
         LOG(ERROR) << "Could not create COW writer from " << cow_path;
         return nullptr;
     }
-
-    return writer;
-}
-
-std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
-        LockedFile* lock, const std::optional<std::string>& source_device,
-        [[maybe_unused]] const std::string& partition_name, const SnapshotStatus& status,
-        const SnapshotPaths& paths) {
-    CHECK(lock);
-
-    CowOptions cow_options;
-    cow_options.max_blocks = {status.device_size() / cow_options.block_size};
-
-    auto writer = std::make_unique<OnlineKernelSnapshotWriter>(cow_options);
-
-    std::string path = paths.snapshot_device.empty() ? paths.target_device : paths.snapshot_device;
-    unique_fd fd(open(path.c_str(), O_RDWR | O_CLOEXEC));
-    if (fd < 0) {
-        PLOG(ERROR) << "open failed: " << path;
-        return nullptr;
-    }
-
-    if (source_device) {
-        writer->SetSourceDevice(*source_device);
-    }
-
-    uint64_t cow_size = status.cow_partition_size() + status.cow_file_size();
-    writer->SetSnapshotDevice(std::move(fd), cow_size);
 
     return writer;
 }
