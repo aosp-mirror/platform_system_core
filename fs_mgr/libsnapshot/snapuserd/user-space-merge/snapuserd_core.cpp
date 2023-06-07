@@ -240,9 +240,9 @@ bool SnapshotHandler::ReadMetadata() {
 bool SnapshotHandler::MmapMetadata() {
     const auto& header = reader_->GetHeader();
 
-    total_mapped_addr_length_ = header.header_size + BUFFER_REGION_DEFAULT_SIZE;
+    total_mapped_addr_length_ = header.prefix.header_size + BUFFER_REGION_DEFAULT_SIZE;
 
-    if (header.major_version >= 2 && header.buffer_size > 0) {
+    if (header.prefix.major_version >= 2 && header.buffer_size > 0) {
         scratch_space_ = true;
     }
 
@@ -362,7 +362,7 @@ bool SnapshotHandler::Start() {
 uint64_t SnapshotHandler::GetBufferMetadataOffset() {
     const auto& header = reader_->GetHeader();
 
-    return (header.header_size + sizeof(BufferState));
+    return (header.prefix.header_size + sizeof(BufferState));
 }
 
 /*
@@ -390,7 +390,7 @@ size_t SnapshotHandler::GetBufferMetadataSize() {
 size_t SnapshotHandler::GetBufferDataOffset() {
     const auto& header = reader_->GetHeader();
 
-    return (header.header_size + GetBufferMetadataSize());
+    return (header.prefix.header_size + GetBufferMetadataSize());
 }
 
 /*
@@ -413,7 +413,7 @@ struct BufferState* SnapshotHandler::GetBufferState() {
     const auto& header = reader_->GetHeader();
 
     struct BufferState* ra_state =
-            reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);
+            reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.prefix.header_size);
     return ra_state;
 }
 
