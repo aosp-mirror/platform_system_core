@@ -104,8 +104,9 @@ static bool Inspect(const std::string& path, Options opt) {
     if (reader.GetFooter(&footer)) has_footer = true;
 
     if (!opt.silent) {
-        std::cout << "Version: " << header.major_version << "." << header.minor_version << "\n";
-        std::cout << "Header size: " << header.header_size << "\n";
+        std::cout << "Version: " << header.prefix.major_version << "."
+                  << header.prefix.minor_version << "\n";
+        std::cout << "Header size: " << header.prefix.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
         std::cout << "Merge ops: " << header.num_merge_ops << "\n";
