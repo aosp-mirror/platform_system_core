@@ -89,6 +89,10 @@ class SnapuserdClient {
 
     // Return the status of the snapshot
     std::string QuerySnapshotStatus(const std::string& misc_name);
+
+    // Check the update verification status - invoked by update_verifier during
+    // boot
+    bool QueryUpdateVerification();
 };
 
 }  // namespace snapshot

@@ -168,8 +168,14 @@ static void print_backtrace(CallbackType callback, const Tombstone& tombstone,
       build_id = StringPrintf(" (BuildId: %s)", frame.build_id().c_str());
     }
 
-    CB(should_log, "      #%02d pc %0*" PRIx64 "  %s%s%s", index++, pointer_width(tombstone) * 2,
-       frame.rel_pc(), frame.file_name().c_str(), function.c_str(), build_id.c_str());
+    std::string line =
+        StringPrintf("      #%02d pc %0*" PRIx64 "  %s", index++, pointer_width(tombstone) * 2,
+                     frame.rel_pc(), frame.file_name().c_str());
+    if (frame.file_map_offset() != 0) {
+      line += StringPrintf(" (offset 0x%" PRIx64 ")", frame.file_map_offset());
+    }
+    line += function + build_id;
+    CB(should_log, "%s", line.c_str());
   }
 }
 

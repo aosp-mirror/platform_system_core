@@ -50,6 +50,7 @@ enum class DaemonOps {
     INITIATE,
     PERCENTAGE,
     GETSTATUS,
+    UPDATE_VERIFY,
     INVALID,
 };
 
@@ -129,6 +130,8 @@ class UserSnapshotServer {
 
     double GetMergePercentage(std::lock_guard<std::mutex>* proof_of_lock);
     void TerminateMergeThreads(std::lock_guard<std::mutex>* proof_of_lock);
+
+    bool UpdateVerification(std::lock_guard<std::mutex>* proof_of_lock);
 
   public:
     UserSnapshotServer();

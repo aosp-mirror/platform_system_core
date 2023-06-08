@@ -269,5 +269,15 @@ std::string SnapuserdClient::QuerySnapshotStatus(const std::string& misc_name) {
     return Receivemsg();
 }
 
+bool SnapuserdClient::QueryUpdateVerification() {
+    std::string msg = "update-verify";
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
+}
+
 }  // namespace snapshot
 }  // namespace android
