@@ -364,8 +364,8 @@ Result<void> ServiceParser::ParseRebootOnFailure(std::vector<std::string>&& args
 
 Result<void> ServiceParser::ParseRestartPeriod(std::vector<std::string>&& args) {
     int period;
-    if (!ParseInt(args[1], &period, 5)) {
-        return Error() << "restart_period value must be an integer >= 5";
+    if (!ParseInt(args[1], &period, 0)) {
+        return Error() << "restart_period value must be an integer >= 0";
     }
     service_->restart_period_ = std::chrono::seconds(period);
     return {};
