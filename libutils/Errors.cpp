@@ -15,6 +15,8 @@
  */
 #include <utils/Errors.h>
 
+#include <string.h>
+
 namespace android {
 
 std::string statusToString(status_t s) {

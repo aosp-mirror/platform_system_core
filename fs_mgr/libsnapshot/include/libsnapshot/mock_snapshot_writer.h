@@ -31,9 +31,6 @@ class MockSnapshotWriter : public ISnapshotWriter {
     // Return number of bytes the cow image occupies on disk.
     MOCK_METHOD(uint64_t, GetCowSize, (), (override));
 
-    // Returns true if AddCopy() operations are supported.
-    MOCK_METHOD(bool, SupportsCopyOperation, (), (const override));
-
     MOCK_METHOD(bool, EmitCopy, (uint64_t, uint64_t, uint64_t), (override));
     MOCK_METHOD(bool, EmitRawBlocks, (uint64_t, const void*, size_t), (override));
     MOCK_METHOD(bool, EmitXorBlocks, (uint32_t, const void*, size_t, uint32_t, uint16_t),
