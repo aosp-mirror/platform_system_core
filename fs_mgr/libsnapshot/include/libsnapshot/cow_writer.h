@@ -93,9 +93,6 @@ class ICowWriter {
     // Return number of bytes the cow image occupies on disk.
     virtual uint64_t GetCowSize() = 0;
 
-    // Returns true if AddCopy() operations are supported.
-    virtual bool SupportsCopyOperation() const { return true; }
-
     const CowOptions& options() { return options_; }
 
   protected:
@@ -170,8 +167,6 @@ class CowWriter : public ICowWriter {
     bool Finalize() override;
 
     uint64_t GetCowSize() override;
-
-    uint32_t GetCowVersion() { return header_.major_version; }
 
   protected:
     virtual bool EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) override;

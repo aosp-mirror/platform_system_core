@@ -65,9 +65,9 @@ TEST_F(CowTest, CopyContiguous) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
     const auto& header = reader.GetHeader();
-    ASSERT_EQ(header.magic, kCowMagicNumber);
-    ASSERT_EQ(header.major_version, kCowVersionMajor);
-    ASSERT_EQ(header.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
 
     CowFooter footer;
@@ -114,9 +114,9 @@ TEST_F(CowTest, ReadWrite) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
     const auto& header = reader.GetHeader();
-    ASSERT_EQ(header.magic, kCowMagicNumber);
-    ASSERT_EQ(header.major_version, kCowVersionMajor);
-    ASSERT_EQ(header.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
 
     CowFooter footer;
@@ -193,9 +193,9 @@ TEST_F(CowTest, ReadWriteXor) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
     const auto& header = reader.GetHeader();
-    ASSERT_EQ(header.magic, kCowMagicNumber);
-    ASSERT_EQ(header.major_version, kCowVersionMajor);
-    ASSERT_EQ(header.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
     ASSERT_EQ(header.block_size, options.block_size);
 
     CowFooter footer;

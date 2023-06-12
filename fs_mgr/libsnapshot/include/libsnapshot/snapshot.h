@@ -697,10 +697,6 @@ class SnapshotManager final : public ISnapshotManager {
             LockedFile* lock, const std::optional<std::string>& source_device,
             const std::string& partition_name, const SnapshotStatus& status,
             const SnapshotPaths& paths);
-    std::unique_ptr<ISnapshotWriter> OpenKernelSnapshotWriter(
-            LockedFile* lock, const std::optional<std::string>& source_device,
-            const std::string& partition_name, const SnapshotStatus& status,
-            const SnapshotPaths& paths);
 
     // Map the base device, COW devices, and snapshot device.
     bool MapPartitionWithSnapshot(LockedFile* lock, CreateLogicalPartitionParams params,

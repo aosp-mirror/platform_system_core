@@ -23,24 +23,19 @@
 #include "util.h"
 
 ConnectedDevicesStorage::ConnectedDevicesStorage() {
-    const std::string home_path = GetHomeDirPath();
-    if (home_path.empty()) {
-        return;
-    }
-
-    const std::string home_fastboot_path = home_path + kPathSeparator + ".fastboot";
-
-    if (!EnsureDirectoryExists(home_fastboot_path)) {
-        LOG(FATAL) << "Cannot create directory: " << home_fastboot_path;
-    }
+    home_fastboot_path_ = GetHomeDirPath() + kPathSeparator + ".fastboot";
+    devices_path_ = home_fastboot_path_ + kPathSeparator + "devices";
 
     // We're using a separate file for locking because the Windows LockFileEx does not
     // permit opening a file stream for the locked file, even within the same process. So,
     // we have to use fd or handle API to manipulate the storage files, which makes it
     // nearly impossible to fully rewrite a file content without having to recreate it.
     // Unfortunately, this is not an option during holding a lock.
-    devices_path_ = home_fastboot_path + kPathSeparator + "devices";
-    devices_lock_path_ = home_fastboot_path + kPathSeparator + "devices.lock";
+    devices_lock_path_ = home_fastboot_path_ + kPathSeparator + "devices.lock";
+}
+
+bool ConnectedDevicesStorage::Exists() const {
+    return FileExists(devices_path_);
 }
 
 void ConnectedDevicesStorage::WriteDevices(const FileLock&, const std::set<std::string>& devices) {
@@ -63,5 +58,8 @@ void ConnectedDevicesStorage::Clear(const FileLock&) {
 }
 
 FileLock ConnectedDevicesStorage::Lock() const {
+    if (!EnsureDirectoryExists(home_fastboot_path_)) {
+        LOG(FATAL) << "Cannot create directory: " << home_fastboot_path_;
+    }
     return FileLock(devices_lock_path_);
 }
