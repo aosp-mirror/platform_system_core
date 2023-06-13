@@ -47,6 +47,7 @@
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
 #include "snapuserd_readahead.h"
+#include "snapuserd_verify.h"
 
 namespace android {
 namespace snapshot {
@@ -95,36 +96,6 @@ struct MergeGroupState {
 
     MergeGroupState(MERGE_GROUP_STATE state, size_t n_ios)
         : merge_state_(state), num_ios_in_progress(n_ios) {}
-};
-
-class UpdateVerify {
-  public:
-    UpdateVerify(const std::string& misc_name);
-    void VerifyUpdatePartition();
-    bool CheckPartitionVerification();
-
-  private:
-    enum class UpdateVerifyState {
-        VERIFY_UNKNOWN,
-        VERIFY_FAILED,
-        VERIFY_SUCCESS,
-    };
-
-    std::string misc_name_;
-    UpdateVerifyState state_;
-    std::mutex m_lock_;
-    std::condition_variable m_cv_;
-
-    int kMinThreadsToVerify = 1;
-    int kMaxThreadsToVerify = 4;
-    uint64_t kThresholdSize = 512_MiB;
-    uint64_t kBlockSizeVerify = 1_MiB;
-
-    bool IsBlockAligned(uint64_t read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
-    void UpdatePartitionVerificationState(UpdateVerifyState state);
-    bool VerifyPartition(const std::string& partition_name, const std::string& dm_block_device);
-    bool VerifyBlocks(const std::string& partition_name, const std::string& dm_block_device,
-                      off_t offset, int skip_blocks, uint64_t dev_sz);
 };
 
 class Worker {
@@ -308,7 +279,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     MERGE_GROUP_STATE ProcessMergingBlock(uint64_t new_block, void* buffer);
 
     bool IsIouringSupported();
-    bool CheckPartitionVerification() { return update_verify_->CheckPartitionVerification(); }
+    bool CheckPartitionVerification();
 
   private:
     bool ReadMetadata();
