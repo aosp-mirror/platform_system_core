@@ -174,12 +174,13 @@ cc_library_static {
         "libsnapshot_cow_defaults",
     ],
     srcs: [
-        "libsnapshot_cow/cow_decompress.cpp",
-        "libsnapshot_cow/cow_reader.cpp",
-        "libsnapshot_cow/cow_writer.cpp",
-        "libsnapshot_cow/cow_format.cpp",
         "libsnapshot_cow/cow_compress.cpp",
+        "libsnapshot_cow/cow_decompress.cpp",
+        "libsnapshot_cow/cow_format.cpp",
+        "libsnapshot_cow/cow_reader.cpp",
         "libsnapshot_cow/parser_v2.cpp",
+        "libsnapshot_cow/writer_base.cpp",
+        "libsnapshot_cow/writer_v2.cpp",
     ],
     host_supported: true,
     recovery_available: true,
@@ -371,7 +372,7 @@ cc_test {
         "libsnapshot_cow_defaults",
     ],
     srcs: [
-        "libsnapshot_cow/cow_api_test.cpp",
+        "libsnapshot_cow/test_v2.cpp",
     ],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
