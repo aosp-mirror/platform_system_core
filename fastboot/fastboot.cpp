@@ -2231,7 +2231,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
                                       {"version", no_argument, 0, 0},
                                       {0, 0, 0, 0}};
 
-    serial = getenv("ANDROID_SERIAL");
+    serial = getenv("FASTBOOT_DEVICE");
+    if (!serial)
+        serial = getenv("ANDROID_SERIAL");
 
     int c;
     while ((c = getopt_long(argc, argv, "a::hls:S:vw", longopts, &longindex)) != -1) {
