@@ -31,6 +31,10 @@ static constexpr uint32_t kCowVersionManifest = 2;
 static constexpr uint32_t kMinCowVersion = 1;
 static constexpr uint32_t kMaxCowVersion = 2;
 
+// Normally, this should be kMaxCowVersion. When a new version is under testing
+// it may be the previous value of kMaxCowVersion.
+static constexpr uint32_t kDefaultCowVersion = 2;
+
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
 //
