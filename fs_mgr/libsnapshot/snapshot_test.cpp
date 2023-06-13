@@ -1220,13 +1220,13 @@ class SnapshotUpdateTest : public SnapshotTest {
         SHA256_CTX ctx;
         SHA256_Init(&ctx);
 
-        if (!writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks()) {
             LOG(ERROR) << "CowWriter must specify maximum number of blocks";
             return false;
         }
-        const auto num_blocks = writer->options().max_blocks.value();
+        const auto num_blocks = writer->GetMaxBlocks().value();
 
-        const auto block_size = writer->options().block_size;
+        const auto block_size = writer->GetBlockSize();
         std::string block(block_size, '\0');
         for (uint64_t i = 0; i < num_blocks; i++) {
             if (!ReadFully(rand, block.data(), block.size())) {
@@ -1254,13 +1254,13 @@ class SnapshotUpdateTest : public SnapshotTest {
         if (auto res = MapUpdateSnapshot(name, &writer); !res) {
             return res;
         }
-        if (!writer->options().max_blocks || !*writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks() || !*writer->GetMaxBlocks()) {
             return AssertionFailure() << "No max blocks set for " << name << " writer";
         }
 
-        uint64_t src_block = (old_size / writer->options().block_size) - 1;
+        uint64_t src_block = (old_size / writer->GetBlockSize()) - 1;
         uint64_t dst_block = 0;
-        uint64_t max_blocks = *writer->options().max_blocks;
+        uint64_t max_blocks = *writer->GetMaxBlocks();
         while (dst_block < max_blocks && dst_block < src_block) {
             if (!writer->AddCopy(dst_block, src_block)) {
                 return AssertionFailure() << "Unable to add copy for " << name << " for blocks "
