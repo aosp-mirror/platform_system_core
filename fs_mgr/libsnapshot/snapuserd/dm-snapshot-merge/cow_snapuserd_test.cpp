@@ -122,6 +122,7 @@ class CowSnapuserdTest final {
     void SimulateDaemonRestart();
     void StartMerge();
 
+    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
     void CreateCowDevice();
     void CreateCowDeviceOrderedOps();
     void CreateCowDeviceOrderedOpsInverted();
@@ -164,6 +165,7 @@ class CowSnapuserdMetadataTest final {
 
   private:
     void InitMetadata();
+    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
     void CreateCowDevice();
     void CreateCowPartialFilledArea();
 
@@ -258,6 +260,19 @@ void CowSnapuserdTest::StartSnapuserdDaemon() {
     }
 }
 
+std::unique_ptr<ICowWriter> CowSnapuserdTest::CreateCowDeviceInternal() {
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    CowOptions options;
+    options.compression = "gz";
+
+    unique_fd fd(cow_system_->fd);
+    cow_system_->fd = -1;
+
+    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+}
+
 void CowSnapuserdTest::ReadLastBlock() {
     unique_fd rnd_fd;
     total_base_size_ = BLOCK_SZ * 2;
@@ -280,9 +295,6 @@ void CowSnapuserdTest::ReadLastBlock() {
     base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
     ASSERT_TRUE(base_loop_->valid());
 
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
-
     std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(total_base_size_);
     loff_t offset = 0;
 
@@ -294,16 +306,13 @@ void CowSnapuserdTest::ReadLastBlock() {
         offset += BLOCK_SZ;
     }
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+    ASSERT_TRUE(writer->AddRawBlocks(0, random_buffer_1_.get(), BLOCK_SZ));
+    ASSERT_TRUE(writer->AddRawBlocks(1, (char*)random_buffer_1_.get() + BLOCK_SZ, BLOCK_SZ));
 
-    ASSERT_TRUE(writer.AddRawBlocks(0, random_buffer_1_.get(), BLOCK_SZ));
-    ASSERT_TRUE(writer.AddRawBlocks(1, (char*)random_buffer_1_.get() + BLOCK_SZ, BLOCK_SZ));
-
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
 
     SetDeviceControlName();
 
@@ -381,22 +390,16 @@ void CowSnapuserdTest::ReadSnapshotDeviceAndValidate() {
 }
 
 void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
     size_t x = num_blocks;
     size_t blk_src_copy = 0;
 
     // Create overlapping copy operations
     while (1) {
-        ASSERT_TRUE(writer.AddCopy(blk_src_copy, blk_src_copy + 1));
+        ASSERT_TRUE(writer->AddCopy(blk_src_copy, blk_src_copy + 1));
         x -= 1;
         if (x == 1) {
             break;
@@ -405,7 +408,7 @@ void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
     }
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
 
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
@@ -433,22 +436,16 @@ void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
 }
 
 void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_1() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
     size_t x = num_blocks;
     size_t blk_src_copy = num_blocks - 1;
 
     // Create overlapping copy operations
     while (1) {
-        ASSERT_TRUE(writer.AddCopy(blk_src_copy + 1, blk_src_copy));
+        ASSERT_TRUE(writer->AddCopy(blk_src_copy + 1, blk_src_copy));
         x -= 1;
         if (x == 0) {
             ASSERT_EQ(blk_src_copy, 0);
@@ -458,7 +455,7 @@ void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_1() {
     }
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
 
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
@@ -468,10 +465,11 @@ void CowSnapuserdTest::CreateCowDeviceWithCopyOverlap_1() {
               true);
 
     // Merged operations
-    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), options.block_size, 0),
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), writer->GetBlockSize(),
+                                               0),
               true);
     ASSERT_EQ(android::base::ReadFullyAtOffset(
-                      base_fd_, (char*)orig_buffer_.get() + options.block_size, size_, 0),
+                      base_fd_, (char*)orig_buffer_.get() + writer->GetBlockSize(), size_, 0),
               true);
 }
 
@@ -479,8 +477,8 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOpsInverted() {
     unique_fd rnd_fd;
     loff_t offset = 0;
 
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
     rnd_fd.reset(open("/dev/random", O_RDONLY));
     ASSERT_TRUE(rnd_fd > 0);
@@ -495,13 +493,7 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOpsInverted() {
         offset += 1_MiB;
     }
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
     size_t blk_end_copy = num_blocks * 3;
     size_t source_blk = num_blocks - 1;
     size_t blk_src_copy = blk_end_copy - 1;
@@ -509,7 +501,7 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOpsInverted() {
 
     size_t x = num_blocks;
     while (1) {
-        ASSERT_TRUE(writer.AddCopy(source_blk, blk_src_copy));
+        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
         x -= 1;
         if (x == 0) {
             break;
@@ -519,12 +511,12 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOpsInverted() {
     }
 
     for (size_t i = num_blocks; i > 0; i--) {
-        ASSERT_TRUE(writer.AddXorBlocks(num_blocks + i - 1,
-                                        &random_buffer_1_.get()[options.block_size * (i - 1)],
-                                        options.block_size, 2 * num_blocks + i - 1, xor_offset));
+        ASSERT_TRUE(writer->AddXorBlocks(
+                num_blocks + i - 1, &random_buffer_1_.get()[writer->GetBlockSize() * (i - 1)],
+                writer->GetBlockSize(), 2 * num_blocks + i - 1, xor_offset));
     }
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
     // Read the entire base device
@@ -542,8 +534,8 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOps() {
     unique_fd rnd_fd;
     loff_t offset = 0;
 
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
     rnd_fd.reset(open("/dev/random", O_RDONLY));
     ASSERT_TRUE(rnd_fd > 0);
@@ -559,20 +551,14 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOps() {
     }
     memset(random_buffer_1_.get(), 0, size_);
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
     size_t x = num_blocks;
     size_t source_blk = 0;
     size_t blk_src_copy = 2 * num_blocks;
     uint16_t xor_offset = 5;
 
     while (1) {
-        ASSERT_TRUE(writer.AddCopy(source_blk, blk_src_copy));
+        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
 
         x -= 1;
         if (x == 0) {
@@ -582,10 +568,10 @@ void CowSnapuserdTest::CreateCowDeviceOrderedOps() {
         blk_src_copy += 1;
     }
 
-    ASSERT_TRUE(writer.AddXorBlocks(num_blocks, random_buffer_1_.get(), size_, 2 * num_blocks,
-                                    xor_offset));
+    ASSERT_TRUE(writer->AddXorBlocks(num_blocks, random_buffer_1_.get(), size_, 2 * num_blocks,
+                                     xor_offset));
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
     // Read the entire base device
@@ -603,8 +589,8 @@ void CowSnapuserdTest::CreateCowDevice() {
     unique_fd rnd_fd;
     loff_t offset = 0;
 
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
     rnd_fd.reset(open("/dev/random", O_RDONLY));
     ASSERT_TRUE(rnd_fd > 0);
@@ -619,13 +605,7 @@ void CowSnapuserdTest::CreateCowDevice() {
         offset += 1_MiB;
     }
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
     size_t blk_end_copy = num_blocks * 2;
     size_t source_blk = num_blocks - 1;
     size_t blk_src_copy = blk_end_copy - 1;
@@ -639,11 +619,11 @@ void CowSnapuserdTest::CreateCowDevice() {
     for (int i = 0; i < num_blocks; i++) {
         sequence[num_blocks + i] = 5 * num_blocks - 1 - i;
     }
-    ASSERT_TRUE(writer.AddSequenceData(2 * num_blocks, sequence));
+    ASSERT_TRUE(writer->AddSequenceData(2 * num_blocks, sequence));
 
     size_t x = num_blocks;
     while (1) {
-        ASSERT_TRUE(writer.AddCopy(source_blk, blk_src_copy));
+        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
         x -= 1;
         if (x == 0) {
             break;
@@ -655,24 +635,24 @@ void CowSnapuserdTest::CreateCowDevice() {
     source_blk = num_blocks;
     blk_src_copy = blk_end_copy;
 
-    ASSERT_TRUE(writer.AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
 
     size_t blk_zero_copy_start = source_blk + num_blocks;
     size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
 
-    ASSERT_TRUE(writer.AddZeroBlocks(blk_zero_copy_start, num_blocks));
+    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
 
     size_t blk_random2_replace_start = blk_zero_copy_end;
 
-    ASSERT_TRUE(writer.AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
+    ASSERT_TRUE(writer->AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
 
     size_t blk_xor_start = blk_random2_replace_start + num_blocks;
     size_t xor_offset = BLOCK_SZ / 2;
-    ASSERT_TRUE(writer.AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
-                                    xor_offset));
+    ASSERT_TRUE(writer->AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
+                                     xor_offset));
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
     // Construct the buffer required for validation
     orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
     std::string zero_buffer(size_, 0);
@@ -902,29 +882,36 @@ void CowSnapuserdTest::MergeInterrupt() {
     ASSERT_TRUE(Merge());
 }
 
-void CowSnapuserdMetadataTest::CreateCowPartialFilledArea() {
+std::unique_ptr<ICowWriter> CowSnapuserdMetadataTest::CreateCowDeviceInternal() {
     std::string path = android::base::GetExecutableDirectory();
     cow_system_ = std::make_unique<TemporaryFile>(path);
 
     CowOptions options;
     options.compression = "gz";
-    CowWriter writer(options);
 
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
+    unique_fd fd(cow_system_->fd);
+    cow_system_->fd = -1;
+
+    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+}
+
+void CowSnapuserdMetadataTest::CreateCowPartialFilledArea() {
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
     // Area 0 is completely filled with 256 exceptions
     for (int i = 0; i < 256; i++) {
-        ASSERT_TRUE(writer.AddCopy(i, 256 + i));
+        ASSERT_TRUE(writer->AddCopy(i, 256 + i));
     }
 
     // Area 1 is partially filled with 2 copy ops and 10 zero ops
-    ASSERT_TRUE(writer.AddCopy(500, 1000));
-    ASSERT_TRUE(writer.AddCopy(501, 1001));
+    ASSERT_TRUE(writer->AddCopy(500, 1000));
+    ASSERT_TRUE(writer->AddCopy(501, 1001));
 
-    ASSERT_TRUE(writer.AddZeroBlocks(300, 10));
+    ASSERT_TRUE(writer->AddZeroBlocks(300, 10));
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
 }
 
 void CowSnapuserdMetadataTest::ValidatePartialFilledArea() {
@@ -956,8 +943,8 @@ void CowSnapuserdMetadataTest::CreateCowDevice() {
     unique_fd rnd_fd;
     loff_t offset = 0;
 
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
 
     rnd_fd.reset(open("/dev/random", O_RDONLY));
     ASSERT_TRUE(rnd_fd > 0);
@@ -972,50 +959,44 @@ void CowSnapuserdMetadataTest::CreateCowDevice() {
         offset += 1_MiB;
     }
 
-    CowOptions options;
-    options.compression = "gz";
-    CowWriter writer(options);
-
-    ASSERT_TRUE(writer.Initialize(cow_system_->fd));
-
-    size_t num_blocks = size_ / options.block_size;
+    size_t num_blocks = size_ / writer->GetBlockSize();
 
     // Overlapping region. This has to be split
     // into two batch operations
-    ASSERT_TRUE(writer.AddCopy(23, 20));
-    ASSERT_TRUE(writer.AddCopy(22, 19));
-    ASSERT_TRUE(writer.AddCopy(21, 18));
-    ASSERT_TRUE(writer.AddCopy(20, 17));
-    ASSERT_TRUE(writer.AddCopy(19, 16));
-    ASSERT_TRUE(writer.AddCopy(18, 15));
+    ASSERT_TRUE(writer->AddCopy(23, 20));
+    ASSERT_TRUE(writer->AddCopy(22, 19));
+    ASSERT_TRUE(writer->AddCopy(21, 18));
+    ASSERT_TRUE(writer->AddCopy(20, 17));
+    ASSERT_TRUE(writer->AddCopy(19, 16));
+    ASSERT_TRUE(writer->AddCopy(18, 15));
 
     // Contiguous region but blocks in ascending order
     // Daemon has to ensure that these blocks are merged
     // in a batch
-    ASSERT_TRUE(writer.AddCopy(50, 75));
-    ASSERT_TRUE(writer.AddCopy(51, 76));
-    ASSERT_TRUE(writer.AddCopy(52, 77));
-    ASSERT_TRUE(writer.AddCopy(53, 78));
+    ASSERT_TRUE(writer->AddCopy(50, 75));
+    ASSERT_TRUE(writer->AddCopy(51, 76));
+    ASSERT_TRUE(writer->AddCopy(52, 77));
+    ASSERT_TRUE(writer->AddCopy(53, 78));
 
     // Dis-contiguous region
-    ASSERT_TRUE(writer.AddCopy(110, 130));
-    ASSERT_TRUE(writer.AddCopy(105, 125));
-    ASSERT_TRUE(writer.AddCopy(100, 120));
+    ASSERT_TRUE(writer->AddCopy(110, 130));
+    ASSERT_TRUE(writer->AddCopy(105, 125));
+    ASSERT_TRUE(writer->AddCopy(100, 120));
 
     // Overlap
-    ASSERT_TRUE(writer.AddCopy(25, 30));
-    ASSERT_TRUE(writer.AddCopy(30, 31));
+    ASSERT_TRUE(writer->AddCopy(25, 30));
+    ASSERT_TRUE(writer->AddCopy(30, 31));
 
     size_t source_blk = num_blocks;
 
-    ASSERT_TRUE(writer.AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
 
     size_t blk_zero_copy_start = source_blk + num_blocks;
 
-    ASSERT_TRUE(writer.AddZeroBlocks(blk_zero_copy_start, num_blocks));
+    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
 
     // Flush operations
-    ASSERT_TRUE(writer.Finalize());
+    ASSERT_TRUE(writer->Finalize());
 }
 
 void CowSnapuserdMetadataTest::InitMetadata() {
