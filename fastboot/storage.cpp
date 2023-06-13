@@ -18,6 +18,7 @@
 #include <android-base/logging.h>
 
 #include <fstream>
+#include <iterator>
 
 #include "storage.h"
 #include "util.h"
