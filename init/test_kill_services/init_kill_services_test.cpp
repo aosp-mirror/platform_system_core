@@ -27,10 +27,13 @@ using ::android::base::WaitForProperty;
 using std::literals::chrono_literals::operator""s;
 
 void ExpectKillingServiceRecovers(const std::string& service_name) {
+    LOG(INFO) << "before we say hi to " << service_name << ", I can't have apexd around!";
+
     // b/280514080 - servicemanager will restart apexd, and apexd will restart the
     // system when crashed. This is fine as the device recovers, but it causes
     // flakes in this test.
-    ASSERT_TRUE(WaitForProperty("init.svc.apexd", "stopped", 60s)) << "apexd won't stop";
+    ASSERT_TRUE(WaitForProperty("init.svc.apexd", "stopped", 60s))
+            << (system("cat /dev/binderfs/binder_logs/state"), "apexd won't stop");
 
     LOG(INFO) << "hello " << service_name << "!";
     const std::string status_prop = "init.svc." + service_name;
