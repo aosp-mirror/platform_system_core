@@ -46,6 +46,8 @@
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
+#include "snapuserd_readahead.h"
+#include "snapuserd_verify.h"
 
 namespace android {
 namespace snapshot {
@@ -94,112 +96,6 @@ struct MergeGroupState {
 
     MergeGroupState(MERGE_GROUP_STATE state, size_t n_ios)
         : merge_state_(state), num_ios_in_progress(n_ios) {}
-};
-
-class ReadAhead {
-  public:
-    ReadAhead(const std::string& cow_device, const std::string& backing_device,
-              const std::string& misc_name, std::shared_ptr<SnapshotHandler> snapuserd);
-    bool RunThread();
-
-  private:
-    void InitializeRAIter();
-    bool RAIterDone();
-    void RAIterNext();
-    void RAResetIter(uint64_t num_blocks);
-    const CowOperation* GetRAOpIter();
-
-    void InitializeBuffer();
-    bool InitReader();
-    bool InitializeFds();
-
-    void CloseFds() { backing_store_fd_ = {}; }
-
-    bool ReadAheadIOStart();
-    int PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
-                             std::vector<uint64_t>& blocks,
-                             std::vector<const CowOperation*>& xor_op_vec);
-    bool ReconstructDataFromCow();
-    void CheckOverlap(const CowOperation* cow_op);
-
-    bool ReadAheadAsyncIO();
-    bool ReapIoCompletions(int pending_ios_to_complete);
-    bool ReadXorData(size_t block_index, size_t xor_op_index,
-                     std::vector<const CowOperation*>& xor_op_vec);
-    void ProcessXorData(size_t& block_xor_index, size_t& xor_index,
-                        std::vector<const CowOperation*>& xor_op_vec, void* buffer,
-                        loff_t& buffer_offset);
-    void UpdateScratchMetadata();
-
-    bool ReadAheadSyncIO();
-    bool InitializeIouring();
-    void FinalizeIouring();
-
-    void* read_ahead_buffer_;
-    void* metadata_buffer_;
-
-    std::unique_ptr<ICowOpIter> cowop_iter_;
-
-    std::string cow_device_;
-    std::string backing_store_device_;
-    std::string misc_name_;
-
-    unique_fd cow_fd_;
-    unique_fd backing_store_fd_;
-
-    std::shared_ptr<SnapshotHandler> snapuserd_;
-    std::unique_ptr<CowReader> reader_;
-
-    std::unordered_set<uint64_t> dest_blocks_;
-    std::unordered_set<uint64_t> source_blocks_;
-    bool overlap_;
-    std::vector<uint64_t> blocks_;
-    int total_blocks_merged_ = 0;
-    std::unique_ptr<uint8_t[]> ra_temp_buffer_;
-    std::unique_ptr<uint8_t[]> ra_temp_meta_buffer_;
-    BufferSink bufsink_;
-
-    uint64_t total_ra_blocks_completed_ = 0;
-    bool read_ahead_async_ = false;
-    // Queue depth of 8 seems optimal. We don't want
-    // to have a huge depth as it may put more memory pressure
-    // on the kernel worker threads given that we use
-    // IOSQE_ASYNC flag - ASYNC flags can potentially
-    // result in EINTR; Since we don't restart
-    // syscalls and fallback to synchronous I/O, we
-    // don't want huge queue depth
-    int queue_depth_ = 8;
-    std::unique_ptr<struct io_uring> ring_;
-};
-
-class UpdateVerify {
-  public:
-    UpdateVerify(const std::string& misc_name);
-    void VerifyUpdatePartition();
-    bool CheckPartitionVerification();
-
-  private:
-    enum class UpdateVerifyState {
-        VERIFY_UNKNOWN,
-        VERIFY_FAILED,
-        VERIFY_SUCCESS,
-    };
-
-    std::string misc_name_;
-    UpdateVerifyState state_;
-    std::mutex m_lock_;
-    std::condition_variable m_cv_;
-
-    int kMinThreadsToVerify = 1;
-    int kMaxThreadsToVerify = 4;
-    uint64_t kThresholdSize = 512_MiB;
-    uint64_t kBlockSizeVerify = 1_MiB;
-
-    bool IsBlockAligned(uint64_t read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
-    void UpdatePartitionVerificationState(UpdateVerifyState state);
-    bool VerifyPartition(const std::string& partition_name, const std::string& dm_block_device);
-    bool VerifyBlocks(const std::string& partition_name, const std::string& dm_block_device,
-                      off_t offset, int skip_blocks, uint64_t dev_sz);
 };
 
 class Worker {
@@ -383,7 +279,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     MERGE_GROUP_STATE ProcessMergingBlock(uint64_t new_block, void* buffer);
 
     bool IsIouringSupported();
-    bool CheckPartitionVerification() { return update_verify_->CheckPartitionVerification(); }
+    bool CheckPartitionVerification();
 
   private:
     bool ReadMetadata();
