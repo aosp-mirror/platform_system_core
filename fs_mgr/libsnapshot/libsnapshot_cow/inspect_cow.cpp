@@ -57,7 +57,7 @@ static void ShowBad(CowReader& reader, const struct CowOperation* op) {
     size_t count;
     auto buffer = std::make_unique<uint8_t[]>(op->data_length);
 
-    if (!reader.GetRawBytes(op->source, buffer.get(), op->data_length, &count)) {
+    if (!reader.GetRawBytes(op, buffer.get(), op->data_length, &count)) {
         std::cerr << "Failed to read at all!\n";
     } else {
         std::cout << "The Block data is:\n";
@@ -199,7 +199,7 @@ static bool Inspect(const std::string& path) {
             std::vector<uint32_t> merge_op_blocks;
             size_t seq_len = op->data_length / sizeof(uint32_t);
             merge_op_blocks.resize(seq_len);
-            if (!reader.GetRawBytes(op->source, merge_op_blocks.data(), op->data_length, &read)) {
+            if (!reader.GetRawBytes(op, merge_op_blocks.data(), op->data_length, &read)) {
                 PLOG(ERROR) << "Failed to read sequence op!";
                 return false;
             }
