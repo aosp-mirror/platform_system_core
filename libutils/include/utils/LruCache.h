@@ -161,12 +161,12 @@ public:
 // Implementation is here, because it's fully templated
 template <typename TKey, typename TValue>
 LruCache<TKey, TValue>::LruCache(uint32_t maxCapacity)
-    : mSet(new LruCacheSet())
-    , mListener(nullptr)
-    , mOldest(nullptr)
-    , mYoungest(nullptr)
-    , mMaxCapacity(maxCapacity)
-    , mNullValue(0) {
+    : mSet(new LruCacheSet()),
+      mListener(nullptr),
+      mOldest(nullptr),
+      mYoungest(nullptr),
+      mMaxCapacity(maxCapacity),
+      mNullValue{} {
     mSet->max_load_factor(1.0);
 };
 
