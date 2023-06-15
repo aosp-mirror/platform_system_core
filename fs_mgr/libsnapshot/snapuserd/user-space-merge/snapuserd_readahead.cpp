@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "snapuserd_readahead.h"
+
 #include "snapuserd_core.h"
 
 namespace android {
