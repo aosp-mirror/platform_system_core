@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-#include "snapuserd_core.h"
+#include "snapuserd_verify.h"
 
 #include <android-base/chrono_utils.h>
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
+
+#include "snapuserd_core.h"
 
 namespace android {
 namespace snapshot {
