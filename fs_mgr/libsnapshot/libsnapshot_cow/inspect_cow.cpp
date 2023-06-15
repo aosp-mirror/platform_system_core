@@ -26,6 +26,7 @@
 #include <android-base/unique_fd.h>
 #include <gflags/gflags.h>
 #include <libsnapshot/cow_reader.h>
+#include "parser_v2.h"
 
 DEFINE_bool(silent, false, "Run silently");
 DEFINE_bool(decompress, false, "Attempt to decompress data ops");
@@ -36,9 +37,12 @@ DEFINE_bool(show_merged, false,
             "If show_ops is true, and order is merge or reverse-merge, include merged ops");
 DEFINE_bool(verify_merge_sequence, false, "Verify merge order sequencing");
 DEFINE_bool(show_merge_sequence, false, "Show merge order sequence");
+DEFINE_bool(show_raw_ops, false, "Show raw ops directly from the underlying parser");
 
 namespace android {
 namespace snapshot {
+
+using android::base::borrowed_fd;
 
 void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,
               unsigned int, const char* message) {
@@ -64,6 +68,38 @@ static void ShowBad(CowReader& reader, const struct CowOperation* op) {
         if (op->data_length >= sizeof(CowOperation)) {
             std::cout << "The start, as an op, would be " << *(CowOperation*)buffer.get() << "\n";
         }
+    }
+}
+
+static bool ShowRawOpStreamV2(borrowed_fd fd, const CowHeader& header) {
+    CowParserV2 parser;
+    if (!parser.Parse(fd, header)) {
+        LOG(ERROR) << "v2 parser failed";
+        return false;
+    }
+    for (const auto& op : *parser.ops()) {
+        std::cout << op << "\n";
+        if (auto iter = parser.data_loc()->find(op.new_block); iter != parser.data_loc()->end()) {
+            std::cout << "    data loc: " << iter->second << "\n";
+        }
+    }
+    return true;
+}
+
+static bool ShowRawOpStream(borrowed_fd fd) {
+    CowHeader header;
+    if (!ReadCowHeader(fd, &header)) {
+        LOG(ERROR) << "parse header failed";
+        return false;
+    }
+
+    switch (header.prefix.major_version) {
+        case 1:
+        case 2:
+            return ShowRawOpStreamV2(fd, header);
+        default:
+            LOG(ERROR) << "unknown COW version: " << header.prefix.major_version;
+            return false;
     }
 }
 
@@ -127,6 +163,21 @@ static bool Inspect(const std::string& path) {
     }
 
     std::string buffer(header.block_size, '\0');
+
+    if (!FLAGS_silent && FLAGS_show_raw_ops) {
+        std::cout << "\n";
+        std::cout << "Listing raw op stream:\n";
+        std::cout << "----------------------\n";
+        if (!ShowRawOpStream(fd)) {
+            return false;
+        }
+    }
+
+    if (!FLAGS_silent && FLAGS_show_ops) {
+        std::cout << "\n";
+        std::cout << "Listing op stream:\n";
+        std::cout << "------------------\n";
+    }
 
     bool success = true;
     uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
