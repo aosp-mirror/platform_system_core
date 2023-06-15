@@ -300,6 +300,8 @@ bool GetVendorMappingVersion(std::string* plat_vers) {
 }
 
 constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
+constexpr const char kMicrodroidPrecompiledSepolicy[] =
+        "/system/etc/selinux/microdroid_precompiled_sepolicy";
 
 bool IsSplitPolicyDevice() {
     return access(plat_policy_cil_file, R_OK) != -1;
@@ -497,14 +499,19 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
 
 bool OpenMonolithicPolicy(PolicyFile* policy_file) {
     static constexpr char kSepolicyFile[] = "/sepolicy";
+    // In Microdroid the precompiled sepolicy is located on /system, since there is no vendor code.
+    // TODO(b/287206497): refactor once we start conditionally compiling init for Microdroid.
+    std::string monolithic_policy_file = access(kMicrodroidPrecompiledSepolicy, R_OK) == 0
+                                                 ? kMicrodroidPrecompiledSepolicy
+                                                 : kSepolicyFile;
 
-    LOG(VERBOSE) << "Opening SELinux policy from monolithic file";
-    policy_file->fd.reset(open(kSepolicyFile, O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+    LOG(INFO) << "Opening SELinux policy from monolithic file " << monolithic_policy_file;
+    policy_file->fd.reset(open(monolithic_policy_file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (policy_file->fd < 0) {
         PLOG(ERROR) << "Failed to open monolithic SELinux policy";
         return false;
     }
-    policy_file->path = kSepolicyFile;
+    policy_file->path = monolithic_policy_file;
     return true;
 }
 
