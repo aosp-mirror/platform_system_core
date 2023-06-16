@@ -168,6 +168,7 @@ class CowReader final : public ICowReader {
     bool ParseOps(std::optional<uint64_t> label);
     bool PrepMergeOps();
     uint64_t FindNumCopyops();
+    uint8_t GetCompressionType(const CowOperation* op);
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
