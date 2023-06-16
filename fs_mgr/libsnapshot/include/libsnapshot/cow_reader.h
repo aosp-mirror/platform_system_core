@@ -73,7 +73,19 @@ class ICowReader {
     // The operation pointer must derive from ICowOpIter::Get().
     virtual ssize_t ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
                              size_t ignore_bytes = 0) = 0;
+
+    // Get the absolute source offset, in bytes, of a CowOperation. Returns
+    // false if the operation does not read from source partitions.
+    virtual bool GetSourceOffset(const CowOperation* op, uint64_t* source_offset) = 0;
 };
+
+static constexpr uint64_t GetBlockFromOffset(const CowHeader& header, uint64_t offset) {
+    return offset / header.block_size;
+}
+
+static constexpr uint64_t GetBlockRelativeOffset(const CowHeader& header, uint64_t offset) {
+    return offset % header.block_size;
+}
 
 // Iterate over a sequence of COW operations. The iterator is bidirectional.
 class ICowOpIter {
@@ -119,6 +131,7 @@ class CowReader final : public ICowReader {
     bool VerifyMergeOps() override;
     bool GetFooter(CowFooter* footer) override;
     bool GetLastLabel(uint64_t* label) override;
+    bool GetSourceOffset(const CowOperation* op, uint64_t* source_offset) override;
 
     // Create a CowOpIter object which contains footer_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
