@@ -45,6 +45,7 @@
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot_stats.h>
 #include "device_info.h"
+#include "libsnapshot_cow/writer_v2.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
 #include "snapshot_reader.h"
@@ -3202,39 +3203,20 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     CHECK(current_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME &&
           target_metadata->GetBlockDevicePartitionName(0) == LP_METADATA_DEFAULT_PARTITION_NAME);
 
-    std::map<std::string, SnapshotStatus> all_snapshot_status;
-
-    // In case of error, automatically delete devices that are created along the way.
-    // Note that "lock" is destroyed after "created_devices", so it is safe to use |lock| for
-    // these devices.
-    AutoDeviceList created_devices;
-
     const auto& dap_metadata = manifest.dynamic_partition_metadata();
-    CowOptions options;
-    CowWriter writer(options);
-    bool cow_format_support = true;
-    if (dap_metadata.cow_version() < writer.GetCowVersion()) {
-        cow_format_support = false;
-    }
-
-    LOG(INFO) << " dap_metadata.cow_version(): " << dap_metadata.cow_version()
-              << " writer.GetCowVersion(): " << writer.GetCowVersion();
-
-    // Deduce supported features.
-    bool userspace_snapshots = CanUseUserspaceSnapshots();
-    bool legacy_compression = GetLegacyCompressionEnabledProperty();
 
     std::string vabc_disable_reason;
     if (!dap_metadata.vabc_enabled()) {
         vabc_disable_reason = "not enabled metadata";
     } else if (device_->IsRecovery()) {
         vabc_disable_reason = "recovery";
-    } else if (!cow_format_support) {
-        vabc_disable_reason = "cow format not supported";
     } else if (!KernelSupportsCompressedSnapshots()) {
         vabc_disable_reason = "kernel missing userspace block device support";
     }
 
+    // Deduce supported features.
+    bool userspace_snapshots = CanUseUserspaceSnapshots();
+    bool legacy_compression = GetLegacyCompressionEnabledProperty();
     if (!vabc_disable_reason.empty()) {
         if (userspace_snapshots) {
             LOG(INFO) << "Userspace snapshots disabled: " << vabc_disable_reason;
@@ -3244,6 +3226,16 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
         userspace_snapshots = false;
         legacy_compression = false;
+    }
+
+    if (legacy_compression || userspace_snapshots) {
+        if (dap_metadata.cow_version() < kMinCowVersion ||
+            dap_metadata.cow_version() > kMaxCowVersion) {
+            LOG(ERROR) << "Manifest cow version is out of bounds (got: "
+                       << dap_metadata.cow_version() << ", min: " << kMinCowVersion
+                       << ", max: " << kMaxCowVersion << ")";
+            return Return::Error();
+        }
     }
 
     const bool using_snapuserd = userspace_snapshots || legacy_compression;
@@ -3278,6 +3270,11 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         cow_creator.batched_writes = dap_metadata.vabc_feature_set().batch_writes();
     }
 
+    // In case of error, automatically delete devices that are created along the way.
+    // Note that "lock" is destroyed after "created_devices", so it is safe to use |lock| for
+    // these devices.
+    AutoDeviceList created_devices;
+    std::map<std::string, SnapshotStatus> all_snapshot_status;
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
     if (!ret.is_ok()) {
@@ -3561,8 +3558,8 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             }
             options.compression = it->second.compression_algorithm();
 
-            CowWriter writer(options);
-            if (!writer.Initialize(fd) || !writer.Finalize()) {
+            CowWriterV2 writer(options, std::move(fd));
+            if (!writer.Initialize(std::nullopt) || !writer.Finalize()) {
                 LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
                 return Return::Error();
             }
@@ -3651,12 +3648,13 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    if (status.using_snapuserd()) {
-        return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
-                                            status, paths);
+    if (!status.using_snapuserd()) {
+        LOG(ERROR) << "Can only create snapshot writers with userspace or compressed snapshots";
+        return nullptr;
     }
-    return OpenKernelSnapshotWriter(lock.get(), source_device, params.GetPartitionName(), status,
-                                    paths);
+
+    return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
+                                        status, paths);
 #endif
 }
 
@@ -3701,34 +3699,6 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
         LOG(ERROR) << "Could not create COW writer from " << cow_path;
         return nullptr;
     }
-
-    return writer;
-}
-
-std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenKernelSnapshotWriter(
-        LockedFile* lock, const std::optional<std::string>& source_device,
-        [[maybe_unused]] const std::string& partition_name, const SnapshotStatus& status,
-        const SnapshotPaths& paths) {
-    CHECK(lock);
-
-    CowOptions cow_options;
-    cow_options.max_blocks = {status.device_size() / cow_options.block_size};
-
-    auto writer = std::make_unique<OnlineKernelSnapshotWriter>(cow_options);
-
-    std::string path = paths.snapshot_device.empty() ? paths.target_device : paths.snapshot_device;
-    unique_fd fd(open(path.c_str(), O_RDWR | O_CLOEXEC));
-    if (fd < 0) {
-        PLOG(ERROR) << "open failed: " << path;
-        return nullptr;
-    }
-
-    if (source_device) {
-        writer->SetSourceDevice(*source_device);
-    }
-
-    uint64_t cow_size = status.cow_partition_size() + status.cow_file_size();
-    writer->SetSnapshotDevice(std::move(fd), cow_size);
 
     return writer;
 }

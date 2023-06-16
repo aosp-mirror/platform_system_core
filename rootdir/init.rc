@@ -295,7 +295,7 @@ on init
     write /proc/sys/kernel/randomize_va_space 2
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
-    write /proc/sys/net/unix/max_dgram_qlen 600
+    write /proc/sys/net/unix/max_dgram_qlen 2400
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -1003,6 +1003,11 @@ on post-fs-data
     # Must start before 'odsign', as odsign depends on *CLASSPATH variables
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
+
+    # Start ART's oneshot boot service to propagate boot experiment flags to
+    # dalvik.vm.*. This needs to be done before odsign since odrefresh uses and
+    # validates those properties against the signed cache-info.xml.
+    exec_start art_boot
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.

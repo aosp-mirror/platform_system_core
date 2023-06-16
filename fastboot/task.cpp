@@ -26,9 +26,9 @@
 #include "util.h"
 
 using namespace std::string_literals;
-FlashTask::FlashTask(const std::string& _slot, const std::string& _pname, const std::string& _fname,
-                     const bool apply_vbmeta)
-    : pname_(_pname), fname_(_fname), slot_(_slot), apply_vbmeta_(apply_vbmeta) {}
+FlashTask::FlashTask(const std::string& slot, const std::string& pname, const std::string& fname,
+                     const bool apply_vbmeta, const FlashingPlan* fp)
+    : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta), fp_(fp) {}
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
@@ -41,9 +41,17 @@ void FlashTask::Run() {
                 "And try again. If you are intentionally trying to "
                 "overwrite a fixed partition, use --force.");
         }
-        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_);
+        do_flash(partition.c_str(), fname_.c_str(), apply_vbmeta_, fp_);
     };
     do_for_partitions(pname_, slot_, flash, true);
+}
+
+std::string FlashTask::ToString() {
+    std::string apply_vbmeta_string = "";
+    if (apply_vbmeta_) {
+        apply_vbmeta_string = " --apply_vbmeta";
+    }
+    return "flash" + apply_vbmeta_string + " " + pname_ + " " + fname_;
 }
 
 std::string FlashTask::GetPartitionAndSlot() {
@@ -84,6 +92,10 @@ void RebootTask::Run() {
     }
 }
 
+std::string RebootTask::ToString() {
+    return "reboot " + reboot_target_;
+}
+
 FlashSuperLayoutTask::FlashSuperLayoutTask(const std::string& super_name,
                                            std::unique_ptr<SuperFlashHelper> helper,
                                            SparsePtr sparse_layout, uint64_t super_size)
@@ -105,6 +117,9 @@ void FlashSuperLayoutTask::Run() {
 
     // Send the data to the device.
     flash_partition_files(super_name_, files);
+}
+std::string FlashSuperLayoutTask::ToString() {
+    return "optimized-flash-super";
 }
 
 std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
@@ -214,11 +229,9 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
 
     for (const auto& task : tasks) {
         if (auto flash_task = task->AsFlashTask()) {
-            if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
-                auto partition = flash_task->GetPartitionAndSlot();
-                if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
-                    return nullptr;
-                }
+            auto partition = flash_task->GetPartitionAndSlot();
+            if (!helper->AddPartition(partition, flash_task->GetImageName(), false)) {
+                return nullptr;
             }
         }
     }
@@ -265,6 +278,9 @@ void UpdateSuperTask::Run() {
     }
     fp_->fb->RawCommand(command, "Updating super partition");
 }
+std::string UpdateSuperTask::ToString() {
+    return "update-super";
+}
 
 ResizeTask::ResizeTask(const FlashingPlan* fp, const std::string& pname, const std::string& size,
                        const std::string& slot)
@@ -279,10 +295,18 @@ void ResizeTask::Run() {
     do_for_partitions(pname_, slot_, resize_partition, false);
 }
 
+std::string ResizeTask::ToString() {
+    return "resize " + pname_;
+}
+
 DeleteTask::DeleteTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
 
 void DeleteTask::Run() {
     fp_->fb->DeletePartition(pname_);
+}
+
+std::string DeleteTask::ToString() {
+    return "delete " + pname_;
 }
 
 WipeTask::WipeTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
@@ -299,4 +323,8 @@ void WipeTask::Run() {
         return;
     }
     fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options);
+}
+
+std::string WipeTask::ToString() {
+    return "erase " + pname_;
 }
