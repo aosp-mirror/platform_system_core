@@ -628,8 +628,8 @@ bool Snapuserd::ReadMetadata() {
 bool Snapuserd::MmapMetadata() {
     const auto& header = reader_->GetHeader();
 
-    if (header.major_version >= 2 && header.buffer_size > 0) {
-        total_mapped_addr_length_ = header.header_size + BUFFER_REGION_DEFAULT_SIZE;
+    if (header.prefix.major_version >= 2 && header.buffer_size > 0) {
+        total_mapped_addr_length_ = header.prefix.header_size + BUFFER_REGION_DEFAULT_SIZE;
         read_ahead_feature_ = true;
     } else {
         // mmap the first 4k page - older COW format
@@ -823,7 +823,7 @@ bool Snapuserd::Start() {
 uint64_t Snapuserd::GetBufferMetadataOffset() {
     const auto& header = reader_->GetHeader();
 
-    size_t size = header.header_size + sizeof(BufferState);
+    size_t size = header.prefix.header_size + sizeof(BufferState);
     return size;
 }
 
@@ -845,7 +845,7 @@ size_t Snapuserd::GetBufferMetadataSize() {
 size_t Snapuserd::GetBufferDataOffset() {
     const auto& header = reader_->GetHeader();
 
-    return (header.header_size + GetBufferMetadataSize());
+    return (header.prefix.header_size + GetBufferMetadataSize());
 }
 
 /*
@@ -862,7 +862,7 @@ struct BufferState* Snapuserd::GetBufferState() {
     const auto& header = reader_->GetHeader();
 
     struct BufferState* ra_state =
-            reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.header_size);
+            reinterpret_cast<struct BufferState*>((char*)mapped_addr_ + header.prefix.header_size);
     return ra_state;
 }
 

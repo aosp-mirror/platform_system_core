@@ -124,7 +124,8 @@ class FlashAllTool {
 
 bool should_flash_in_userspace(const std::string& partition_name);
 bool is_userspace_fastboot();
-void do_flash(const char* pname, const char* fname, const bool apply_vbmeta);
+void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
+              const FlashingPlan* fp);
 void do_for_partitions(const std::string& part, const std::string& slot,
                        const std::function<void(const std::string&)>& func, bool force_slot);
 std::string find_item(const std::string& item);
@@ -143,7 +144,7 @@ std::unique_ptr<WipeTask> ParseWipeCommand(const FlashingPlan* fp,
                                            const std::vector<std::string>& parts);
 std::unique_ptr<Task> ParseFastbootInfoLine(const FlashingPlan* fp,
                                             const std::vector<std::string>& command);
-void AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
+bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
 std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
                                                      const std::vector<std::string>& file);
 

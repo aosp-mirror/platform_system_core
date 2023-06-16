@@ -24,13 +24,15 @@
 class ConnectedDevicesStorage {
   public:
     ConnectedDevicesStorage();
+
+    bool Exists() const;
     void WriteDevices(const FileLock&, const std::set<std::string>& devices);
     std::set<std::string> ReadDevices(const FileLock&);
     void Clear(const FileLock&);
-
     FileLock Lock() const;
 
   private:
+    std::string home_fastboot_path_;
     std::string devices_path_;
     std::string devices_lock_path_;
 };
