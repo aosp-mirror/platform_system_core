@@ -1,0 +1,58 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+cc_defaults {
+    name: "liblp_fuzz_defaults",
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    shared_libs: [
+        "liblp",
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libcutils",
+    ],
+    include_dirs: [
+        "system/core/fs_mgr/liblp",
+    ],
+    fuzz_config: {
+        cc: [
+            "android-media-fuzzing-reports@google.com",
+        ],
+        componentid: 59148,
+        hotlists: ["4593311"],
+        description: "The fuzzers target the APIs of all liblp modules",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped"
+    }
+}
+
+cc_fuzz {
+    name: "liblp_builder_fuzzer",
+    srcs: ["liblp_builder_fuzzer.cpp"],
+    defaults: ["liblp_fuzz_defaults"],
+}
+
+cc_fuzz {
+    name: "liblp_super_layout_builder_fuzzer",
+    srcs: ["liblp_super_layout_builder_fuzzer.cpp"],
+    defaults: ["liblp_fuzz_defaults"],
+}
