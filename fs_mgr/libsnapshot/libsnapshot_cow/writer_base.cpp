@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
+#include "snapshot_reader.h"
 
 // The info messages here are spammy, but as useful for update_engine. Disable
 // them when running on the host.
@@ -157,6 +158,37 @@ bool CowWriterBase::ValidateNewBlock(uint64_t new_block) {
         return false;
     }
     return true;
+}
+
+std::unique_ptr<ICowReader> CowWriterBase::OpenReader() {
+    unique_fd cow_fd(fcntl(fd_.get(), F_DUPFD | F_DUPFD_CLOEXEC, 0));
+    if (cow_fd < 0) {
+        PLOG(ERROR) << "CowWriterV2::OpenReander: dup COW device";
+        return nullptr;
+    }
+
+    auto cow = std::make_unique<CowReader>();
+    if (!cow->Parse(std::move(cow_fd))) {
+        LOG(ERROR) << "CowWriterV2::OpenReader: unable to read COW";
+        return nullptr;
+    }
+    return cow;
+}
+
+std::unique_ptr<chromeos_update_engine::FileDescriptor> CowWriterBase::OpenFileDescriptor(
+        const std::optional<std::string>& source_device) {
+    auto reader = OpenReader();
+    if (!reader) {
+        return nullptr;
+    }
+
+    std::optional<uint64_t> block_dev_size;
+    if (options_.max_blocks) {
+        block_dev_size = {*options_.max_blocks * options_.block_size};
+    }
+
+    return std::make_unique<CompressedSnapshotReader>(std::move(reader), source_device,
+                                                      block_dev_size);
 }
 
 }  // namespace snapshot
