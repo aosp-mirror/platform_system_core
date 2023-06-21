@@ -24,6 +24,7 @@
 #include <memory>
 #include <unordered_map>
 #include "android-base/strings.h"
+
 using android::base::Split;
 using testing::_;
 
@@ -58,6 +59,33 @@ static std::vector<std::unique_ptr<Task>> collectTasks(FlashingPlan* fp,
 std::unique_ptr<Task> ParseCommand(FlashingPlan* fp, std::string command) {
     std::vector<std::string> vec_command = android::base::Split(command, " ");
     return ParseFastbootInfoLine(fp, vec_command);
+}
+
+// tests if tasks_a is a superset of tasks_b. Used for checking to ensure all partitions flashed
+// from hardcoded image list is also flashed in new fastboot-info.txt
+static bool compareTaskList(std::vector<std::unique_ptr<Task>>& tasks_a,
+                            std::vector<std::unique_ptr<Task>>& tasks_b) {
+    std::set<std::string> list;
+    for (auto& task : tasks_a) {
+        list.insert(task->ToString());
+    }
+    for (auto& task : tasks_b) {
+        if (list.find(task->ToString()) == list.end()) {
+            std::cout << "ERROR: " << task->ToString()
+                      << " not found in task list created by fastboot-info.txt";
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::string tasksToString(std::vector<std::unique_ptr<Task>>& tasks) {
+    std::string output;
+    for (auto& task : tasks) {
+        output.append(task->ToString());
+        output.append("\n");
+    }
+    return output;
 }
 
 TEST_F(ParseTest, CorrectFlashTaskFormed) {
@@ -158,4 +186,52 @@ TEST_F(ParseTest, CorrectDriverCalls) {
     for (auto& task : tasks) {
         task->Run();
     }
+}
+
+TEST_F(ParseTest, CorrectTaskLists) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+    fp->sparse_limit = std::numeric_limits<int64_t>::max();
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = false;
+
+    ON_CALL(fb, GetVar("super-partition-name", _, _))
+            .WillByDefault(testing::Return(fastboot::BAD_ARG));
+
+    FlashAllTool tool(fp.get());
+
+    fp->should_use_fastboot_info = false;
+    auto hardcoded_tasks = tool.CollectTasks();
+    fp->should_use_fastboot_info = true;
+    auto fastboot_info_tasks = tool.CollectTasks();
+
+    auto is_non_flash_task = [](const auto& task) -> bool {
+        return task->AsFlashTask() == nullptr;
+    };
+
+    // remove non flash tasks for testing purposes
+    hardcoded_tasks.erase(
+            std::remove_if(hardcoded_tasks.begin(), hardcoded_tasks.end(), is_non_flash_task),
+            hardcoded_tasks.end());
+    fastboot_info_tasks.erase(std::remove_if(fastboot_info_tasks.begin(), fastboot_info_tasks.end(),
+                                             is_non_flash_task),
+                              fastboot_info_tasks.end());
+
+    if (!compareTaskList(fastboot_info_tasks, hardcoded_tasks)) {
+        std::cout << "\n\n---Hardcoded Task List---\n"
+                  << tasksToString(hardcoded_tasks) << "\n---Fastboot-Info Task List---\n"
+                  << tasksToString(fastboot_info_tasks);
+    }
+
+    ASSERT_TRUE(compareTaskList(fastboot_info_tasks, hardcoded_tasks));
+
+    ASSERT_TRUE(fastboot_info_tasks.size() >= hardcoded_tasks.size())
+            << "size of fastboot-info task list: " << fastboot_info_tasks.size()
+            << " size of hardcoded task list: " << hardcoded_tasks.size();
 }
