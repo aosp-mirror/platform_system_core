@@ -265,8 +265,8 @@ phony {
     ],
 }
 
-cc_binary {
-    name: "init_second_stage",
+cc_defaults {
+    name: "init_second_stage_defaults",
     recovery_available: true,
     stem: "init",
     defaults: ["init_defaults"],
@@ -304,8 +304,21 @@ cc_binary {
             ],
         },
     },
+}
+
+cc_binary {
+    name: "init_second_stage",
+    defaults: ["init_second_stage_defaults"],
+}
+
+cc_binary {
+    name: "init_second_stage.microdroid",
+    defaults: ["init_second_stage_defaults"],
+    cflags: ["-DMICRODROID"],
+    installable: false,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
+
 
 soong_config_module_type {
     name: "init_first_stage_cc_defaults",
@@ -324,12 +337,8 @@ init_first_stage_cc_defaults {
             installable: false,
         },
     },
-}
 
-cc_binary {
-    name: "init_first_stage",
     stem: "init",
-    defaults: ["init_first_stage_defaults"],
 
     srcs: [
         "block_dev_initializer.cpp",
@@ -441,6 +450,18 @@ cc_binary {
     ramdisk: true,
 
     install_in_root: true,
+}
+
+cc_binary {
+    name: "init_first_stage",
+    defaults: ["init_first_stage_defaults"],
+}
+
+cc_binary {
+    name: "init_first_stage.microdroid",
+    defaults: ["init_first_stage_defaults"],
+    cflags: ["-DMICRODROID"],
+    installable: false,
 }
 
 phony {
