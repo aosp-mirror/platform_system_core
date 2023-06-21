@@ -392,10 +392,7 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz) {
 
             // Just return the header if it is an error
             if (header->type == DM_USER_RESP_ERROR) {
-                if (!RespondIOError()) {
-                    return false;
-                }
-
+                RespondIOError();
                 io_error = true;
                 break;
             }
@@ -537,7 +534,7 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
         if (ret < 0) {
             SNAP_LOG(ERROR) << "ReadUnalignedSector failed for sector: " << sector
                             << " size: " << size << " it->sector: " << it->first;
-            return RespondIOError();
+            return false;
         }
 
         remaining_size -= ret;
@@ -565,7 +562,7 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
         CHECK(diff_size <= BLOCK_SZ);
         if (remaining_size < diff_size) {
             if (!ReadDataFromBaseDevice(sector, remaining_size)) {
-                return RespondIOError();
+                return false;
             }
             total_bytes_read += remaining_size;
 
@@ -574,7 +571,7 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
             }
         } else {
             if (!ReadDataFromBaseDevice(sector, diff_size)) {
-                return RespondIOError();
+                return false;
             }
 
             total_bytes_read += diff_size;
@@ -596,7 +593,7 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
     return true;
 }
 
-bool Worker::RespondIOError() {
+void Worker::RespondIOError() {
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
     header->type = DM_USER_RESP_ERROR;
     // This is an issue with the dm-user interface. There
@@ -610,13 +607,7 @@ bool Worker::RespondIOError() {
     // TODO: Fix the interface
     CHECK(header_response_);
 
-    if (!WriteDmUserPayload(0)) {
-        return false;
-    }
-
-    // There is no need to process further as we have already seen
-    // an I/O error
-    return true;
+    WriteDmUserPayload(0);
 }
 
 bool Worker::DmuserReadRequest() {
@@ -624,7 +615,7 @@ bool Worker::DmuserReadRequest() {
 
     // Unaligned I/O request
     if (!IsBlockAligned(header->sector << SECTOR_SHIFT)) {
-        return ReadUnalignedSector(header->sector, header->len);
+        return ReadUnalignedSector(header->sector, header->len) != -1;
     }
 
     return ReadAlignedSector(header->sector, header->len);
