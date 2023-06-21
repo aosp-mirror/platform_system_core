@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libsnapshot/snapshot.h>
-
 #include <unordered_set>
 
 #include <android-base/file.h>
@@ -61,7 +59,7 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_EQ(fsync(base_->fd), 0);
     }
 
-    void WriteCow(ISnapshotWriter* writer) {
+    void WriteCow(ICowWriter* writer) {
         std::string new_block = MakeNewBlockString();
         std::string xor_block = MakeXorBlockString();
 
@@ -72,8 +70,8 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_TRUE(writer->Finalize());
     }
 
-    void TestBlockReads(ISnapshotWriter* writer) {
-        auto reader = writer->OpenReader();
+    void TestBlockReads(ICowWriter* writer) {
+        auto reader = writer->OpenFileDescriptor(base_->path);
         ASSERT_NE(reader, nullptr);
 
         // Test that unchanged blocks are not modified.
@@ -117,8 +115,8 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_EQ(two_blocks, zeroes);
     }
 
-    void TestByteReads(ISnapshotWriter* writer) {
-        auto reader = writer->OpenReader();
+    void TestByteReads(ICowWriter* writer) {
+        auto reader = writer->OpenFileDescriptor(base_->path);
         ASSERT_NE(reader, nullptr);
 
         std::string blob(kBlockSize * 3, 'x');
@@ -154,7 +152,7 @@ class OfflineSnapshotTest : public ::testing::Test {
         ASSERT_EQ(got, expected);
     }
 
-    void TestReads(ISnapshotWriter* writer) {
+    void TestReads(ICowWriter* writer) {
         ASSERT_NO_FATAL_FAILURE(TestBlockReads(writer));
         ASSERT_NO_FATAL_FAILURE(TestByteReads(writer));
     }
@@ -186,10 +184,7 @@ TEST_F(OfflineSnapshotTest, CompressedSnapshot) {
     unique_fd cow_fd(dup(cow_->fd));
     ASSERT_GE(cow_fd, 0);
 
-    auto writer = std::make_unique<CompressedSnapshotWriter>(options);
-    writer->SetSourceDevice(base_->path);
-    ASSERT_TRUE(writer->SetCowDevice(std::move(cow_fd)));
-    ASSERT_TRUE(writer->Initialize());
+    auto writer = CreateCowWriter(kDefaultCowVersion, options, std::move(cow_fd));
     ASSERT_NO_FATAL_FAILURE(WriteCow(writer.get()));
     ASSERT_NO_FATAL_FAILURE(TestReads(writer.get()));
 }
