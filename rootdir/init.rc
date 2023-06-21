@@ -939,15 +939,22 @@ on post-fs-data
     # encryption policies apply recursively.  These directories should never
     # contain any subdirectories other than the per-user ones.  /data/media/obb
     # is an exception that exists for legacy reasons.
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    mkdir /data/misc_ce 01771 system misc encryption=None
-    mkdir /data/misc_de 01771 system misc encryption=None
-    mkdir /data/system_ce 0770 system system encryption=None
-    mkdir /data/system_de 0770 system system encryption=None
-    mkdir /data/user 0711 system system encryption=None
-    mkdir /data/user_de 0711 system system encryption=None
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
+    #
+    # Don't use any write mode bits (0222) for any of these directories, since
+    # the only process that should write to them directly is vold (since it
+    # needs to set up file-based encryption on the subdirectories), which runs
+    # as root with CAP_DAC_OVERRIDE.  This is also fully enforced via the
+    # SELinux policy.  But we also set the DAC file modes accordingly, to try to
+    # minimize differences in behavior if SELinux is set to permissive mode.
+    mkdir /data/media 0550 media_rw media_rw encryption=None
+    mkdir /data/misc_ce 0551 system misc encryption=None
+    mkdir /data/misc_de 0551 system misc encryption=None
+    mkdir /data/system_ce 0550 system system encryption=None
+    mkdir /data/system_de 0550 system system encryption=None
+    mkdir /data/user 0511 system system encryption=None
+    mkdir /data/user_de 0511 system system encryption=None
+    mkdir /data/vendor_ce 0551 root root encryption=None
+    mkdir /data/vendor_de 0551 root root encryption=None
 
     # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
     # needed first to relabel the directory from media_rw_data_file.
