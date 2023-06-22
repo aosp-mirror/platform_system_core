@@ -130,12 +130,7 @@ bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size,
     return true;
 }
 
-std::string HashSnapshot(ISnapshotWriter* writer) {
-    auto reader = writer->OpenReader();
-    if (!reader) {
-        return {};
-    }
-
+std::string HashSnapshot(ICowWriter::FileDescriptor* reader) {
     SHA256_CTX ctx;
     SHA256_Init(&ctx);
 

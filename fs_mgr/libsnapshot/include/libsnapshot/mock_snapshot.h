@@ -42,9 +42,9 @@ class MockSnapshotManager : public ISnapshotManager {
                 (const android::fs_mgr::CreateLogicalPartitionParams& params,
                  std::string* snapshot_path),
                 (override));
-    MOCK_METHOD(std::unique_ptr<ISnapshotWriter>, OpenSnapshotWriter,
+    MOCK_METHOD(std::unique_ptr<ICowWriter>, OpenSnapshotWriter,
                 (const android::fs_mgr::CreateLogicalPartitionParams& params,
-                 const std::optional<std::string>&),
+                 std::optional<uint64_t>),
                 (override));
     MOCK_METHOD(bool, UnmapUpdateSnapshot, (const std::string& target_partition_name), (override));
     MOCK_METHOD(bool, NeedSnapshotsInFirstStageMount, (), (override));
