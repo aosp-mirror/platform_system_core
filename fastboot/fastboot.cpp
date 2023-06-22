@@ -1494,6 +1494,13 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
         if (fd < 0 || !load_buf_fd(std::move(fd), &buf, fp)) {
             die("could not load '%s': %s", fname, strerror(errno));
         }
+        std::vector<char> signature_data;
+        std::string file_string(fname);
+        if (fp->source->ReadFile(file_string.substr(0, file_string.find('.')) + ".sig",
+                                 &signature_data)) {
+            fb->Download("signature", signature_data);
+            fb->RawCommand("signature", "installing signature");
+        }
     } else if (!load_buf(fname, &buf, fp)) {
         die("cannot load '%s': %s", fname, strerror(errno));
     }
@@ -1780,7 +1787,10 @@ void FlashAllTool::Flash() {
 
     CancelSnapshotIfNeeded();
 
-    HardcodedFlash();
+    tasks_ = CollectTasksFromImageList();
+    for (auto& task : tasks_) {
+        task->Run();
+    }
     return;
 }
 
@@ -1832,13 +1842,12 @@ void FlashAllTool::CollectImages() {
     }
 }
 
-void FlashAllTool::HardcodedFlash() {
+std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
     CollectImages();
     // First flash boot partitions. We allow this to happen either in userspace
     // or in bootloader fastboot.
-    FlashImages(boot_images_);
-
     std::vector<std::unique_ptr<Task>> tasks;
+    AddFlashTasks(boot_images_, tasks);
 
     if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
         tasks.emplace_back(std::move(flash_super_task));
@@ -1862,13 +1871,12 @@ void FlashAllTool::HardcodedFlash() {
             tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
     }
-    for (auto& i : tasks) {
-        i->Run();
-    }
-    FlashImages(os_images_);
+    AddFlashTasks(os_images_, tasks);
+    return tasks;
 }
 
-void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::string>>& images) {
+void FlashAllTool::AddFlashTasks(const std::vector<std::pair<const Image*, std::string>>& images,
+                                 std::vector<std::unique_ptr<Task>>& tasks) {
     for (const auto& [image, slot] : images) {
         fastboot_buffer buf;
         unique_fd fd = fp_->source->OpenFile(image->img_name);
@@ -1878,25 +1886,9 @@ void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::st
             }
             die("could not load '%s': %s", image->img_name.c_str(), strerror(errno));
         }
-        FlashImage(*image, slot, &buf);
+        tasks.emplace_back(std::make_unique<FlashTask>(slot, image->part_name, image->img_name,
+                                                       is_vbmeta_partition(image->part_name), fp_));
     }
-}
-
-void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf) {
-    auto flash = [&, this](const std::string& partition_name) {
-        std::vector<char> signature_data;
-        if (fp_->source->ReadFile(image.sig_name, &signature_data)) {
-            fb->Download("signature", signature_data);
-            fb->RawCommand("signature", "installing signature");
-        }
-
-        if (is_logical(partition_name)) {
-            fb->ResizePartition(partition_name, std::to_string(buf->image_size));
-        }
-
-        flash_buf(partition_name.c_str(), buf, is_vbmeta_partition(partition_name));
-    };
-    do_for_partitions(image.part_name, slot, flash, false);
 }
 
 bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
