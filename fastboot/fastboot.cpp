@@ -1076,9 +1076,7 @@ static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_BINARY)));
 
     if (fd == -1) {
-        auto path = find_item_given_name(fname);
-        fd = unique_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_BINARY)));
-        if (fd == -1) return false;
+        return false;
     }
 
     struct stat s;
