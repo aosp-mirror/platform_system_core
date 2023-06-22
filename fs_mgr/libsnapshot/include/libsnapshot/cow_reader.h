@@ -24,6 +24,10 @@
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
 
+namespace chromeos_update_engine {
+class FileDescriptor;
+}  // namespace chromeos_update_engine
+
 namespace android {
 namespace snapshot {
 
@@ -32,6 +36,8 @@ class ICowOpIter;
 // Interface for reading from a snapuserd COW.
 class ICowReader {
   public:
+    using FileDescriptor = chromeos_update_engine::FileDescriptor;
+
     virtual ~ICowReader() {}
 
     // Return the file header.
@@ -109,10 +115,9 @@ class CowReader final : public ICowReader {
     bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool InitForMerge(android::base::unique_fd&& fd);
+
     bool VerifyMergeOps() override;
-
     bool GetFooter(CowFooter* footer) override;
-
     bool GetLastLabel(uint64_t* label) override;
 
     // Create a CowOpIter object which contains footer_.num_ops
