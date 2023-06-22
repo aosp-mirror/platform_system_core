@@ -40,6 +40,7 @@
 #include "result.h"
 #include "socket.h"
 #include "util.h"
+#include "ziparchive/zip_archive.h"
 
 class FastBootTool {
   public:
@@ -120,6 +121,22 @@ class FlashAllTool {
     std::vector<ImageEntry> boot_images_;
     std::vector<ImageEntry> os_images_;
     FlashingPlan* fp_;
+};
+
+class ZipImageSource final : public ImageSource {
+  public:
+    explicit ZipImageSource(ZipArchiveHandle zip) : zip_(zip) {}
+    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
+    unique_fd OpenFile(const std::string& name) const override;
+
+  private:
+    ZipArchiveHandle zip_;
+};
+
+class LocalImageSource final : public ImageSource {
+  public:
+    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
+    unique_fd OpenFile(const std::string& name) const override;
 };
 
 bool should_flash_in_userspace(const std::string& partition_name);
