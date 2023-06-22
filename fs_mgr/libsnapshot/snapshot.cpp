@@ -45,10 +45,9 @@
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot_stats.h>
 #include "device_info.h"
-#include "libsnapshot_cow/writer_v2.h"
+#include "libsnapshot_cow/parser_v2.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
-#include "snapshot_reader.h"
 #include "utility.h"
 
 namespace android {
@@ -3288,7 +3287,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         return Return::Error();
     }
 
-    ret = InitializeUpdateSnapshots(lock.get(), target_metadata.get(),
+    ret = InitializeUpdateSnapshots(lock.get(), dap_metadata.cow_version(), target_metadata.get(),
                                     exported_target_metadata.get(), target_suffix,
                                     all_snapshot_status);
     if (!ret.is_ok()) return ret;
@@ -3510,7 +3509,7 @@ Return SnapshotManager::CreateUpdateSnapshotsInternal(
 }
 
 Return SnapshotManager::InitializeUpdateSnapshots(
-        LockedFile* lock, MetadataBuilder* target_metadata,
+        LockedFile* lock, uint32_t cow_version, MetadataBuilder* target_metadata,
         const LpMetadata* exported_target_metadata, const std::string& target_suffix,
         const std::map<std::string, SnapshotStatus>& all_snapshot_status) {
     CHECK(lock);
@@ -3558,8 +3557,8 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             }
             options.compression = it->second.compression_algorithm();
 
-            CowWriterV2 writer(options, std::move(fd));
-            if (!writer.Initialize(std::nullopt) || !writer.Finalize()) {
+            auto writer = CreateCowWriter(cow_version, options, std::move(fd));
+            if (!writer->Finalize()) {
                 LOG(ERROR) << "Could not initialize COW device for " << target_partition->name();
                 return Return::Error();
             }
@@ -3609,12 +3608,12 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
     return true;
 }
 
-std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
+std::unique_ptr<ICowWriter> SnapshotManager::OpenSnapshotWriter(
         const android::fs_mgr::CreateLogicalPartitionParams& params,
-        const std::optional<std::string>& source_device) {
+        std::optional<uint64_t> label) {
 #if defined(LIBSNAPSHOT_NO_COW_WRITE)
     (void)params;
-    (void)source_device;
+    (void)label;
 
     LOG(ERROR) << "Snapshots cannot be written in first-stage init or recovery";
     return nullptr;
@@ -3653,16 +3652,14 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
-                                        status, paths);
+    return OpenCompressedSnapshotWriter(lock.get(), status, paths, label);
 #endif
 }
 
 #if !defined(LIBSNAPSHOT_NO_COW_WRITE)
-std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
-        LockedFile* lock, const std::optional<std::string>& source_device,
-        [[maybe_unused]] const std::string& partition_name, const SnapshotStatus& status,
-        const SnapshotPaths& paths) {
+std::unique_ptr<ICowWriter> SnapshotManager::OpenCompressedSnapshotWriter(
+        LockedFile* lock, const SnapshotStatus& status, const SnapshotPaths& paths,
+        std::optional<uint64_t> label) {
     CHECK(lock);
 
     CowOptions cow_options;
@@ -3679,11 +3676,6 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     // never creates this scenario.
     CHECK(status.snapshot_size() == status.device_size());
 
-    auto writer = std::make_unique<CompressedSnapshotWriter>(cow_options);
-    if (source_device) {
-        writer->SetSourceDevice(*source_device);
-    }
-
     std::string cow_path;
     if (!GetMappedImageDevicePath(paths.cow_device_name, &cow_path)) {
         LOG(ERROR) << "Could not determine path for " << paths.cow_device_name;
@@ -3695,12 +3687,14 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
         PLOG(ERROR) << "OpenCompressedSnapshotWriter: open " << cow_path;
         return nullptr;
     }
-    if (!writer->SetCowDevice(std::move(cow_fd))) {
-        LOG(ERROR) << "Could not create COW writer from " << cow_path;
+
+    CowHeader header;
+    if (!ReadCowHeader(cow_fd, &header)) {
+        LOG(ERROR) << "OpenCompressedSnapshotWriter: read header failed";
         return nullptr;
     }
 
-    return writer;
+    return CreateCowWriter(header.prefix.major_version, cow_options, std::move(cow_fd), label);
 }
 #endif  // !defined(LIBSNAPSHOT_NO_COW_WRITE)
 
