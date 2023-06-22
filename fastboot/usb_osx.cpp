@@ -436,12 +436,7 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
 
     for (;;) {
         if (! IOIteratorIsValid(iterator)) {
-            /*
-             * Apple documentation advises resetting the iterator if
-             * it should become invalid during iteration.
-             */
-            IOIteratorReset(iterator);
-            continue;
+            break;
         }
 
         io_service_t device = IOIteratorNext(iterator);
