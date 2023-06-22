@@ -96,6 +96,7 @@ struct FlashingPlan {
     bool wants_set_active = false;
     bool skip_secondary = false;
     bool force_flash = false;
+    bool should_optimize_flash_super = true;
 
     std::string slot_override;
     std::string current_slot;
