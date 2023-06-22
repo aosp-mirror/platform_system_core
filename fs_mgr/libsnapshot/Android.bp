@@ -85,11 +85,9 @@ filegroup {
         "android/snapshot/snapshot.proto",
         "device_info.cpp",
         "snapshot.cpp",
-        "snapshot_reader.cpp",
         "snapshot_stats.cpp",
         "snapshot_stub.cpp",
         "snapshot_metadata_updater.cpp",
-        "snapshot_writer.cpp",
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
@@ -165,6 +163,9 @@ cc_defaults {
         "liblz4",
         "libzstd",
     ],
+    header_libs: [
+        "libupdate_engine_headers",
+    ],
     export_include_dirs: ["include"],
 }
 
@@ -179,6 +180,7 @@ cc_library_static {
         "libsnapshot_cow/cow_format.cpp",
         "libsnapshot_cow/cow_reader.cpp",
         "libsnapshot_cow/parser_v2.cpp",
+        "libsnapshot_cow/snapshot_reader.cpp",
         "libsnapshot_cow/writer_base.cpp",
         "libsnapshot_cow/writer_v2.cpp",
     ],
@@ -224,9 +226,7 @@ cc_defaults {
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
-        "snapshot_reader_test.cpp",
         "snapshot_test.cpp",
-        "snapshot_writer_test.cpp",
     ],
     shared_libs: [
         "libbinder",
@@ -372,6 +372,7 @@ cc_test {
         "libsnapshot_cow_defaults",
     ],
     srcs: [
+        "libsnapshot_cow/snapshot_reader_test.cpp",
         "libsnapshot_cow/test_v2.cpp",
     ],
     cflags: [
