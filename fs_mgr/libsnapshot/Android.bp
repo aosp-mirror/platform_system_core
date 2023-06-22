@@ -417,6 +417,7 @@ cc_binary {
         "libbrotli",
         "libcrypto_static",
         "liblog",
+        "libgflags",
         "libsnapshot_cow",
         "libz",
     ],
