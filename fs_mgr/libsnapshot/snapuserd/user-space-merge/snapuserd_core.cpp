@@ -23,6 +23,8 @@
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 
+#include "snapuserd_merge.h"
+
 namespace android {
 namespace snapshot {
 
@@ -57,8 +59,9 @@ bool SnapshotHandler::InitializeWorkers() {
         worker_threads_.push_back(std::move(wt));
     }
 
-    merge_thread_ = std::make_unique<Worker>(cow_device_, backing_store_device_, control_device_,
-                                             misc_name_, base_path_merge_, GetSharedPtr());
+    merge_thread_ =
+            std::make_unique<MergeWorker>(cow_device_, backing_store_device_, control_device_,
+                                          misc_name_, base_path_merge_, GetSharedPtr());
 
     read_ahead_thread_ = std::make_unique<ReadAhead>(cow_device_, backing_store_device_, misc_name_,
                                                      GetSharedPtr());
@@ -316,7 +319,7 @@ bool SnapshotHandler::Start() {
     }
 
     std::future<bool> merge_thread =
-            std::async(std::launch::async, &Worker::RunMergeThread, merge_thread_.get());
+            std::async(std::launch::async, &MergeWorker::Run, merge_thread_.get());
 
     // Now that the worker threads are up, scan the partitions.
     if (perform_verification_) {
@@ -450,6 +453,12 @@ bool SnapshotHandler::IsIouringSupported() {
 
 bool SnapshotHandler::CheckPartitionVerification() {
     return update_verify_->CheckPartitionVerification();
+}
+
+void SnapshotHandler::FreeResources() {
+    worker_threads_.clear();
+    read_ahead_thread_ = nullptr;
+    merge_thread_ = nullptr;
 }
 
 }  // namespace snapshot
