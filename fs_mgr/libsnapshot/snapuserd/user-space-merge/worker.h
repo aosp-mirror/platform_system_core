@@ -33,8 +33,7 @@ class SnapshotHandler;
 
 class Worker {
   public:
-    Worker(const std::string& cow_device, const std::string& backing_device,
-           const std::string& control_device, const std::string& misc_name,
+    Worker(const std::string& cow_device, const std::string& misc_name,
            const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
     virtual ~Worker() = default;
 
@@ -45,14 +44,7 @@ class Worker {
     void InitializeBufsink();
     bool InitializeFds();
     bool InitReader();
-    void CloseFds() {
-        ctrl_fd_ = {};
-        backing_store_fd_ = {};
-        base_path_merge_fd_ = {};
-    }
-
-    // IO Path
-    bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
+    virtual void CloseFds() { base_path_merge_fd_ = {}; }
 
     bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
 
@@ -60,26 +52,19 @@ class Worker {
     bool ProcessReplaceOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
 
-    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
-    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
-
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
 
-    std::string cow_device_;
-    std::string backing_store_device_;
-    std::string control_device_;
-    std::string misc_name_;
-    std::string base_path_merge_;
+    std::string misc_name_;  // Needed for SNAP_LOG.
 
-    unique_fd cow_fd_;
-    unique_fd backing_store_fd_;
     unique_fd base_path_merge_fd_;
-    unique_fd ctrl_fd_;
-
-    std::unique_ptr<ICowOpIter> cowop_iter_;
 
     std::shared_ptr<SnapshotHandler> snapuserd_;
+
+  private:
+    std::string cow_device_;
+    std::string base_path_merge_;
+    unique_fd cow_fd_;
 };
 
 }  // namespace snapshot

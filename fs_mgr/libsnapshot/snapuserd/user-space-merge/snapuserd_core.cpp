@@ -59,9 +59,8 @@ bool SnapshotHandler::InitializeWorkers() {
         worker_threads_.push_back(std::move(wt));
     }
 
-    merge_thread_ =
-            std::make_unique<MergeWorker>(cow_device_, backing_store_device_, control_device_,
-                                          misc_name_, base_path_merge_, GetSharedPtr());
+    merge_thread_ = std::make_unique<MergeWorker>(cow_device_, misc_name_, base_path_merge_,
+                                                  GetSharedPtr());
 
     read_ahead_thread_ = std::make_unique<ReadAhead>(cow_device_, backing_store_device_, misc_name_,
                                                      GetSharedPtr());

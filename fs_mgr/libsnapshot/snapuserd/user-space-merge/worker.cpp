@@ -19,12 +19,9 @@
 namespace android {
 namespace snapshot {
 
-Worker::Worker(const std::string& cow_device, const std::string& backing_device,
-               const std::string& control_device, const std::string& misc_name,
+Worker::Worker(const std::string& cow_device, const std::string& misc_name,
                const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd) {
     cow_device_ = cow_device;
-    backing_store_device_ = backing_device;
-    control_device_ = control_device;
     misc_name_ = misc_name;
     base_path_merge_ = base_path_merge;
     snapuserd_ = snapuserd;
@@ -63,21 +60,9 @@ bool Worker::InitReader() {
 }
 
 bool Worker::InitializeFds() {
-    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
-    if (backing_store_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << backing_store_device_;
-        return false;
-    }
-
     cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
     if (cow_fd_ < 0) {
         SNAP_PLOG(ERROR) << "Open Failed: " << cow_device_;
-        return false;
-    }
-
-    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
-    if (ctrl_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
         return false;
     }
 

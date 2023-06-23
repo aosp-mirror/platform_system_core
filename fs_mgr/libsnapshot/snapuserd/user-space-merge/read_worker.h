@@ -30,6 +30,7 @@ class ReadWorker : public Worker {
 
     bool Run();
     bool Init() override;
+    void CloseFds() override;
 
   private:
     // Functions interacting with dm-user
@@ -49,6 +50,15 @@ class ReadWorker : public Worker {
                             std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
     bool ReadFromSourceDevice(const CowOperation* cow_op);
     bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
+
+    constexpr bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
+    constexpr sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
+
+    std::string backing_store_device_;
+    unique_fd backing_store_fd_;
+
+    std::string control_device_;
+    unique_fd ctrl_fd_;
 
     XorSink xorsink_;
     bool header_response_ = false;

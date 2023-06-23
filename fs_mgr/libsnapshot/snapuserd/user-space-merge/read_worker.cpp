@@ -25,11 +25,19 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
+void ReadWorker::CloseFds() {
+    ctrl_fd_ = {};
+    backing_store_fd_ = {};
+    Worker::CloseFds();
+}
+
 ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing_device,
                        const std::string& control_device, const std::string& misc_name,
                        const std::string& base_path_merge,
                        std::shared_ptr<SnapshotHandler> snapuserd)
-    : Worker(cow_device, backing_device, control_device, misc_name, base_path_merge, snapuserd) {}
+    : Worker(cow_device, misc_name, base_path_merge, snapuserd),
+      backing_store_device_(backing_device),
+      control_device_(control_device) {}
 
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
@@ -209,6 +217,19 @@ bool ReadWorker::Init() {
     if (!Worker::Init()) {
         return false;
     }
+
+    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
+    if (backing_store_fd_ < 0) {
+        SNAP_PLOG(ERROR) << "Open Failed: " << backing_store_device_;
+        return false;
+    }
+
+    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
+    if (ctrl_fd_ < 0) {
+        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
+        return false;
+    }
+
     xorsink_.Initialize(&bufsink_, BLOCK_SZ);
     return true;
 }

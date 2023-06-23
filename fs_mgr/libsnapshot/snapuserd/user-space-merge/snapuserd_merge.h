@@ -22,8 +22,7 @@ namespace snapshot {
 
 class MergeWorker : public Worker {
   public:
-    MergeWorker(const std::string& cow_device, const std::string& backing_device,
-                const std::string& control_device, const std::string& misc_name,
+    MergeWorker(const std::string& cow_device, const std::string& misc_name,
                 const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
     bool Run();
 
@@ -40,6 +39,7 @@ class MergeWorker : public Worker {
     void FinalizeIouring();
 
   private:
+    std::unique_ptr<ICowOpIter> cowop_iter_;
     std::unique_ptr<struct io_uring> ring_;
     size_t ra_block_index_ = 0;
     uint64_t blocks_merged_in_group_ = 0;

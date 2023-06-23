@@ -24,11 +24,10 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
-MergeWorker::MergeWorker(const std::string& cow_device, const std::string& backing_device,
-                         const std::string& control_device, const std::string& misc_name,
+MergeWorker::MergeWorker(const std::string& cow_device, const std::string& misc_name,
                          const std::string& base_path_merge,
                          std::shared_ptr<SnapshotHandler> snapuserd)
-    : Worker(cow_device, backing_device, control_device, misc_name, base_path_merge, snapuserd) {}
+    : Worker(cow_device, misc_name, base_path_merge, snapuserd) {}
 
 int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
                               std::vector<const CowOperation*>* replace_zero_vec) {
