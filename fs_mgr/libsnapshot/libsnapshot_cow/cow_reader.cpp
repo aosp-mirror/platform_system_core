@@ -230,7 +230,7 @@ bool CowReader::PrepMergeOps() {
             size_t seq_len = current_op.data_length / sizeof(uint32_t);
 
             merge_op_blocks->resize(merge_op_blocks->size() + seq_len);
-            if (!GetRawBytes(current_op.source, &merge_op_blocks->data()[num_seqs],
+            if (!GetRawBytes(&current_op, &merge_op_blocks->data()[num_seqs],
                              current_op.data_length, &read)) {
                 PLOG(ERROR) << "Failed to read sequence op!";
                 return false;
@@ -514,6 +514,18 @@ std::unique_ptr<ICowOpIter> CowReader::GetRevMergeOpIter(bool ignore_progress) {
 std::unique_ptr<ICowOpIter> CowReader::GetMergeOpIter(bool ignore_progress) {
     return std::make_unique<CowMergeOpIter>(ops_, block_pos_index_,
                                             ignore_progress ? 0 : merge_op_start_);
+}
+
+bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read) {
+    switch (op->type) {
+        case kCowSequenceOp:
+        case kCowReplaceOp:
+        case kCowXorOp:
+            return GetRawBytes(op->source, buffer, len, read);
+        default:
+            LOG(ERROR) << "Cannot get raw bytes of non-data op: " << *op;
+            return false;
+    }
 }
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {

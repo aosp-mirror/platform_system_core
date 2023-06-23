@@ -133,6 +133,7 @@ class CowReader final : public ICowReader {
 
     CowHeader& GetHeader() override { return header_; }
 
+    bool GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read);
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
     // Returns the total number of data ops that should be merged. This is the
