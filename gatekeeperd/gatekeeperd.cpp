@@ -74,9 +74,13 @@ class GateKeeperProxy : public BnGateKeeperService {
   public:
     GateKeeperProxy() {
         clear_state_if_needed_done = false;
-        hw_device = IGatekeeper::getService();
-        ::ndk::SpAIBinder ks2Binder(AServiceManager_getService(gatekeeperServiceName));
-        aidl_hw_device = AidlIGatekeeper::fromBinder(ks2Binder);
+        if (AServiceManager_isDeclared(gatekeeperServiceName)) {
+            ::ndk::SpAIBinder ks2Binder(AServiceManager_waitForService(gatekeeperServiceName));
+            aidl_hw_device = AidlIGatekeeper::fromBinder(ks2Binder);
+        }
+        if (!aidl_hw_device) {
+            hw_device = IGatekeeper::getService();
+        }
         is_running_gsi = android::base::GetBoolProperty(android::gsi::kGsiBootedProp, false);
 
         if (!aidl_hw_device && !hw_device) {
