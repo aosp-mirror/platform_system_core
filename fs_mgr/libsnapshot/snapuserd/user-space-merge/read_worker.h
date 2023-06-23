@@ -43,6 +43,8 @@ class ReadWorker : public Worker {
     bool ProcessXorOp(const CowOperation* cow_op);
     bool ProcessOrderedOp(const CowOperation* cow_op);
     bool ProcessCopyOp(const CowOperation* cow_op);
+    bool ProcessReplaceOp(const CowOperation* cow_op);
+    bool ProcessZeroOp();
 
     bool ReadAlignedSector(sector_t sector, size_t sz);
     bool ReadUnalignedSector(sector_t sector, size_t size);

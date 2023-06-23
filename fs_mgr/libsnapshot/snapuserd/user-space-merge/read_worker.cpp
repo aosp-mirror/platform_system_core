@@ -42,7 +42,7 @@ ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
-bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
+bool ReadWorker::ProcessReplaceOp(const CowOperation* cow_op) {
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
     if (!buffer) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed to allocate buffer";
@@ -120,7 +120,7 @@ bool ReadWorker::ProcessXorOp(const CowOperation* cow_op) {
     return true;
 }
 
-bool Worker::ProcessZeroOp() {
+bool ReadWorker::ProcessZeroOp() {
     // Zero out the entire block
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
     if (buffer == nullptr) {

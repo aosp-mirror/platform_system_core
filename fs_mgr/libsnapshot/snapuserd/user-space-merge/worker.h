@@ -46,12 +46,6 @@ class Worker {
     bool InitReader();
     virtual void CloseFds() { base_path_merge_fd_ = {}; }
 
-    bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
-
-    // Processing COW operations
-    bool ProcessReplaceOp(const CowOperation* cow_op);
-    bool ProcessZeroOp();
-
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
 
