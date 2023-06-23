@@ -1849,18 +1849,14 @@ int fs_mgr_do_mount_one(const FstabEntry& entry, const std::string& alt_mount_po
     return ret;
 }
 
-// If tmp_mount_point is non-null, mount the filesystem there.  This is for the
-// tmp mount we do to check the user password
 // If multiple fstab entries are to be mounted on "n_name", it will try to mount each one
 // in turn, and stop on 1st success, or no more match.
-static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
-                                  const std::string& n_blk_device, const char* tmp_mount_point,
-                                  int needs_checkpoint, bool metadata_encrypted,
-                                  bool needs_encrypt) {
+int fs_mgr_do_mount(Fstab* fstab, const std::string& n_name, const std::string& n_blk_device,
+                    int needs_checkpoint, bool needs_encrypt) {
     int mount_errors = 0;
     int first_mount_errno = 0;
     std::string mount_point;
-    CheckpointManager checkpoint_manager(needs_checkpoint, metadata_encrypted, needs_encrypt);
+    CheckpointManager checkpoint_manager(needs_checkpoint, true, needs_encrypt);
     AvbUniquePtr avb_handle(nullptr);
 
     if (!fstab) {
@@ -1902,11 +1898,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         }
 
         // Now mount it where requested */
-        if (tmp_mount_point) {
-            mount_point = tmp_mount_point;
-        } else {
-            mount_point = fstab_entry.mount_point;
-        }
+        mount_point = fstab_entry.mount_point;
 
         int fs_stat = prepare_fs_for_mount(n_blk_device, fstab_entry, mount_point);
 
@@ -1961,35 +1953,6 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         LERROR << "Cannot find mount point " << n_name << " in fstab";
     }
     return FS_MGR_DOMNT_FAILED;
-}
-
-int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, -1, false, false);
-}
-
-int fs_mgr_do_mount(Fstab* fstab, const char* n_name, char* n_blk_device, char* tmp_mount_point,
-                    bool needs_checkpoint, bool metadata_encrypted, bool needs_encrypt) {
-    return fs_mgr_do_mount_helper(fstab, n_name, n_blk_device, tmp_mount_point, needs_checkpoint,
-                                  metadata_encrypted, needs_encrypt);
-}
-
-/*
- * mount a tmpfs filesystem at the given point.
- * return 0 on success, non-zero on failure.
- */
-int fs_mgr_do_tmpfs_mount(const char *n_name)
-{
-    int ret;
-
-    ret = mount("tmpfs", n_name, "tmpfs", MS_NOATIME | MS_NOSUID | MS_NODEV | MS_NOEXEC,
-                CRYPTO_TMPFS_OPTIONS);
-    if (ret < 0) {
-        LERROR << "Cannot mount tmpfs filesystem at " << n_name;
-        return -1;
-    }
-
-    /* Success */
-    return 0;
 }
 
 static bool ConfigureIoScheduler(const std::string& device_path) {
