@@ -23,6 +23,7 @@
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 
+#include "read_worker.h"
 #include "snapuserd_merge.h"
 
 namespace android {
@@ -48,9 +49,8 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 
 bool SnapshotHandler::InitializeWorkers() {
     for (int i = 0; i < num_worker_threads_; i++) {
-        std::unique_ptr<Worker> wt =
-                std::make_unique<Worker>(cow_device_, backing_store_device_, control_device_,
-                                         misc_name_, base_path_merge_, GetSharedPtr());
+        auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, control_device_,
+                                               misc_name_, base_path_merge_, GetSharedPtr());
         if (!wt->Init()) {
             SNAP_LOG(ERROR) << "Thread initialization failed";
             return false;
@@ -315,7 +315,7 @@ bool SnapshotHandler::Start() {
     // Launch worker threads
     for (int i = 0; i < worker_threads_.size(); i++) {
         threads.emplace_back(
-                std::async(std::launch::async, &Worker::RunThread, worker_threads_[i].get()));
+                std::async(std::launch::async, &ReadWorker::Run, worker_threads_[i].get()));
     }
 
     std::future<bool> merge_thread =

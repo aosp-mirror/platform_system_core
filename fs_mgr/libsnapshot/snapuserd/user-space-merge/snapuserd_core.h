@@ -76,6 +76,7 @@ enum class MERGE_IO_TRANSITION {
 };
 
 class MergeWorker;
+class ReadWorker;
 class SnapshotHandler;
 
 enum class MERGE_GROUP_STATE {
@@ -104,8 +105,9 @@ class Worker {
     Worker(const std::string& cow_device, const std::string& backing_device,
            const std::string& control_device, const std::string& misc_name,
            const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
-    bool RunThread();
-    bool Init();
+    virtual ~Worker() = default;
+
+    virtual bool Init();
 
   protected:
     // Initialization
@@ -118,39 +120,21 @@ class Worker {
         base_path_merge_fd_ = {};
     }
 
-    // Functions interacting with dm-user
-    bool WriteDmUserPayload(size_t size);
-    bool DmuserReadRequest();
-
     // IO Path
-    bool ProcessIORequest();
     bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
 
     bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
     bool ReadFromSourceDevice(const CowOperation* cow_op);
 
-    bool ReadAlignedSector(sector_t sector, size_t sz);
-    bool ReadUnalignedSector(sector_t sector, size_t size);
-    int ReadUnalignedSector(sector_t sector, size_t size,
-                            std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
-    void RespondIOError();
-
     // Processing COW operations
-    bool ProcessCowOp(const CowOperation* cow_op);
     bool ProcessReplaceOp(const CowOperation* cow_op);
     bool ProcessZeroOp();
-
-    // Handles Copy and Xor
-    bool ProcessCopyOp(const CowOperation* cow_op);
-    bool ProcessXorOp(const CowOperation* cow_op);
-    bool ProcessOrderedOp(const CowOperation* cow_op);
 
     sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
 
     std::unique_ptr<CowReader> reader_;
     BufferSink bufsink_;
-    XorSink xorsink_;
 
     std::string cow_device_;
     std::string backing_store_device_;
@@ -162,7 +146,6 @@ class Worker {
     unique_fd backing_store_fd_;
     unique_fd base_path_merge_fd_;
     unique_fd ctrl_fd_;
-    bool header_response_ = false;
 
     std::unique_ptr<ICowOpIter> cowop_iter_;
 
@@ -286,7 +269,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void* mapped_addr_;
     size_t total_mapped_addr_length_;
 
-    std::vector<std::unique_ptr<Worker>> worker_threads_;
+    std::vector<std::unique_ptr<ReadWorker>> worker_threads_;
     // Read-ahead related
     bool populate_data_from_cow_ = false;
     bool ra_thread_ = false;
