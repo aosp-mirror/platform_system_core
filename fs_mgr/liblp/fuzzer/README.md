@@ -2,6 +2,7 @@
 ## Table of contents
 +  [liblp_builder_fuzzer](#Builder)
 +  [liblp_super_layout_builder_fuzzer](#SuperBuilder)
++  [liblp_apis_fuzzer](#APIs)
 
 # <a  name="Builder"></a> Fuzzer for LiblpBuilder
 
@@ -90,4 +91,46 @@ SuperLayoutBuilder supports the following parameters:
 ```
   $ adb sync data
   $ adb shell /data/fuzz/arm64/liblp_super_layout_builder_fuzzer/liblp_super_layout_builder_fuzzer
+```
+
+# <a  name="APIs"></a> Fuzzer for LiblpApis
+
+LiblpAPIs supports the following parameters:
+1. blockDeviceInfoSize (parameter name: "block_device_info_size")
+2. alignment (parameter name: "alignment")
+3. alignmentOffset (parameter name: "alignment_offset")
+4. logicalBlockSize (parameter name: "logical_block_size")
+5. blockDevSize (parameter name: "blockdev_size")
+6. metadataMaxSize (parameter name: "metadata_max_size")
+7. metadataSlotCount (parameter name: "metadata_slot_count")
+8. blockDeviceInfoName (parameter name: "block_device_info_name")
+9. numSectors (parameter name: "num_sectors")
+10. physicalSector (parameter name: "physical_sector")
+11. sparsify (parameter name: "sparsify")
+12. buffer (parameter name: "data")
+
+| Parameter| Valid Values| Configured Value|
+|------------- |-------------| ----- |
+|`blockDeviceInfoSize`| Integer |Value obtained from FuzzedDataProvider|
+|`alignment`| Integer |Value obtained from FuzzedDataProvider|
+|`alignmentOffset`| Integer |Value obtained from FuzzedDataProvider|
+|`logicalBlockSize`| Integer |Value obtained from FuzzedDataProvider|
+|`blockDevSize`| Integer value in multiples of `LP_SECTOR_SIZE`|Value obtained from FuzzedDataProvider|
+|`metadataMaxSize`| Integer value from `0` to `10000` |Value obtained from FuzzedDataProvider|
+|`metadataSlotCount`| Integer value from `0` to `2` |Value obtained from FuzzedDataProvider|
+|`blockDeviceInfoName`| String |Value obtained from FuzzedDataProvider|
+|`numSectors`| Integer value from `1` to `1000000` |Value obtained from FuzzedDataProvider|
+|`physicalSector`| Integer value from `1` to `1000000` |Value obtained from FuzzedDataProvider|
+|`alignment`| Bool |Value obtained from FuzzedDataProvider|
+|`alignment`| Vector |Value obtained from FuzzedDataProvider|
+
+#### Steps to run
+1. Build the fuzzer
+```
+  $ mm -j$(nproc) liblp_apis_fuzzer
+```
+2. Run on device
+```
+  $ adb sync data
+  $ adb shell /data/fuzz/arm64/liblp_apis_fuzzer/liblp_apis_fuzzer
 ```
