@@ -181,6 +181,10 @@ cc_library_static {
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
+    apex_available: [
+        "//apex_available:anyapex",
+        "//apex_available:platform",
+    ],
     host_supported: true,
     defaults: ["fs_mgr_defaults"],
     srcs: [
@@ -206,6 +210,7 @@ cc_library_static {
         "libbase_headers",
         "libgsi_headers",
     ],
+    min_sdk_version: "31",
 }
 
 cc_binary {
