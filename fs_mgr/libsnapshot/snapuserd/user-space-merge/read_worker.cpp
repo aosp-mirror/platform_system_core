@@ -25,60 +25,11 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
-Worker::Worker(const std::string& cow_device, const std::string& backing_device,
-               const std::string& control_device, const std::string& misc_name,
-               const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd) {
-    cow_device_ = cow_device;
-    backing_store_device_ = backing_device;
-    control_device_ = control_device;
-    misc_name_ = misc_name;
-    base_path_merge_ = base_path_merge;
-    snapuserd_ = snapuserd;
-}
-
 ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing_device,
                        const std::string& control_device, const std::string& misc_name,
                        const std::string& base_path_merge,
                        std::shared_ptr<SnapshotHandler> snapuserd)
     : Worker(cow_device, backing_device, control_device, misc_name, base_path_merge, snapuserd) {}
-
-bool Worker::InitializeFds() {
-    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
-    if (backing_store_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << backing_store_device_;
-        return false;
-    }
-
-    cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
-    if (cow_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << cow_device_;
-        return false;
-    }
-
-    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
-    if (ctrl_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
-        return false;
-    }
-
-    // Base device used by merge thread
-    base_path_merge_fd_.reset(open(base_path_merge_.c_str(), O_RDWR));
-    if (base_path_merge_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << base_path_merge_;
-        return false;
-    }
-
-    return true;
-}
-
-bool Worker::InitReader() {
-    reader_ = snapuserd_->CloneReaderForWorker();
-
-    if (!reader_->InitForMerge(std::move(cow_fd_))) {
-        return false;
-    }
-    return true;
-}
 
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
@@ -96,7 +47,7 @@ bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
     return true;
 }
 
-bool Worker::ReadFromSourceDevice(const CowOperation* cow_op) {
+bool ReadWorker::ReadFromSourceDevice(const CowOperation* cow_op) {
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
     if (buffer == nullptr) {
         SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
@@ -254,29 +205,6 @@ bool ReadWorker::ProcessCowOp(const CowOperation* cow_op) {
     return false;
 }
 
-void Worker::InitializeBufsink() {
-    // Allocate the buffer which is used to communicate between
-    // daemon and dm-user. The buffer comprises of header and a fixed payload.
-    // If the dm-user requests a big IO, the IO will be broken into chunks
-    // of PAYLOAD_BUFFER_SZ.
-    size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_BUFFER_SZ;
-    bufsink_.Initialize(buf_size);
-}
-
-bool Worker::Init() {
-    InitializeBufsink();
-
-    if (!InitializeFds()) {
-        return false;
-    }
-
-    if (!InitReader()) {
-        return false;
-    }
-
-    return true;
-}
-
 bool ReadWorker::Init() {
     if (!Worker::Init()) {
         return false;
@@ -325,7 +253,7 @@ bool ReadWorker::WriteDmUserPayload(size_t size) {
     return true;
 }
 
-bool Worker::ReadDataFromBaseDevice(sector_t sector, size_t read_size) {
+bool ReadWorker::ReadDataFromBaseDevice(sector_t sector, size_t read_size) {
     CHECK(read_size <= BLOCK_SZ);
 
     void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
