@@ -214,8 +214,8 @@ cc_library_headers {
     visibility: [":__subpackages__"],
 }
 
-cc_library_static {
-    name: "libinit",
+cc_defaults {
+    name: "libinit_defaults",
     recovery_available: true,
     defaults: [
         "init_defaults",
@@ -252,10 +252,17 @@ cc_library_static {
             ],
         },
     },
-    visibility: [
-        "//system/apex/apexd",
-        "//frameworks/native/cmds/installd",
-    ],
+}
+
+cc_library_static {
+    name: "libinit",
+    defaults: ["libinit_defaults"],
+}
+
+cc_library_static {
+    name: "libinit.microdroid",
+    defaults: ["libinit_defaults"],
+    cflags: ["-DMICRODROID=1"],
 }
 
 phony {
@@ -270,7 +277,6 @@ cc_defaults {
     recovery_available: true,
     stem: "init",
     defaults: ["init_defaults"],
-    static_libs: ["libinit"],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
     target: {
@@ -309,12 +315,14 @@ cc_defaults {
 cc_binary {
     name: "init_second_stage",
     defaults: ["init_second_stage_defaults"],
+    static_libs: ["libinit"],
 }
 
 cc_binary {
     name: "init_second_stage.microdroid",
     defaults: ["init_second_stage_defaults"],
-    cflags: ["-DMICRODROID"],
+    static_libs: ["libinit.microdroid"],
+    cflags: ["-DMICRODROID=1"],
     installable: false,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
@@ -460,7 +468,7 @@ cc_binary {
 cc_binary {
     name: "init_first_stage.microdroid",
     defaults: ["init_first_stage_defaults"],
-    cflags: ["-DMICRODROID"],
+    cflags: ["-DMICRODROID=1"],
     installable: false,
 }
 
