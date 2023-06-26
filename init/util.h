@@ -105,7 +105,14 @@ bool IsRecoveryMode();
 bool IsDefaultMountNamespaceReady();
 void SetDefaultMountNamespaceReady();
 
-bool IsMicrodroid();
+inline constexpr bool IsMicrodroid() {
+#ifdef MICRODROID
+    return MICRODROID;
+#else
+    return false;
+#endif
+}
+
 bool Has32BitAbi();
 
 std::string GetApexNameFromFileName(const std::string& path);
