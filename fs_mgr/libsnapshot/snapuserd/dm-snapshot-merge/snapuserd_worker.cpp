@@ -115,12 +115,13 @@ bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
         SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
         return false;
     }
-    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
-                    << " Source: " << cow_op->source;
-    uint64_t offset = cow_op->source;
-    if (cow_op->type == kCowCopyOp) {
-        offset *= BLOCK_SZ;
+    uint64_t offset;
+    if (!reader_->GetSourceOffset(cow_op, &offset)) {
+        SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get source offset";
+        return false;
     }
+    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
+                    << " Source: " << offset;
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
         SNAP_PLOG(ERROR) << "Copy op failed. Read from backing store: " << backing_store_device_
                          << "at block :" << offset / BLOCK_SZ << " offset:" << offset % BLOCK_SZ;
@@ -508,7 +509,7 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
                 if (read_ahead_buffer_map.find(cow_op->new_block) == read_ahead_buffer_map.end()) {
                     SNAP_LOG(ERROR)
                             << " Block: " << cow_op->new_block << " not found in read-ahead cache"
-                            << " Source: " << cow_op->source;
+                            << " Op: " << *cow_op;
                     return -1;
                 }
                 // If this is a final block merged in the read-ahead buffer
