@@ -94,12 +94,13 @@ bool Worker::ReadFromSourceDevice(const CowOperation* cow_op) {
         SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
         return false;
     }
-    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
-                    << " Source: " << cow_op->source;
-    uint64_t offset = cow_op->source;
-    if (cow_op->type == kCowCopyOp) {
-        offset *= BLOCK_SZ;
+    uint64_t offset;
+    if (!reader_->GetSourceOffset(cow_op, &offset)) {
+        SNAP_LOG(ERROR) << "ReadFromSourceDevice: Failed to get source offset";
+        return false;
     }
+    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
+                    << " Op: " << *cow_op;
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
         std::string op;
         if (cow_op->type == kCowCopyOp)

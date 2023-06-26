@@ -85,6 +85,7 @@ class ReadAhead {
 
     std::shared_ptr<SnapshotHandler> snapuserd_;
     std::unique_ptr<CowReader> reader_;
+    CowHeader header_;
 
     std::unordered_set<uint64_t> dest_blocks_;
     std::unordered_set<uint64_t> source_blocks_;
