@@ -732,11 +732,6 @@ void SetDefaultMountNamespaceReady() {
     is_default_mount_namespace_ready = true;
 }
 
-bool IsMicrodroid() {
-    static bool is_microdroid = android::base::GetProperty("ro.hardware", "") == "microdroid";
-    return is_microdroid;
-}
-
 bool Has32BitAbi() {
     static bool has = !android::base::GetProperty("ro.product.cpu.abilist32", "").empty();
     return has;
