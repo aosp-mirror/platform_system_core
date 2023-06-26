@@ -145,7 +145,7 @@ TEST_F(CowTest, ReadWrite) {
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_FALSE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -224,10 +224,10 @@ TEST_F(CowTest, ReadWriteXor) {
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowXorOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
+    ASSERT_FALSE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_EQ(op->source, 98314);  // 4096 * 24 + 10
+    ASSERT_EQ(GetCowOpSourceInfoData(op), 98314);  // 4096 * 24 + 10
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
     ASSERT_EQ(sink, data);
 
@@ -283,7 +283,7 @@ TEST_F(CowTest, CompressGz) {
     std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -339,7 +339,7 @@ TEST_P(CompressionTest, ThreadedBatchWrites) {
             total_blocks += 1;
             std::string sink(xor_data.size(), '\0');
             ASSERT_EQ(op->new_block, 50);
-            ASSERT_EQ(op->source, 98314);  // 4096 * 24 + 10
+            ASSERT_EQ(GetCowOpSourceInfoData(op), 98314);  // 4096 * 24 + 10
             ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
             ASSERT_EQ(sink, xor_data);
         }
@@ -528,7 +528,7 @@ TEST_F(CowTest, ClusterCompressGz) {
     std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -546,7 +546,7 @@ TEST_F(CowTest, ClusterCompressGz) {
 
     sink = {};
     sink.resize(data2.size(), '\0');
-    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 41);  // compressed!
     ASSERT_EQ(op->new_block, 51);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -591,7 +591,7 @@ TEST_F(CowTest, CompressTwoBlocks) {
 
     auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_EQ(op->compression, kCowCompressGz);
+    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->new_block, 51);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
 }

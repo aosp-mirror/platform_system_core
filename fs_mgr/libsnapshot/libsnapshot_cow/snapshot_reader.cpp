@@ -155,7 +155,12 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
         }
 
         if (op) {
-            chunk = op->source;
+            uint64_t source_offset;
+            if (!cow_->GetSourceOffset(op, &source_offset)) {
+                LOG(ERROR) << "GetSourceOffset failed in CompressedSnapshotReader for op: " << *op;
+                return false;
+            }
+            chunk = GetBlockFromOffset(cow_->GetHeader(), source_offset);
         }
 
         off64_t offset = (chunk * block_size_) + start_offset;
@@ -179,7 +184,12 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
             return -1;
         }
 
-        off64_t offset = op->source + start_offset;
+        uint64_t source_offset;
+        if (!cow_->GetSourceOffset(op, &source_offset)) {
+            LOG(ERROR) << "GetSourceOffset failed in CompressedSnapshotReader for op: " << *op;
+            return false;
+        }
+        off64_t offset = source_offset + start_offset;
 
         std::string data(bytes_to_read, '\0');
         if (!android::base::ReadFullyAtOffset(fd, data.data(), data.size(), offset)) {

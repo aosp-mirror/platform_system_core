@@ -312,18 +312,14 @@ bool CowReader::VerifyMergeOps() {
     std::unordered_map<uint64_t, const CowOperation*> overwritten_blocks;
     while (!itr->AtEnd()) {
         const auto& op = itr->Get();
-        uint64_t block;
-        bool offset;
-        if (op->type == kCowCopyOp) {
-            block = op->source;
-            offset = false;
-        } else if (op->type == kCowXorOp) {
-            block = op->source / header_.block_size;
-            offset = (op->source % header_.block_size) != 0;
-        } else {
+        uint64_t offset;
+        if (!GetSourceOffset(op, &offset)) {
             itr->Next();
             continue;
         }
+
+        uint64_t block = GetBlockFromOffset(header_, offset);
+        bool misaligned = (GetBlockRelativeOffset(header_, offset) != 0);
 
         const CowOperation* overwrite = nullptr;
         if (overwritten_blocks.count(block)) {
@@ -332,7 +328,7 @@ bool CowReader::VerifyMergeOps() {
                        << op << "\noverwritten by previously merged op:\n"
                        << *overwrite;
         }
-        if (offset && overwritten_blocks.count(block + 1)) {
+        if (misaligned && overwritten_blocks.count(block + 1)) {
             overwrite = overwritten_blocks[block + 1];
             LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
                        << op << "\noverwritten by previously merged op:\n"
@@ -521,7 +517,7 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
         case kCowSequenceOp:
         case kCowReplaceOp:
         case kCowXorOp:
-            return GetRawBytes(op->source, buffer, len, read);
+            return GetRawBytes(GetCowOpSourceInfoData(op), buffer, len, read);
         default:
             LOG(ERROR) << "Cannot get raw bytes of non-data op: " << *op;
             return false;
@@ -578,10 +574,14 @@ class CowDataStream final : public IByteStream {
     size_t remaining_;
 };
 
+uint8_t CowReader::GetCompressionType(const CowOperation* op) {
+    return op->compression;
+}
+
 ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
                             size_t ignore_bytes) {
     std::unique_ptr<IDecompressor> decompressor;
-    switch (op->compression) {
+    switch (GetCompressionType(op)) {
         case kCowCompressNone:
             break;
         case kCowCompressGz:
@@ -601,7 +601,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
             }
             break;
         default:
-            LOG(ERROR) << "Unknown compression type: " << op->compression;
+            LOG(ERROR) << "Unknown compression type: " << GetCompressionType(op);
             return -1;
     }
 
@@ -609,7 +609,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     if (op->type == kCowXorOp) {
         offset = data_loc_->at(op->new_block);
     } else {
-        offset = op->source;
+        offset = GetCowOpSourceInfoData(op);
     }
 
     if (!decompressor) {
@@ -620,6 +620,19 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     CowDataStream stream(this, offset, op->data_length);
     decompressor->set_stream(&stream);
     return decompressor->Decompress(buffer, buffer_size, header_.block_size, ignore_bytes);
+}
+
+bool CowReader::GetSourceOffset(const CowOperation* op, uint64_t* source_offset) {
+    switch (op->type) {
+        case kCowCopyOp:
+            *source_offset = GetCowOpSourceInfoData(op) * header_.block_size;
+            return true;
+        case kCowXorOp:
+            *source_offset = GetCowOpSourceInfoData(op);
+            return true;
+        default:
+            return false;
+    }
 }
 
 }  // namespace snapshot
