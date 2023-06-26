@@ -166,6 +166,13 @@ static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
+static inline uint64_t GetCowOpSourceInfoData(const CowOperation* op) {
+    return op->source;
+}
+static inline bool GetCowOpSourceInfoCompression(const CowOperation* op) {
+    return op->compression != kCowCompressNone;
+}
+
 struct CowFooter {
     CowFooterOperation op;
     uint8_t unused[64];
