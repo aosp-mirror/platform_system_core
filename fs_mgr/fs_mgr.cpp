@@ -613,7 +613,6 @@ static void tune_metadata_csum(const std::string& blk_device, const FstabEntry& 
 
 // Read the primary superblock from an f2fs filesystem.  On failure return
 // false.  If it's not an f2fs filesystem, also set FS_STAT_INVALID_MAGIC.
-#define F2FS_BLKSIZE 4096
 #define F2FS_SUPER_OFFSET 1024
 static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(blk_device.c_str(), O_RDONLY | O_CLOEXEC)));
@@ -628,7 +627,9 @@ static bool read_f2fs_superblock(const std::string& blk_device, int* fs_stat) {
         PERROR << "Can't read '" << blk_device << "' superblock1";
         return false;
     }
-    if (TEMP_FAILURE_RETRY(pread(fd, &sb2, sizeof(sb2), F2FS_BLKSIZE + F2FS_SUPER_OFFSET)) !=
+    // F2FS only supports block_size=page_size case. So, it is safe to call
+    // `getpagesize()` and use that as size of super block.
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb2, sizeof(sb2), getpagesize() + F2FS_SUPER_OFFSET)) !=
         sizeof(sb2)) {
         PERROR << "Can't read '" << blk_device << "' superblock2";
         return false;
@@ -652,7 +653,7 @@ bool fs_mgr_is_f2fs(const std::string& blk_device) {
         return false;
     }
     if (sb == cpu_to_le32(F2FS_SUPER_MAGIC)) return true;
-    if (TEMP_FAILURE_RETRY(pread(fd, &sb, sizeof(sb), F2FS_BLKSIZE + F2FS_SUPER_OFFSET)) !=
+    if (TEMP_FAILURE_RETRY(pread(fd, &sb, sizeof(sb), getpagesize() + F2FS_SUPER_OFFSET)) !=
         sizeof(sb)) {
         return false;
     }
