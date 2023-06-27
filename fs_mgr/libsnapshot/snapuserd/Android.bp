@@ -60,8 +60,9 @@ cc_library_static {
     local_include_dirs: ["include/"],
     srcs: [
         "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+        "dm_user_block_server.cpp",
         "snapuserd_buffer.cpp",
         "user-space-merge/handler_manager.cpp",
         "user-space-merge/merge_worker.cpp",
