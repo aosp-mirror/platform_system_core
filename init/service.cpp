@@ -50,7 +50,6 @@
 #endif
 
 #ifdef INIT_FULL_SOURCES
-#include <ApexProperties.sysprop.h>
 #include <android/api-level.h>
 
 #include "mount_namespace.h"
@@ -323,7 +322,7 @@ void Service::Reap(const siginfo_t& siginfo) {
     }
 
 #if INIT_FULL_SOURCES
-    static bool is_apex_updatable = android::sysprop::ApexProperties::updatable().value_or(false);
+    static bool is_apex_updatable = true;
 #else
     static bool is_apex_updatable = false;
 #endif
