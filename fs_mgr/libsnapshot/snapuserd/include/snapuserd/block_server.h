@@ -38,7 +38,7 @@ class IBlockServer {
         //
         // If false is returned, an error will be automatically reported unless
         // SendError was called.
-        virtual bool RequestSectors(uint64_t sector, size_t size) = 0;
+        virtual bool RequestSectors(uint64_t sector, uint64_t size) = 0;
     };
 
     virtual ~IBlockServer() {}
