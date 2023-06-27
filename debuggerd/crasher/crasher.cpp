@@ -148,7 +148,7 @@ noinline void abuse_heap() {
 noinline void leak() {
     while (true) {
         void* mapping =
-            mmap(nullptr, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            mmap(nullptr, getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         static_cast<volatile char*>(mapping)[0] = 'a';
     }
 }
