@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-#include <ApexProperties.sysprop.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -29,16 +28,6 @@
 #include <android-base/unique_fd.h>
 
 #include "util.h"
-
-#ifndef RECOVERY
-#define ACTIVATE_FLATTENED_APEX 1
-#endif
-
-#ifdef ACTIVATE_FLATTENED_APEX
-#include <apex_manifest.pb.h>
-#include <com_android_apex.h>
-#include <selinux/android.h>
-#endif  // ACTIVATE_FLATTENED_APEX
 
 namespace android {
 namespace init {
@@ -77,15 +66,9 @@ static std::string GetMountNamespaceId() {
     return ret;
 }
 
-static bool IsApexUpdatable() {
-    static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
-    return updatable;
-}
-
 // In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
 // namespaces.
 static bool NeedsTwoMountNamespaces() {
-    if (!IsApexUpdatable()) return false;
     if (IsRecoveryMode()) return false;
     // In microdroid, there's only one set of APEXes in built-in directories include block devices.
     if (IsMicrodroid()) return false;
@@ -193,7 +176,7 @@ bool SetupMountNamespaces() {
 // Switch the mount namespace of the current process from bootstrap to default OR from default to
 // bootstrap. If the current mount namespace is neither bootstrap nor default, keep it that way.
 Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace) {
-    if (IsRecoveryMode() || !IsApexUpdatable()) {
+    if (IsRecoveryMode()) {
         // we don't have multiple namespaces in recovery mode or if apex is not updatable
         return {};
     }
