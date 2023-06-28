@@ -230,7 +230,7 @@ void Modprobe::ParseCfg(const std::string& cfg,
     }
 
     std::vector<std::string> lines = android::base::Split(cfg_contents, "\n");
-    for (const std::string line : lines) {
+    for (const auto& line : lines) {
         if (line.empty() || line[0] == '#') {
             continue;
         }
@@ -421,7 +421,8 @@ bool Modprobe::LoadWithAliases(const std::string& module_name, bool strict,
     }
 
     if (strict && !module_loaded) {
-        LOG(ERROR) << "LoadWithAliases was unable to load " << module_name;
+        LOG(ERROR) << "LoadWithAliases was unable to load " << module_name
+                   << ", tried: " << android::base::Join(modules_to_load, ", ");
         return false;
     }
     return true;
