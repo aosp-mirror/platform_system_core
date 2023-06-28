@@ -37,8 +37,8 @@
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
 #include <libsnapshot/cow_writer.h>
+#include <snapuserd/dm_user_block_server.h>
 #include <storage_literals/storage_literals.h>
-
 #include "handler_manager.h"
 #include "snapuserd_core.h"
 #include "testing/temp_device.h"
@@ -535,9 +535,12 @@ void SnapuserdTest::InitCowDevice() {
         use_iouring = false;
     }
 
+    DmUserBlockServerFactory factory;
+
+    auto opener = factory.CreateOpener(system_device_ctrl_name_);
     auto handler =
             handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_loop_->device(),
-                                 base_loop_->device(), 1, use_iouring, false);
+                                 base_loop_->device(), opener, 1, use_iouring, false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__

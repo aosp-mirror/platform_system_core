@@ -43,6 +43,7 @@
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 #include <liburing.h>
+#include <snapuserd/block_server.h>
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
@@ -102,8 +103,8 @@ struct MergeGroupState {
 class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
   public:
     SnapshotHandler(std::string misc_name, std::string cow_device, std::string backing_device,
-                    std::string base_path_merge, int num_workers, bool use_iouring,
-                    bool perform_verification);
+                    std::string base_path_merge, std::shared_ptr<IBlockServerOpener> opener,
+                    int num_workers, bool use_iouring, bool perform_verification);
     bool InitCowDevice();
     bool Start();
 
@@ -242,6 +243,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     std::unique_ptr<struct io_uring> ring_;
     std::unique_ptr<UpdateVerify> update_verify_;
+    std::shared_ptr<IBlockServerOpener> block_server_opener_;
 };
 
 }  // namespace snapshot
