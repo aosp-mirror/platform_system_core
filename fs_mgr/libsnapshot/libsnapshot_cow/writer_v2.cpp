@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "writer_v2.h"
+
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -37,7 +39,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include "writer_v2.h"
+#include "parser_v2.h"
 
 // The info messages here are spammy, but as useful for update_engine. Disable
 // them when running on the host.
@@ -252,14 +254,20 @@ bool CowWriterV2::OpenForWrite() {
 }
 
 bool CowWriterV2::OpenForAppend(uint64_t label) {
-    auto reader = std::make_unique<CowReader>();
-    std::queue<CowOperation> toAdd;
-
-    if (!reader->Parse(fd_, {label})) {
+    if (!ReadCowHeader(fd_, &header_)) {
         return false;
     }
 
-    header_ = reader->GetHeader();
+    CowParserV2 parser;
+    if (!parser.Parse(fd_, header_, {label})) {
+        return false;
+    }
+    if (header_.prefix.major_version > 2) {
+        LOG(ERROR) << "CowWriterV2 tried to open incompatible version "
+                   << header_.prefix.major_version;
+        return false;
+    }
+
     options_.block_size = header_.block_size;
     options_.cluster_ops = header_.cluster_ops;
 
@@ -267,15 +275,9 @@ bool CowWriterV2::OpenForAppend(uint64_t label) {
     footer_.op.num_ops = 0;
     InitPos();
 
-    auto iter = reader->GetOpIter();
-
-    while (!iter->AtEnd()) {
-        AddOperation(*iter->Get());
-        iter->Next();
+    for (const auto& op : *parser.ops()) {
+        AddOperation(op);
     }
-
-    // Free reader so we own the descriptor position again.
-    reader = nullptr;
 
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
