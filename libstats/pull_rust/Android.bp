@@ -28,7 +28,6 @@ rust_bindgen {
     ],
     source_stem: "bindings",
     bindgen_flags: [
-        "--size_t-is-usize",
         "--allowlist-function=AStatsEventList_addStatsEvent",
         "--allowlist-function=AStatsEvent_.*",
         "--allowlist-function=AStatsManager_.*",
