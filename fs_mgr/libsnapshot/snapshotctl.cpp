@@ -133,7 +133,6 @@ bool CreateTestUpdate(SnapshotManager* sm) {
 
     // Write the "new" system partition.
     auto system_target_name = "system" + target_slot;
-    auto source_device = "/dev/block/mapper/" + system_source_name;
     CreateLogicalPartitionParams clpp = {
             .block_device = fs_mgr_get_super_partition_name(target_slot_number),
             .metadata_slot = {target_slot_number},
@@ -141,13 +140,9 @@ bool CreateTestUpdate(SnapshotManager* sm) {
             .partition_opener = &opener,
             .timeout_ms = 10s,
     };
-    auto writer = sm->OpenSnapshotWriter(clpp, {source_device});
+    auto writer = sm->OpenSnapshotWriter(clpp, std::nullopt);
     if (!writer) {
         std::cerr << "Could not open snapshot writer.\n";
-        return false;
-    }
-    if (!writer->Initialize()) {
-        std::cerr << "Could not initialize snapshot for writing.\n";
         return false;
     }
 

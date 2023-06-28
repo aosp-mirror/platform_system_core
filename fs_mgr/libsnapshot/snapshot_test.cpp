@@ -345,7 +345,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     AssertionResult MapUpdateSnapshot(const std::string& name,
-                                      std::unique_ptr<ISnapshotWriter>* writer) {
+                                      std::unique_ptr<ICowWriter>* writer) {
         TestPartitionOpener opener(fake_super);
         CreateLogicalPartitionParams params{
                 .block_device = fake_super,
@@ -355,13 +355,9 @@ class SnapshotTest : public ::testing::Test {
                 .partition_opener = &opener,
         };
 
-        auto old_partition = "/dev/block/mapper/" + GetOtherPartitionName(name);
-        auto result = sm->OpenSnapshotWriter(params, {old_partition});
+        auto result = sm->OpenSnapshotWriter(params, {});
         if (!result) {
             return AssertionFailure() << "Cannot open snapshot for writing: " << name;
-        }
-        if (!result->Initialize()) {
-            return AssertionFailure() << "Cannot initialize snapshot for writing: " << name;
         }
 
         if (writer) {
@@ -440,7 +436,7 @@ class SnapshotTest : public ::testing::Test {
 
     // Prepare A/B slot for a partition named "test_partition".
     AssertionResult PrepareOneSnapshot(uint64_t device_size,
-                                       std::unique_ptr<ISnapshotWriter>* writer = nullptr) {
+                                       std::unique_ptr<ICowWriter>* writer = nullptr) {
         lock_ = nullptr;
 
         DeltaArchiveManifest manifest;
@@ -643,21 +639,38 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
 TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(AcquireLock());
 
-    static const uint64_t kDeviceSize = 1024 * 1024;
-
-    std::unique_ptr<ISnapshotWriter> writer;
-    ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize, &writer));
-
-    bool userspace_snapshots = sm->UpdateUsesUserSnapshots(lock_.get());
-
-    // Release the lock.
-    lock_ = nullptr;
+    static constexpr uint64_t kDeviceSize = 1024 * 1024;
+    static constexpr uint32_t kBlockSize = 4096;
 
     std::string test_string = "This is a test string.";
-    test_string.resize(writer->options().block_size);
-    ASSERT_TRUE(writer->AddRawBlocks(0, test_string.data(), test_string.size()));
-    ASSERT_TRUE(writer->Finalize());
-    writer = nullptr;
+    test_string.resize(kBlockSize);
+
+    bool userspace_snapshots = false;
+    if (snapuserd_required_) {
+        std::unique_ptr<ICowWriter> writer;
+        ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize, &writer));
+
+        userspace_snapshots = sm->UpdateUsesUserSnapshots(lock_.get());
+
+        // Release the lock.
+        lock_ = nullptr;
+
+        ASSERT_TRUE(writer->AddRawBlocks(0, test_string.data(), test_string.size()));
+        ASSERT_TRUE(writer->Finalize());
+        writer = nullptr;
+    } else {
+        ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize));
+
+        // Release the lock.
+        lock_ = nullptr;
+
+        std::string path;
+        ASSERT_TRUE(dm_.GetDmDevicePathByName("test_partition_b", &path));
+
+        unique_fd fd(open(path.c_str(), O_WRONLY));
+        ASSERT_GE(fd, 0);
+        ASSERT_TRUE(android::base::WriteFully(fd, test_string.data(), test_string.size()));
+    }
 
     // Done updating.
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
@@ -1143,7 +1156,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
         if (snapuserd_required_) {
-            std::unique_ptr<ISnapshotWriter> writer;
+            std::unique_ptr<ICowWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
             std::string path;
@@ -1164,7 +1177,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     AssertionResult WriteSnapshotAndHash(PartitionUpdate* partition) {
         std::string name = partition->partition_name() + "_b";
         if (snapuserd_required_) {
-            std::unique_ptr<ISnapshotWriter> writer;
+            std::unique_ptr<ICowWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
                 return res;
@@ -1203,13 +1216,13 @@ class SnapshotUpdateTest : public SnapshotTest {
         SHA256_CTX ctx;
         SHA256_Init(&ctx);
 
-        if (!writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks()) {
             LOG(ERROR) << "CowWriter must specify maximum number of blocks";
             return false;
         }
-        const auto num_blocks = writer->options().max_blocks.value();
+        const auto num_blocks = writer->GetMaxBlocks().value();
 
-        const auto block_size = writer->options().block_size;
+        const auto block_size = writer->GetBlockSize();
         std::string block(block_size, '\0');
         for (uint64_t i = 0; i < num_blocks; i++) {
             if (!ReadFully(rand, block.data(), block.size())) {
@@ -1233,17 +1246,17 @@ class SnapshotUpdateTest : public SnapshotTest {
     // It doesn't really matter the order, we just want copies that reference
     // blocks that won't exist if the partition shrinks.
     AssertionResult ShiftAllSnapshotBlocks(const std::string& name, uint64_t old_size) {
-        std::unique_ptr<ISnapshotWriter> writer;
+        std::unique_ptr<ICowWriter> writer;
         if (auto res = MapUpdateSnapshot(name, &writer); !res) {
             return res;
         }
-        if (!writer->options().max_blocks || !*writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks() || !*writer->GetMaxBlocks()) {
             return AssertionFailure() << "No max blocks set for " << name << " writer";
         }
 
-        uint64_t src_block = (old_size / writer->options().block_size) - 1;
+        uint64_t src_block = (old_size / writer->GetBlockSize()) - 1;
         uint64_t dst_block = 0;
-        uint64_t max_blocks = *writer->options().max_blocks;
+        uint64_t max_blocks = *writer->GetMaxBlocks();
         while (dst_block < max_blocks && dst_block < src_block) {
             if (!writer->AddCopy(dst_block, src_block)) {
                 return AssertionFailure() << "Unable to add copy for " << name << " for blocks "
@@ -1256,7 +1269,13 @@ class SnapshotUpdateTest : public SnapshotTest {
             return AssertionFailure() << "Unable to finalize writer for " << name;
         }
 
-        auto hash = HashSnapshot(writer.get());
+        auto old_partition = "/dev/block/mapper/" + GetOtherPartitionName(name);
+        auto reader = writer->OpenFileDescriptor(old_partition);
+        if (!reader) {
+            return AssertionFailure() << "Could not open file descriptor for " << name;
+        }
+
+        auto hash = HashSnapshot(reader.get());
         if (hash.empty()) {
             return AssertionFailure() << "Unable to hash snapshot writer for " << name;
         }
@@ -1411,7 +1430,7 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     for (auto* partition : partitions) {
         AddOperation(partition);
 
-        std::unique_ptr<ISnapshotWriter> writer;
+        std::unique_ptr<ICowWriter> writer;
         auto res = MapUpdateSnapshot(partition->partition_name() + "_b", &writer);
         ASSERT_TRUE(res);
         ASSERT_TRUE(writer->AddZeroBlocks(0, 1));

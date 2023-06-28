@@ -198,7 +198,7 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 // Expect space of |path| is multiple of 4K.
 bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
                      std::string* hash = nullptr);
-std::string HashSnapshot(ISnapshotWriter* writer);
+std::string HashSnapshot(ICowWriter::FileDescriptor* writer);
 
 std::string ToHexString(const uint8_t* buf, size_t len);
 
