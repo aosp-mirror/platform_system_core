@@ -104,7 +104,6 @@ static bool g_long_listing = false;
 // libsparse will support INT_MAX, but this results in large allocations, so
 // let's keep it at 1GB to avoid memory pressure on the host.
 static constexpr int64_t RESPARSE_LIMIT = 1 * 1024 * 1024 * 1024;
-static uint64_t sparse_limit = 0;
 static int64_t target_sparse_limit = -1;
 
 static unsigned g_base_addr = 0x10000000;
@@ -1016,8 +1015,8 @@ static uint64_t get_uint_var(const char* var_name) {
     return value;
 }
 
-int64_t get_sparse_limit(int64_t size) {
-    int64_t limit = sparse_limit;
+int64_t get_sparse_limit(int64_t size, const FlashingPlan* fp) {
+    int64_t limit = int64_t(fp->sparse_limit);
     if (limit == 0) {
         // Unlimited, so see what the target device's limit is.
         // TODO: shouldn't we apply this limit even if you've used -S?
@@ -1038,7 +1037,7 @@ int64_t get_sparse_limit(int64_t size) {
     return 0;
 }
 
-static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
+static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf, const FlashingPlan* fp) {
     int64_t sz = get_file_size(fd);
     if (sz == -1) {
         return false;
@@ -1056,7 +1055,7 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     }
 
     lseek(fd.get(), 0, SEEK_SET);
-    int64_t limit = get_sparse_limit(sz);
+    int64_t limit = get_sparse_limit(sz, fp);
     buf->fd = std::move(fd);
     if (limit) {
         buf->files = load_sparse_files(buf->fd.get(), limit);
@@ -1072,13 +1071,11 @@ static bool load_buf_fd(unique_fd fd, struct fastboot_buffer* buf) {
     return true;
 }
 
-static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
+static bool load_buf(const char* fname, struct fastboot_buffer* buf, const FlashingPlan* fp) {
     unique_fd fd(TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_BINARY)));
 
     if (fd == -1) {
-        auto path = find_item_given_name(fname);
-        fd = unique_fd(TEMP_FAILURE_RETRY(open(path.c_str(), O_RDONLY | O_BINARY)));
-        if (fd == -1) return false;
+        return false;
     }
 
     struct stat s;
@@ -1090,7 +1087,7 @@ static bool load_buf(const char* fname, struct fastboot_buffer* buf) {
         return false;
     }
 
-    return load_buf_fd(std::move(fd), buf);
+    return load_buf_fd(std::move(fd), buf, fp);
 }
 
 static void rewrite_vbmeta_buffer(struct fastboot_buffer* buf, bool vbmeta_in_boot) {
@@ -1492,12 +1489,19 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
-    if (fp->source) {
+    if (fp && fp->source) {
         unique_fd fd = fp->source->OpenFile(fname);
-        if (fd < 0 || !load_buf_fd(std::move(fd), &buf)) {
+        if (fd < 0 || !load_buf_fd(std::move(fd), &buf, fp)) {
             die("could not load '%s': %s", fname, strerror(errno));
         }
-    } else if (!load_buf(fname, &buf)) {
+        std::vector<char> signature_data;
+        std::string file_string(fname);
+        if (fp->source->ReadFile(file_string.substr(0, file_string.find('.')) + ".sig",
+                                 &signature_data)) {
+            fb->Download("signature", signature_data);
+            fb->RawCommand("signature", "installing signature");
+        }
+    } else if (!load_buf(fname, &buf, fp)) {
         die("cannot load '%s': %s", fname, strerror(errno));
     }
 
@@ -1783,7 +1787,10 @@ void FlashAllTool::Flash() {
 
     CancelSnapshotIfNeeded();
 
-    HardcodedFlash();
+    tasks_ = CollectTasksFromImageList();
+    for (auto& task : tasks_) {
+        task->Run();
+    }
     return;
 }
 
@@ -1835,13 +1842,12 @@ void FlashAllTool::CollectImages() {
     }
 }
 
-void FlashAllTool::HardcodedFlash() {
+std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
     CollectImages();
     // First flash boot partitions. We allow this to happen either in userspace
     // or in bootloader fastboot.
-    FlashImages(boot_images_);
-
     std::vector<std::unique_ptr<Task>> tasks;
+    AddFlashTasks(boot_images_, tasks);
 
     if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
         tasks.emplace_back(std::move(flash_super_task));
@@ -1865,52 +1871,25 @@ void FlashAllTool::HardcodedFlash() {
             tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
     }
-    for (auto& i : tasks) {
-        i->Run();
-    }
-    FlashImages(os_images_);
+    AddFlashTasks(os_images_, tasks);
+    return tasks;
 }
 
-void FlashAllTool::FlashImages(const std::vector<std::pair<const Image*, std::string>>& images) {
+void FlashAllTool::AddFlashTasks(const std::vector<std::pair<const Image*, std::string>>& images,
+                                 std::vector<std::unique_ptr<Task>>& tasks) {
     for (const auto& [image, slot] : images) {
         fastboot_buffer buf;
         unique_fd fd = fp_->source->OpenFile(image->img_name);
-        if (fd < 0 || !load_buf_fd(std::move(fd), &buf)) {
+        if (fd < 0 || !load_buf_fd(std::move(fd), &buf, fp_)) {
             if (image->optional_if_no_image) {
                 continue;
             }
             die("could not load '%s': %s", image->img_name.c_str(), strerror(errno));
         }
-        FlashImage(*image, slot, &buf);
+        tasks.emplace_back(std::make_unique<FlashTask>(slot, image->part_name, image->img_name,
+                                                       is_vbmeta_partition(image->part_name), fp_));
     }
 }
-
-void FlashAllTool::FlashImage(const Image& image, const std::string& slot, fastboot_buffer* buf) {
-    auto flash = [&, this](const std::string& partition_name) {
-        std::vector<char> signature_data;
-        if (fp_->source->ReadFile(image.sig_name, &signature_data)) {
-            fb->Download("signature", signature_data);
-            fb->RawCommand("signature", "installing signature");
-        }
-
-        if (is_logical(partition_name)) {
-            fb->ResizePartition(partition_name, std::to_string(buf->image_size));
-        }
-
-        flash_buf(partition_name.c_str(), buf, is_vbmeta_partition(partition_name));
-    };
-    do_for_partitions(image.part_name, slot, flash, false);
-}
-
-class ZipImageSource final : public ImageSource {
-  public:
-    explicit ZipImageSource(ZipArchiveHandle zip) : zip_(zip) {}
-    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
-    unique_fd OpenFile(const std::string& name) const override;
-
-  private:
-    ZipArchiveHandle zip_;
-};
 
 bool ZipImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
     return UnzipToMemory(zip_, name, out);
@@ -1934,12 +1913,6 @@ static void do_update(const char* filename, FlashingPlan* fp) {
 
     CloseArchive(zip);
 }
-
-class LocalImageSource final : public ImageSource {
-  public:
-    bool ReadFile(const std::string& name, std::vector<char>* out) const override;
-    unique_fd OpenFile(const std::string& name) const override;
-};
 
 bool LocalImageSource::ReadFile(const std::string& name, std::vector<char>* out) const {
     auto path = find_item_given_name(name);
@@ -2000,7 +1973,7 @@ static unsigned fb_get_flash_block_size(std::string name) {
 
 void fb_perform_format(const std::string& partition, int skip_if_not_supported,
                        const std::string& type_override, const std::string& size_override,
-                       const unsigned fs_options) {
+                       const unsigned fs_options, const FlashingPlan* fp) {
     std::string partition_type, partition_size;
 
     struct fastboot_buffer buf;
@@ -2013,8 +1986,8 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (target_sparse_limit > 0 && target_sparse_limit < limit) {
         limit = target_sparse_limit;
     }
-    if (sparse_limit > 0 && sparse_limit < limit) {
-        limit = sparse_limit;
+    if (fp->sparse_limit > 0 && fp->sparse_limit < limit) {
+        limit = fp->sparse_limit;
     }
 
     if (fb->GetVar("partition-type:" + partition, &partition_type) != fastboot::SUCCESS) {
@@ -2069,7 +2042,7 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (fd == -1) {
         die("Cannot open generated image: %s", strerror(errno));
     }
-    if (!load_buf_fd(std::move(fd), &buf)) {
+    if (!load_buf_fd(std::move(fd), &buf, fp)) {
         die("Cannot read image: %s", strerror(errno));
     }
     flash_buf(partition, &buf, is_vbmeta_partition(partition));
@@ -2209,6 +2182,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                                       {"cmdline", required_argument, 0, 0},
                                       {"disable-verification", no_argument, 0, 0},
                                       {"disable-verity", no_argument, 0, 0},
+                                      {"disable-super-optimization", no_argument, 0, 0},
                                       {"force", no_argument, 0, 0},
                                       {"fs-options", required_argument, 0, 0},
                                       {"header-version", required_argument, 0, 0},
@@ -2246,6 +2220,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 g_disable_verification = true;
             } else if (name == "disable-verity") {
                 g_disable_verity = true;
+            } else if (name == "disable-super-optimization") {
+                fp->should_optimize_flash_super = false;
             } else if (name == "force") {
                 fp->force_flash = true;
             } else if (name == "fs-options") {
@@ -2301,7 +2277,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                     serial = optarg;
                     break;
                 case 'S':
-                    if (!android::base::ParseByteCount(optarg, &sparse_limit)) {
+                    if (!android::base::ParseByteCount(optarg, &fp->sparse_limit)) {
                         die("invalid sparse limit %s", optarg);
                     }
                     break;
@@ -2419,7 +2395,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string partition = next_arg(&args);
 
             auto format = [&](const std::string& partition) {
-                fb_perform_format(partition, 0, type_override, size_override, fp->fs_options);
+                fb_perform_format(partition, 0, type_override, size_override, fp->fs_options,
+                                  fp.get());
             };
             do_for_partitions(partition, fp->slot_override, format, true);
         } else if (command == "signature") {
@@ -2513,7 +2490,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             std::string filename = next_arg(&args);
 
             struct fastboot_buffer buf;
-            if (!load_buf(filename.c_str(), &buf) || buf.type != FB_BUFFER_FD) {
+            if (!load_buf(filename.c_str(), &buf, fp.get()) || buf.type != FB_BUFFER_FD) {
                 die("cannot load '%s'", filename.c_str());
             }
             fb->Download(filename, buf.fd.get(), buf.sz);
