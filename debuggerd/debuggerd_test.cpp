@@ -300,24 +300,7 @@ void CrasherTest::AssertDeath(int signo) {
 }
 
 static void ConsumeFd(unique_fd fd, std::string* output) {
-  constexpr size_t read_length = PAGE_SIZE;
-  std::string result;
-
-  while (true) {
-    size_t offset = result.size();
-    result.resize(result.size() + PAGE_SIZE);
-    ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &result[offset], read_length));
-    if (rc == -1) {
-      FAIL() << "read failed: " << strerror(errno);
-    } else if (rc == 0) {
-      result.resize(result.size() - PAGE_SIZE);
-      break;
-    }
-
-    result.resize(result.size() - PAGE_SIZE + rc);
-  }
-
-  *output = std::move(result);
+  ASSERT_TRUE(android::base::ReadFdToString(fd, output));
 }
 
 class LogcatCollector {

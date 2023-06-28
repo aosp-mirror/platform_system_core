@@ -28,6 +28,7 @@
 #pragma once
 #include <cstdlib>
 #include <deque>
+#include <functional>
 #include <limits>
 #include <string>
 #include <vector>

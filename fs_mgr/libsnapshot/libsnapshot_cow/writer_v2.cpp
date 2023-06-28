@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+#include "writer_v2.h"
+
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -37,6 +39,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "parser_v2.h"
+
 // The info messages here are spammy, but as useful for update_engine. Disable
 // them when running on the host.
 #ifdef __ANDROID__
@@ -48,104 +52,17 @@
 namespace android {
 namespace snapshot {
 
-namespace {
-std::string GetFdPath(int fd) {
-    const auto fd_path = "/proc/self/fd/" + std::to_string(fd);
-    std::string file_path(512, '\0');
-    const auto err = readlink(fd_path.c_str(), file_path.data(), file_path.size());
-    if (err <= 0) {
-        PLOG(ERROR) << "Failed to determine path for fd " << fd;
-        file_path.clear();
-    } else {
-        file_path.resize(err);
-    }
-    return file_path;
-}
-}  // namespace
-
 static_assert(sizeof(off_t) == sizeof(uint64_t));
 
-using android::base::borrowed_fd;
 using android::base::unique_fd;
 
-bool ICowWriter::AddCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
-    CHECK(num_blocks != 0);
-
-    for (size_t i = 0; i < num_blocks; i++) {
-        if (!ValidateNewBlock(new_block + i)) {
-            return false;
-        }
-    }
-
-    return EmitCopy(new_block, old_block, num_blocks);
-}
-
-bool ICowWriter::AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
-    if (size % options_.block_size != 0) {
-        LOG(ERROR) << "AddRawBlocks: size " << size << " is not a multiple of "
-                   << options_.block_size;
-        return false;
-    }
-
-    uint64_t num_blocks = size / options_.block_size;
-    uint64_t last_block = new_block_start + num_blocks - 1;
-    if (!ValidateNewBlock(last_block)) {
-        return false;
-    }
-    return EmitRawBlocks(new_block_start, data, size);
-}
-
-bool ICowWriter::AddXorBlocks(uint32_t new_block_start, const void* data, size_t size,
-                              uint32_t old_block, uint16_t offset) {
-    if (size % options_.block_size != 0) {
-        LOG(ERROR) << "AddRawBlocks: size " << size << " is not a multiple of "
-                   << options_.block_size;
-        return false;
-    }
-
-    uint64_t num_blocks = size / options_.block_size;
-    uint64_t last_block = new_block_start + num_blocks - 1;
-    if (!ValidateNewBlock(last_block)) {
-        return false;
-    }
-    if (offset >= options_.block_size) {
-        LOG(ERROR) << "AddXorBlocks: offset " << offset << " is not less than "
-                   << options_.block_size;
-    }
-    return EmitXorBlocks(new_block_start, data, size, old_block, offset);
-}
-
-bool ICowWriter::AddZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
-    uint64_t last_block = new_block_start + num_blocks - 1;
-    if (!ValidateNewBlock(last_block)) {
-        return false;
-    }
-    return EmitZeroBlocks(new_block_start, num_blocks);
-}
-
-bool ICowWriter::AddLabel(uint64_t label) {
-    return EmitLabel(label);
-}
-
-bool ICowWriter::AddSequenceData(size_t num_ops, const uint32_t* data) {
-    return EmitSequenceData(num_ops, data);
-}
-
-bool ICowWriter::ValidateNewBlock(uint64_t new_block) {
-    if (options_.max_blocks && new_block >= options_.max_blocks.value()) {
-        LOG(ERROR) << "New block " << new_block << " exceeds maximum block count "
-                   << options_.max_blocks.value();
-        return false;
-    }
-    return true;
-}
-
-CowWriter::CowWriter(const CowOptions& options) : ICowWriter(options), fd_(-1) {
+CowWriterV2::CowWriterV2(const CowOptions& options, unique_fd&& fd)
+    : CowWriterBase(options, std::move(fd)) {
     SetupHeaders();
     SetupWriteOptions();
 }
 
-CowWriter::~CowWriter() {
+CowWriterV2::~CowWriterV2() {
     for (size_t i = 0; i < compress_threads_.size(); i++) {
         CompressWorker* worker = compress_threads_[i].get();
         if (worker) {
@@ -164,7 +81,7 @@ CowWriter::~CowWriter() {
     compress_threads_.clear();
 }
 
-void CowWriter::SetupWriteOptions() {
+void CowWriterV2::SetupWriteOptions() {
     num_compress_threads_ = options_.num_compress_threads;
 
     if (!num_compress_threads_) {
@@ -184,7 +101,7 @@ void CowWriter::SetupWriteOptions() {
     }
 }
 
-void CowWriter::SetupHeaders() {
+void CowWriterV2::SetupHeaders() {
     header_ = {};
     header_.prefix.magic = kCowMagicNumber;
     header_.prefix.major_version = kCowVersionMajor;
@@ -201,7 +118,7 @@ void CowWriter::SetupHeaders() {
     footer_.op.type = kCowFooterOp;
 }
 
-bool CowWriter::ParseOptions() {
+bool CowWriterV2::ParseOptions() {
     auto algorithm = CompressionAlgorithmFromString(options_.compression);
     if (!algorithm) {
         LOG(ERROR) << "unrecognized compression: " << options_.compression;
@@ -216,42 +133,7 @@ bool CowWriter::ParseOptions() {
     return true;
 }
 
-bool CowWriter::SetFd(android::base::borrowed_fd fd) {
-    if (fd.get() < 0) {
-        owned_fd_.reset(open("/dev/null", O_RDWR | O_CLOEXEC));
-        if (owned_fd_ < 0) {
-            PLOG(ERROR) << "open /dev/null failed";
-            return false;
-        }
-        fd_ = owned_fd_;
-        is_dev_null_ = true;
-    } else {
-        fd_ = fd;
-
-        struct stat stat {};
-        if (fstat(fd.get(), &stat) < 0) {
-            PLOG(ERROR) << "fstat failed";
-            return false;
-        }
-        const auto file_path = GetFdPath(fd.get());
-        is_block_device_ = S_ISBLK(stat.st_mode);
-        if (is_block_device_) {
-            uint64_t size_in_bytes = 0;
-            if (ioctl(fd.get(), BLKGETSIZE64, &size_in_bytes)) {
-                PLOG(ERROR) << "Failed to get total size for: " << fd.get();
-                return false;
-            }
-            cow_image_size_ = size_in_bytes;
-            LOG_INFO << "COW image " << file_path << " has size " << size_in_bytes;
-        } else {
-            LOG_INFO << "COW image " << file_path
-                     << " is not a block device, assuming unlimited space.";
-        }
-    }
-    return true;
-}
-
-void CowWriter::InitBatchWrites() {
+void CowWriterV2::InitBatchWrites() {
     if (batch_write_) {
         cowop_vec_ = std::make_unique<struct iovec[]>(header_.cluster_ops);
         data_vec_ = std::make_unique<struct iovec[]>(header_.cluster_ops);
@@ -277,7 +159,7 @@ void CowWriter::InitBatchWrites() {
     LOG_INFO << "Batch writes: " << batch_write;
 }
 
-void CowWriter::InitWorkers() {
+void CowWriterV2::InitWorkers() {
     if (num_compress_threads_ <= 1) {
         LOG_INFO << "Not creating new threads for compression.";
         return;
@@ -291,44 +173,27 @@ void CowWriter::InitWorkers() {
     LOG_INFO << num_compress_threads_ << " thread used for compression";
 }
 
-bool CowWriter::Initialize(unique_fd&& fd) {
-    owned_fd_ = std::move(fd);
-    return Initialize(borrowed_fd{owned_fd_});
-}
-
-bool CowWriter::Initialize(borrowed_fd fd) {
-    if (!SetFd(fd) || !ParseOptions()) {
+bool CowWriterV2::Initialize(std::optional<uint64_t> label) {
+    if (!InitFd() || !ParseOptions()) {
         return false;
     }
-
-    if (!OpenForWrite()) {
-        return false;
+    if (!label) {
+        if (!OpenForWrite()) {
+            return false;
+        }
+    } else {
+        if (!OpenForAppend(*label)) {
+            return false;
+        }
     }
 
-    InitWorkers();
+    if (!compress_threads_.size()) {
+        InitWorkers();
+    }
     return true;
 }
 
-bool CowWriter::InitializeAppend(android::base::unique_fd&& fd, uint64_t label) {
-    owned_fd_ = std::move(fd);
-    return InitializeAppend(android::base::borrowed_fd{owned_fd_}, label);
-}
-
-bool CowWriter::InitializeAppend(android::base::borrowed_fd fd, uint64_t label) {
-    if (!SetFd(fd) || !ParseOptions()) {
-        return false;
-    }
-
-    bool ret = OpenForAppend(label);
-
-    if (ret && !compress_threads_.size()) {
-        InitWorkers();
-    }
-
-    return ret;
-}
-
-void CowWriter::InitPos() {
+void CowWriterV2::InitPos() {
     next_op_pos_ = sizeof(header_) + header_.buffer_size;
     cluster_size_ = header_.cluster_ops * sizeof(CowOperation);
     if (header_.cluster_ops) {
@@ -340,7 +205,7 @@ void CowWriter::InitPos() {
     current_data_size_ = 0;
 }
 
-bool CowWriter::OpenForWrite() {
+bool CowWriterV2::OpenForWrite() {
     // This limitation is tied to the data field size in CowOperation.
     if (header_.block_size > std::numeric_limits<uint16_t>::max()) {
         LOG(ERROR) << "Block size is too large";
@@ -388,15 +253,21 @@ bool CowWriter::OpenForWrite() {
     return true;
 }
 
-bool CowWriter::OpenForAppend(uint64_t label) {
-    auto reader = std::make_unique<CowReader>();
-    std::queue<CowOperation> toAdd;
-
-    if (!reader->Parse(fd_, {label})) {
+bool CowWriterV2::OpenForAppend(uint64_t label) {
+    if (!ReadCowHeader(fd_, &header_)) {
         return false;
     }
 
-    header_ = reader->GetHeader();
+    CowParserV2 parser;
+    if (!parser.Parse(fd_, header_, {label})) {
+        return false;
+    }
+    if (header_.prefix.major_version > 2) {
+        LOG(ERROR) << "CowWriterV2 tried to open incompatible version "
+                   << header_.prefix.major_version;
+        return false;
+    }
+
     options_.block_size = header_.block_size;
     options_.cluster_ops = header_.cluster_ops;
 
@@ -404,15 +275,9 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     footer_.op.num_ops = 0;
     InitPos();
 
-    auto iter = reader->GetOpIter();
-
-    while (!iter->AtEnd()) {
-        AddOperation(*iter->Get());
-        iter->Next();
+    for (const auto& op : *parser.ops()) {
+        AddOperation(op);
     }
-
-    // Free reader so we own the descriptor position again.
-    reader = nullptr;
 
     if (lseek(fd_.get(), next_op_pos_, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
@@ -424,7 +289,7 @@ bool CowWriter::OpenForAppend(uint64_t label) {
     return EmitClusterIfNeeded();
 }
 
-bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
+bool CowWriterV2::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
     CHECK(!merge_in_progress_);
 
     for (size_t i = 0; i < num_blocks; i++) {
@@ -440,16 +305,16 @@ bool CowWriter::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_bl
     return true;
 }
 
-bool CowWriter::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
+bool CowWriterV2::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
     return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
 }
 
-bool CowWriter::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
-                              uint32_t old_block, uint16_t offset) {
+bool CowWriterV2::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
+                                uint32_t old_block, uint16_t offset) {
     return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
 }
 
-bool CowWriter::CompressBlocks(size_t num_blocks, const void* data) {
+bool CowWriterV2::CompressBlocks(size_t num_blocks, const void* data) {
     size_t num_threads = (num_blocks == 1) ? 1 : num_compress_threads_;
     size_t num_blocks_per_thread = num_blocks / num_threads;
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
@@ -483,8 +348,8 @@ bool CowWriter::CompressBlocks(size_t num_blocks, const void* data) {
     return true;
 }
 
-bool CowWriter::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
-                           uint64_t old_block, uint16_t offset, uint8_t type) {
+bool CowWriterV2::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
+                             uint64_t old_block, uint16_t offset, uint8_t type) {
     CHECK(!merge_in_progress_);
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
 
@@ -558,7 +423,7 @@ bool CowWriter::EmitBlocks(uint64_t new_block_start, const void* data, size_t si
     return true;
 }
 
-bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+bool CowWriterV2::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     CHECK(!merge_in_progress_);
     for (uint64_t i = 0; i < num_blocks; i++) {
         CowOperation op = {};
@@ -570,7 +435,7 @@ bool CowWriter::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     return true;
 }
 
-bool CowWriter::EmitLabel(uint64_t label) {
+bool CowWriterV2::EmitLabel(uint64_t label) {
     CHECK(!merge_in_progress_);
     CowOperation op = {};
     op.type = kCowLabelOp;
@@ -578,7 +443,7 @@ bool CowWriter::EmitLabel(uint64_t label) {
     return WriteOperation(op) && Sync();
 }
 
-bool CowWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
+bool CowWriterV2::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     CHECK(!merge_in_progress_);
     size_t to_add = 0;
     size_t max_ops = (header_.block_size * 2) / sizeof(uint32_t);
@@ -598,7 +463,7 @@ bool CowWriter::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     return true;
 }
 
-bool CowWriter::EmitCluster() {
+bool CowWriterV2::EmitCluster() {
     CowOperation op = {};
     op.type = kCowClusterOp;
     // Next cluster starts after remainder of current cluster and the next data block.
@@ -606,7 +471,7 @@ bool CowWriter::EmitCluster() {
     return WriteOperation(op);
 }
 
-bool CowWriter::EmitClusterIfNeeded() {
+bool CowWriterV2::EmitClusterIfNeeded() {
     // If there isn't room for another op and the cluster end op, end the current cluster
     if (cluster_size_ && cluster_size_ < current_cluster_size_ + 2 * sizeof(CowOperation)) {
         if (!EmitCluster()) return false;
@@ -614,7 +479,7 @@ bool CowWriter::EmitClusterIfNeeded() {
     return true;
 }
 
-bool CowWriter::Finalize() {
+bool CowWriterV2::Finalize() {
     if (!FlushCluster()) {
         LOG(ERROR) << "Finalize: FlushCluster() failed";
         return false;
@@ -688,7 +553,7 @@ bool CowWriter::Finalize() {
     return Sync();
 }
 
-uint64_t CowWriter::GetCowSize() {
+uint64_t CowWriterV2::GetCowSize() {
     if (current_data_size_ > 0) {
         return next_data_pos_ + sizeof(footer_);
     } else {
@@ -696,7 +561,7 @@ uint64_t CowWriter::GetCowSize() {
     }
 }
 
-bool CowWriter::GetDataPos(uint64_t* pos) {
+bool CowWriterV2::GetDataPos(uint64_t* pos) {
     off_t offs = lseek(fd_.get(), 0, SEEK_CUR);
     if (offs < 0) {
         PLOG(ERROR) << "lseek failed";
@@ -706,7 +571,7 @@ bool CowWriter::GetDataPos(uint64_t* pos) {
     return true;
 }
 
-bool CowWriter::EnsureSpaceAvailable(const uint64_t bytes_needed) const {
+bool CowWriterV2::EnsureSpaceAvailable(const uint64_t bytes_needed) const {
     if (bytes_needed > cow_image_size_) {
         LOG(ERROR) << "No space left on COW device. Required: " << bytes_needed
                    << ", available: " << cow_image_size_;
@@ -716,7 +581,7 @@ bool CowWriter::EnsureSpaceAvailable(const uint64_t bytes_needed) const {
     return true;
 }
 
-bool CowWriter::FlushCluster() {
+bool CowWriterV2::FlushCluster() {
     ssize_t ret;
 
     if (op_vec_index_) {
@@ -745,7 +610,7 @@ bool CowWriter::FlushCluster() {
     return true;
 }
 
-bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t size) {
+bool CowWriterV2::WriteOperation(const CowOperation& op, const void* data, size_t size) {
     if (!EnsureSpaceAvailable(next_op_pos_ + sizeof(op))) {
         return false;
     }
@@ -793,7 +658,7 @@ bool CowWriter::WriteOperation(const CowOperation& op, const void* data, size_t 
     return EmitClusterIfNeeded();
 }
 
-void CowWriter::AddOperation(const CowOperation& op) {
+void CowWriterV2::AddOperation(const CowOperation& op) {
     footer_.op.num_ops++;
 
     if (op.type == kCowClusterOp) {
@@ -808,14 +673,14 @@ void CowWriter::AddOperation(const CowOperation& op) {
     next_op_pos_ += sizeof(CowOperation) + GetNextOpOffset(op, header_.cluster_ops);
 }
 
-bool CowWriter::WriteRawData(const void* data, const size_t size) {
+bool CowWriterV2::WriteRawData(const void* data, const size_t size) {
     if (!android::base::WriteFullyAtOffset(fd_, data, size, next_data_pos_)) {
         return false;
     }
     return true;
 }
 
-bool CowWriter::Sync() {
+bool CowWriterV2::Sync() {
     if (is_dev_null_) {
         return true;
     }
@@ -826,7 +691,7 @@ bool CowWriter::Sync() {
     return true;
 }
 
-bool CowWriter::Truncate(off_t length) {
+bool CowWriterV2::Truncate(off_t length) {
     if (is_dev_null_ || is_block_device_) {
         return true;
     }

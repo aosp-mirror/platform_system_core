@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "snapuserd_readahead.h"
+
 #include "snapuserd_core.h"
 
 namespace android {
@@ -32,14 +34,17 @@ ReadAhead::ReadAhead(const std::string& cow_device, const std::string& backing_d
 }
 
 void ReadAhead::CheckOverlap(const CowOperation* cow_op) {
-    uint64_t source_block = cow_op->source;
-    uint64_t source_offset = 0;
-    if (cow_op->type == kCowXorOp) {
-        source_block /= BLOCK_SZ;
-        source_offset = cow_op->source % BLOCK_SZ;
+    uint64_t source_offset;
+    if (!reader_->GetSourceOffset(cow_op, &source_offset)) {
+        SNAP_LOG(ERROR) << "ReadAhead operation has no source offset: " << *cow_op;
+        return;
     }
+
+    uint64_t source_block = GetBlockFromOffset(header_, source_offset);
+    bool misaligned = (GetBlockRelativeOffset(header_, source_offset) != 0);
+
     if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block) ||
-        (source_offset > 0 && source_blocks_.count(source_block + 1))) {
+        (misaligned && source_blocks_.count(source_block + 1))) {
         overlap_ = true;
     }
 
@@ -64,11 +69,12 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
 
     // Get the first block with offset
     const CowOperation* cow_op = GetRAOpIter();
-    *source_offset = cow_op->source;
 
-    if (cow_op->type == kCowCopyOp) {
-        *source_offset *= BLOCK_SZ;
-    } else if (cow_op->type == kCowXorOp) {
+    if (!reader_->GetSourceOffset(cow_op, source_offset)) {
+        SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
+        return nr_consecutive;
+    }
+    if (cow_op->type == kCowXorOp) {
         xor_op_vec.push_back(cow_op);
     }
 
@@ -86,10 +92,10 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
      */
     while (!RAIterDone() && num_ops) {
         const CowOperation* op = GetRAOpIter();
-        uint64_t next_offset = op->source;
-
-        if (cow_op->type == kCowCopyOp) {
-            next_offset *= BLOCK_SZ;
+        uint64_t next_offset;
+        if (!reader_->GetSourceOffset(op, &next_offset)) {
+            SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
+            break;
         }
 
         // Check for consecutive blocks
@@ -801,6 +807,7 @@ bool ReadAhead::InitReader() {
     if (!reader_->InitForMerge(std::move(cow_fd_))) {
         return false;
     }
+    header_ = reader_->GetHeader();
     return true;
 }
 

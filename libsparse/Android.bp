@@ -28,6 +28,9 @@ cc_library {
         "libbase",
     ],
     target: {
+        darwin: {
+            enabled: true,
+        },
         windows: {
             enabled: true,
         },
@@ -52,6 +55,11 @@ cc_binary {
     ],
 
     cflags: ["-Werror"],
+    target: {
+        darwin: {
+            enabled: true,
+        },
+    },
 }
 
 cc_binary {
