@@ -26,7 +26,7 @@ package {
 cc_defaults {
     name: "libstatspush_compat_defaults",
     srcs: [
-        "statsd_writer.c",
+        "statsd_writer.cpp",
         "stats_event_list.c",
         "StatsEventCompat.cpp"
     ],
