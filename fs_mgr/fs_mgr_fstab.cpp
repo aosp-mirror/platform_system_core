@@ -51,6 +51,7 @@ namespace fs_mgr {
 namespace {
 
 constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
+constexpr char kProcMountsPath[] = "/proc/mounts";
 
 struct FlagList {
     const char *name;
@@ -699,9 +700,7 @@ void EnableMandatoryFlags(Fstab* fstab) {
     }
 }
 
-bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
-    const bool is_proc_mounts = (path == "/proc/mounts");
-
+static bool ReadFstabFromFileCommon(const std::string& path, Fstab* fstab_out) {
     std::string fstab_str;
     if (!android::base::ReadFileToString(path, &fstab_str, /* follow_symlinks = */ true)) {
         PERROR << __FUNCTION__ << "(): failed to read file: '" << path << "'";
@@ -709,11 +708,22 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
     }
 
     Fstab fstab;
-    if (!ParseFstabFromString(fstab_str, is_proc_mounts, &fstab)) {
+    if (!ParseFstabFromString(fstab_str, path == kProcMountsPath, &fstab)) {
         LERROR << __FUNCTION__ << "(): failed to load fstab from : '" << path << "'";
         return false;
     }
-    if (!is_proc_mounts) {
+
+    EnableMandatoryFlags(&fstab);
+
+    *fstab_out = std::move(fstab);
+    return true;
+}
+
+bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
+    if (!ReadFstabFromFileCommon(path, fstab)) {
+        return false;
+    }
+    if (path != kProcMountsPath) {
         if (!access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
             std::string dsu_slot;
             if (!android::gsi::GetActiveDsu(&dsu_slot)) {
@@ -725,18 +735,21 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab_out) {
                 PERROR << __FUNCTION__ << "(): failed to read DSU LP names";
                 return false;
             }
-            TransformFstabForDsu(&fstab, dsu_slot, Split(lp_names, ","));
+            TransformFstabForDsu(fstab, dsu_slot, Split(lp_names, ","));
         } else if (errno != ENOENT) {
             PERROR << __FUNCTION__ << "(): failed to access() DSU booted indicator";
             return false;
         }
+
+        SkipMountingPartitions(fstab, false /* verbose */);
     }
-
-    SkipMountingPartitions(&fstab, false /* verbose */);
-    EnableMandatoryFlags(&fstab);
-
-    *fstab_out = std::move(fstab);
     return true;
+}
+
+bool ReadFstabFromProcMounts(Fstab* fstab) {
+    // Don't call `ReadFstabFromFile` because the code for `path != kProcMountsPath` has an extra
+    // code size cost, even if it's never executed.
+    return ReadFstabFromFileCommon(kProcMountsPath, fstab);
 }
 
 // Returns fstab entries parsed from the device tree if they exist
