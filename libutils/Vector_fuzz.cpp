@@ -13,71 +13,203 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "fuzzer/FuzzedDataProvider.h"
-#include "utils/Vector.h"
-static constexpr uint16_t MAX_VEC_SIZE = 5000;
+#include <fuzzer/FuzzedDataProvider.h>
+#include <utils/Log.h>
+#include <utils/Vector.h>
 
-void runVectorFuzz(const uint8_t* data, size_t size) {
-    FuzzedDataProvider dataProvider(data, size);
-    android::Vector<uint8_t> vec = android::Vector<uint8_t>();
-    // We want to test handling of sizeof as well.
-    android::Vector<uint32_t> vec32 = android::Vector<uint32_t>();
+#include <functional>
 
-    // We're going to generate two vectors of this size
-    size_t vectorSize = dataProvider.ConsumeIntegralInRange<size_t>(0, MAX_VEC_SIZE);
-    vec.setCapacity(vectorSize);
-    vec32.setCapacity(vectorSize);
-    for (size_t i = 0; i < vectorSize; i++) {
-        uint8_t count = dataProvider.ConsumeIntegralInRange<uint8_t>(1, 5);
-        vec.insertAt((uint8_t)i, i, count);
-        vec32.insertAt((uint32_t)i, i, count);
-        vec.push_front(i);
-        vec32.push(i);
+using android::Vector;
+
+static constexpr uint16_t MAX_VEC_SIZE = 100;
+static constexpr bool kLog = false;
+
+struct NonTrivialDestructor {
+    NonTrivialDestructor() : mInit(1) {}
+    ~NonTrivialDestructor() {
+        LOG_ALWAYS_FATAL_IF(mInit != 1, "mInit should be 1, but it's: %d", mInit);
+        mInit--;
+        LOG_ALWAYS_FATAL_IF(mInit != 0, "mInit should be 0, but it's: %d", mInit);
     }
 
-    // Now we'll perform some test operations with any remaining data
-    // Index to perform operations at
-    size_t index = dataProvider.ConsumeIntegralInRange<size_t>(0, vec.size());
-    std::vector<uint8_t> remainingVec = dataProvider.ConsumeRemainingBytes<uint8_t>();
-    // Insert an array and vector
-    vec.insertArrayAt(remainingVec.data(), index, remainingVec.size());
-    android::Vector<uint8_t> vecCopy = android::Vector<uint8_t>(vec);
-    vec.insertVectorAt(vecCopy, index);
-    // Same thing for 32 bit vector
-    android::Vector<uint32_t> vec32Copy = android::Vector<uint32_t>(vec32);
-    vec32.insertArrayAt(vec32Copy.array(), index, vec32.size());
-    vec32.insertVectorAt(vec32Copy, index);
-    // Replace single character
-    if (remainingVec.size() > 0) {
-        vec.replaceAt(remainingVec[0], index);
-        vec32.replaceAt(static_cast<uint32_t>(remainingVec[0]), index);
-    } else {
-        vec.replaceAt(0, index);
-        vec32.replaceAt(0, index);
+  private:
+    uint8_t mInit;
+};
+
+template <typename T>
+struct VectorFuzzerData {
+    Vector<T> vector;
+    const std::vector<std::function<void(FuzzedDataProvider&, Vector<T>&)>> funcs = {
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                // operator= Vector<TYPE>, still needs for SortedVector
+                if (kLog) ALOGI("operator=");
+                vector = testVector(provider);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("clear");
+                vector.clear();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("size");
+                vector.size();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("isEmpty");
+                vector.isEmpty();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("capacity");
+                vector.capacity();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                size_t vectorSize = provider.ConsumeIntegralInRange<size_t>(0, MAX_VEC_SIZE);
+                if (kLog) ALOGI("setCapacity");
+                vector.setCapacity(vectorSize);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                size_t vectorSize = provider.ConsumeIntegralInRange<size_t>(0, MAX_VEC_SIZE);
+                if (kLog) ALOGI("resize");
+                vector.resize(vectorSize);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("array");
+                vector.array();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("editArray");
+                vector.editArray();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                if (vector.size() == 0) return;
+                size_t idx = provider.ConsumeIntegralInRange<size_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("operator[]");
+                vector[idx];  // returns a const value for Vector
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                if (vector.size() == 0) return;
+                size_t idx = provider.ConsumeIntegralInRange<size_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("itemAt");
+                vector.itemAt(idx);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (vector.size() == 0) return;
+                if (kLog) ALOGI("top");
+                vector.top();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                if (vector.size() == 0) return;
+                size_t idx = provider.ConsumeIntegralInRange<size_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("editItemAt");
+                vector.editItemAt(idx);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (vector.size() == 0) return;
+                if (kLog) ALOGI("editTop");
+                vector.editTop() = T{};
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size());
+                Vector vec2 = testVector(provider);
+                if (vec2.size() == 0) return;  // TODO: maybe we should support this?
+                if (kLog) ALOGI("insertVectorAt %d of size %zu", idx, vec2.size());
+                vector.insertVectorAt(vec2, idx);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                if (kLog) ALOGI("appendVector");
+                vector.appendVector(testVector(provider));
+            },
+            // TODO: insertArrayAt
+            // TODO: appendArray
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size());
+                uint8_t numItems = provider.ConsumeIntegralInRange<uint8_t>(1, 100);
+                if (kLog) ALOGI("insertAt");
+                vector.insertAt(idx, numItems);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size());
+                uint8_t numItems = provider.ConsumeIntegralInRange<uint8_t>(1, 100);
+                if (kLog) ALOGI("insertAt");
+                vector.insertAt(T{}, idx, numItems);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (vector.size() == 0) return;
+                if (kLog) ALOGI("pop");
+                vector.pop();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("push");
+                vector.push();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("add");
+                vector.add();
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("add");
+                vector.add(T{});
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("replaceAt");
+                vector.replaceAt(idx);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("replaceAt");
+                vector.replaceAt(T{}, idx);
+            },
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                if (vector.size() == 0) return;
+                uint8_t idx = provider.ConsumeIntegralInRange<uint8_t>(0, vector.size() - 1);
+                if (kLog) ALOGI("remoteItemsAt");
+                vector.removeItemsAt(idx);  // TODO: different count
+            },
+            // removeAt is alias for removeItemsAt
+            // TODO: sort
+            [&](FuzzedDataProvider& provider, Vector<T>& vector) {
+                (void)provider;
+                if (kLog) ALOGI("getItemSize");
+                vector.getItemSize();
+            },
+            // TODO: iterators
+    };
+
+    Vector<T> testVector(FuzzedDataProvider& provider) {
+        Vector<T> vec;
+        size_t vectorSize = provider.ConsumeIntegralInRange<size_t>(0, MAX_VEC_SIZE);
+        return vec;
     }
-    // Add any remaining bytes
-    for (uint8_t i : remainingVec) {
-        vec.add(i);
-        vec32.add(static_cast<uint32_t>(i));
+
+    void fuzz(FuzzedDataProvider&& provider) {
+        while (provider.remaining_bytes()) {
+            size_t funcIdx = provider.ConsumeIntegralInRange<size_t>(0, funcs.size() - 1);
+            funcs[funcIdx](provider, vector);
+        }
     }
-    // Shrink capactiy
-    vec.setCapacity(remainingVec.size());
-    vec32.setCapacity(remainingVec.size());
-    // Iterate through each pointer
-    size_t sum = 0;
-    for (auto& it : vec) {
-        sum += it;
-    }
-    for (auto& it : vec32) {
-        sum += it;
-    }
-    // Cleanup
-    vec.clear();
-    vecCopy.clear();
-    vec32.clear();
-    vec32Copy.clear();
-}
+};
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    runVectorFuzz(data, size);
+    FuzzedDataProvider provider(data, size);
+
+    provider.PickValueInArray<std::function<void()>>({
+            [&]() { VectorFuzzerData<uint8_t>().fuzz(std::move(provider)); },
+            [&]() { VectorFuzzerData<int32_t>().fuzz(std::move(provider)); },
+            [&]() { VectorFuzzerData<NonTrivialDestructor>().fuzz(std::move(provider)); },
+    })();
+
     return 0;
 }
