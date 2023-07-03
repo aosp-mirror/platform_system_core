@@ -64,6 +64,7 @@ FastBootDriver::FastBootDriver(Transport* transport, DriverCallbacks driver_call
       prolog_(std::move(driver_callbacks.prolog)),
       epilog_(std::move(driver_callbacks.epilog)),
       info_(std::move(driver_callbacks.info)),
+      text_(std::move(driver_callbacks.text)),
       disable_checks_(no_checks) {}
 
 FastBootDriver::~FastBootDriver() {
@@ -498,6 +499,10 @@ RetCode FastBootDriver::HandleResponse(std::string* response, std::vector<std::s
             error_ = android::base::StringPrintf("remote: '%s'", status + strlen("FAIL"));
             set_response(input.substr(strlen("FAIL")));
             return DEVICE_FAIL;
+        } else if (android::base::StartsWith(input, "TEXT")) {
+            text_(input.substr(strlen("TEXT")));
+            // Reset timeout as many more TEXT may come
+            start = std::chrono::steady_clock::now();
         } else if (android::base::StartsWith(input, "DATA")) {
             std::string tmp = input.substr(strlen("DATA"));
             uint32_t num = strtol(tmp.c_str(), 0, 16);

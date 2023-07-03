@@ -31,6 +31,7 @@ namespace fs_mgr {
 
 struct FstabEntry {
     std::string blk_device;
+    std::string zoned_device;
     std::string logical_partition_name;
     std::string mount_point;
     std::string fs_type;
@@ -94,15 +95,22 @@ using Fstab = std::vector<FstabEntry>;
 
 // Exported for testability. Regular users should use ReadFstabFromFile().
 bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
+// Exported for testability. Regular users should use ReadDefaultFstab().
+std::string GetFstabPath();
+// Exported for testability.
+bool SkipMountWithConfig(const std::string& skip_config, Fstab* fstab, bool verbose);
 
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);
 bool ReadDefaultFstab(Fstab* fstab);
 bool SkipMountingPartitions(Fstab* fstab, bool verbose = false);
 
-FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 // The Fstab can contain multiple entries for the same mount point with different configurations.
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path);
+
+// Like GetEntriesForMountPoint() but return only the first entry or nullptr if no entry is found.
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
+const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& path);
 
 // This method builds DSU fstab entries and transfer the fstab.
 //

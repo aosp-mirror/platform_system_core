@@ -17,18 +17,30 @@
 #ifndef TRUSTY_GATEKEEPER_H
 #define TRUSTY_GATEKEEPER_H
 
-#include <android/hardware/gatekeeper/1.0/IGatekeeper.h>
-#include <hidl/Status.h>
-
 #include <memory>
+
+#include <aidl/android/hardware/gatekeeper/BnGatekeeper.h>
 
 #include <gatekeeper/gatekeeper_messages.h>
 
 #include "gatekeeper_ipc.h"
 
-namespace gatekeeper {
+namespace aidl::android::hardware::gatekeeper {
 
-class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGatekeeper {
+using aidl::android::hardware::gatekeeper::GatekeeperEnrollResponse;
+using aidl::android::hardware::gatekeeper::GatekeeperVerifyResponse;
+using ::gatekeeper::DeleteAllUsersRequest;
+using ::gatekeeper::DeleteAllUsersResponse;
+using ::gatekeeper::DeleteUserRequest;
+using ::gatekeeper::DeleteUserResponse;
+using ::gatekeeper::EnrollRequest;
+using ::gatekeeper::EnrollResponse;
+using ::gatekeeper::gatekeeper_error_t;
+using ::gatekeeper::GateKeeperMessage;
+using ::gatekeeper::VerifyRequest;
+using ::gatekeeper::VerifyResponse;
+
+class TrustyGateKeeperDevice : public BnGatekeeper {
   public:
     explicit TrustyGateKeeperDevice();
     ~TrustyGateKeeperDevice();
@@ -40,11 +52,10 @@ class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGa
      * Returns: 0 on success or an error code less than 0 on error.
      * On error, enrolled_password_handle will not be allocated.
      */
-    ::android::hardware::Return<void> enroll(
-            uint32_t uid, const ::android::hardware::hidl_vec<uint8_t>& currentPasswordHandle,
-            const ::android::hardware::hidl_vec<uint8_t>& currentPassword,
-            const ::android::hardware::hidl_vec<uint8_t>& desiredPassword,
-            enroll_cb _hidl_cb) override;
+    ::ndk::ScopedAStatus enroll(int32_t uid, const std::vector<uint8_t>& currentPasswordHandle,
+                                const std::vector<uint8_t>& currentPassword,
+                                const std::vector<uint8_t>& desiredPassword,
+                                GatekeeperEnrollResponse* _aidl_return) override;
 
     /**
      * Verifies provided_password matches enrolled_password_handle.
@@ -59,25 +70,24 @@ class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGa
      * Returns: 0 on success or an error code less than 0 on error
      * On error, verification token will not be allocated
      */
-    ::android::hardware::Return<void> verify(
-            uint32_t uid, uint64_t challenge,
-            const ::android::hardware::hidl_vec<uint8_t>& enrolledPasswordHandle,
-            const ::android::hardware::hidl_vec<uint8_t>& providedPassword,
-            verify_cb _hidl_cb) override;
+    ::ndk::ScopedAStatus verify(int32_t uid, int64_t challenge,
+                                const std::vector<uint8_t>& enrolledPasswordHandle,
+                                const std::vector<uint8_t>& providedPassword,
+                                GatekeeperVerifyResponse* _aidl_return) override;
 
-    ::android::hardware::Return<void> deleteUser(uint32_t uid, deleteUser_cb _hidl_cb) override;
+    ::ndk::ScopedAStatus deleteAllUsers() override;
 
-    ::android::hardware::Return<void> deleteAllUsers(deleteAllUsers_cb _hidl_cb) override;
+    ::ndk::ScopedAStatus deleteUser(int32_t uid) override;
 
   private:
     gatekeeper_error_t Send(uint32_t command, const GateKeeperMessage& request,
                            GateKeeperMessage* response);
 
-    gatekeeper_error_t Send(const EnrollRequest& request, EnrollResponse *response) {
+    gatekeeper_error_t Send(const EnrollRequest& request, EnrollResponse* response) {
         return Send(GK_ENROLL, request, response);
     }
 
-    gatekeeper_error_t Send(const VerifyRequest& request, VerifyResponse *response) {
+    gatekeeper_error_t Send(const VerifyRequest& request, VerifyResponse* response) {
         return Send(GK_VERIFY, request, response);
     }
 
@@ -93,7 +103,6 @@ class TrustyGateKeeperDevice : public ::android::hardware::gatekeeper::V1_0::IGa
     int error_;
 };
 
-}  // namespace gatekeeper
+}  // namespace aidl::android::hardware::gatekeeper
 
 #endif
-
