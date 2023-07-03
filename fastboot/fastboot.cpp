@@ -2213,6 +2213,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
                                       {"disable-verification", no_argument, 0, 0},
                                       {"disable-verity", no_argument, 0, 0},
                                       {"disable-super-optimization", no_argument, 0, 0},
+                                      {"disable-fastboot-info", no_argument, 0, 0},
                                       {"force", no_argument, 0, 0},
                                       {"fs-options", required_argument, 0, 0},
                                       {"header-version", required_argument, 0, 0},
@@ -2253,6 +2254,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 g_disable_verity = true;
             } else if (name == "disable-super-optimization") {
                 fp->should_optimize_flash_super = false;
+            } else if (name == "disable-fastboot-info") {
+                fp->should_use_fastboot_info = false;
             } else if (name == "force") {
                 fp->force_flash = true;
             } else if (name == "fs-options") {
