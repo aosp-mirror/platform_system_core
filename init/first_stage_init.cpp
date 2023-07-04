@@ -257,6 +257,16 @@ static BootMode GetBootMode(const std::string& cmdline, const std::string& bootc
     return BootMode::NORMAL_MODE;
 }
 
+static std::unique_ptr<FirstStageMount> CreateFirstStageMount() {
+    auto ret = FirstStageMount::Create();
+    if (ret.ok()) {
+        return std::move(*ret);
+    } else {
+        LOG(ERROR) << "Failed to create FirstStageMount : " << ret.error();
+        return nullptr;
+    }
+}
+
 int FirstStageMain(int argc, char** argv) {
     if (REBOOT_BOOTLOADER_ON_PANIC) {
         InstallRebootSignalHandlers();
@@ -381,12 +391,17 @@ int FirstStageMain(int argc, char** argv) {
                   << module_elapse_time.count() << " ms";
     }
 
+    std::unique_ptr<FirstStageMount> fsm;
+
     bool created_devices = false;
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
         if (!IsRecoveryMode()) {
-            created_devices = DoCreateDevices();
-            if (!created_devices) {
-                LOG(ERROR) << "Failed to create device nodes early";
+            fsm = CreateFirstStageMount();
+            if (fsm) {
+                created_devices = fsm->DoCreateDevices();
+                if (!created_devices) {
+                    LOG(ERROR) << "Failed to create device nodes early";
+                }
             }
         }
         StartConsole(cmdline);
@@ -437,8 +452,23 @@ int FirstStageMain(int argc, char** argv) {
         SwitchRoot("/first_stage_ramdisk");
     }
 
-    if (!DoFirstStageMount(!created_devices)) {
-        LOG(FATAL) << "Failed to mount required partitions early ...";
+    if (IsRecoveryMode()) {
+        LOG(INFO) << "First stage mount skipped (recovery mode)";
+    } else {
+        if (!fsm) {
+            fsm = CreateFirstStageMount();
+        }
+        if (!fsm) {
+            LOG(FATAL) << "FirstStageMount not available";
+        }
+
+        if (!created_devices && !fsm->DoCreateDevices()) {
+            LOG(FATAL) << "Failed to create devices required for first stage mount";
+        }
+
+        if (!fsm->DoFirstStageMount()) {
+            LOG(FATAL) << "Failed to mount required partitions early ...";
+        }
     }
 
     struct stat new_root_info;

@@ -76,21 +76,21 @@ namespace init {
 
 // Class Declarations
 // ------------------
-class FirstStageMount {
+class FirstStageMountVBootV2 : public FirstStageMount {
   public:
-    FirstStageMount(Fstab fstab);
-    virtual ~FirstStageMount() = default;
+    friend void SetInitAvbVersionInRecovery();
 
-    // The factory method to create a FirstStageMountVBootV2 instance.
-    static Result<std::unique_ptr<FirstStageMount>> Create();
-    bool DoCreateDevices();    // Creates devices and logical partitions from storage devices
-    bool DoFirstStageMount();  // Mounts fstab entries read from device tree.
+    FirstStageMountVBootV2(Fstab fstab);
+    virtual ~FirstStageMountVBootV2() = default;
+
+    bool DoCreateDevices() override;
+    bool DoFirstStageMount() override;
+
+  private:
     bool InitDevices();
-
-  protected:
     bool InitRequiredDevices(std::set<std::string> devices);
     bool CreateLogicalPartitions();
-    bool CreateSnapshotPartitions(android::snapshot::SnapshotManager* sm);
+    bool CreateSnapshotPartitions(SnapshotManager* sm);
     bool MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
                         Fstab::iterator* end = nullptr);
 
@@ -106,9 +106,10 @@ class FirstStageMount {
     // revocation check by DSU installation service.
     void CopyDsuAvbKeys();
 
-    // Pure virtual functions.
-    virtual bool GetDmVerityDevices(std::set<std::string>* devices) = 0;
-    virtual bool SetUpDmVerity(FstabEntry* fstab_entry) = 0;
+    bool GetDmVerityDevices(std::set<std::string>* devices);
+    bool SetUpDmVerity(FstabEntry* fstab_entry);
+
+    bool InitAvbHandle();
 
     bool need_dm_verity_;
     bool dsu_not_on_userdata_ = false;
@@ -122,19 +123,6 @@ class FirstStageMount {
     // Reads all AVB keys before chroot into /system, as they might be used
     // later when mounting other partitions, e.g., /vendor and /product.
     std::map<std::string, std::vector<std::string>> preload_avb_key_blobs_;
-};
-
-class FirstStageMountVBootV2 : public FirstStageMount {
-  public:
-    friend void SetInitAvbVersionInRecovery();
-
-    FirstStageMountVBootV2(Fstab fstab);
-    ~FirstStageMountVBootV2() override = default;
-
-  protected:
-    bool GetDmVerityDevices(std::set<std::string>* devices) override;
-    bool SetUpDmVerity(FstabEntry* fstab_entry) override;
-    bool InitAvbHandle();
 
     std::vector<std::string> vbmeta_partitions_;
     AvbUniquePtr avb_handle_;
@@ -220,10 +208,6 @@ static bool IsStandaloneImageRollback(const AvbHandle& builtin_vbmeta,
 
 // Class Definitions
 // -----------------
-FirstStageMount::FirstStageMount(Fstab fstab) : need_dm_verity_(false), fstab_(std::move(fstab)) {
-    super_partition_name_ = fs_mgr_get_super_partition_name();
-}
-
 Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create() {
     auto fstab = ReadFirstStageFstab();
     if (!fstab.ok()) {
@@ -233,7 +217,7 @@ Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create() {
     return std::make_unique<FirstStageMountVBootV2>(std::move(*fstab));
 }
 
-bool FirstStageMount::DoCreateDevices() {
+bool FirstStageMountVBootV2::DoCreateDevices() {
     if (!InitDevices()) return false;
 
     // Mount /metadata before creating logical partitions, since we need to
@@ -255,7 +239,7 @@ bool FirstStageMount::DoCreateDevices() {
     return true;
 }
 
-bool FirstStageMount::DoFirstStageMount() {
+bool FirstStageMountVBootV2::DoFirstStageMount() {
     if (!IsDmLinearEnabled() && fstab_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
@@ -267,7 +251,7 @@ bool FirstStageMount::DoFirstStageMount() {
     return true;
 }
 
-bool FirstStageMount::InitDevices() {
+bool FirstStageMountVBootV2::InitDevices() {
     std::set<std::string> devices;
     GetSuperDeviceName(&devices);
 
@@ -288,14 +272,14 @@ bool FirstStageMount::InitDevices() {
     return true;
 }
 
-bool FirstStageMount::IsDmLinearEnabled() {
+bool FirstStageMountVBootV2::IsDmLinearEnabled() {
     for (const auto& entry : fstab_) {
         if (entry.fs_mgr_flags.logical) return true;
     }
     return false;
 }
 
-void FirstStageMount::GetSuperDeviceName(std::set<std::string>* devices) {
+void FirstStageMountVBootV2::GetSuperDeviceName(std::set<std::string>* devices) {
     // Add any additional devices required for dm-linear mappings.
     if (!IsDmLinearEnabled()) {
         return;
@@ -307,7 +291,7 @@ void FirstStageMount::GetSuperDeviceName(std::set<std::string>* devices) {
 // Creates devices with uevent->partition_name matching ones in the given set.
 // Found partitions will then be removed from it for the subsequent member
 // function to check which devices are NOT created.
-bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
+bool FirstStageMountVBootV2::InitRequiredDevices(std::set<std::string> devices) {
     if (!block_dev_init_.InitDeviceMapper()) {
         return false;
     }
@@ -317,7 +301,8 @@ bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
     return block_dev_init_.InitDevices(std::move(devices));
 }
 
-bool FirstStageMount::InitDmLinearBackingDevices(const android::fs_mgr::LpMetadata& metadata) {
+bool FirstStageMountVBootV2::InitDmLinearBackingDevices(
+        const android::fs_mgr::LpMetadata& metadata) {
     std::set<std::string> devices;
 
     auto partition_names = android::fs_mgr::GetBlockDevicePartitionNames(metadata);
@@ -334,7 +319,7 @@ bool FirstStageMount::InitDmLinearBackingDevices(const android::fs_mgr::LpMetada
     return InitRequiredDevices(std::move(devices));
 }
 
-bool FirstStageMount::CreateLogicalPartitions() {
+bool FirstStageMountVBootV2::CreateLogicalPartitions() {
     if (!IsDmLinearEnabled()) {
         return true;
     }
@@ -365,7 +350,7 @@ bool FirstStageMount::CreateLogicalPartitions() {
     return android::fs_mgr::CreateLogicalPartitions(*metadata.get(), super_path_);
 }
 
-bool FirstStageMount::CreateSnapshotPartitions(SnapshotManager* sm) {
+bool FirstStageMountVBootV2::CreateSnapshotPartitions(SnapshotManager* sm) {
     // When COW images are present for snapshots, they are stored on
     // the data partition.
     if (!InitRequiredDevices({"userdata"})) {
@@ -400,8 +385,8 @@ bool FirstStageMount::CreateSnapshotPartitions(SnapshotManager* sm) {
     return true;
 }
 
-bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
-                                     Fstab::iterator* end) {
+bool FirstStageMountVBootV2::MountPartition(const Fstab::iterator& begin, bool erase_same_mounts,
+                                            Fstab::iterator* end) {
     // Sets end to begin + 1, so we can just return on failure below.
     if (end) {
         *end = begin + 1;
@@ -445,7 +430,7 @@ bool FirstStageMount::MountPartition(const Fstab::iterator& begin, bool erase_sa
     return mounted;
 }
 
-void FirstStageMount::PreloadAvbKeys() {
+void FirstStageMountVBootV2::PreloadAvbKeys() {
     for (const auto& entry : fstab_) {
         // No need to cache the key content if it's empty, or is already cached.
         if (entry.avb_keys.empty() || preload_avb_key_blobs_.count(entry.avb_keys)) {
@@ -492,7 +477,7 @@ void FirstStageMount::PreloadAvbKeys() {
 // If system is in the fstab then we're not a system-as-root device, and in
 // this case, we mount system first then pivot to it.  From that point on,
 // we are effectively identical to a system-as-root device.
-bool FirstStageMount::TrySwitchSystemAsRoot() {
+bool FirstStageMountVBootV2::TrySwitchSystemAsRoot() {
     UseDsuIfPresent();
     // Preloading all AVB keys from the ramdisk before switching root to /system.
     PreloadAvbKeys();
@@ -521,7 +506,7 @@ bool FirstStageMount::TrySwitchSystemAsRoot() {
     return true;
 }
 
-bool FirstStageMount::MountPartitions() {
+bool FirstStageMountVBootV2::MountPartitions() {
     if (!TrySwitchSystemAsRoot()) return false;
 
     if (!SkipMountingPartitions(&fstab_, true /* verbose */)) return false;
@@ -604,7 +589,7 @@ bool FirstStageMount::MountPartitions() {
 // copy files to /metadata is NOT fatal, because it is auxiliary to perform
 // public key matching before booting into DSU images on next boot. The actual
 // public key matching will still be done on next boot to DSU.
-void FirstStageMount::CopyDsuAvbKeys() {
+void FirstStageMountVBootV2::CopyDsuAvbKeys() {
     std::error_code ec;
     // Removing existing keys in gsi::kDsuAvbKeyDir as they might be stale.
     std::filesystem::remove_all(gsi::kDsuAvbKeyDir, ec);
@@ -620,7 +605,7 @@ void FirstStageMount::CopyDsuAvbKeys() {
     }
 }
 
-void FirstStageMount::UseDsuIfPresent() {
+void FirstStageMountVBootV2::UseDsuIfPresent() {
     std::string error;
 
     if (!android::gsi::CanBootIntoGsi(&error)) {
@@ -657,10 +642,10 @@ void FirstStageMount::UseDsuIfPresent() {
     TransformFstabForDsu(&fstab_, active_dsu, dsu_partitions);
 }
 
-// First retrieve any vbmeta partitions from device tree (legacy) then read through the fstab
-// for any further vbmeta partitions.
 FirstStageMountVBootV2::FirstStageMountVBootV2(Fstab fstab)
-    : FirstStageMount(std::move(fstab)), avb_handle_(nullptr) {
+    : need_dm_verity_(false), fstab_(std::move(fstab)), avb_handle_(nullptr) {
+    super_partition_name_ = fs_mgr_get_super_partition_name();
+
     std::string device_tree_vbmeta_parts;
     read_android_dt_file("vbmeta/parts", &device_tree_vbmeta_parts);
 
@@ -791,39 +776,6 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
     // Sets INIT_AVB_VERSION here for init to set ro.boot.avb_version in the second stage.
     setenv("INIT_AVB_VERSION", avb_handle_->avb_version().c_str(), 1);
     return true;
-}
-
-// Public functions
-// ----------------
-// Creates devices and logical partitions from storage devices
-bool DoCreateDevices() {
-    auto fsm = FirstStageMount::Create();
-    if (!fsm.ok()) {
-        LOG(ERROR) << "Failed to create FirstStageMount: " << fsm.error();
-        return false;
-    }
-    return (*fsm)->DoCreateDevices();
-}
-
-// Mounts partitions specified by fstab in device tree.
-bool DoFirstStageMount(bool create_devices) {
-    // Skips first stage mount if we're in recovery mode.
-    if (IsRecoveryMode()) {
-        LOG(INFO) << "First stage mount skipped (recovery mode)";
-        return true;
-    }
-
-    auto fsm = FirstStageMount::Create();
-    if (!fsm.ok()) {
-        LOG(ERROR) << "Failed to create FirstStageMount " << fsm.error();
-        return false;
-    }
-
-    if (create_devices) {
-        if (!(*fsm)->DoCreateDevices()) return false;
-    }
-
-    return (*fsm)->DoFirstStageMount();
 }
 
 void SetInitAvbVersionInRecovery() {
