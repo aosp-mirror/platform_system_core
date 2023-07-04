@@ -138,7 +138,7 @@ static inline bool IsDtVbmetaCompatible(const Fstab& fstab) {
     return is_android_dt_value_expected("vbmeta/compatible", "android,vbmeta");
 }
 
-static Result<Fstab> ReadFirstStageFstab() {
+static Result<Fstab> ReadFirstStageFstabAndroid() {
     Fstab fstab;
     if (!ReadFstabFromDt(&fstab)) {
         if (ReadDefaultFstab(&fstab)) {
@@ -150,6 +150,24 @@ static Result<Fstab> ReadFirstStageFstab() {
         } else {
             return Error() << "failed to read default fstab for first stage mount";
         }
+    }
+    return fstab;
+}
+
+// Note: this is a temporary solution to avoid blocking devs that depend on /vendor partition in
+// Microdroid. For the proper solution the /vendor fstab should probably be defined in the DT.
+// TODO(b/285855430): refactor this
+// TODO(b/285855436): verify key microdroid-vendor was signed with.
+// TODO(b/285855436): should be mounted on top of dm-verity device.
+static Result<Fstab> ReadFirstStageFstabMicrodroid(const std::string& cmdline) {
+    Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        return Error() << "failed to read fstab";
+    }
+    if (cmdline.find("androidboot.microdroid.mount_vendor=1") == std::string::npos) {
+        // We weren't asked to mount /vendor partition, filter it out from the fstab.
+        auto predicate = [](const auto& entry) { return entry.mount_point == "/vendor"; };
+        fstab.erase(std::remove_if(fstab.begin(), fstab.end(), predicate), fstab.end());
     }
     return fstab;
 }
@@ -206,10 +224,13 @@ static bool IsStandaloneImageRollback(const AvbHandle& builtin_vbmeta,
     return rollbacked;
 }
 
-// Class Definitions
-// -----------------
-Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create() {
-    auto fstab = ReadFirstStageFstab();
+Result<std::unique_ptr<FirstStageMount>> FirstStageMount::Create(const std::string& cmdline) {
+    Result<Fstab> fstab;
+    if (IsMicrodroid()) {
+        fstab = ReadFirstStageFstabMicrodroid(cmdline);
+    } else {
+        fstab = ReadFirstStageFstabAndroid();
+    }
     if (!fstab.ok()) {
         return fstab.error();
     }
@@ -784,7 +805,7 @@ void SetInitAvbVersionInRecovery() {
         return;
     }
 
-    auto fstab = ReadFirstStageFstab();
+    auto fstab = ReadFirstStageFstabAndroid();
     if (!fstab.ok()) {
         LOG(ERROR) << fstab.error();
         return;

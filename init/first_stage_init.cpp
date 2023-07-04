@@ -257,8 +257,8 @@ static BootMode GetBootMode(const std::string& cmdline, const std::string& bootc
     return BootMode::NORMAL_MODE;
 }
 
-static std::unique_ptr<FirstStageMount> CreateFirstStageMount() {
-    auto ret = FirstStageMount::Create();
+static std::unique_ptr<FirstStageMount> CreateFirstStageMount(const std::string& cmdline) {
+    auto ret = FirstStageMount::Create(cmdline);
     if (ret.ok()) {
         return std::move(*ret);
     } else {
@@ -396,7 +396,7 @@ int FirstStageMain(int argc, char** argv) {
     bool created_devices = false;
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
         if (!IsRecoveryMode()) {
-            fsm = CreateFirstStageMount();
+            fsm = CreateFirstStageMount(cmdline);
             if (fsm) {
                 created_devices = fsm->DoCreateDevices();
                 if (!created_devices) {
@@ -456,7 +456,7 @@ int FirstStageMain(int argc, char** argv) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";
     } else {
         if (!fsm) {
-            fsm = CreateFirstStageMount();
+            fsm = CreateFirstStageMount(cmdline);
         }
         if (!fsm) {
             LOG(FATAL) << "FirstStageMount not available";
