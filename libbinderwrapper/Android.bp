@@ -26,13 +26,10 @@ cc_defaults {
         "-Werror",
         "-Wno-unused-parameter",
 
-        // for libchrome
-        "-Wno-sign-promo",
     ],
     export_include_dirs: ["include"],
     shared_libs: [
         "libbinder",
-        "libchrome",
         "libutils",
     ],
 }
