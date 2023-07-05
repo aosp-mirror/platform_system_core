@@ -14,6 +14,7 @@
 
 #include "handler_manager.h"
 
+#include <pthread.h>
 #include <sys/eventfd.h>
 
 #include <android-base/logging.h>
@@ -132,6 +133,8 @@ bool SnapshotHandlerManager::DeleteHandler(const std::string& misc_name) {
 void SnapshotHandlerManager::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
+    pthread_setname_np(pthread_self(), "Handler");
+
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -219,6 +222,7 @@ void SnapshotHandlerManager::WakeupMonitorMergeThread() {
 }
 
 void SnapshotHandlerManager::MonitorMerge() {
+    pthread_setname_np(pthread_self(), "Merge Monitor");
     while (!stop_monitor_merge_thread_) {
         uint64_t testVal;
         ssize_t ret =
