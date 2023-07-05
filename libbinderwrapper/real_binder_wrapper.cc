@@ -16,7 +16,8 @@
 
 #include "real_binder_wrapper.h"
 
-#include <base/logging.h>
+#include <android-base/logging.h>
+
 #include <binder/Binder.h>
 #include <binder/IBinder.h>
 #include <binder/IPCThreadState.h>
@@ -29,20 +30,18 @@ namespace android {
 // be awkward.
 class RealBinderWrapper::DeathRecipient : public IBinder::DeathRecipient {
  public:
-  explicit DeathRecipient(const ::base::Closure& callback)
-      : callback_(callback) {}
-  ~DeathRecipient() = default;
+   explicit DeathRecipient(const std::function<void()>& callback)
+       : callback_(std::move(callback)) {}
+   ~DeathRecipient() = default;
 
-  // IBinder::DeathRecipient:
-  void binderDied(const wp<IBinder>& who) override {
-    callback_.Run();
-  }
+   // IBinder::DeathRecipient:
+   void binderDied(const wp<IBinder>& who) override { callback_(); }
 
  private:
   // Callback to run in response to binder death.
-  ::base::Closure callback_;
+   std::function<void()> callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(DeathRecipient);
+   DISALLOW_COPY_AND_ASSIGN(DeathRecipient);
 };
 
 RealBinderWrapper::RealBinderWrapper() = default;
@@ -83,9 +82,8 @@ sp<BBinder> RealBinderWrapper::CreateLocalBinder() {
   return sp<BBinder>(new BBinder());
 }
 
-bool RealBinderWrapper::RegisterForDeathNotifications(
-    const sp<IBinder>& binder,
-    const ::base::Closure& callback) {
+bool RealBinderWrapper::RegisterForDeathNotifications(const sp<IBinder>& binder,
+                                                      const std::function<void()>& callback) {
   sp<DeathRecipient> recipient(new DeathRecipient(callback));
   if (binder->linkToDeath(recipient) != OK) {
     LOG(ERROR) << "Failed to register for death notifications on "
