@@ -16,7 +16,8 @@
 
 #include <binderwrapper/stub_binder_wrapper.h>
 
-#include <base/logging.h>
+#include <android-base/logging.h>
+
 #include <binder/Binder.h>
 #include <binder/IBinder.h>
 
@@ -41,8 +42,7 @@ sp<IBinder> StubBinderWrapper::GetRegisteredService(
 
 void StubBinderWrapper::NotifyAboutBinderDeath(const sp<IBinder>& binder) {
   const auto it = death_callbacks_.find(binder);
-  if (it != death_callbacks_.end())
-    it->second.Run();
+  if (it != death_callbacks_.end()) it->second();
 }
 
 sp<IBinder> StubBinderWrapper::GetService(const std::string& service_name) {
@@ -62,9 +62,8 @@ sp<BBinder> StubBinderWrapper::CreateLocalBinder() {
   return binder;
 }
 
-bool StubBinderWrapper::RegisterForDeathNotifications(
-    const sp<IBinder>& binder,
-    const ::base::Closure& callback) {
+bool StubBinderWrapper::RegisterForDeathNotifications(const sp<IBinder>& binder,
+                                                      const std::function<void()>& callback) {
   death_callbacks_[binder] = callback;
   return true;
 }

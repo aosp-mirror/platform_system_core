@@ -17,7 +17,6 @@
 #ifndef SYSTEM_CORE_INCLUDE_BINDERWRAPPER_BINDER_TEST_BASE_H_
 #define SYSTEM_CORE_INCLUDE_BINDERWRAPPER_BINDER_TEST_BASE_H_
 
-#include <base/macros.h>
 #include <gtest/gtest.h>
 
 namespace android {
@@ -37,7 +36,7 @@ class BinderTestBase : public ::testing::Test {
   StubBinderWrapper* binder_wrapper_;  // Not owned.
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BinderTestBase);
+   BinderTestBase(const BinderTestBase&) = delete;
 };
 
 }  // namespace android
