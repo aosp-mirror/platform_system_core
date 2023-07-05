@@ -1747,7 +1747,7 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         tasks.emplace_back(std::move(task));
     }
-    if (auto flash_super_task = FlashSuperLayoutTask::InitializeFromTasks(fp, tasks)) {
+    if (auto flash_super_task = OptimizedFlashSuperTask::InitializeFromTasks(fp, tasks)) {
         auto it = tasks.begin();
         for (size_t i = 0; i < tasks.size(); i++) {
             if (auto flash_task = tasks[i]->AsFlashTask()) {
@@ -1849,7 +1849,7 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
     std::vector<std::unique_ptr<Task>> tasks;
     AddFlashTasks(boot_images_, tasks);
 
-    if (auto flash_super_task = FlashSuperLayoutTask::Initialize(fp_, os_images_)) {
+    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp_, os_images_)) {
         tasks.emplace_back(std::move(flash_super_task));
     } else {
         // Sync the super partition. This will reboot to userspace fastboot if needed.
@@ -2205,8 +2205,9 @@ int FastBootTool::Main(int argc, char* argv[]) {
                                       {0, 0, 0, 0}};
 
     serial = getenv("FASTBOOT_DEVICE");
-    if (!serial)
+    if (!serial) {
         serial = getenv("ANDROID_SERIAL");
+    }
 
     int c;
     while ((c = getopt_long(argc, argv, "a::hls:S:vw", longopts, &longindex)) != -1) {
