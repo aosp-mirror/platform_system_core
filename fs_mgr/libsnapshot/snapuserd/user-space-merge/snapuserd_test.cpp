@@ -106,7 +106,7 @@ class SnapuserdTest : public ::testing::Test {
     std::unique_ptr<TemporaryFile> cow_system_;
     std::unique_ptr<uint8_t[]> orig_buffer_;
     std::unique_ptr<uint8_t[]> merged_buffer_;
-    SnapshotHandlerManager handlers_;
+    std::unique_ptr<SnapshotHandlerManager> handlers_;
     bool setup_ok_ = false;
     bool merge_ok_ = false;
     size_t size_ = 100_MiB;
@@ -117,15 +117,18 @@ class SnapuserdTest : public ::testing::Test {
 
 void SnapuserdTest::SetUp() {
     harness_ = std::make_unique<DmUserTestHarness>();
+    handlers_ = std::make_unique<SnapshotHandlerManager>();
 }
 
 void SnapuserdTest::Shutdown() {
     ASSERT_TRUE(dmuser_dev_->Destroy());
 
     auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
-    ASSERT_TRUE(handlers_.DeleteHandler(system_device_ctrl_name_));
+    ASSERT_TRUE(handlers_->DeleteHandler(system_device_ctrl_name_));
     ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
-    handlers_.TerminateMergeThreads();
+    handlers_->TerminateMergeThreads();
+    handlers_->JoinAllThreads();
+    handlers_ = std::make_unique<SnapshotHandlerManager>();
 }
 
 bool SnapuserdTest::SetupDefault() {
@@ -524,8 +527,8 @@ void SnapuserdTest::InitCowDevice() {
     auto factory = harness_->GetBlockServerFactory();
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     auto handler =
-            handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
-                                 base_dev_->GetPath(), opener, 1, use_iouring, false);
+            handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
+                                  base_dev_->GetPath(), opener, 1, use_iouring, false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -557,12 +560,12 @@ void SnapuserdTest::CreateUserDevice() {
 }
 
 void SnapuserdTest::InitDaemon() {
-    ASSERT_TRUE(handlers_.StartHandler(system_device_ctrl_name_));
+    ASSERT_TRUE(handlers_->StartHandler(system_device_ctrl_name_));
 }
 
 void SnapuserdTest::CheckMergeCompletion() {
     while (true) {
-        double percentage = handlers_.GetMergePercentage();
+        double percentage = handlers_->GetMergePercentage();
         if ((int)percentage == 100) {
             break;
         }
@@ -592,7 +595,7 @@ bool SnapuserdTest::Merge() {
 }
 
 void SnapuserdTest::StartMerge() {
-    ASSERT_TRUE(handlers_.InitiateMerge(system_device_ctrl_name_));
+    ASSERT_TRUE(handlers_->InitiateMerge(system_device_ctrl_name_));
 }
 
 void SnapuserdTest::ValidateMerge() {
