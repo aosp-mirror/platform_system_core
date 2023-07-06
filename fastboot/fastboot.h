@@ -97,6 +97,7 @@ struct FlashingPlan {
     bool skip_secondary = false;
     bool force_flash = false;
     bool should_optimize_flash_super = true;
+    bool should_use_fastboot_info = false;
     uint64_t sparse_limit = 0;
 
     std::string slot_override;
@@ -111,6 +112,7 @@ class FlashAllTool {
     FlashAllTool(FlashingPlan* fp);
 
     void Flash();
+    std::vector<std::unique_ptr<Task>> CollectTasks();
 
   private:
     void CheckRequirements();
@@ -118,6 +120,8 @@ class FlashAllTool {
     void CollectImages();
     void AddFlashTasks(const std::vector<std::pair<const Image*, std::string>>& images,
                        std::vector<std::unique_ptr<Task>>& tasks);
+
+    std::vector<std::unique_ptr<Task>> CollectTasksFromFastbootInfo();
     std::vector<std::unique_ptr<Task>> CollectTasksFromImageList();
 
     std::vector<ImageEntry> boot_images_;
@@ -143,6 +147,7 @@ class LocalImageSource final : public ImageSource {
     unique_fd OpenFile(const std::string& name) const override;
 };
 
+char* get_android_product_out();
 bool should_flash_in_userspace(const std::string& partition_name);
 bool is_userspace_fastboot();
 void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
