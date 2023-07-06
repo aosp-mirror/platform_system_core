@@ -19,7 +19,6 @@
 
 #include <map>
 
-#include <base/macros.h>
 #include <binderwrapper/binder_wrapper.h>
 
 namespace android {
@@ -38,7 +37,7 @@ class RealBinderWrapper : public BinderWrapper {
                        const sp<IBinder>& binder) override;
   sp<BBinder> CreateLocalBinder() override;
   bool RegisterForDeathNotifications(const sp<IBinder>& binder,
-                                     const ::base::Closure& callback) override;
+                                     const std::function<void()>& callback) override;
   bool UnregisterForDeathNotifications(const sp<IBinder>& binder) override;
   uid_t GetCallingUid() override;
   pid_t GetCallingPid() override;
@@ -50,7 +49,7 @@ class RealBinderWrapper : public BinderWrapper {
   // death.
   std::map<sp<IBinder>, sp<DeathRecipient>> death_recipients_;
 
-  DISALLOW_COPY_AND_ASSIGN(RealBinderWrapper);
+  RealBinderWrapper(const RealBinderWrapper&) = delete;
 };
 
 }  // namespace android

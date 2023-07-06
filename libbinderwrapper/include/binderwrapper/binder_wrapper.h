@@ -19,9 +19,9 @@
 
 #include <sys/types.h>
 
+#include <functional>
 #include <string>
 
-#include <base/callback.h>
 #include <utils/StrongPointer.h>
 
 namespace android {
@@ -68,9 +68,8 @@ class BinderWrapper {
 
   // Registers |callback| to be invoked when |binder| dies. If another callback
   // is currently registered for |binder|, it will be replaced.
-  virtual bool RegisterForDeathNotifications(
-      const sp<IBinder>& binder,
-      const ::base::Closure& callback) = 0;
+  virtual bool RegisterForDeathNotifications(const sp<IBinder>& binder,
+                                             const std::function<void()>&) = 0;
 
   // Unregisters the callback, if any, for |binder|.
   virtual bool UnregisterForDeathNotifications(const sp<IBinder>& binder) = 0;
