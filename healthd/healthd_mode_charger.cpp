@@ -88,7 +88,7 @@ char* locale;
 #define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
-#define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
+#define MAX_BATT_LEVEL_WAIT_TIME (5 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME_PROP "ro.product.charger.unplugged_shutdown_time"
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
@@ -289,6 +289,18 @@ static void reset_animation(animation* anim) {
     anim->run = false;
 }
 
+void Charger::BlankSecScreen() {
+    int drm = drm_ == DRM_INNER ? 1 : 0;
+
+    if (!init_screen_) {
+        /* blank the secondary screen */
+        healthd_draw_->blank_screen(false, drm);
+        healthd_draw_->redraw_screen(&batt_anim_, surf_unknown_);
+        healthd_draw_->blank_screen(true, drm);
+        init_screen_ = true;
+    }
+}
+
 void Charger::UpdateScreenState(int64_t now) {
     int disp_time;
 
@@ -308,36 +320,16 @@ void Charger::UpdateScreenState(int64_t now) {
         // If timeout and battery level is still not ready, draw unknown battery
     }
 
-    if (healthd_draw_ == nullptr) {
-        std::optional<bool> out_screen_on = configuration_->ChargerShouldKeepScreenOn();
-        if (out_screen_on.has_value()) {
-            if (!*out_screen_on) {
-                LOGV("[%" PRId64 "] leave screen off\n", now);
-                batt_anim_.run = false;
-                next_screen_transition_ = -1;
-                if (configuration_->ChargerIsOnline()) {
-                    RequestEnableSuspend();
-                }
-                return;
-            }
-        }
-
-        healthd_draw_ = HealthdDraw::Create(&batt_anim_);
-        if (healthd_draw_ == nullptr) return;
-
-#if !defined(__ANDROID_VNDK__)
-        if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
-            healthd_draw_->blank_screen(true, static_cast<int>(drm_));
-            screen_blanked_ = true;
-        }
-#endif
-    }
+    if (healthd_draw_ == nullptr) return;
 
     /* animation is over, blank screen and leave */
     if (batt_anim_.num_cycles > 0 && batt_anim_.cur_cycle == batt_anim_.num_cycles) {
         reset_animation(&batt_anim_);
         next_screen_transition_ = -1;
         healthd_draw_->blank_screen(true, static_cast<int>(drm_));
+        if (healthd_draw_->has_multiple_connectors()) {
+            BlankSecScreen();
+        }
         screen_blanked_ = true;
         LOGV("[%" PRId64 "] animation done\n", now);
         if (configuration_->ChargerIsOnline()) {
@@ -628,6 +620,18 @@ void Charger::OnHealthInfoChanged(const ChargerHealthInfo& health_info) {
         kick_animation(&batt_anim_);
     }
     health_info_ = health_info;
+
+    if (property_get_bool("ro.charger_mode_autoboot", false)) {
+        if (health_info_.battery_level >= boot_min_cap_) {
+            if (property_get_bool("ro.enable_boot_charger_mode", false)) {
+                LOGW("booting from charger mode\n");
+                property_set("sys.boot_from_charger_mode", "1");
+            } else {
+                LOGW("Battery SOC = %d%%, Automatically rebooting\n", health_info_.battery_level);
+                reboot(RB_AUTOBOOT);
+            }
+        }
+    }
 }
 
 int Charger::OnPrepareToWait(void) {
@@ -736,6 +740,33 @@ void Charger::InitAnimation() {
     }
 }
 
+void Charger::InitHealthdDraw() {
+    if (healthd_draw_ == nullptr) {
+        std::optional<bool> out_screen_on = configuration_->ChargerShouldKeepScreenOn();
+        if (out_screen_on.has_value()) {
+            if (!*out_screen_on) {
+                LOGV("[%" PRId64 "] leave screen off\n", curr_time_ms());
+                batt_anim_.run = false;
+                next_screen_transition_ = -1;
+                if (configuration_->ChargerIsOnline()) {
+                    RequestEnableSuspend();
+                }
+                return;
+            }
+        }
+
+        healthd_draw_ = HealthdDraw::Create(&batt_anim_);
+        if (healthd_draw_ == nullptr) return;
+
+#if !defined(__ANDROID_VNDK__)
+        if (android::sysprop::ChargerProperties::disable_init_blank().value_or(false)) {
+            healthd_draw_->blank_screen(true, static_cast<int>(drm_));
+            screen_blanked_ = true;
+        }
+#endif
+    }
+}
+
 void Charger::OnInit(struct healthd_config* config) {
     int ret;
     int i;
@@ -753,6 +784,7 @@ void Charger::OnInit(struct healthd_config* config) {
     }
 
     InitAnimation();
+    InitHealthdDraw();
 
     ret = CreateDisplaySurface(batt_anim_.fail_file, &surf_unknown_);
     if (ret < 0) {

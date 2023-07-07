@@ -30,6 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <map>
 #include <thread>
 
 #include <android-base/file.h>
@@ -61,6 +62,8 @@ namespace init {
 
 const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android/");
 
+const std::string kDataDirPrefix("/data/");
+
 void (*trigger_shutdown)(const std::string& command) = nullptr;
 
 // DecodeUid() - decodes and returns the given string, which can be either the
@@ -86,8 +89,8 @@ Result<uid_t> DecodeUid(const std::string& name) {
  * daemon. We communicate the file descriptor's value via the environment
  * variable ANDROID_SOCKET_ENV_PREFIX<name> ("ANDROID_SOCKET_foo").
  */
-Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_t perm, uid_t uid,
-                         gid_t gid, const std::string& socketcon) {
+Result<int> CreateSocket(const std::string& name, int type, bool passcred, bool should_listen,
+                         mode_t perm, uid_t uid, gid_t gid, const std::string& socketcon) {
     if (!socketcon.empty()) {
         if (setsockcreatecon(socketcon.c_str()) == -1) {
             return ErrnoError() << "setsockcreatecon(\"" << socketcon << "\") failed";
@@ -117,12 +120,12 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
 
     if (passcred) {
         int on = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
+        if (setsockopt(fd.get(), SOL_SOCKET, SO_PASSCRED, &on, sizeof(on))) {
             return ErrnoError() << "Failed to set SO_PASSCRED '" << name << "'";
         }
     }
 
-    int ret = bind(fd, (struct sockaddr *) &addr, sizeof (addr));
+    int ret = bind(fd.get(), (struct sockaddr*)&addr, sizeof(addr));
     int savederrno = errno;
 
     if (!secontext.empty()) {
@@ -141,6 +144,9 @@ Result<int> CreateSocket(const std::string& name, int type, bool passcred, mode_
     }
     if (fchmodat(AT_FDCWD, addr.sun_path, perm, AT_SYMLINK_NOFOLLOW)) {
         return ErrnoError() << "Failed to fchmodat socket '" << addr.sun_path << "'";
+    }
+    if (should_listen && listen(fd.get(), /* use OS maximum */ 1 << 30)) {
+        return ErrnoError() << "Failed to listen on socket '" << addr.sun_path << "'";
     }
 
     LOG(INFO) << "Created socket '" << addr.sun_path << "'"
@@ -162,7 +168,7 @@ Result<std::string> ReadFile(const std::string& path) {
     // For security reasons, disallow world-writable
     // or group-writable files.
     struct stat sb;
-    if (fstat(fd, &sb) == -1) {
+    if (fstat(fd.get(), &sb) == -1) {
         return ErrnoError() << "fstat failed()";
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
@@ -458,58 +464,34 @@ Result<void> IsLegalPropertyValue(const std::string& name, const std::string& va
     return {};
 }
 
-static FscryptAction FscryptInferAction(const std::string& dir) {
-    const std::string prefix = "/data/";
-
-    if (!android::base::StartsWith(dir, prefix)) {
-        return FscryptAction::kNone;
-    }
-
-    // Special-case /data/media/obb per b/64566063
-    if (dir == "/data/media/obb") {
-        // Try to set policy on this directory, but if it is non-empty this may fail.
-        return FscryptAction::kAttempt;
-    }
-
-    // Only set policy on first level /data directories
-    // To make this less restrictive, consider using a policy file.
-    // However this is overkill for as long as the policy is simply
-    // to apply a global policy to all /data folders created via makedir
-    if (dir.find_first_of('/', prefix.size()) != std::string::npos) {
-        return FscryptAction::kNone;
-    }
-
-    // Special case various directories that must not be encrypted,
-    // often because their subdirectories must be encrypted.
-    // This isn't a nice way to do this, see b/26641735
-    std::vector<std::string> directories_to_exclude = {
-            "lost+found", "system_ce", "system_de", "misc_ce",     "misc_de",
-            "vendor_ce",  "vendor_de", "media",     "data",        "user",
-            "user_de",    "apex",      "preloads",  "app-staging", "gsi",
-    };
-    for (const auto& d : directories_to_exclude) {
-        if ((prefix + d) == dir) {
-            return FscryptAction::kNone;
+// Remove unnecessary slashes so that any later checks (e.g., the check for
+// whether the path is a top-level directory in /data) don't get confused.
+std::string CleanDirPath(const std::string& path) {
+    std::string result;
+    result.reserve(path.length());
+    // Collapse duplicate slashes, e.g. //data//foo// => /data/foo/
+    for (char c : path) {
+        if (c != '/' || result.empty() || result.back() != '/') {
+            result += c;
         }
     }
-    // Empty these directories if policy setting fails.
-    std::vector<std::string> wipe_on_failure = {
-            "rollback", "rollback-observer",  // b/139193659
-    };
-    for (const auto& d : wipe_on_failure) {
-        if ((prefix + d) == dir) {
-            return FscryptAction::kDeleteIfNecessary;
-        }
+    // Remove trailing slash, e.g. /data/foo/ => /data/foo
+    if (result.length() > 1 && result.back() == '/') {
+        result.pop_back();
     }
-    return FscryptAction::kRequire;
+    return result;
 }
 
 Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
+    std::string path = CleanDirPath(args[1]);
+    const bool is_toplevel_data_dir =
+            StartsWith(path, kDataDirPrefix) &&
+            path.find_first_of('/', kDataDirPrefix.size()) == std::string::npos;
+    FscryptAction fscrypt_action =
+            is_toplevel_data_dir ? FscryptAction::kRequire : FscryptAction::kNone;
     mode_t mode = 0755;
     Result<uid_t> uid = -1;
     Result<gid_t> gid = -1;
-    FscryptAction fscrypt_inferred_action = FscryptInferAction(args[1]);
-    FscryptAction fscrypt_action = fscrypt_inferred_action;
     std::string ref_option = "ref";
     bool set_option_encryption = false;
     bool set_option_key = false;
@@ -574,24 +556,17 @@ Result<MkdirOptions> ParseMkdir(const std::vector<std::string>& args) {
     if (set_option_key && fscrypt_action == FscryptAction::kNone) {
         return Error() << "Key option set but encryption action is none";
     }
-    const std::string prefix = "/data/";
-    if (StartsWith(args[1], prefix) &&
-        args[1].find_first_of('/', prefix.size()) == std::string::npos) {
+    if (is_toplevel_data_dir) {
         if (!set_option_encryption) {
-            LOG(WARNING) << "Top-level directory needs encryption action, eg mkdir " << args[1]
+            LOG(WARNING) << "Top-level directory needs encryption action, eg mkdir " << path
                          << " <mode> <uid> <gid> encryption=Require";
         }
         if (fscrypt_action == FscryptAction::kNone) {
-            LOG(INFO) << "Not setting encryption policy on: " << args[1];
+            LOG(INFO) << "Not setting encryption policy on: " << path;
         }
     }
-    if (fscrypt_action != fscrypt_inferred_action) {
-        LOG(WARNING) << "Inferred action different from explicit one, expected "
-                     << static_cast<int>(fscrypt_inferred_action) << " but got "
-                     << static_cast<int>(fscrypt_action);
-    }
 
-    return MkdirOptions{args[1], mode, *uid, *gid, fscrypt_action, ref_option};
+    return MkdirOptions{path, mode, *uid, *gid, fscrypt_action, ref_option};
 }
 
 Result<MountAllOptions> ParseMountAll(const std::vector<std::string>& args) {
@@ -760,6 +735,73 @@ void SetDefaultMountNamespaceReady() {
 bool IsMicrodroid() {
     static bool is_microdroid = android::base::GetProperty("ro.hardware", "") == "microdroid";
     return is_microdroid;
+}
+
+bool Has32BitAbi() {
+    static bool has = !android::base::GetProperty("ro.product.cpu.abilist32", "").empty();
+    return has;
+}
+
+std::string GetApexNameFromFileName(const std::string& path) {
+    static const std::string kApexDir = "/apex/";
+    if (StartsWith(path, kApexDir)) {
+        auto begin = kApexDir.size();
+        auto end = path.find('/', begin);
+        return path.substr(begin, end - begin);
+    }
+    return "";
+}
+
+std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
+                                                int active_sdk) {
+    std::vector<std::string> filtered_configs;
+
+    std::map<std::string, std::pair<std::string, int>> script_map;
+    for (const auto& c : configs) {
+        int sdk = 0;
+        const std::vector<std::string> parts = android::base::Split(c, ".");
+        std::string base;
+        if (parts.size() < 2) {
+            continue;
+        }
+
+        // parts[size()-1], aka the suffix, should be "rc" or "#rc"
+        // any other pattern gets discarded
+
+        const auto& suffix = parts[parts.size() - 1];
+        if (suffix == "rc") {
+            sdk = 0;
+        } else {
+            char trailer[9] = {0};
+            int r = sscanf(suffix.c_str(), "%d%8s", &sdk, trailer);
+            if (r != 2) {
+                continue;
+            }
+            if (strlen(trailer) > 2 || strcmp(trailer, "rc") != 0) {
+                continue;
+            }
+        }
+
+        if (sdk < 0 || sdk > active_sdk) {
+            continue;
+        }
+
+        base = parts[0];
+        for (unsigned int i = 1; i < parts.size() - 1; i++) {
+            base = base + "." + parts[i];
+        }
+
+        // is this preferred over what we already have
+        auto it = script_map.find(base);
+        if (it == script_map.end() || it->second.second < sdk) {
+            script_map[base] = std::make_pair(c, sdk);
+        }
+    }
+
+    for (const auto& m : script_map) {
+        filtered_configs.push_back(m.second.first);
+    }
+    return filtered_configs;
 }
 
 }  // namespace init

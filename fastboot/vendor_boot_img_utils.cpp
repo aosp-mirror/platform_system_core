@@ -152,6 +152,9 @@ class DataUpdater {
     if (memcmp(hdr->magic, VENDOR_BOOT_MAGIC, VENDOR_BOOT_MAGIC_SIZE) != 0) {
         return Errorf("Vendor boot image magic mismatch");
     }
+    if (hdr->page_size == 0) {
+        return Errorf("Page size cannot be zero");
+    }
     if (hdr->header_version < version) {
         return Errorf("Require vendor boot header V{} but is V{}", version, hdr->header_version);
     }
@@ -199,6 +202,7 @@ class DataUpdater {
 }
 
 // round |value| up to a multiple of |page_size|.
+// aware that this can be integer overflow if value is too large
 inline uint32_t round_up(uint32_t value, uint32_t page_size) {
     return (value + page_size - 1) / page_size * page_size;
 }
@@ -311,7 +315,13 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
     const uint32_t r = round_up(hdr->vendor_ramdisk_table_size, hdr->page_size);
     const uint32_t s = round_up(hdr->bootconfig_size, hdr->page_size);
 
-    if (hdr->vendor_ramdisk_table_entry_num == std::numeric_limits<uint32_t>::max()) {
+    uint64_t total_size = (uint64_t)o + p + q + r + s;
+    if (total_size > vendor_boot.size()) {
+        return Errorf("Vendor boot image size is too small, overflow");
+    }
+
+    if ((uint64_t)hdr->vendor_ramdisk_table_entry_num * sizeof(vendor_ramdisk_table_entry_v4) >
+        (uint64_t)o + p + q + r) {
         return Errorf("Too many vendor ramdisk entries in table, overflow");
     }
 

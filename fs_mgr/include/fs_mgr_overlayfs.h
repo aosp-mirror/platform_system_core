@@ -17,36 +17,21 @@
 #pragma once
 
 #include <functional>
+#include <set>
+#include <string>
 
 #include <fstab/fstab.h>
 
-#include <set>
-#include <string>
-#include <vector>
-
-android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
+// Keep the list short and only add interfaces that must be exported public.
 
 bool fs_mgr_overlayfs_mount_all(android::fs_mgr::Fstab* fstab);
-bool fs_mgr_overlayfs_setup(const char* backing = nullptr, const char* mount_point = nullptr,
-                            bool* change = nullptr, bool force = true);
-bool fs_mgr_overlayfs_teardown(const char* mount_point = nullptr, bool* change = nullptr);
 bool fs_mgr_overlayfs_is_setup();
-bool fs_mgr_has_shared_blocks(const std::string& mount_point, const std::string& dev);
-std::string fs_mgr_get_context(const std::string& mount_point);
-
-enum class OverlayfsValidResult {
-    kNotSupported = 0,
-    kOk,
-    kOverrideCredsRequired,
-};
-OverlayfsValidResult fs_mgr_overlayfs_valid();
 
 namespace android {
 namespace fs_mgr {
 
 void MapScratchPartitionIfNeeded(Fstab* fstab,
                                  const std::function<bool(const std::set<std::string>&)>& init);
-void CleanupOldScratchFiles();
 
 // Teardown overlays of all sources (cache dir, scratch device, DSU) for |mount_point|.
 // Teardown all overlays if |mount_point| is empty.
