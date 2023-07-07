@@ -46,6 +46,10 @@
 #define DEFINED_FRIEND_TEST
 #endif
 
+namespace aidl::android::hardware::boot {
+enum class MergeStatus;
+}
+
 namespace android {
 
 namespace fiemap {
@@ -59,13 +63,6 @@ class IPartitionOpener;
 
 // Forward declare IBootControl types since we cannot include only the headers
 // with Soong. Note: keep the enum width in sync.
-namespace hardware {
-namespace boot {
-namespace V1_1 {
-enum class MergeStatus : int32_t;
-}  // namespace V1_1
-}  // namespace boot
-}  // namespace hardware
 
 namespace snapshot {
 
@@ -95,6 +92,7 @@ class ISnapshotManager {
     class IDeviceInfo {
       public:
         using IImageManager = android::fiemap::IImageManager;
+        using MergeStatus = aidl::android::hardware::boot::MergeStatus;
 
         virtual ~IDeviceInfo() {}
         virtual std::string GetMetadataDir() const = 0;
@@ -103,8 +101,7 @@ class ISnapshotManager {
         virtual std::string GetSuperDevice(uint32_t slot) const = 0;
         virtual const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
-        virtual bool SetBootControlMergeStatus(
-                android::hardware::boot::V1_1::MergeStatus status) = 0;
+        virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
         virtual bool IsTestDevice() const { return false; }
@@ -133,6 +130,9 @@ class ISnapshotManager {
     // If |wipe| is set to true, wipe is scheduled after reboot, and snapshots
     // may need to be merged before wiping.
     virtual bool FinishedSnapshotWrites(bool wipe) = 0;
+
+    // Set feature flags on an ISnapshotMergeStats object.
+    virtual void SetMergeStatsFeatures(ISnapshotMergeStats* stats) = 0;
 
     // Update an ISnapshotMergeStats object with statistics about COW usage.
     // This should be called before the merge begins as otherwise snapshots
@@ -308,7 +308,7 @@ class SnapshotManager final : public ISnapshotManager {
     using LpMetadata = android::fs_mgr::LpMetadata;
     using MetadataBuilder = android::fs_mgr::MetadataBuilder;
     using DeltaArchiveManifest = chromeos_update_engine::DeltaArchiveManifest;
-    using MergeStatus = android::hardware::boot::V1_1::MergeStatus;
+    using MergeStatus = aidl::android::hardware::boot::MergeStatus;
     using FiemapStatus = android::fiemap::FiemapStatus;
 
     friend class SnapshotMergeStats;
@@ -332,10 +332,13 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper function for second stage init to restorecon on the rollback indicator.
     static std::string GetGlobalRollbackIndicatorPath();
 
-    // Detach dm-user devices from the current snapuserd, and populate
-    // |snapuserd_argv| with the necessary arguments to restart snapuserd
-    // and reattach them.
-    bool DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv);
+    // Populate |snapuserd_argv| with the necessary arguments to restart snapuserd
+    // after loading selinux policy.
+    bool PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv);
+
+    // Detach dm-user devices from the first stage snapuserd. Load
+    // new dm-user tables after loading selinux policy.
+    bool DetachFirstStageSnapuserdForSelinux();
 
     // Perform the transition from the selinux stage of snapuserd into the
     // second-stage of snapuserd. This process involves re-creating the dm-user
@@ -378,6 +381,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool MapAllSnapshots(const std::chrono::milliseconds& timeout_ms = {}) override;
     bool UnmapAllSnapshots() override;
     std::string ReadSourceBuildFingerprint() override;
+    void SetMergeStatsFeatures(ISnapshotMergeStats* stats) override;
 
     // We can't use WaitForFile during first-stage init, because ueventd is not
     // running and therefore will not automatically create symlinks. Instead,
@@ -390,6 +394,10 @@ class SnapshotManager final : public ISnapshotManager {
     // If true, compression is enabled for this update. This is used by
     // first-stage to decide whether to launch snapuserd.
     bool IsSnapuserdRequired();
+
+    // This is primarily used to device reboot. If OTA update is in progress,
+    // init will avoid killing processes
+    bool IsUserspaceSnapshotUpdateInProgress();
 
     enum class SnapshotDriver {
         DM_SNAPSHOT,
@@ -640,6 +648,7 @@ class SnapshotManager final : public ISnapshotManager {
     MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
                                            const SnapshotStatus& update_status);
 
+    auto UpdateStateToStr(enum UpdateState state);
     // Get status or table information about a device-mapper node with a single target.
     enum class TableQuery {
         Table,

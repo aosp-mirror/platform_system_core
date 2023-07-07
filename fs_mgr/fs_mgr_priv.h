@@ -33,7 +33,7 @@
  */
 #define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
 
-#define FS_MGR_TAG "[libfs_mgr]"
+#define FS_MGR_TAG "[libfs_mgr] "
 
 // Logs a message to kernel
 #define LINFO    LOG(INFO) << FS_MGR_TAG
@@ -98,6 +98,16 @@ bool fs_mgr_is_ext4(const std::string& blk_device);
 bool fs_mgr_is_f2fs(const std::string& blk_device);
 
 bool fs_mgr_teardown_verity(android::fs_mgr::FstabEntry* fstab);
+
+bool fs_mgr_filesystem_available(const std::string& filesystem);
+std::string fs_mgr_get_context(const std::string& mount_point);
+
+enum class OverlayfsValidResult {
+    kNotSupported = 0,
+    kOk,
+    kOverrideCredsRequired,
+};
+OverlayfsValidResult fs_mgr_overlayfs_valid();
 
 namespace android {
 namespace fs_mgr {

@@ -18,7 +18,11 @@
 
 #include <sys/socket.h>
 
+#include <condition_variable>
+#include <deque>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "epoll.h"
 
