@@ -28,10 +28,7 @@ class ISnapshotMergeStats {
     virtual ~ISnapshotMergeStats() = default;
     // Called when merge starts or resumes.
     virtual bool Start() = 0;
-    virtual void set_state(android::snapshot::UpdateState state, bool using_compression) = 0;
-    virtual void set_cow_file_size(uint64_t cow_file_size) = 0;
-    virtual void set_total_cow_size_bytes(uint64_t bytes) = 0;
-    virtual void set_estimated_cow_size_bytes(uint64_t bytes) = 0;
+    virtual void set_state(android::snapshot::UpdateState state) = 0;
     virtual void set_boot_complete_time_ms(uint32_t ms) = 0;
     virtual void set_boot_complete_to_merge_start_time_ms(uint32_t ms) = 0;
     virtual void set_merge_failure_code(MergeFailureCode code) = 0;
@@ -55,6 +52,9 @@ class ISnapshotMergeStats {
     // Return nullptr if any failure.
     virtual std::unique_ptr<Result> Finish() = 0;
 
+    // Return the underlying implementation.
+    virtual SnapshotMergeReport* report() = 0;
+
     // Write out the current state. This should be called when data might be lost that
     // cannot be recovered (eg the COW sizes).
     virtual bool WriteState() = 0;
@@ -67,11 +67,8 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
 
     // ISnapshotMergeStats overrides
     bool Start() override;
-    void set_state(android::snapshot::UpdateState state, bool using_compression) override;
-    void set_cow_file_size(uint64_t cow_file_size) override;
+    void set_state(android::snapshot::UpdateState state) override;
     uint64_t cow_file_size() override;
-    void set_total_cow_size_bytes(uint64_t bytes) override;
-    void set_estimated_cow_size_bytes(uint64_t bytes) override;
     uint64_t total_cow_size_bytes() override;
     uint64_t estimated_cow_size_bytes() override;
     void set_boot_complete_time_ms(uint32_t ms) override;
@@ -84,6 +81,9 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
     std::string source_build_fingerprint() override;
     std::unique_ptr<Result> Finish() override;
     bool WriteState() override;
+
+    // Access the underlying report before it is finished.
+    SnapshotMergeReport* report() override { return &report_; }
 
   private:
     bool ReadState();

@@ -298,21 +298,31 @@ void ColdBoot::Run() {
 
 static UeventdConfiguration GetConfiguration() {
     auto hardware = android::base::GetProperty("ro.hardware", "");
-    std::vector<std::string> legacy_paths{"/vendor/ueventd.rc", "/odm/ueventd.rc",
-                                          "/ueventd." + hardware + ".rc"};
+
+    struct LegacyPathInfo {
+        std::string legacy_path;
+        std::string preferred;
+    };
+    std::vector<LegacyPathInfo> legacy_paths{
+            {"/vendor/ueventd.rc", "/vendor/etc/ueventd.rc"},
+            {"/odm/ueventd.rc", "/odm/etc/ueventd.rc"},
+            {"/ueventd." + hardware + ".rc", "another ueventd.rc file"}};
 
     std::vector<std::string> canonical{"/system/etc/ueventd.rc"};
 
     if (android::base::GetIntProperty("ro.product.first_api_level", 10000) < __ANDROID_API_T__) {
         // TODO: Remove these legacy paths once Android S is no longer supported.
-        canonical.insert(canonical.end(), legacy_paths.begin(), legacy_paths.end());
+        for (const auto& info : legacy_paths) {
+            canonical.push_back(info.legacy_path);
+        }
     } else {
         // Warn if newer device is using legacy paths.
-        for (const auto& path : legacy_paths) {
-            if (access(path.c_str(), F_OK) == 0) {
+        for (const auto& info : legacy_paths) {
+            if (access(info.legacy_path.c_str(), F_OK) == 0) {
                 LOG(FATAL_WITHOUT_ABORT)
                         << "Legacy ueventd configuration file detected and will not be parsed: "
-                        << path;
+                        << info.legacy_path << ". Please move your configuration to "
+                        << info.preferred << " instead.";
             }
         }
     }

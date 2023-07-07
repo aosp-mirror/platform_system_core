@@ -85,7 +85,7 @@ Result<void> check_exec_background(const BuiltinArguments& args) {
 }
 
 Result<void> check_exec_reboot_on_failure(const BuiltinArguments& args) {
-    BuiltinArguments remaining_args(args.context);
+    BuiltinArguments remaining_args{.context = args.context};
 
     remaining_args.args = std::vector<std::string>(args.begin() + 1, args.end());
     remaining_args.args[0] = args[0];

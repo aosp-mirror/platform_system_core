@@ -45,7 +45,7 @@ static char errmsg[2048];
 
 typedef unsigned long long msecs_t;
 #if VERBOSE
-void dump_dhcp_msg();
+void dump_dhcp_msg(dhcp_msg *msg, int len);
 #endif
 
 msecs_t get_msecs(void)

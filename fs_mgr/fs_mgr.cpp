@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <selinux/selinux.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/swap.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -90,9 +92,6 @@
 #define SYSFS_EXT4_VERITY "/sys/fs/ext4/features/verity"
 #define SYSFS_EXT4_CASEFOLD "/sys/fs/ext4/features/casefold"
 
-// FIXME: this should be in system/extras
-#define EXT4_FEATURE_COMPAT_STABLE_INODES 0x0800
-
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using android::base::Basename;
@@ -124,8 +123,8 @@ enum FsStatFlags {
     FS_STAT_RO_MOUNT_FAILED = 0x0040,
     FS_STAT_RO_UNMOUNT_FAILED = 0x0080,
     FS_STAT_FULL_MOUNT_FAILED = 0x0100,
-    FS_STAT_E2FSCK_FAILED = 0x0200,
-    FS_STAT_E2FSCK_FS_FIXED = 0x0400,
+    FS_STAT_FSCK_FAILED = 0x0200,
+    FS_STAT_FSCK_FS_FIXED = 0x0400,
     FS_STAT_INVALID_MAGIC = 0x0800,
     FS_STAT_TOGGLE_QUOTAS_FAILED = 0x10000,
     FS_STAT_SET_RESERVED_BLOCKS_FAILED = 0x20000,
@@ -136,7 +135,6 @@ enum FsStatFlags {
 };
 
 static void log_fs_stat(const std::string& blk_device, int fs_stat) {
-    if ((fs_stat & FS_STAT_IS_EXT4) == 0) return; // only log ext4
     std::string msg =
             android::base::StringPrintf("\nfs_stat,%s,0x%x\n", blk_device.c_str(), fs_stat);
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(FSCK_LOG_FILE, O_WRONLY | O_CLOEXEC |
@@ -166,7 +164,7 @@ static bool should_force_check(int fs_stat) {
     return fs_stat &
            (FS_STAT_E2FSCK_F_ALWAYS | FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED |
             FS_STAT_RO_MOUNT_FAILED | FS_STAT_RO_UNMOUNT_FAILED | FS_STAT_FULL_MOUNT_FAILED |
-            FS_STAT_E2FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
+            FS_STAT_FSCK_FAILED | FS_STAT_TOGGLE_QUOTAS_FAILED |
             FS_STAT_SET_RESERVED_BLOCKS_FAILED | FS_STAT_ENABLE_ENCRYPTION_FAILED);
 }
 
@@ -255,10 +253,10 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
             if (ret < 0) {
                 /* No need to check for error in fork, we can't really handle it now */
                 LERROR << "Failed trying to run " << E2FSCK_BIN;
-                *fs_stat |= FS_STAT_E2FSCK_FAILED;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
             } else if (status != 0) {
                 LINFO << "e2fsck returned status 0x" << std::hex << status;
-                *fs_stat |= FS_STAT_E2FSCK_FS_FIXED;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
             }
         }
     } else if (is_f2fs(fs_type)) {
@@ -267,20 +265,30 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
         const char* f2fs_fsck_forced_argv[] = {
                 F2FS_FSCK_BIN, "-f", "-c", "10000", "--debug-cache", blk_device.c_str()};
 
-        if (should_force_check(*fs_stat)) {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
-                                      &status, false, LOG_KLOG | LOG_FILE, false, nullptr);
+        if (access(F2FS_FSCK_BIN, X_OK)) {
+            LINFO << "Not running " << F2FS_FSCK_BIN << " on " << realpath(blk_device)
+                  << " (executable not in system image)";
         } else {
-            LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
-                  << realpath(blk_device);
-            ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status, false,
-                                      LOG_KLOG | LOG_FILE, false, nullptr);
-        }
-        if (ret < 0) {
-            /* No need to check for error in fork, we can't really handle it now */
-            LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+            if (should_force_check(*fs_stat)) {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -f -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_forced_argv), f2fs_fsck_forced_argv,
+                                          &status, false, LOG_KLOG | LOG_FILE, false,
+                                          FSCK_LOG_FILE);
+            } else {
+                LINFO << "Running " << F2FS_FSCK_BIN << " -a -c 10000 --debug-cache "
+                      << realpath(blk_device);
+                ret = logwrap_fork_execvp(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv, &status,
+                                          false, LOG_KLOG | LOG_FILE, false, FSCK_LOG_FILE);
+            }
+            if (ret < 0) {
+                /* No need to check for error in fork, we can't really handle it now */
+                LERROR << "Failed trying to run " << F2FS_FSCK_BIN;
+                *fs_stat |= FS_STAT_FSCK_FAILED;
+            } else if (status != 0) {
+                LINFO << F2FS_FSCK_BIN << " returned status 0x" << std::hex << status;
+                *fs_stat |= FS_STAT_FSCK_FS_FIXED;
+            }
         }
     }
     android::base::SetProperty("ro.boottime.init.fsck." + Basename(target),
@@ -840,8 +848,10 @@ static int __mount(const std::string& source, const std::string& target, const F
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
         fs_mgr_set_blk_ro(source);
     }
-    android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
-                               std::to_string(t.duration().count()));
+    if (ret == 0) {
+        android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
+                                   std::to_string(t.duration().count()));
+    }
     errno = save_errno;
     return ret;
 }
@@ -881,7 +891,7 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
 // attempted_idx: On return, will indicate which fstab entry
 //     succeeded. In case of failure, it will be the start_idx.
 // Sets errno to match the 1st mount failure on failure.
-static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_idx,
+static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
                                     int* attempted_idx) {
     unsigned long i;
     int mount_errno = 0;
@@ -895,10 +905,18 @@ static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_
         // Deal with alternate entries for the same point which are required to be all following
         // each other.
         if (mounted) {
-            LERROR << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
-                   << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
-                   << fstab[*attempted_idx].fs_type;
+            LINFO << __FUNCTION__ << "(): skipping fstab dup mountpoint=" << fstab[i].mount_point
+                  << " rec[" << i << "].fs_type=" << fstab[i].fs_type << " already mounted as "
+                  << fstab[*attempted_idx].fs_type;
             continue;
+        }
+
+        // fstab[start_idx].blk_device is already updated to /dev/dm-<N> by
+        // AVB related functions. Copy it from start_idx to the current index i.
+        if ((i != start_idx) && fstab[i].fs_mgr_flags.logical &&
+            fstab[start_idx].fs_mgr_flags.logical &&
+            (fstab[i].logical_partition_name == fstab[start_idx].logical_partition_name)) {
+            fstab[i].blk_device = fstab[start_idx].blk_device;
         }
 
         int fs_stat = prepare_fs_for_mount(fstab[i].blk_device, fstab[i]);
@@ -917,9 +935,9 @@ static bool mount_with_alternatives(const Fstab& fstab, int start_idx, int* end_
                 *attempted_idx = i;
                 mounted = true;
                 if (i != start_idx) {
-                    LERROR << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
-                           << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
-                           << " instead of " << fstab[start_idx].fs_type;
+                    LINFO << __FUNCTION__ << "(): Mounted " << fstab[i].blk_device << " on "
+                          << fstab[i].mount_point << " with fs_type=" << fstab[i].fs_type
+                          << " instead of " << fstab[start_idx].fs_type;
                 }
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
                 mount_errno = 0;
@@ -1157,6 +1175,10 @@ class CheckpointManager {
                     PERROR << "Cannot get device size";
                     return false;
                 }
+
+                // dm-bow will not load if size is not a multiple of 4096
+                // rounding down does not hurt, since ext4 will only use full blocks
+                size &= ~7;
 
                 android::dm::DmTable table;
                 auto bowTarget =
@@ -1474,7 +1496,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
                                    attempted_entry.mount_point, wiped ? "true" : "false",
-                                   attempted_entry.fs_type},
+                                   attempted_entry.fs_type, attempted_entry.zoned_device},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1514,7 +1536,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
 
                 if (!call_vdc({"cryptfs", "encryptFstab", current_entry.blk_device,
                                current_entry.mount_point, "true" /* shouldFormat */,
-                               current_entry.fs_type},
+                               current_entry.fs_type, current_entry.zoned_device},
                               nullptr)) {
                     LERROR << "Encryption failed";
                 } else {
@@ -1539,7 +1561,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         if (mount_errno != EBUSY && mount_errno != EACCES &&
             should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
-                           attempted_entry.mount_point},
+                           attempted_entry.mount_point, attempted_entry.zoned_device},
                           nullptr)) {
                 ++error_count;
             } else if (current_entry.mount_point == "/data") {
@@ -1911,6 +1933,7 @@ static int fs_mgr_do_mount_helper(Fstab* fstab, const std::string& n_name,
         while (retry_count-- > 0) {
             if (!__mount(n_blk_device, mount_point, fstab_entry)) {
                 fs_stat &= ~FS_STAT_FULL_MOUNT_FAILED;
+                log_fs_stat(fstab_entry.blk_device, fs_stat);
                 return FS_MGR_DOMNT_SUCCESS;
             } else {
                 if (retry_count <= 0) break;  // run check_fs only once
@@ -2172,36 +2195,22 @@ std::optional<HashtreeInfo> fs_mgr_get_hashtree_info(const android::fs_mgr::Fsta
         std::vector<std::string> tokens = android::base::Split(target.data, " \t\r\n");
         if (tokens[0] != "0" && tokens[0] != "1") {
             LOG(WARNING) << "Unrecognized device mapper version in " << target.data;
-            return {};
         }
 
         // Hashtree algorithm & root digest are the 8th & 9th token in the output.
-        return HashtreeInfo{.algorithm = android::base::Trim(tokens[7]),
-                            .root_digest = android::base::Trim(tokens[8])};
+        return HashtreeInfo{
+                .algorithm = android::base::Trim(tokens[7]),
+                .root_digest = android::base::Trim(tokens[8]),
+                .check_at_most_once = target.data.find("check_at_most_once") != std::string::npos};
     }
 
     return {};
 }
 
 bool fs_mgr_verity_is_check_at_most_once(const android::fs_mgr::FstabEntry& entry) {
-    if (!entry.fs_mgr_flags.avb) {
-        return false;
-    }
-
-    DeviceMapper& dm = DeviceMapper::Instance();
-    std::string device = GetVerityDeviceName(entry);
-
-    std::vector<DeviceMapper::TargetInfo> table;
-    if (dm.GetState(device) == DmDeviceState::INVALID || !dm.GetTableInfo(device, &table)) {
-        return false;
-    }
-    for (const auto& target : table) {
-        if (strcmp(target.spec.target_type, "verity") == 0 &&
-            target.data.find("check_at_most_once") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
+    auto hashtree_info = fs_mgr_get_hashtree_info(entry);
+    if (!hashtree_info) return false;
+    return hashtree_info->check_at_most_once;
 }
 
 std::string fs_mgr_get_super_partition_name(int slot) {
@@ -2341,4 +2350,50 @@ bool fs_mgr_load_verity_state(int* mode) {
     }
 
     return true;
+}
+
+bool fs_mgr_filesystem_available(const std::string& filesystem) {
+    std::string filesystems;
+    if (!android::base::ReadFileToString("/proc/filesystems", &filesystems)) return false;
+    return filesystems.find("\t" + filesystem + "\n") != std::string::npos;
+}
+
+std::string fs_mgr_get_context(const std::string& mount_point) {
+    char* ctx = nullptr;
+    if (getfilecon(mount_point.c_str(), &ctx) == -1) {
+        PERROR << "getfilecon " << mount_point;
+        return "";
+    }
+
+    std::string context(ctx);
+    free(ctx);
+    return context;
+}
+
+OverlayfsValidResult fs_mgr_overlayfs_valid() {
+    // Overlayfs available in the kernel, and patched for override_creds?
+    if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
+        return OverlayfsValidResult::kOverrideCredsRequired;
+    }
+    if (!fs_mgr_filesystem_available("overlay")) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    struct utsname uts;
+    if (uname(&uts) == -1) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    int major, minor;
+    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (major < 4) {
+        return OverlayfsValidResult::kOk;
+    }
+    if (major > 4) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    if (minor > 3) {
+        return OverlayfsValidResult::kNotSupported;
+    }
+    return OverlayfsValidResult::kOk;
 }
