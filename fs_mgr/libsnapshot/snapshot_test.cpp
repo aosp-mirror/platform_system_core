@@ -26,6 +26,7 @@
 #include <future>
 #include <iostream>
 
+#include <aidl/android/hardware/boot/MergeStatus.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -39,6 +40,7 @@
 #include <libdm/dm.h>
 #include <libfiemap/image_manager.h>
 #include <liblp/builder.h>
+#include <openssl/sha.h>
 #include <storage_literals/storage_literals.h>
 
 #include <android/snapshot/snapshot.pb.h>
@@ -51,9 +53,19 @@
 #include <libsnapshot/mock_device_info.h>
 #include <libsnapshot/mock_snapshot.h>
 
-DEFINE_string(force_config, "", "Force testing mode (dmsnap, vab, vabc) ignoring device config.");
+#if defined(LIBSNAPSHOT_TEST_VAB_LEGACY)
+#define DEFAULT_MODE "vab-legacy"
+#elif defined(LIBSNAPSHOT_TEST_VABC_LEGACY)
+#define DEFAULT_MODE "vabc-legacy"
+#else
+#define DEFAULT_MODE ""
+#endif
+
+DEFINE_string(force_mode, DEFAULT_MODE,
+              "Force testing older modes (vab-legacy, vabc-legacy) ignoring device config.");
 DEFINE_string(force_iouring_disable, "",
               "Force testing mode (iouring_disabled) - disable io_uring");
+DEFINE_string(compression_method, "gz", "Default compression algorithm.");
 
 namespace android {
 namespace snapshot {
@@ -90,8 +102,6 @@ TestDeviceInfo* test_device = nullptr;
 std::string fake_super;
 
 void MountMetadata();
-bool ShouldUseCompression();
-bool IsDaemonRequired();
 
 class SnapshotTest : public ::testing::Test {
   public:
@@ -105,9 +115,19 @@ class SnapshotTest : public ::testing::Test {
 
   protected:
     void SetUp() override {
+        const testing::TestInfo* const test_info =
+                testing::UnitTest::GetInstance()->current_test_info();
+        test_name_ = test_info->test_suite_name() + "/"s + test_info->name();
+
+        LOG(INFO) << "Starting test: " << test_name_;
+
         SKIP_IF_NON_VIRTUAL_AB();
 
-        SnapshotTestPropertyFetcher::SetUp();
+        SetupProperties();
+        if (!DeviceSupportsMode()) {
+            GTEST_SKIP() << "Mode not supported on this device";
+        }
+
         InitializeState();
         CleanupTestArtifacts();
         FormatFakeSuper();
@@ -115,13 +135,65 @@ class SnapshotTest : public ::testing::Test {
         ASSERT_TRUE(sm->BeginUpdate());
     }
 
+    void SetupProperties() {
+        std::unordered_map<std::string, std::string> properties;
+
+        ASSERT_TRUE(android::base::SetProperty("snapuserd.test.dm.snapshots", "0"))
+                << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
+        ASSERT_TRUE(android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0"))
+                << "Failed to set property: snapuserd.test.io_uring.disabled";
+
+        if (FLAGS_force_mode == "vabc-legacy") {
+            ASSERT_TRUE(android::base::SetProperty("snapuserd.test.dm.snapshots", "1"))
+                    << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
+            properties["ro.virtual_ab.compression.enabled"] = "true";
+            properties["ro.virtual_ab.userspace.snapshots.enabled"] = "false";
+        } else if (FLAGS_force_mode == "vab-legacy") {
+            properties["ro.virtual_ab.compression.enabled"] = "false";
+            properties["ro.virtual_ab.userspace.snapshots.enabled"] = "false";
+        }
+
+        if (FLAGS_force_iouring_disable == "iouring_disabled") {
+            ASSERT_TRUE(android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1"))
+                    << "Failed to set property: snapuserd.test.io_uring.disabled";
+            properties["ro.virtual_ab.io_uring.enabled"] = "false";
+        }
+
+        auto fetcher = std::make_unique<SnapshotTestPropertyFetcher>("_a", std::move(properties));
+        IPropertyFetcher::OverrideForTesting(std::move(fetcher));
+
+        if (GetLegacyCompressionEnabledProperty() || CanUseUserspaceSnapshots()) {
+            // If we're asked to test the device's actual configuration, then it
+            // may be misconfigured, so check for kernel support as libsnapshot does.
+            if (FLAGS_force_mode.empty()) {
+                snapuserd_required_ = KernelSupportsCompressedSnapshots();
+            } else {
+                snapuserd_required_ = true;
+            }
+        }
+    }
+
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+
+        LOG(INFO) << "Tearing down SnapshotTest test: " << test_name_;
 
         lock_ = nullptr;
 
         CleanupTestArtifacts();
         SnapshotTestPropertyFetcher::TearDown();
+
+        LOG(INFO) << "Teardown complete for test: " << test_name_;
+    }
+
+    bool DeviceSupportsMode() {
+        if (FLAGS_force_mode.empty()) {
+            return true;
+        }
+        if (snapuserd_required_ && !KernelSupportsCompressedSnapshots()) {
+            return false;
+        }
+        return true;
     }
 
     void InitializeState() {
@@ -140,6 +212,11 @@ class SnapshotTest : public ::testing::Test {
         // completing a merge, the snapshot stops existing, so we can't
         // get an accurate list to remove.
         lock_ = nullptr;
+
+        // If there is no image manager, the test was skipped.
+        if (!image_manager_) {
+            return;
+        }
 
         std::vector<std::string> snapshots = {"test-snapshot", "test_partition_a",
                                               "test_partition_b"};
@@ -357,8 +434,11 @@ class SnapshotTest : public ::testing::Test {
         DeltaArchiveManifest manifest;
 
         auto dynamic_partition_metadata = manifest.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(IsCompressionEnabled());
+        dynamic_partition_metadata->set_vabc_enabled(snapuserd_required_);
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
+        if (snapuserd_required_) {
+            dynamic_partition_metadata->set_vabc_compression_param(FLAGS_compression_method);
+        }
 
         auto group = dynamic_partition_metadata->add_groups();
         group->set_name("group");
@@ -396,7 +476,7 @@ class SnapshotTest : public ::testing::Test {
             if (!res) {
                 return res;
             }
-        } else if (!IsCompressionEnabled()) {
+        } else if (!snapuserd_required_) {
             std::string ignore;
             if (!MapUpdateSnapshot("test_partition_b", &ignore)) {
                 return AssertionFailure() << "Failed to map test_partition_b";
@@ -449,15 +529,17 @@ class SnapshotTest : public ::testing::Test {
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
     android::fiemap::IImageManager* image_manager_ = nullptr;
     std::string fake_super_;
+    bool snapuserd_required_ = false;
+    std::string test_name_;
 };
 
 TEST_F(SnapshotTest, CreateSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = ShouldUseCompression();
-    if (cow_creator.compression_enabled) {
-        cow_creator.compression_algorithm = "gz";
+    cow_creator.using_snapuserd = snapuserd_required_;
+    if (cow_creator.using_snapuserd) {
+        cow_creator.compression_algorithm = FLAGS_compression_method;
     } else {
         cow_creator.compression_algorithm = "none";
     }
@@ -483,7 +565,7 @@ TEST_F(SnapshotTest, CreateSnapshot) {
         ASSERT_EQ(status.state(), SnapshotState::CREATED);
         ASSERT_EQ(status.device_size(), kDeviceSize);
         ASSERT_EQ(status.snapshot_size(), kDeviceSize);
-        ASSERT_EQ(status.compression_enabled(), cow_creator.compression_enabled);
+        ASSERT_EQ(status.using_snapuserd(), cow_creator.using_snapuserd);
         ASSERT_EQ(status.compression_algorithm(), cow_creator.compression_algorithm);
     }
 
@@ -496,7 +578,7 @@ TEST_F(SnapshotTest, MapSnapshot) {
     ASSERT_TRUE(AcquireLock());
 
     PartitionCowCreator cow_creator;
-    cow_creator.compression_enabled = ShouldUseCompression();
+    cow_creator.using_snapuserd = snapuserd_required_;
 
     static const uint64_t kDeviceSize = 1024 * 1024;
     SnapshotStatus status;
@@ -623,10 +705,10 @@ TEST_F(SnapshotTest, FirstStageMountAndMerge) {
     SnapshotStatus status;
     ASSERT_TRUE(init->ReadSnapshotStatus(lock_.get(), "test_partition_b", &status));
     ASSERT_EQ(status.state(), SnapshotState::CREATED);
-    if (ShouldUseCompression()) {
-        ASSERT_EQ(status.compression_algorithm(), "gz");
+    if (snapuserd_required_) {
+        ASSERT_EQ(status.compression_algorithm(), FLAGS_compression_method);
     } else {
-        ASSERT_EQ(status.compression_algorithm(), "none");
+        ASSERT_EQ(status.compression_algorithm(), "");
     }
 
     DeviceMapper::TargetInfo target;
@@ -889,6 +971,11 @@ class SnapshotUpdateTest : public SnapshotTest {
         SKIP_IF_NON_VIRTUAL_AB();
 
         SnapshotTest::SetUp();
+        if (!image_manager_) {
+            // Test was skipped.
+            return;
+        }
+
         Cleanup();
 
         // Cleanup() changes slot suffix, so initialize it again.
@@ -897,8 +984,11 @@ class SnapshotUpdateTest : public SnapshotTest {
         opener_ = std::make_unique<TestPartitionOpener>(fake_super);
 
         auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
-        dynamic_partition_metadata->set_vabc_enabled(ShouldUseCompression());
+        dynamic_partition_metadata->set_vabc_enabled(snapuserd_required_);
         dynamic_partition_metadata->set_cow_version(android::snapshot::kCowVersionMajor);
+        if (snapuserd_required_) {
+            dynamic_partition_metadata->set_vabc_compression_param(FLAGS_compression_method);
+        }
 
         // Create a fake update package metadata.
         // Not using full name "system", "vendor", "product" because these names collide with the
@@ -961,6 +1051,8 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+
+        LOG(INFO) << "Tearing down SnapshotUpdateTest test: " << test_name_;
 
         Cleanup();
         SnapshotTest::TearDown();
@@ -1030,7 +1122,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
-        if (ShouldUseCompression()) {
+        if (snapuserd_required_) {
             std::unique_ptr<ISnapshotWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
@@ -1039,14 +1131,25 @@ class SnapshotUpdateTest : public SnapshotTest {
         }
     }
 
-    AssertionResult WriteSnapshotAndHash(const std::string& name) {
-        if (ShouldUseCompression()) {
+    AssertionResult WriteSnapshots() {
+        for (const auto& partition : {sys_, vnd_, prd_}) {
+            auto res = WriteSnapshotAndHash(partition);
+            if (!res) {
+                return res;
+            }
+        }
+        return AssertionSuccess();
+    }
+
+    AssertionResult WriteSnapshotAndHash(PartitionUpdate* partition) {
+        std::string name = partition->partition_name() + "_b";
+        if (snapuserd_required_) {
             std::unique_ptr<ISnapshotWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
                 return res;
             }
-            if (!WriteRandomData(writer.get(), &hashes_[name])) {
+            if (!WriteRandomSnapshotData(writer.get(), &hashes_[name])) {
                 return AssertionFailure() << "Unable to write random data to snapshot " << name;
             }
             if (!writer->Finalize()) {
@@ -1068,6 +1171,42 @@ class SnapshotUpdateTest : public SnapshotTest {
 
         return AssertionSuccess() << "Written random data to snapshot " << name
                                   << ", hash: " << hashes_[name];
+    }
+
+    bool WriteRandomSnapshotData(ICowWriter* writer, std::string* hash) {
+        unique_fd rand(open("/dev/urandom", O_RDONLY));
+        if (rand < 0) {
+            PLOG(ERROR) << "open /dev/urandom";
+            return false;
+        }
+
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+
+        if (!writer->options().max_blocks) {
+            LOG(ERROR) << "CowWriter must specify maximum number of blocks";
+            return false;
+        }
+        const auto num_blocks = writer->options().max_blocks.value();
+
+        const auto block_size = writer->options().block_size;
+        std::string block(block_size, '\0');
+        for (uint64_t i = 0; i < num_blocks; i++) {
+            if (!ReadFully(rand, block.data(), block.size())) {
+                PLOG(ERROR) << "read /dev/urandom";
+                return false;
+            }
+            if (!writer->AddRawBlocks(i, block.data(), block.size())) {
+                LOG(ERROR) << "Failed to add raw block " << i;
+                return false;
+            }
+            SHA256_Update(&ctx, block.data(), block.size());
+        }
+
+        uint8_t out[32];
+        SHA256_Final(out, &ctx);
+        *hash = ToHexString(out, sizeof(out));
+        return true;
     }
 
     // Generate a snapshot that moves all the upper blocks down to the start.
@@ -1178,9 +1317,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1208,7 +1345,7 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
         // We should have started in SECOND_PHASE since nothing shrinks.
         ASSERT_TRUE(AcquireLock());
@@ -1235,8 +1372,8 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
 }
 
 TEST_F(SnapshotUpdateTest, DuplicateOps) {
-    if (!ShouldUseCompression()) {
-        GTEST_SKIP() << "Compression-only test";
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "snapuserd-only test";
     }
 
     // Execute the update.
@@ -1244,9 +1381,7 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     std::vector<PartitionUpdate*> partitions = {sys_, vnd_, prd_};
     for (auto* partition : partitions) {
@@ -1279,9 +1414,9 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
 // Test that shrinking and growing partitions at the same time is handled
 // correctly in VABC.
 TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
-    if (!ShouldUseCompression()) {
+    if (!snapuserd_required_) {
         // b/179111359
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     auto old_sys_size = GetSize(sys_);
@@ -1310,8 +1445,8 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
         ASSERT_EQ(status.old_partition_size(), 3145728);
     }
 
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
-    ASSERT_TRUE(WriteSnapshotAndHash("vnd_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
+    ASSERT_TRUE(WriteSnapshotAndHash(vnd_));
     ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
 
     sync();
@@ -1342,7 +1477,7 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1396,9 +1531,9 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
 
 // Test that a transient merge consistency check failure can resume properly.
 TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
-    if (!ShouldUseCompression()) {
+    if (!snapuserd_required_) {
         // b/179111359
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     auto old_sys_size = GetSize(sys_);
@@ -1414,8 +1549,8 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
-    ASSERT_TRUE(WriteSnapshotAndHash("vnd_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
+    ASSERT_TRUE(WriteSnapshotAndHash(vnd_));
     ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
 
     sync();
@@ -1450,7 +1585,7 @@ TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
 
     // Initiate the merge and wait for it to be completed.
     ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), IsDaemonRequired());
+    ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
         // Check that the merge phase is FIRST_PHASE until at least one call
         // to ProcessUpdateState() occurs.
@@ -1576,9 +1711,7 @@ TEST_F(SnapshotUpdateTest, TestRollback) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -1737,9 +1870,7 @@ TEST_F(SnapshotUpdateTest, RetrofitAfterRegularAb) {
     ASSERT_FALSE(image_manager_->BackingImageExists("prd_b-cow-img"));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Assert that source partitions aren't affected.
     for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
@@ -2011,9 +2142,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
 
@@ -2053,17 +2182,15 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name)) << name;
-    }
+    ASSERT_TRUE(WriteSnapshots());
 
     // Create a stale snapshot that should not exist.
     {
         ASSERT_TRUE(AcquireLock());
 
         PartitionCowCreator cow_creator = {
-                .compression_enabled = ShouldUseCompression(),
-                .compression_algorithm = ShouldUseCompression() ? "gz" : "none",
+                .using_snapuserd = snapuserd_required_,
+                .compression_algorithm = snapuserd_required_ ? FLAGS_compression_method : "",
         };
         SnapshotStatus status;
         status.set_name("sys_a");
@@ -2138,7 +2265,7 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
     // Map and write some data to target partition.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
 
     // Finish update.
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
@@ -2159,8 +2286,8 @@ TEST_F(SnapshotUpdateTest, Hashtree) {
 
 // Test for overflow bit after update
 TEST_F(SnapshotUpdateTest, Overflow) {
-    if (ShouldUseCompression()) {
-        GTEST_SKIP() << "No overflow bit set for userspace COWs";
+    if (snapuserd_required_) {
+        GTEST_SKIP() << "No overflow bit set for snapuserd COWs";
     }
 
     const auto actual_write_size = GetSize(sys_);
@@ -2174,7 +2301,7 @@ TEST_F(SnapshotUpdateTest, Overflow) {
 
     // Map and write some data to target partitions.
     ASSERT_TRUE(MapUpdateSnapshots({"vnd_b", "prd_b"}));
-    ASSERT_TRUE(WriteSnapshotAndHash("sys_b"));
+    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
 
     std::vector<android::dm::DeviceMapper::TargetInfo> table;
     ASSERT_TRUE(DeviceMapper::Instance().GetTableStatus("sys_b", &table));
@@ -2234,8 +2361,8 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 
     // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b", "dlkm_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
+    for (const auto& partition : {sys_, vnd_, prd_, dlkm}) {
+        ASSERT_TRUE(WriteSnapshotAndHash(partition));
     }
 
     // Assert that source partitions aren't affected.
@@ -2294,8 +2421,8 @@ class AutoKill final {
 };
 
 TEST_F(SnapshotUpdateTest, DaemonTransition) {
-    if (!ShouldUseCompression()) {
-        GTEST_SKIP() << "Skipping Virtual A/B Compression test";
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "Skipping snapuserd test";
     }
 
     // Ensure a connection to the second-stage daemon, but use the first-stage
@@ -2359,9 +2486,7 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
+    ASSERT_TRUE(WriteSnapshots());
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
     ASSERT_TRUE(sm->MapAllSnapshots(10s));
 
@@ -2411,13 +2536,6 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     // fit in super, but not |prd|.
     constexpr uint64_t partition_size = 3788_KiB;
     SetSize(sys_, partition_size);
-    SetSize(vnd_, partition_size);
-    SetSize(prd_, 18_MiB);
-
-    // Make sure |prd| does not fit in super at all. On VABC, this means we
-    // fake an extra large COW for |vnd| to fill up super.
-    vnd_->set_estimate_cow_size(30_MiB);
-    prd_->set_estimate_cow_size(30_MiB);
 
     AddOperationForPartitions();
 
@@ -2429,23 +2547,7 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
         GTEST_SKIP() << "Test does not apply to userspace snapshots";
     }
 
-    // Test that partitions prioritize using space in super.
-    auto tgt = MetadataBuilder::New(*opener_, "super", 1);
-    ASSERT_NE(tgt, nullptr);
-    ASSERT_NE(nullptr, tgt->FindPartition("sys_b-cow"));
-    ASSERT_NE(nullptr, tgt->FindPartition("vnd_b-cow"));
-    ASSERT_EQ(nullptr, tgt->FindPartition("prd_b-cow"));
-
-    // Write some data to target partitions.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(WriteSnapshotAndHash(name));
-    }
-
-    // Assert that source partitions aren't affected.
-    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
-        ASSERT_TRUE(IsPartitionUnchanged(name));
-    }
-
+    ASSERT_TRUE(WriteSnapshots());
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
 
     ASSERT_TRUE(UnmapAll());
@@ -2597,44 +2699,49 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Merge"s;
                          });
 
-// Test behavior of ImageManager::Create on low space scenario. These tests assumes image manager
-// uses /data as backup device.
-class ImageManagerTest : public SnapshotTest, public WithParamInterface<uint64_t> {
+class ImageManagerTest : public SnapshotTest {
   protected:
     void SetUp() override {
         SKIP_IF_NON_VIRTUAL_AB();
         SnapshotTest::SetUp();
-        userdata_ = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata_->Init(GetParam()));
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
-
+        CleanUp();
+    }
+    void CleanUp() {
+        if (!image_manager_) {
+            return;
+        }
         EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
                     image_manager_->DeleteBackingImage(kImageName));
     }
+
     static constexpr const char* kImageName = "my_image";
-    std::unique_ptr<LowSpaceUserdata> userdata_;
 };
 
-TEST_P(ImageManagerTest, CreateImageNoSpace) {
-    uint64_t to_allocate = userdata_->free_space() + userdata_->bsize();
-    auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                  IImageManager::CREATE_IMAGE_DEFAULT);
-    ASSERT_FALSE(res) << "Should not be able to create image with size = " << to_allocate
-                      << " bytes because only " << userdata_->free_space() << " bytes are free";
-    ASSERT_EQ(FiemapStatus::ErrorCode::NO_SPACE, res.error_code()) << res.string();
-}
-
-std::vector<uint64_t> ImageManagerTestParams() {
-    std::vector<uint64_t> ret;
+TEST_F(ImageManagerTest, CreateImageNoSpace) {
+    bool at_least_one_failure = false;
     for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        ret.push_back(size);
-    }
-    return ret;
-}
+        auto userdata = std::make_unique<LowSpaceUserdata>();
+        ASSERT_TRUE(userdata->Init(size));
 
-INSTANTIATE_TEST_SUITE_P(ImageManagerTest, ImageManagerTest, ValuesIn(ImageManagerTestParams()));
+        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
+
+        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
+                                                      IImageManager::CREATE_IMAGE_DEFAULT);
+        if (!res) {
+            at_least_one_failure = true;
+        } else {
+            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
+        }
+
+        CleanUp();
+    }
+
+    ASSERT_TRUE(at_least_one_failure)
+            << "We should have failed to allocate at least one over-sized image";
+}
 
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
@@ -2736,41 +2843,16 @@ void SnapshotTestEnvironment::TearDown() {
     }
 }
 
-bool IsDaemonRequired() {
-    if (FLAGS_force_config == "dmsnap") {
-        return false;
+void KillSnapuserd() {
+    auto status = android::base::GetProperty("init.svc.snapuserd", "stopped");
+    if (status == "stopped") {
+        return;
     }
-
-    if (!IsCompressionEnabled()) {
-        return false;
+    auto snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+    if (!snapuserd_client) {
+        return;
     }
-
-    const std::string UNKNOWN = "unknown";
-    const std::string vendor_release =
-            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
-
-    // No userspace snapshots if vendor partition is on Android 12
-    // However, for GRF devices, snapuserd daemon will be on
-    // vendor ramdisk in Android 12.
-    if (vendor_release.find("12") != std::string::npos) {
-        return true;
-    }
-
-    if (!FLAGS_force_config.empty()) {
-        return true;
-    }
-
-    return IsUserspaceSnapshotsEnabled() && KernelSupportsCompressedSnapshots();
-}
-
-bool ShouldUseCompression() {
-    if (FLAGS_force_config == "vab" || FLAGS_force_config == "dmsnap") {
-        return false;
-    }
-    if (FLAGS_force_config == "vabc") {
-        return true;
-    }
-    return IsCompressionEnabled() && KernelSupportsCompressedSnapshots();
+    snapuserd_client->DetachSnapuserd();
 }
 
 }  // namespace snapshot
@@ -2783,35 +2865,20 @@ int main(int argc, char** argv) {
 
     android::base::SetProperty("ctl.stop", "snapuserd");
 
-    std::unordered_set<std::string> configs = {"", "dmsnap", "vab", "vabc"};
-    if (configs.count(FLAGS_force_config) == 0) {
+    std::unordered_set<std::string> modes = {"", "vab-legacy", "vabc-legacy"};
+    if (modes.count(FLAGS_force_mode) == 0) {
         std::cerr << "Unexpected force_config argument\n";
         return 1;
     }
 
-    if (FLAGS_force_config == "dmsnap") {
-        if (!android::base::SetProperty("snapuserd.test.dm.snapshots", "1")) {
-            return testing::AssertionFailure()
-                   << "Failed to disable property: virtual_ab.userspace.snapshots.enabled";
-        }
-    }
-
-    if (FLAGS_force_iouring_disable == "iouring_disabled") {
-        if (!android::base::SetProperty("snapuserd.test.io_uring.force_disable", "1")) {
-            return testing::AssertionFailure()
-                   << "Failed to disable property: snapuserd.test.io_uring.disabled";
-        }
-    }
+    // This is necessary if the configuration we're testing doesn't match the device.
+    android::snapshot::KillSnapuserd();
 
     int ret = RUN_ALL_TESTS();
 
-    if (FLAGS_force_config == "dmsnap") {
-        android::base::SetProperty("snapuserd.test.dm.snapshots", "0");
-    }
+    android::base::SetProperty("snapuserd.test.dm.snapshots", "0");
+    android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0");
 
-    if (FLAGS_force_iouring_disable == "iouring_disabled") {
-        android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0");
-    }
-
+    android::snapshot::KillSnapuserd();
     return ret;
 }

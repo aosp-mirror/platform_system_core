@@ -111,8 +111,7 @@ static int exec_cmd(const char* path, const char** argv, const char** envp) {
 }
 #endif
 
-static int generate_ext4_image(const char* fileName, long long partSize,
-                               const std::string& initial_dir, unsigned eraseBlkSize,
+static int generate_ext4_image(const char* fileName, long long partSize, unsigned eraseBlkSize,
                                unsigned logicalBlkSize, const unsigned fsOptions) {
     static constexpr int block_size = 4096;
     const std::string exec_dir = android::base::GetExecutableDirectory();
@@ -163,16 +162,7 @@ static int generate_ext4_image(const char* fileName, long long partSize,
     if (ret != 0) {
         return -1;
     }
-
-    if (initial_dir.empty()) {
-        return 0;
-    }
-
-    const std::string e2fsdroid_path = exec_dir + "/e2fsdroid";
-    std::vector<const char*> e2fsdroid_args = {e2fsdroid_path.c_str(), "-f", initial_dir.c_str(),
-                                               fileName, nullptr};
-
-    return exec_cmd(e2fsdroid_args[0], e2fsdroid_args.data(), nullptr);
+    return 0;
 }
 
 enum {
@@ -188,8 +178,7 @@ enum {
     // clang-format on
 };
 
-static int generate_f2fs_image(const char* fileName, long long partSize,
-                               const std::string& initial_dir, unsigned /* unused */,
+static int generate_f2fs_image(const char* fileName, long long partSize, unsigned /* unused */,
                                unsigned /* unused */, const unsigned fsOptions) {
     const std::string exec_dir = android::base::GetExecutableDirectory();
     const std::string mkf2fs_path = exec_dir + "/make_f2fs";
@@ -227,19 +216,6 @@ static int generate_f2fs_image(const char* fileName, long long partSize,
     if (ret != 0) {
         return -1;
     }
-
-    if (initial_dir.empty()) {
-        return 0;
-    }
-
-    const std::string sload_path = exec_dir + "/sload_f2fs";
-    std::vector<const char*> sload_args = {sload_path.c_str(), "-S",
-                                       "-f", initial_dir.c_str(), fileName, nullptr};
-
-    ret = exec_cmd(sload_args[0], sload_args.data(), nullptr);
-    if (ret != 0 && ret != FSCK_ERROR_CORRECTED) {
-        return -1;
-    }
     return 0;
 }
 
@@ -247,8 +223,8 @@ static const struct fs_generator {
     const char* fs_type;  //must match what fastboot reports for partition type
 
     //returns 0 or error value
-    int (*generate)(const char* fileName, long long partSize, const std::string& initial_dir,
-                    unsigned eraseBlkSize, unsigned logicalBlkSize, const unsigned fsOptions);
+    int (*generate)(const char* fileName, long long partSize, unsigned eraseBlkSize,
+                    unsigned logicalBlkSize, const unsigned fsOptions);
 
 } generators[] = {
     { "ext4", generate_ext4_image},
@@ -265,7 +241,7 @@ const struct fs_generator* fs_get_generator(const std::string& fs_type) {
 }
 
 int fs_generator_generate(const struct fs_generator* gen, const char* fileName, long long partSize,
-                          const std::string& initial_dir, unsigned eraseBlkSize,
-                          unsigned logicalBlkSize, const unsigned fsOptions) {
-    return gen->generate(fileName, partSize, initial_dir, eraseBlkSize, logicalBlkSize, fsOptions);
+                          unsigned eraseBlkSize, unsigned logicalBlkSize,
+                          const unsigned fsOptions) {
+    return gen->generate(fileName, partSize, eraseBlkSize, logicalBlkSize, fsOptions);
 }

@@ -151,6 +151,11 @@ Result<void> ServiceParser::ParseEnterNamespace(std::vector<std::string>&& args)
     return {};
 }
 
+Result<void> ServiceParser::ParseGentleKill(std::vector<std::string>&& args) {
+    service_->flags_ |= SVC_GENTLE_KILL;
+    return {};
+}
+
 Result<void> ServiceParser::ParseGroup(std::vector<std::string>&& args) {
     auto gid = DecodeUid(args[1]);
     if (!gid.ok()) {
@@ -434,11 +439,14 @@ Result<void> ServiceParser::ParseSocket(std::vector<std::string>&& args) {
                        << "' instead.";
     }
 
-    if (types.size() > 1) {
-        if (types.size() == 2 && types[1] == "passcred") {
+    for (size_t i = 1; i < types.size(); i++) {
+        if (types[i] == "passcred") {
             socket.passcred = true;
+        } else if (types[i] == "listen") {
+            socket.listen = true;
         } else {
-            return Error() << "Only 'passcred' may be used to modify the socket type";
+            return Error() << "Unknown socket type decoration '" << types[i]
+                           << "'. Known values are ['passcred', 'listen']";
         }
     }
 
@@ -581,6 +589,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"disabled",                {0,     0,    &ServiceParser::ParseDisabled}},
         {"enter_namespace",         {2,     2,    &ServiceParser::ParseEnterNamespace}},
         {"file",                    {2,     2,    &ServiceParser::ParseFile}},
+        {"gentle_kill",             {0,     0,    &ServiceParser::ParseGentleKill}},
         {"group",                   {1,     NR_SVC_SUPP_GIDS + 1, &ServiceParser::ParseGroup}},
         {"interface",               {2,     2,    &ServiceParser::ParseInterface}},
         {"ioprio",                  {2,     2,    &ServiceParser::ParseIoprio}},
@@ -647,7 +656,7 @@ Result<void> ServiceParser::ParseSection(std::vector<std::string>&& args,
         }
     }
 
-    service_ = std::make_unique<Service>(name, restart_action_subcontext, str_args, from_apex_);
+    service_ = std::make_unique<Service>(name, restart_action_subcontext, filename, str_args);
     return {};
 }
 
