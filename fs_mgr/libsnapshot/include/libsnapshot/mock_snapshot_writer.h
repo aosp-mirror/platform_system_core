@@ -34,7 +34,7 @@ class MockSnapshotWriter : public ISnapshotWriter {
     // Returns true if AddCopy() operations are supported.
     MOCK_METHOD(bool, SupportsCopyOperation, (), (const override));
 
-    MOCK_METHOD(bool, EmitCopy, (uint64_t, uint64_t), (override));
+    MOCK_METHOD(bool, EmitCopy, (uint64_t, uint64_t, uint64_t), (override));
     MOCK_METHOD(bool, EmitRawBlocks, (uint64_t, const void*, size_t), (override));
     MOCK_METHOD(bool, EmitXorBlocks, (uint32_t, const void*, size_t, uint32_t, uint16_t),
                 (override));

@@ -33,12 +33,6 @@ extern int qtaguid_tagSocket(int sockfd, int tag, uid_t uid);
  */
 extern int qtaguid_untagSocket(int sockfd);
 
-/*
- * Enable/disable qtaguid functionnality at a lower level.
- * When pacified, the kernel will accept commands but do nothing.
- */
-extern int qtaguid_setPacifier(int on);
-
 #ifdef __cplusplus
 }
 #endif

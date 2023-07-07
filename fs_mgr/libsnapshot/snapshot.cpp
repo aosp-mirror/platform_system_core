@@ -53,6 +53,7 @@
 namespace android {
 namespace snapshot {
 
+using aidl::android::hardware::boot::MergeStatus;
 using android::base::unique_fd;
 using android::dm::DeviceMapper;
 using android::dm::DmDeviceState;
@@ -72,7 +73,6 @@ using android::fs_mgr::GetPartitionName;
 using android::fs_mgr::LpMetadata;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::SlotNumberForSlotSuffix;
-using android::hardware::boot::V1_1::MergeStatus;
 using chromeos_update_engine::DeltaArchiveManifest;
 using chromeos_update_engine::Extent;
 using chromeos_update_engine::FileDescriptor;
@@ -398,8 +398,14 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_state(SnapshotState::CREATED);
     status->set_sectors_allocated(0);
     status->set_metadata_sectors(0);
-    status->set_compression_enabled(cow_creator->compression_enabled);
+    status->set_using_snapuserd(cow_creator->using_snapuserd);
     status->set_compression_algorithm(cow_creator->compression_algorithm);
+    if (cow_creator->enable_threading) {
+        status->set_enable_threading(cow_creator->enable_threading);
+    }
+    if (cow_creator->batched_writes) {
+        status->set_batched_writes(cow_creator->batched_writes);
+    }
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -788,7 +794,7 @@ bool SnapshotManager::InitiateMerge() {
         }
     }
 
-    bool compression_enabled = false;
+    bool using_snapuserd = false;
 
     std::vector<std::string> first_merge_group;
 
@@ -809,7 +815,7 @@ bool SnapshotManager::InitiateMerge() {
             return false;
         }
 
-        compression_enabled |= snapshot_status.compression_enabled();
+        using_snapuserd |= snapshot_status.using_snapuserd();
         if (DecideMergePhase(snapshot_status) == MergePhase::FIRST_PHASE) {
             first_merge_group.emplace_back(snapshot);
         }
@@ -817,7 +823,7 @@ bool SnapshotManager::InitiateMerge() {
 
     SnapshotUpdateStatus initial_status = ReadSnapshotUpdateStatus(lock.get());
     initial_status.set_state(UpdateState::Merging);
-    initial_status.set_compression_enabled(compression_enabled);
+    initial_status.set_using_snapuserd(using_snapuserd);
 
     if (!UpdateUsesUserSnapshots(lock.get())) {
         initial_status.set_sectors_allocated(initial_target_values.sectors_allocated);
@@ -988,6 +994,29 @@ bool SnapshotManager::IsSnapshotDevice(const std::string& dm_name, TargetInfo* t
     return true;
 }
 
+auto SnapshotManager::UpdateStateToStr(const enum UpdateState state) {
+    switch (state) {
+        case None:
+            return "None";
+        case Initiated:
+            return "Initiated";
+        case Unverified:
+            return "Unverified";
+        case Merging:
+            return "Merging";
+        case MergeNeedsReboot:
+            return "MergeNeedsReboot";
+        case MergeCompleted:
+            return "MergeCompleted";
+        case MergeFailed:
+            return "MergeFailed";
+        case Cancelled:
+            return "Cancelled";
+        default:
+            return "Unknown";
+    }
+}
+
 bool SnapshotManager::QuerySnapshotStatus(const std::string& dm_name, std::string* target_type,
                                           DmTargetSnapshot::Status* status) {
     DeviceMapper::TargetInfo target;
@@ -1016,7 +1045,7 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& cal
                                                 const std::function<bool()>& before_cancel) {
     while (true) {
         auto result = CheckMergeState(before_cancel);
-        LOG(INFO) << "ProcessUpdateState handling state: " << result.state;
+        LOG(INFO) << "ProcessUpdateState handling state: " << UpdateStateToStr(result.state);
 
         if (result.state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure(result.failure_code);
@@ -1044,7 +1073,7 @@ auto SnapshotManager::CheckMergeState(const std::function<bool()>& before_cancel
     }
 
     auto result = CheckMergeState(lock.get(), before_cancel);
-    LOG(INFO) << "CheckMergeState for snapshots returned: " << result.state;
+    LOG(INFO) << "CheckMergeState for snapshots returned: " << UpdateStateToStr(result.state);
 
     if (result.state == UpdateState::MergeCompleted) {
         // Do this inside the same lock. Failures get acknowledged without the
@@ -1109,7 +1138,8 @@ auto SnapshotManager::CheckMergeState(LockedFile* lock, const std::function<bool
         }
 
         auto result = CheckTargetMergeState(lock, snapshot, update_status);
-        LOG(INFO) << "CheckTargetMergeState for " << snapshot << " returned: " << result.state;
+        LOG(INFO) << "CheckTargetMergeState for " << snapshot
+                  << " returned: " << UpdateStateToStr(result.state);
 
         switch (result.state) {
             case UpdateState::MergeFailed:
@@ -1340,7 +1370,7 @@ MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const 
 }
 
 MergeFailureCode CheckMergeConsistency(const std::string& name, const SnapshotStatus& status) {
-    if (!status.compression_enabled()) {
+    if (!status.using_snapuserd()) {
         // Do not try to verify old-style COWs yet.
         return MergeFailureCode::Ok;
     }
@@ -1474,7 +1504,7 @@ void SnapshotManager::AcknowledgeMergeSuccess(LockedFile* lock) {
     if (UpdateUsesUserSnapshots(lock) && !device()->IsTestDevice()) {
         if (snapuserd_client_) {
             snapuserd_client_->DetachSnapuserd();
-            snapuserd_client_->CloseConnection();
+            snapuserd_client_->RemoveTransitionedDaemonIndicator();
             snapuserd_client_ = nullptr;
         }
     }
@@ -1601,7 +1631,7 @@ bool SnapshotManager::CollapseSnapshotDevice(LockedFile* lock, const std::string
         // as unmap will fail since dm-user itself was a snapshot device prior
         // to switching of tables. Unmap will fail as the device will be mounted
         // by system partitions
-        if (status.compression_enabled()) {
+        if (status.using_snapuserd()) {
             auto dm_user_name = GetDmUserCowName(name, GetSnapshotDriver(lock));
             UnmapDmUserDevice(dm_user_name);
         }
@@ -1723,13 +1753,6 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
 
         auto misc_name = user_cow_name;
 
-        DmTable table;
-        table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
-        if (!dm_.LoadTableAndActivate(user_cow_name, table)) {
-            LOG(ERROR) << "Unable to swap tables for " << misc_name;
-            continue;
-        }
-
         std::string source_device_name;
         if (snapshot_status.old_partition_size() > 0) {
             source_device_name = GetSourceDeviceName(snapshot);
@@ -1757,13 +1780,6 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             continue;
         }
 
-        // Wait for ueventd to acknowledge and create the control device node.
-        std::string control_device = "/dev/dm-user/" + misc_name;
-        if (!WaitForDevice(control_device, 10s)) {
-            LOG(ERROR) << "dm-user control device no found:  " << misc_name;
-            continue;
-        }
-
         if (transition == InitTransition::SELINUX_DETACH) {
             if (!UpdateUsesUserSnapshots(lock.get())) {
                 auto message = misc_name + "," + cow_image_device + "," + source_device;
@@ -1778,6 +1794,20 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
             // been started. We do however want to wait for the misc device
             // to have been created.
             ok_cows++;
+            continue;
+        }
+
+        DmTable table;
+        table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
+        if (!dm_.LoadTableAndActivate(user_cow_name, table)) {
+            LOG(ERROR) << "Unable to swap tables for " << misc_name;
+            continue;
+        }
+
+        // Wait for ueventd to acknowledge and create the control device node.
+        std::string control_device = "/dev/dm-user/" + misc_name;
+        if (!WaitForDevice(control_device, 10s)) {
+            LOG(ERROR) << "dm-user control device no found:  " << misc_name;
             continue;
         }
 
@@ -2091,8 +2121,10 @@ bool SnapshotManager::UpdateUsesCompression() {
 }
 
 bool SnapshotManager::UpdateUsesCompression(LockedFile* lock) {
+    // This returns true even if compression is "none", since update_engine is
+    // really just trying to see if snapuserd is in use.
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
-    return update_status.compression_enabled();
+    return update_status.using_snapuserd();
 }
 
 bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
@@ -2151,8 +2183,17 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
         if (!suffix.empty() && !android::base::EndsWith(name, suffix)) {
             continue;
         }
-        snapshots->emplace_back(std::move(name));
+
+        // Insert system and product partition at the beginning so that
+        // during snapshot-merge, these partitions are merged first.
+        if (name == "system_a" || name == "system_b" || name == "product_a" ||
+            name == "product_b") {
+            snapshots->insert(snapshots->begin(), std::move(name));
+        } else {
+            snapshots->emplace_back(std::move(name));
+        }
     }
+
     return true;
 }
 
@@ -2241,8 +2282,8 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
                 .block_device = super_device,
                 .metadata = metadata.get(),
                 .partition = &partition,
-                .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
+                .partition_opener = &opener,
         };
         if (!MapPartitionWithSnapshot(lock, std::move(params), SnapshotContext::Mount, nullptr)) {
             return false;
@@ -2403,13 +2444,13 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     remaining_time = GetRemainingTime(params.timeout_ms, begin);
     if (remaining_time.count() < 0) return false;
 
-    if (context == SnapshotContext::Update && live_snapshot_status->compression_enabled()) {
+    if (context == SnapshotContext::Update && live_snapshot_status->using_snapuserd()) {
         // Stop here, we can't run dm-user yet, the COW isn't built.
         created_devices.Release();
         return true;
     }
 
-    if (live_snapshot_status->compression_enabled()) {
+    if (live_snapshot_status->using_snapuserd()) {
         // Get the source device (eg the view of the partition from before it was resized).
         std::string source_device_path;
         if (live_snapshot_status->old_partition_size() > 0) {
@@ -2719,8 +2760,8 @@ bool SnapshotManager::MapAllSnapshots(const std::chrono::milliseconds& timeout_m
                 .block_device = super_device,
                 .metadata = metadata.get(),
                 .partition_name = snapshot,
-                .partition_opener = &opener,
                 .timeout_ms = timeout_ms,
+                .partition_opener = &opener,
         };
         if (!MapPartitionWithSnapshot(lock.get(), std::move(params), SnapshotContext::Mount,
                                       nullptr)) {
@@ -2759,7 +2800,6 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
     if (snapuserd_client_) {
         LOG(INFO) << "Shutdown snapuserd daemon";
         snapuserd_client_->DetachSnapuserd();
-        snapuserd_client_->CloseConnection();
         snapuserd_client_ = nullptr;
     }
 
@@ -2861,6 +2901,20 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, MergePhase phase) {
+    switch (phase) {
+        case MergePhase::NO_MERGE:
+            return os << "none";
+        case MergePhase::FIRST_PHASE:
+            return os << "first";
+        case MergePhase::SECOND_PHASE:
+            return os << "second";
+        default:
+            LOG(ERROR) << "Unknown merge phase: " << static_cast<uint32_t>(phase);
+            return os << "unknown(" << static_cast<uint32_t>(phase) << ")";
+    }
+}
+
 UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock);
     return status.state();
@@ -2911,7 +2965,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
     // build fingerprint.
     if (!(state == UpdateState::Initiated || state == UpdateState::None)) {
         SnapshotUpdateStatus old_status = ReadSnapshotUpdateStatus(lock);
-        status.set_compression_enabled(old_status.compression_enabled());
+        status.set_using_snapuserd(old_status.using_snapuserd());
         status.set_source_build_fingerprint(old_status.source_build_fingerprint());
         status.set_merge_phase(old_status.merge_phase());
         status.set_userspace_snapshots(old_status.userspace_snapshots());
@@ -3165,19 +3219,44 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     LOG(INFO) << " dap_metadata.cow_version(): " << dap_metadata.cow_version()
               << " writer.GetCowVersion(): " << writer.GetCowVersion();
 
-    bool use_compression = IsCompressionEnabled() && dap_metadata.vabc_enabled() &&
-                           !device_->IsRecovery() && cow_format_support &&
-                           KernelSupportsCompressedSnapshots();
+    // Deduce supported features.
+    bool userspace_snapshots = CanUseUserspaceSnapshots();
+    bool legacy_compression = GetLegacyCompressionEnabledProperty();
+
+    std::string vabc_disable_reason;
+    if (!dap_metadata.vabc_enabled()) {
+        vabc_disable_reason = "not enabled metadata";
+    } else if (device_->IsRecovery()) {
+        vabc_disable_reason = "recovery";
+    } else if (!cow_format_support) {
+        vabc_disable_reason = "cow format not supported";
+    } else if (!KernelSupportsCompressedSnapshots()) {
+        vabc_disable_reason = "kernel missing userspace block device support";
+    }
+
+    if (!vabc_disable_reason.empty()) {
+        if (userspace_snapshots) {
+            LOG(INFO) << "Userspace snapshots disabled: " << vabc_disable_reason;
+        }
+        if (legacy_compression) {
+            LOG(INFO) << "Compression disabled: " << vabc_disable_reason;
+        }
+        userspace_snapshots = false;
+        legacy_compression = false;
+    }
+
+    const bool using_snapuserd = userspace_snapshots || legacy_compression;
+    if (!using_snapuserd) {
+        LOG(INFO) << "Using legacy Virtual A/B (dm-snapshot)";
+    }
 
     std::string compression_algorithm;
-    if (use_compression) {
+    if (using_snapuserd) {
         compression_algorithm = dap_metadata.vabc_compression_param();
         if (compression_algorithm.empty()) {
             // Older OTAs don't set an explicit compression type, so default to gz.
             compression_algorithm = "gz";
         }
-    } else {
-        compression_algorithm = "none";
     }
 
     PartitionCowCreator cow_creator{
@@ -3188,9 +3267,15 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .current_suffix = current_suffix,
             .update = nullptr,
             .extra_extents = {},
-            .compression_enabled = use_compression,
+            .using_snapuserd = using_snapuserd,
             .compression_algorithm = compression_algorithm,
     };
+    if (dap_metadata.vabc_feature_set().has_threaded()) {
+        cow_creator.enable_threading = dap_metadata.vabc_feature_set().threaded();
+    }
+    if (dap_metadata.vabc_feature_set().has_batch_writes()) {
+        cow_creator.batched_writes = dap_metadata.vabc_feature_set().batch_writes();
+    }
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
@@ -3213,11 +3298,11 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         return Return::Error();
     }
 
-    // If compression is enabled, we need to retain a copy of the old metadata
+    // If snapuserd is enabled, we need to retain a copy of the old metadata
     // so we can access original blocks in case they are moved around. We do
     // not want to rely on the old super metadata slot because we don't
     // guarantee its validity after the slot switch is successful.
-    if (cow_creator.compression_enabled) {
+    if (using_snapuserd) {
         auto metadata = current_metadata->Export();
         if (!metadata) {
             LOG(ERROR) << "Could not export current metadata";
@@ -3233,70 +3318,36 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
 
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
     status.set_state(update_state);
-    status.set_compression_enabled(cow_creator.compression_enabled);
-    if (cow_creator.compression_enabled) {
-        if (!device()->IsTestDevice()) {
-            bool userSnapshotsEnabled = IsUserspaceSnapshotsEnabled();
-            const std::string UNKNOWN = "unknown";
-            const std::string vendor_release = android::base::GetProperty(
-                    "ro.vendor.build.version.release_or_codename", UNKNOWN);
+    status.set_using_snapuserd(using_snapuserd);
 
-            // No user-space snapshots if vendor partition is on Android 12
-            if (vendor_release.find("12") != std::string::npos) {
-                LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
-                          << vendor_release;
-                userSnapshotsEnabled = false;
-            }
+    if (userspace_snapshots) {
+        status.set_userspace_snapshots(true);
+        LOG(INFO) << "Virtual A/B using userspace snapshots";
 
-            // Userspace snapshots is enabled only if compression is enabled
-            status.set_userspace_snapshots(userSnapshotsEnabled);
-            if (userSnapshotsEnabled) {
-                is_snapshot_userspace_ = true;
-                status.set_io_uring_enabled(IsIouringEnabled());
-                LOG(INFO) << "Userspace snapshots enabled";
-            } else {
-                is_snapshot_userspace_ = false;
-                LOG(INFO) << "Userspace snapshots disabled";
-            }
+        if (GetIouringEnabledProperty()) {
+            status.set_io_uring_enabled(true);
+            LOG(INFO) << "io_uring for snapshots enabled";
+        }
+    } else if (legacy_compression) {
+        LOG(INFO) << "Virtual A/B using legacy snapuserd";
+    } else {
+        LOG(INFO) << "Virtual A/B using dm-snapshot";
+    }
 
-            // Terminate stale daemon if any
-            std::unique_ptr<SnapuserdClient> snapuserd_client =
-                    SnapuserdClient::Connect(kSnapuserdSocket, 5s);
-            if (snapuserd_client) {
-                snapuserd_client->DetachSnapuserd();
-                snapuserd_client->CloseConnection();
-                snapuserd_client = nullptr;
-            }
+    is_snapshot_userspace_.emplace(userspace_snapshots);
 
-            // Clear the cached client if any
-            if (snapuserd_client_) {
-                snapuserd_client_->CloseConnection();
-                snapuserd_client_ = nullptr;
-            }
-        } else {
-            bool userSnapshotsEnabled = true;
-            const std::string UNKNOWN = "unknown";
-            const std::string vendor_release = android::base::GetProperty(
-                    "ro.vendor.build.version.release_or_codename", UNKNOWN);
-
-            // No user-space snapshots if vendor partition is on Android 12
-            if (vendor_release.find("12") != std::string::npos) {
-                LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
-                          << vendor_release;
-                userSnapshotsEnabled = false;
-            }
-
-            userSnapshotsEnabled = (userSnapshotsEnabled && !IsDmSnapshotTestingEnabled());
-            status.set_userspace_snapshots(userSnapshotsEnabled);
-            if (!userSnapshotsEnabled) {
-                is_snapshot_userspace_ = false;
-                LOG(INFO) << "User-space snapshots disabled for testing";
-            } else {
-                is_snapshot_userspace_ = true;
-                LOG(INFO) << "User-space snapshots enabled for testing";
-            }
+    if (!device()->IsTestDevice() && using_snapuserd) {
+        // Terminate stale daemon if any
+        std::unique_ptr<SnapuserdClient> snapuserd_client = std::move(snapuserd_client_);
+        if (!snapuserd_client) {
+            snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+        }
+        if (snapuserd_client) {
+            snapuserd_client->DetachSnapuserd();
+            snapuserd_client = nullptr;
         }
     }
+
     if (!WriteSnapshotUpdateStatus(lock.get(), status)) {
         LOG(ERROR) << "Unable to write new update state";
         return Return::Error();
@@ -3489,7 +3540,7 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
-        if (it->second.compression_enabled()) {
+        if (it->second.using_snapuserd()) {
             unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
             if (fd < 0) {
                 PLOG(ERROR) << "open " << cow_path << " failed for snapshot "
@@ -3535,8 +3586,8 @@ bool SnapshotManager::MapUpdateSnapshot(const CreateLogicalPartitionParams& para
     if (!ReadSnapshotStatus(lock.get(), params.GetPartitionName(), &status)) {
         return false;
     }
-    if (status.compression_enabled()) {
-        LOG(ERROR) << "Cannot use MapUpdateSnapshot with compressed snapshots";
+    if (status.using_snapuserd()) {
+        LOG(ERROR) << "Cannot use MapUpdateSnapshot with snapuserd";
         return false;
     }
 
@@ -3593,7 +3644,7 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenSnapshotWriter(
         return nullptr;
     }
 
-    if (status.compression_enabled()) {
+    if (status.using_snapuserd()) {
         return OpenCompressedSnapshotWriter(lock.get(), source_device, params.GetPartitionName(),
                                             status, paths);
     }
@@ -3612,6 +3663,8 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CowOptions cow_options;
     cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
+    cow_options.batch_write = status.batched_writes();
+    cow_options.num_compress_threads = status.enable_threading() ? 2 : 0;
     // Disable scratch space for vts tests
     if (device()->IsTestDevice()) {
         cow_options.scratch_space = false;
@@ -3722,8 +3775,11 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     auto update_status = ReadSnapshotUpdateStatus(file.get());
 
-    ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
-    ss << "Compression: " << update_status.compression_enabled() << std::endl;
+    ss << "Update state: " << update_status.state() << std::endl;
+    ss << "Using snapuserd: " << update_status.using_snapuserd() << std::endl;
+    ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
+    ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
+    ss << "Using XOR compression: " << GetXorCompressionEnabledProperty() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
     ss << "Rollback indicator: "
@@ -3733,6 +3789,17 @@ bool SnapshotManager::Dump(std::ostream& os) {
        << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
        << std::endl;
     ss << "Source build fingerprint: " << update_status.source_build_fingerprint() << std::endl;
+
+    if (update_status.state() == UpdateState::Merging) {
+        ss << "Merge completion: ";
+        if (!EnsureSnapuserdConnected()) {
+            ss << "N/A";
+        } else {
+            ss << snapuserd_client_->GetMergePercent() << "%";
+        }
+        ss << std::endl;
+        ss << "Merge phase: " << update_status.merge_phase() << std::endl;
+    }
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -3756,6 +3823,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
         ss << "    compression: " << status.compression_algorithm() << std::endl;
+        ss << "    merge phase: " << DecideMergePhase(status) << std::endl;
     }
     os << ss.rdbuf();
     return ok;
@@ -3944,7 +4012,7 @@ bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
         if (!ReadSnapshotStatus(lock, snapshot, &status)) {
             return false;
         }
-        if (status.compression_enabled()) {
+        if (status.using_snapuserd()) {
             continue;
         }
 
@@ -4108,11 +4176,72 @@ bool SnapshotManager::IsSnapuserdRequired() {
     if (!lock) return false;
 
     auto status = ReadSnapshotUpdateStatus(lock.get());
-    return status.state() != UpdateState::None && status.compression_enabled();
+    return status.state() != UpdateState::None && status.using_snapuserd();
 }
 
-bool SnapshotManager::DetachSnapuserdForSelinux(std::vector<std::string>* snapuserd_argv) {
+bool SnapshotManager::PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv) {
     return PerformInitTransition(InitTransition::SELINUX_DETACH, snapuserd_argv);
+}
+
+bool SnapshotManager::DetachFirstStageSnapuserdForSelinux() {
+    LOG(INFO) << "Detaching first stage snapuserd";
+
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
+        LOG(ERROR) << "Failed to list snapshots.";
+        return false;
+    }
+
+    size_t num_cows = 0;
+    size_t ok_cows = 0;
+    for (const auto& snapshot : snapshots) {
+        std::string user_cow_name = GetDmUserCowName(snapshot, GetSnapshotDriver(lock.get()));
+
+        if (dm_.GetState(user_cow_name) == DmDeviceState::INVALID) {
+            continue;
+        }
+
+        DeviceMapper::TargetInfo target;
+        if (!GetSingleTarget(user_cow_name, TableQuery::Table, &target)) {
+            continue;
+        }
+
+        auto target_type = DeviceMapper::GetTargetType(target.spec);
+        if (target_type != "user") {
+            LOG(ERROR) << "Unexpected target type for " << user_cow_name << ": " << target_type;
+            continue;
+        }
+
+        num_cows++;
+        auto misc_name = user_cow_name;
+
+        DmTable table;
+        table.Emplace<DmTargetUser>(0, target.spec.length, misc_name);
+        if (!dm_.LoadTableAndActivate(user_cow_name, table)) {
+            LOG(ERROR) << "Unable to swap tables for " << misc_name;
+            continue;
+        }
+
+        // Wait for ueventd to acknowledge and create the control device node.
+        std::string control_device = "/dev/dm-user/" + misc_name;
+        if (!WaitForDevice(control_device, 10s)) {
+            LOG(ERROR) << "dm-user control device no found:  " << misc_name;
+            continue;
+        }
+
+        ok_cows++;
+        LOG(INFO) << "control device is ready: " << control_device;
+    }
+
+    if (ok_cows != num_cows) {
+        LOG(ERROR) << "Could not transition all snapuserd consumers.";
+        return false;
+    }
+
+    return true;
 }
 
 bool SnapshotManager::PerformSecondStageInitTransition() {
@@ -4134,7 +4263,7 @@ const LpMetadata* SnapshotManager::ReadOldPartitionMetadata(LockedFile* lock) {
 }
 
 MergePhase SnapshotManager::DecideMergePhase(const SnapshotStatus& status) {
-    if (status.compression_enabled() && status.device_size() < status.old_partition_size()) {
+    if (status.using_snapuserd() && status.device_size() < status.old_partition_size()) {
         return MergePhase::FIRST_PHASE;
     }
     return MergePhase::SECOND_PHASE;
@@ -4164,9 +4293,19 @@ void SnapshotManager::UpdateCowStats(ISnapshotMergeStats* stats) {
         estimated_cow_size += status.estimated_cow_size();
     }
 
-    stats->set_cow_file_size(cow_file_size);
-    stats->set_total_cow_size_bytes(total_cow_size);
-    stats->set_estimated_cow_size_bytes(estimated_cow_size);
+    stats->report()->set_cow_file_size(cow_file_size);
+    stats->report()->set_total_cow_size_bytes(total_cow_size);
+    stats->report()->set_estimated_cow_size_bytes(estimated_cow_size);
+}
+
+void SnapshotManager::SetMergeStatsFeatures(ISnapshotMergeStats* stats) {
+    auto lock = LockExclusive();
+    if (!lock) return;
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    stats->report()->set_iouring_used(update_status.io_uring_enabled());
+    stats->report()->set_userspace_snapshots_used(update_status.userspace_snapshots());
+    stats->report()->set_xor_compression_used(GetXorCompressionEnabledProperty());
 }
 
 bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
@@ -4251,6 +4390,17 @@ std::string SnapshotManager::ReadSourceBuildFingerprint() {
 
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock.get());
     return status.source_build_fingerprint();
+}
+
+bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
+    auto slot = GetCurrentSlot();
+    if (slot == Slot::Target) {
+        if (IsSnapuserdRequired()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 }  // namespace snapshot
