@@ -398,7 +398,7 @@ validate_and_config(struct disk_info *dinfo, int *fd, struct write_list **lst)
         case PART_SCHEME_GPT:
             /* not supported yet */
         default:
-            ALOGE("Uknown partition scheme.");
+            ALOGE("Unknown partition scheme.");
             break;
     }
 

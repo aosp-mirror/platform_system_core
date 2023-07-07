@@ -38,6 +38,9 @@ class HealthdDraw {
   // Rotate screen.
   virtual void rotate_screen(int drm);
 
+  // Detect dual display
+  virtual bool has_multiple_connectors();
+
   static std::unique_ptr<HealthdDraw> Create(animation *anim);
 
  protected:

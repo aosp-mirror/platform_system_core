@@ -44,7 +44,7 @@ void spawnThreads(FuzzedDataProvider* dataProvider) {
                 dataProvider->ConsumeRandomLengthString(MAX_NAME_SIZE).append(std::to_string(i));
         std::thread th = std::thread(loop);
         pthread_setname_np(th.native_handle(), threadName.c_str());
-        threads.push_back(move(th));
+        threads.push_back(std::move(th));
     }
 
     // Collect thread information

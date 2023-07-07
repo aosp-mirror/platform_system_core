@@ -56,12 +56,14 @@ class FsManagerAvbOps {
 
     AvbIOResult ReadFromPartition(const char* partition, int64_t offset, size_t num_bytes,
                                   void* buffer, size_t* out_num_read);
+    AvbIOResult GetSizeOfPartition(const char* partition, uint64_t* out_size_num_byte);
 
     AvbSlotVerifyResult AvbSlotVerify(const std::string& ab_suffix, AvbSlotVerifyFlags flags,
                                       std::vector<VBMetaData>* out_vbmeta_images);
 
   private:
     std::string GetLogicalPath(const std::string& partition_name);
+    std::string GetPartitionPath(const char* partition_name);
     AvbOps avb_ops_;
     Fstab fstab_;
 };

@@ -18,12 +18,14 @@
 
 #include <algorithm>
 
+#include <BootControlClient.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/binder_manager.h>
 #include <android/hardware/boot/1.0/IBootControl.h>
 #include <android/hardware/fastboot/1.1/IFastboot.h>
+#include <fastbootshim.h>
 #include <fs_mgr.h>
 #include <fs_mgr/roots.h>
 #include <health-shim/shim.h>
@@ -38,9 +40,8 @@ using std::string_literals::operator""s;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
 using ::android::hardware::hidl_string;
-using ::android::hardware::boot::V1_0::IBootControl;
-using ::android::hardware::boot::V1_0::Slot;
 using ::android::hardware::fastboot::V1_1::IFastboot;
+using BootControlClient = FastbootDevice::BootControlClient;
 
 namespace sph = std::placeholders;
 
@@ -61,6 +62,30 @@ std::shared_ptr<aidl::android::hardware::health::IHealth> get_health_service() {
         return ndk::SharedRefBase::make<HealthShim>(hidl_health);
     }
     LOG(WARNING) << "No health implementation is found.";
+    return nullptr;
+}
+
+std::shared_ptr<aidl::android::hardware::fastboot::IFastboot> get_fastboot_service() {
+    using aidl::android::hardware::fastboot::IFastboot;
+    using HidlFastboot = android::hardware::fastboot::V1_1::IFastboot;
+    using aidl::android::hardware::fastboot::FastbootShim;
+    auto service_name = IFastboot::descriptor + "/default"s;
+    if (AServiceManager_isDeclared(service_name.c_str())) {
+        ndk::SpAIBinder binder(AServiceManager_waitForService(service_name.c_str()));
+        std::shared_ptr<IFastboot> fastboot = IFastboot::fromBinder(binder);
+        if (fastboot != nullptr) {
+            LOG(INFO) << "Found and using AIDL fastboot service";
+            return fastboot;
+        }
+        LOG(WARNING) << "AIDL fastboot service is declared, but it cannot be retrieved.";
+    }
+    LOG(INFO) << "Unable to get AIDL fastboot service, trying HIDL...";
+    android::sp<HidlFastboot> hidl_fastboot = HidlFastboot::getService();
+    if (hidl_fastboot != nullptr) {
+        LOG(INFO) << "Found and now using fastboot HIDL implementation";
+        return ndk::SharedRefBase::make<FastbootShim>(hidl_fastboot);
+    }
+    LOG(WARNING) << "No fastboot implementation is found.";
     return nullptr;
 }
 
@@ -85,18 +110,14 @@ FastbootDevice::FastbootDevice()
               {FB_CMD_SNAPSHOT_UPDATE, SnapshotUpdateHandler},
               {FB_CMD_FETCH, FetchHandler},
       }),
-      boot_control_hal_(IBootControl::getService()),
+      boot_control_hal_(BootControlClient::WaitForService()),
       health_hal_(get_health_service()),
-      fastboot_hal_(IFastboot::getService()),
+      fastboot_hal_(get_fastboot_service()),
       active_slot_("") {
     if (android::base::GetProperty("fastbootd.protocol", "usb") == "tcp") {
         transport_ = std::make_unique<ClientTcpTransport>();
     } else {
         transport_ = std::make_unique<ClientUsbTransport>();
-    }
-
-    if (boot_control_hal_) {
-        boot1_1_ = android::hardware::boot::V1_1::IBootControl::castFrom(boot_control_hal_);
     }
 
     // Make sure cache is unmounted, since recovery will have mounted it for
@@ -125,10 +146,15 @@ std::string FastbootDevice::GetCurrentSlot() {
     if (!boot_control_hal_) {
         return "";
     }
-    std::string suffix;
-    auto cb = [&suffix](hidl_string s) { suffix = s; };
-    boot_control_hal_->getSuffix(boot_control_hal_->getCurrentSlot(), cb);
+    std::string suffix = boot_control_hal_->GetSuffix(boot_control_hal_->GetCurrentSlot());
     return suffix;
+}
+
+BootControlClient* FastbootDevice::boot1_1() const {
+    if (boot_control_hal_->GetVersion() >= android::hal::BootControlVersion::BOOTCTL_V1_1) {
+        return boot_control_hal_.get();
+    }
+    return nullptr;
 }
 
 bool FastbootDevice::WriteStatus(FastbootResult result, const std::string& message) {
