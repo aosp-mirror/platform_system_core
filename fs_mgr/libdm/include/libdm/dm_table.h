@@ -31,6 +31,7 @@ namespace dm {
 class DmTable {
   public:
     DmTable() : num_sectors_(0), readonly_(false) {}
+    DmTable(DmTable&& other) = default;
 
     // Adds a target to the device mapper table for a range specified in the target object.
     // The function will return 'true' if the target was successfully added and doesn't overlap with
@@ -69,6 +70,8 @@ class DmTable {
 
     void set_readonly(bool readonly) { readonly_ = readonly; }
     bool readonly() const { return readonly_; }
+
+    DmTable& operator=(DmTable&& other) = default;
 
     ~DmTable() = default;
 

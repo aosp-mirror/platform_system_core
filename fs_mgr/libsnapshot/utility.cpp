@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <time.h>
 
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 
@@ -26,13 +27,16 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
+#include <liblp/property_fetcher.h>
 
+using android::dm::DeviceMapper;
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
 using android::fs_mgr::EnsurePathUnmounted;
 using android::fs_mgr::Fstab;
 using android::fs_mgr::GetEntryForPath;
+using android::fs_mgr::IPropertyFetcher;
 using android::fs_mgr::MetadataBuilder;
 using android::fs_mgr::Partition;
 using android::fs_mgr::ReadDefaultFstab;
@@ -150,20 +154,52 @@ AutoUnmountDevice::~AutoUnmountDevice() {
     }
 }
 
-bool WriteStringToFileAtomic(const std::string& content, const std::string& path) {
-    std::string tmp_path = path + ".tmp";
-    if (!android::base::WriteStringToFile(content, tmp_path)) {
+bool FsyncDirectory(const char* dirname) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(dirname, O_RDONLY | O_CLOEXEC)));
+    if (fd == -1) {
+        PLOG(ERROR) << "Failed to open " << dirname;
         return false;
+    }
+    if (fsync(fd) == -1) {
+        if (errno == EROFS || errno == EINVAL) {
+            PLOG(WARNING) << "Skip fsync " << dirname
+                          << " on a file system does not support synchronization";
+        } else {
+            PLOG(ERROR) << "Failed to fsync " << dirname;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WriteStringToFileAtomic(const std::string& content, const std::string& path) {
+    const std::string tmp_path = path + ".tmp";
+    {
+        const int flags = O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY;
+        android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(tmp_path.c_str(), flags, 0666)));
+        if (fd == -1) {
+            PLOG(ERROR) << "Failed to open " << path;
+            return false;
+        }
+        if (!android::base::WriteStringToFd(content, fd)) {
+            PLOG(ERROR) << "Failed to write to fd " << fd;
+            return false;
+        }
+        // rename() without fsync() is not safe. Data could still be living on page cache. To ensure
+        // atomiticity, call fsync()
+        if (fsync(fd) != 0) {
+            PLOG(ERROR) << "Failed to fsync " << tmp_path;
+        }
     }
     if (rename(tmp_path.c_str(), path.c_str()) == -1) {
         PLOG(ERROR) << "rename failed from " << tmp_path << " to " << path;
         return false;
     }
-    return true;
+    return FsyncDirectory(std::filesystem::path(path).parent_path().c_str());
 }
 
 std::ostream& operator<<(std::ostream& os, const Now&) {
-    struct tm now;
+    struct tm now {};
     time_t t = time(nullptr);
     localtime_r(&t, &now);
     return os << std::put_time(&now, "%Y%m%d-%H%M%S");
@@ -184,16 +220,53 @@ void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uin
     new_extent->set_num_blocks(num_blocks);
 }
 
-bool IsCompressionEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.compression.enabled", false);
+bool GetLegacyCompressionEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.compression.enabled", false);
 }
 
-bool IsUserspaceSnapshotsEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
+bool GetUserspaceSnapshotsEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
-bool IsIouringEnabled() {
-    return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        return false;
+    }
+
+    auto fetcher = IPropertyFetcher::GetInstance();
+
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            fetcher->GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // No user-space snapshots if vendor partition is on Android 12
+    if (vendor_release.find("12") != std::string::npos) {
+        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
+                  << vendor_release;
+        return false;
+    }
+
+    if (IsDmSnapshotTestingEnabled()) {
+        LOG(INFO) << "Userspace snapshots disabled for testing";
+        return false;
+    }
+    if (!KernelSupportsCompressedSnapshots()) {
+        LOG(ERROR) << "Userspace snapshots requested, but no kernel support is available.";
+        return false;
+    }
+    return true;
+}
+
+bool GetIouringEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
+}
+
+bool GetXorCompressionEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.compression.xor.enabled", false);
 }
 
 std::string GetOtherPartitionName(const std::string& name) {
@@ -205,7 +278,13 @@ std::string GetOtherPartitionName(const std::string& name) {
 }
 
 bool IsDmSnapshotTestingEnabled() {
-    return android::base::GetBoolProperty("snapuserd.test.dm.snapshots", false);
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("snapuserd.test.dm.snapshots", false);
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
 }
 
 }  // namespace snapshot

@@ -29,7 +29,7 @@ namespace android {
 namespace init {
 
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
-Parser CreateServiceOnlyParser(ServiceList& service_list, bool from_apex);
+Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list);
 
 bool start_waiting_for_property(const char *name, const char *value);
 
@@ -42,9 +42,11 @@ void SendLoadPersistentPropertiesMessage();
 void PropertyChanged(const std::string& name, const std::string& value);
 bool QueueControlMessage(const std::string& message, const std::string& name, pid_t pid, int fd);
 
-void DebugRebootLogging();
-
 int SecondStageMain(int argc, char** argv);
+
+int StopServicesFromApex(const std::string& apex_name);
+
+void RemoveServiceAndActionFromApex(const std::string& apex_name);
 
 }  // namespace init
 }  // namespace android

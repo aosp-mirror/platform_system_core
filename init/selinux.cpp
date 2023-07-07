@@ -237,9 +237,9 @@ Result<std::string> FindPrecompiledSplitPolicy() {
     // If there is an odm partition, precompiled_sepolicy will be in
     // odm/etc/selinux. Otherwise it will be in vendor/etc/selinux.
     static constexpr const char vendor_precompiled_sepolicy[] =
-        "/vendor/etc/selinux/precompiled_sepolicy";
+            "/vendor/etc/selinux/precompiled_sepolicy";
     static constexpr const char odm_precompiled_sepolicy[] =
-        "/odm/etc/selinux/precompiled_sepolicy";
+            "/odm/etc/selinux/precompiled_sepolicy";
     if (access(odm_precompiled_sepolicy, R_OK) == 0) {
         precompiled_sepolicy = odm_precompiled_sepolicy;
     } else if (access(vendor_precompiled_sepolicy, R_OK) == 0) {
@@ -525,6 +525,32 @@ const std::vector<std::string> kApexSepolicy{"apex_file_contexts", "apex_propert
                                              "apex_service_contexts", "apex_seapp_contexts",
                                              "apex_test"};
 
+Result<void> CreateTmpfsDir() {
+    mode_t mode = 0744;
+    struct stat stat_data;
+    if (stat(kTmpfsDir.c_str(), &stat_data) != 0) {
+        if (errno != ENOENT) {
+            return ErrnoError() << "Could not stat " << kTmpfsDir;
+        }
+        if (mkdir(kTmpfsDir.c_str(), mode) != 0) {
+            return ErrnoError() << "Could not mkdir " << kTmpfsDir;
+        }
+    } else {
+        if (!S_ISDIR(stat_data.st_mode)) {
+            return Error() << kTmpfsDir << " exists and is not a directory.";
+        }
+        LOG(WARNING) << "Directory " << kTmpfsDir << " already exists";
+    }
+
+    // Need to manually call chmod because mkdir will create a folder with
+    // permissions mode & ~umask.
+    if (chmod(kTmpfsDir.c_str(), mode) != 0) {
+        return ErrnoError() << "Could not chmod " << kTmpfsDir;
+    }
+
+    return {};
+}
+
 Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileName) {
     ZipEntry entry;
     std::string dstPath = kTmpfsDir + fileName;
@@ -538,10 +564,10 @@ Result<void> PutFileInTmpfs(ZipArchiveHandle archive, const std::string& fileNam
     unique_fd fd(TEMP_FAILURE_RETRY(
             open(dstPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR)));
     if (fd == -1) {
-        return Error() << "Failed to open " << dstPath;
+        return ErrnoError() << "Failed to open " << dstPath;
     }
 
-    ret = ExtractEntryToFile(archive, &entry, fd);
+    ret = ExtractEntryToFile(archive, &entry, fd.get());
     if (ret != 0) {
         return Error() << "Failed to extract entry \"" << fileName << "\" ("
                        << entry.uncompressed_length << " bytes) to \"" << dstPath
@@ -567,6 +593,11 @@ Result<void> GetPolicyFromApex(const std::string& dir) {
     }
 
     auto handle_guard = android::base::make_scope_guard([&handle] { CloseArchive(handle); });
+
+    auto create = CreateTmpfsDir();
+    if (!create.ok()) {
+        return create.error();
+    }
 
     for (const auto& file : kApexSepolicy) {
         auto extract = PutFileInTmpfs(handle, file);
@@ -598,7 +629,7 @@ Result<void> LoadSepolicyApexCerts() {
 }
 
 Result<void> SepolicyFsVerityCheck() {
-    return Error() << "TODO implementent support for fsverity SEPolicy.";
+    return Error() << "TODO implement support for fsverity SEPolicy.";
 }
 
 Result<void> SepolicyCheckSignature(const std::string& dir) {
@@ -730,15 +761,7 @@ void SelinuxSetEnforcement() {
 
 constexpr size_t kKlogMessageSize = 1024;
 
-void SelinuxAvcLog(char* buf, size_t buf_len) {
-    CHECK_GT(buf_len, 0u);
-
-    size_t str_len = strnlen(buf, buf_len);
-    // trim newline at end of string
-    if (buf[str_len - 1] == '\n') {
-        buf[str_len - 1] = '\0';
-    }
-
+void SelinuxAvcLog(char* buf) {
     struct NetlinkMessage {
         nlmsghdr hdr;
         char buf[kKlogMessageSize];
@@ -754,7 +777,7 @@ void SelinuxAvcLog(char* buf, size_t buf_len) {
         return;
     }
 
-    TEMP_FAILURE_RETRY(send(fd, &request, sizeof(request), 0));
+    TEMP_FAILURE_RETRY(send(fd.get(), &request, sizeof(request), 0));
 }
 
 }  // namespace
@@ -804,8 +827,17 @@ int SelinuxKlogCallback(int type, const char* fmt, ...) {
     if (length_written <= 0) {
         return 0;
     }
+
+    // libselinux log messages usually contain a new line character, while
+    // Android LOG() does not expect it. Remove it to avoid empty lines in
+    // the log buffers.
+    size_t str_len = strlen(buf);
+    if (buf[str_len - 1] == '\n') {
+        buf[str_len - 1] = '\0';
+    }
+
     if (type == SELINUX_AVC) {
-        SelinuxAvcLog(buf, sizeof(buf));
+        SelinuxAvcLog(buf);
     } else {
         android::base::KernelLogger(android::base::MAIN, severity, "selinux", nullptr, 0, buf);
     }
@@ -866,29 +898,31 @@ void MountMissingSystemPartitions() {
             continue;
         }
 
-        auto system_entry = GetEntryForMountPoint(&fstab, "/system");
-        if (!system_entry) {
-            LOG(ERROR) << "Could not find mount entry for /system";
-            break;
-        }
-        if (!system_entry->fs_mgr_flags.logical) {
-            LOG(INFO) << "Skipping mount of " << name << ", system is not dynamic.";
-            break;
-        }
+        auto system_entries = GetEntriesForMountPoint(&fstab, "/system");
+        for (auto& system_entry : system_entries) {
+            if (!system_entry) {
+                LOG(ERROR) << "Could not find mount entry for /system";
+                break;
+            }
+            if (!system_entry->fs_mgr_flags.logical) {
+                LOG(INFO) << "Skipping mount of " << name << ", system is not dynamic.";
+                break;
+            }
 
-        auto entry = *system_entry;
-        auto partition_name = name + fs_mgr_get_slot_suffix();
-        auto replace_name = "system"s + fs_mgr_get_slot_suffix();
+            auto entry = *system_entry;
+            auto partition_name = name + fs_mgr_get_slot_suffix();
+            auto replace_name = "system"s + fs_mgr_get_slot_suffix();
 
-        entry.mount_point = "/"s + name;
-        entry.blk_device =
+            entry.mount_point = "/"s + name;
+            entry.blk_device =
                 android::base::StringReplace(entry.blk_device, replace_name, partition_name, false);
-        if (!fs_mgr_update_logical_partition(&entry)) {
-            LOG(ERROR) << "Could not update logical partition";
-            continue;
-        }
+            if (!fs_mgr_update_logical_partition(&entry)) {
+                LOG(ERROR) << "Could not update logical partition";
+                continue;
+            }
 
-        extra_fstab.emplace_back(std::move(entry));
+            extra_fstab.emplace_back(std::move(entry));
+        }
     }
 
     SkipMountingPartitions(&extra_fstab, true /* verbose */);
