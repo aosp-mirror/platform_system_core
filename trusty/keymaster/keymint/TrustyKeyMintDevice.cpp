@@ -91,7 +91,7 @@ void addClientAndAppData(const vector<uint8_t>& clientId, const vector<uint8_t>&
 }  // namespace
 
 ScopedAStatus TrustyKeyMintDevice::getHardwareInfo(KeyMintHardwareInfo* info) {
-    info->versionNumber = 2;
+    info->versionNumber = 3;
     info->securityLevel = kSecurityLevel;
     info->keyMintName = "TrustyKeyMintDevice";
     info->keyMintAuthorName = "Google";

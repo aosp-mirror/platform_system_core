@@ -162,6 +162,28 @@ equals `true`, then the order of the commands executed will be:
     setprop e 1
     setprop f 2
 
+If the property `true` wasn't `true` when the `boot` was triggered, then the
+order of the commands executed will be:
+
+    setprop a 1
+    setprop b 2
+    setprop e 1
+    setprop f 2
+
+If the property `true` becomes `true` *AFTER* `boot` was triggered, nothing will
+be executed. The condition `boot && property:true=true` will be evaluated to
+false because the `boot` trigger is a past event.
+
+Note that when `ro.property_service.async_persist_writes` is `true`, there is no
+defined ordering between persistent setprops and non-persistent setprops. For
+example:
+
+    on boot
+        setprop a 1
+        setprop persist.b 2
+
+When `ro.property_service.async_persist_writes` is `true`, triggers for these
+two properties may execute in any order.
 
 Services
 --------
@@ -184,8 +206,10 @@ runs the service.
   capability without the "CAP\_" prefix, like "NET\_ADMIN" or "SETPCAP". See
   http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
   capabilities.
-  If no capabilities are provided, then all capabilities are removed from this service, even if it
-  runs as root.
+  If no capabilities are provided, then behaviour depends on the user the service runs under:
+    * if it's root, then the service will run with all the capabitilies (note: whether the
+        service can actually use them is controlled by selinux);
+    * otherwise all capabilities will be dropped.
 
 `class <name> [ <name>\* ]`
 > Specify class names for the service.  All services in a
@@ -230,6 +254,10 @@ runs the service.
 > Open a file path and pass its fd to the launched process. _type_ must be
   "r", "w" or "rw".  For native executables see libcutils
   android\_get\_control\_file().
+
+`gentle_kill`
+> This service will be sent SIGTERM instead of SIGKILL when stopped. After a 200 ms timeout, it will
+  be sent SIGKILL.
 
 `group <groupname> [ <groupname>\* ]`
 > Change to 'groupname' before exec'ing this service.  Additional
@@ -352,9 +380,10 @@ runs the service.
 
 `socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]`
 > Create a UNIX domain socket named /dev/socket/_name_ and pass its fd to the
-  launched process.  _type_ must be "dgram", "stream" or "seqpacket".  _type_
-  may end with "+passcred" to enable SO_PASSCRED on the socket. User and
-  group default to 0.  'seclabel' is the SELinux security context for the
+  launched process.  The socket is created synchronously when the service starts.
+  _type_ must be "dgram", "stream" or "seqpacket".  _type_ may end with "+passcred"
+  to enable SO_PASSCRED on the socket or "+listen" to synchronously make it a listening socket.
+  User and group default to 0.  'seclabel' is the SELinux security context for the
   socket.  It defaults to the service security context, as specified by
   seclabel or computed based on the service executable file security context.
   For native executables see libcutils android\_get\_control\_socket().
@@ -367,8 +396,9 @@ runs the service.
   given console.
 
 `task_profiles <profile> [ <profile>\* ]`
-> Set task profiles for the process when it forks. This is designed to replace the use of
-  writepid option for moving a process into a cgroup.
+> Set task profiles. Before Android U, the profiles are applied to the main thread of the service.
+  For Android U and later, the profiles are applied to the entire service process. This is designed
+  to replace the use of writepid option for moving a process into a cgroup.
 
 `timeout_period <seconds>`
 > Provide a timeout after which point the service will be killed. The oneshot keyword is respected
@@ -397,7 +427,7 @@ runs the service.
   using this new mechanism, processes can use the user option to
   select their desired uid without ever running as root.
   As of Android O, processes can also request capabilities directly in their .rc
-  files. See the "capabilities" option below.
+  files. See the "capabilities" option above.
 
 `writepid <file> [ <file>\* ]`
 > Write the child's pid to the given files when it forks. Meant for
@@ -431,7 +461,9 @@ event trigger.
 
 For example:
 `on boot && property:a=b` defines an action that is only executed when
-the 'boot' event trigger happens and the property a equals b.
+the 'boot' event trigger happens and the property a equals b at the moment. This
+will NOT be executed when the property a transitions to value b after the `boot`
+event was triggered.
 
 `on property:a=b && property:c=d` defines an action that is executed
 at three times:
@@ -606,17 +638,21 @@ provides the `aidl_lazy_test_1` interface.
   group. If not provided, the directory is created with permissions 755 and
   owned by the root user and root group. If provided, the mode, owner and group
   will be updated if the directory exists already.
-
- > _action_ can be one of:
-  * `None`: take no encryption action; directory will be encrypted if parent is.
-  * `Require`: encrypt directory, abort boot process if encryption fails
-  * `Attempt`: try to set an encryption policy, but continue if it fails
-  * `DeleteIfNecessary`: recursively delete directory if necessary to set
-  encryption policy.
-
-  > _key_ can be one of:
-  * `ref`: use the systemwide DE key
-  * `per_boot_ref`: use the key freshly generated on each boot.
+  If the directory does not exist, it will receive the security context from
+  the current SELinux policy or its parent if not specified in the policy. If
+  the directory exists, its security context will not be changed (even if
+  different from the policy).
+>
+> _action_ can be one of:
+>  * `None`: take no encryption action; directory will be encrypted if parent is.
+>  * `Require`: encrypt directory, abort boot process if encryption fails
+>  * `Attempt`: try to set an encryption policy, but continue if it fails
+>  * `DeleteIfNecessary`: recursively delete directory if necessary to set
+>  encryption policy.
+>
+> _key_ can be one of:
+>  * `ref`: use the systemwide DE key
+>  * `per_boot_ref`: use the key freshly generated on each boot.
 
 `mount_all [ <fstab> ] [--<option>]`
 > Calls fs\_mgr\_mount\_all on the given fs\_mgr-format fstab with optional

@@ -19,7 +19,7 @@
 #include <android-base/logging.h>
 #include <android-base/result.h>
 
-#define VBMETA_TAG "[libvbmeta]"
+#define VBMETA_TAG "[libvbmeta] "
 #define LWARN LOG(WARNING) << VBMETA_TAG
 #define LINFO LOG(INFO) << VBMETA_TAG
 #define LERROR LOG(ERROR) << VBMETA_TAG

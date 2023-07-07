@@ -26,8 +26,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
-#include <backtrace/Backtrace.h>
 #include <cutils/android_reboot.h>
+#include <unwindstack/AndroidUnwinder.h>
 
 #include "capabilities.h"
 #include "reboot_utils.h"
@@ -106,7 +106,8 @@ bool IsRebootCapable() {
     return value == CAP_SET;
 }
 
-void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string& rebootTarget) {
+void __attribute__((noreturn))
+RebootSystem(unsigned int cmd, const std::string& rebootTarget, const std::string& reboot_reason) {
     LOG(INFO) << "Reboot ending, jumping to kernel";
 
     if (!IsRebootCapable()) {
@@ -127,10 +128,12 @@ void __attribute__((noreturn)) RebootSystem(unsigned int cmd, const std::string&
 
         case ANDROID_RB_THERMOFF:
             if (android::base::GetBoolProperty("ro.thermal_warmreset", false)) {
+                std::string reason = "shutdown,thermal";
+                if (!reboot_reason.empty()) reason = reboot_reason;
+
                 LOG(INFO) << "Try to trigger a warm reset for thermal shutdown";
-                static constexpr const char kThermalShutdownTarget[] = "shutdown,thermal";
                 syscall(__NR_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                        LINUX_REBOOT_CMD_RESTART2, kThermalShutdownTarget);
+                        LINUX_REBOOT_CMD_RESTART2, reason.c_str());
             } else {
                 reboot(RB_POWER_OFF);
             }
@@ -157,13 +160,13 @@ void __attribute__((noreturn)) InitFatalReboot(int signal_number) {
 
     // In the parent, let's try to get a backtrace then shutdown.
     LOG(ERROR) << __FUNCTION__ << ": signal " << signal_number;
-    std::unique_ptr<Backtrace> backtrace(
-            Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-    if (!backtrace->Unwind(0)) {
-        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack.";
+    unwindstack::AndroidLocalUnwinder unwinder;
+    unwindstack::AndroidUnwinderData data;
+    if (!unwinder.Unwind(data)) {
+        LOG(ERROR) << __FUNCTION__ << ": Failed to unwind callstack: " << data.GetErrorString();
     }
-    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-        LOG(ERROR) << backtrace->FormatFrameData(i);
+    for (const auto& frame : data.frames) {
+        LOG(ERROR) << unwinder.FormatFrame(frame);
     }
     if (init_fatal_panic) {
         LOG(ERROR) << __FUNCTION__ << ": Trigger crash";

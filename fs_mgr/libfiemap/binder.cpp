@@ -195,9 +195,14 @@ bool ImageManagerBinder::RemoveAllImages() {
     return true;
 }
 
-bool ImageManagerBinder::DisableImage(const std::string&) {
-    LOG(ERROR) << __PRETTY_FUNCTION__ << " is not available over binder";
-    return false;
+bool ImageManagerBinder::DisableImage(const std::string& name) {
+    auto status = manager_->disableImage(name);
+    if (!status.isOk()) {
+        LOG(ERROR) << __PRETTY_FUNCTION__
+                   << " binder returned: " << status.exceptionMessage().string();
+        return false;
+    }
+    return true;
 }
 
 bool ImageManagerBinder::RemoveDisabledImages() {
