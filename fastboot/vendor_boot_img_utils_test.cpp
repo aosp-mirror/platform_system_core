@@ -73,8 +73,8 @@ Result<uint64_t> FileSize(borrowed_fd fd, std::filesystem::path path) {
 
 // Seek to beginning then read the whole file.
 Result<std::string> ReadStartOfFdToString(borrowed_fd fd, std::filesystem::path path) {
-    if (lseek64(fd.get(), 0, SEEK_SET) != 0)
-        return ErrnoError() << "lseek64(" << path << ", 0, SEEK_SET)";
+    if (lseek(fd.get(), 0, SEEK_SET) != 0)
+        return ErrnoError() << "lseek(" << path << ", 0, SEEK_SET)";
     std::string content;
     if (!android::base::ReadFdToString(fd, &content)) return ErrnoError() << "read(" << path << ")";
     return content;
