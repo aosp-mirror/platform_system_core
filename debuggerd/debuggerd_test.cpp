@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <linux/prctl.h>
 #include <malloc.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <sys/capability.h>
 #include <sys/mman.h>
@@ -642,7 +643,7 @@ TEST_F(CrasherTest, mte_async) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
 
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 8 \(SEGV_MTEAERR\), fault addr --------)");
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code [89] \(SEGV_MTE[AS]ERR\), fault addr)");
 #else
   GTEST_SKIP() << "Requires aarch64";
 #endif
@@ -1680,6 +1681,24 @@ TEST_P(GwpAsanCrasherTest, DISABLED_run_gwp_asan_test) {
   if (params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
   p[params.access_offset] = 42;
   if (!params.free_before_access) free(static_cast<void*>(const_cast<char*>(p)));
+
+  bool recoverable = std::get<1>(GetParam());
+  ASSERT_TRUE(recoverable);  // Non-recoverable should have crashed.
+
+  // As we're in recoverable mode, trigger another 2x use-after-frees (ensuring
+  // we end with at least one in a different slot), make sure the process still
+  // doesn't crash.
+  p = reinterpret_cast<char* volatile>(malloc(params.alloc_size));
+  char* volatile p2 = reinterpret_cast<char* volatile>(malloc(params.alloc_size));
+  free(static_cast<void*>(const_cast<char*>(p)));
+  free(static_cast<void*>(const_cast<char*>(p2)));
+  *p = 42;
+  *p2 = 42;
+
+  // Under clang coverage (which is a default TEST_MAPPING presubmit target), the
+  // recoverable+seccomp tests fail because the minijail prevents some atexit syscalls that clang
+  // coverage does. Thus, skip the atexit handlers.
+  _exit(0);
 }
 
 TEST_F(CrasherTest, fdsan_warning_abort_message) {
@@ -2419,35 +2438,42 @@ TEST_F(CrasherTest, verify_dex_pc_with_function_name) {
 #if defined(__arm__)
     asm volatile(
         "mov r1, %[base]\n"
-        "mov r2, 0\n"
-        "str r3, [r2]\n"
+        "mov r2, #0\n"
+        "str r2, [r2]\n"
         : [base] "+r"(ptr)
         :
-        : "r1", "r2", "r3", "memory");
+        : "r1", "r2", "memory");
 #elif defined(__aarch64__)
     asm volatile(
         "mov x1, %[base]\n"
-        "mov x2, 0\n"
-        "str x3, [x2]\n"
+        "mov x2, #0\n"
+        "str xzr, [x2]\n"
         : [base] "+r"(ptr)
         :
-        : "x1", "x2", "x3", "memory");
+        : "x1", "x2", "memory");
+#elif defined(__riscv)
+    // TODO: x1 is ra (the link register) on riscv64, so this might have
+    // unintended consequences, but we'll need to change the .cfi_escape if so.
+    asm volatile(
+        "mv x1, %[base]\n"
+        "sw zero, 0(zero)\n"
+        : [base] "+r"(ptr)
+        :
+        : "x1", "memory");
 #elif defined(__i386__)
     asm volatile(
         "mov %[base], %%ecx\n"
-        "movl $0, %%edi\n"
-        "movl 0(%%edi), %%edx\n"
+        "movl $0, 0\n"
         : [base] "+r"(ptr)
         :
-        : "edi", "ecx", "edx", "memory");
+        : "ecx", "memory");
 #elif defined(__x86_64__)
     asm volatile(
         "mov %[base], %%rdx\n"
-        "movq 0, %%rdi\n"
-        "movq 0(%%rdi), %%rcx\n"
+        "movq $0, 0\n"
         : [base] "+r"(ptr)
         :
-        : "rcx", "rdx", "rdi", "memory");
+        : "rdx", "memory");
 #else
 #error "Unsupported architecture"
 #endif
@@ -2677,4 +2703,104 @@ TEST_F(CrasherTest, verify_build_id) {
     found_valid_elf = true;
   }
   ASSERT_TRUE(found_valid_elf) << "Did not find any elf files with valid BuildIDs to check.";
+}
+
+const char kLogMessage[] = "Should not see this log message.";
+
+// Verify that the logd process does not read the log.
+TEST_F(CrasherTest, logd_skips_reading_logs) {
+  StartProcess([]() {
+    pthread_setname_np(pthread_self(), "logd");
+    LOG(INFO) << kLogMessage;
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  // logd should not contain our log message.
+  ASSERT_NOT_MATCH(result, kLogMessage);
+}
+
+// Verify that the logd process does not read the log when the non-main
+// thread crashes.
+TEST_F(CrasherTest, logd_skips_reading_logs_not_main_thread) {
+  StartProcess([]() {
+    pthread_setname_np(pthread_self(), "logd");
+    LOG(INFO) << kLogMessage;
+
+    std::thread thread([]() {
+      pthread_setname_np(pthread_self(), "not_logd_thread");
+      // Raise the signal on the side thread.
+      raise_debugger_signal(kDebuggerdTombstone);
+    });
+    thread.join();
+    _exit(0);
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd, kDebuggerdTombstone);
+  FinishCrasher();
+  AssertDeath(0);
+
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_NOT_MATCH(result, kLogMessage);
+}
+
+// Disable this test since there is a high liklihood that this would
+// be flaky since it requires 500 messages being in the log.
+TEST_F(CrasherTest, DISABLED_max_log_messages) {
+  StartProcess([]() {
+    for (size_t i = 0; i < 600; i++) {
+      LOG(INFO) << "Message number " << i;
+    }
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, "Message number 99");
+  ASSERT_MATCH(result, "Message number 100");
+  ASSERT_MATCH(result, "Message number 599");
+}
+
+TEST_F(CrasherTest, log_with_newline) {
+  StartProcess([]() {
+    LOG(INFO) << "This line has a newline.\nThis is on the next line.";
+    abort();
+  });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, ":\\s*This line has a newline.");
+  ASSERT_MATCH(result, ":\\s*This is on the next line.");
 }

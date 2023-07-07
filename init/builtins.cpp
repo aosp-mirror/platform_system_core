@@ -1074,7 +1074,7 @@ static Result<void> do_restorecon(const BuiltinArguments& args) {
 static Result<void> do_restorecon_recursive(const BuiltinArguments& args) {
     std::vector<std::string> non_const_args(args.args);
     non_const_args.insert(std::next(non_const_args.begin()), "--recursive");
-    return do_restorecon({std::move(non_const_args), args.context});
+    return do_restorecon({.args = std::move(non_const_args), .context = args.context});
 }
 
 static Result<void> do_loglevel(const BuiltinArguments& args) {

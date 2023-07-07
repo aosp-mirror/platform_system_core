@@ -216,7 +216,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
       log_error(output_fd, 0,
                 "received packet of unexpected length from tombstoned while reading %s response: "
                 "expected %zd, received %zd",
-                kind, sizeof(response), rc);
+                kind, sizeof(*response), rc);
       return false;
     }
     return true;

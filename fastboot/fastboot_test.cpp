@@ -203,6 +203,54 @@ TEST(FastBoot, ParseRequirementLineMalformed) {
     ParseRequirementLineTestMalformed("require-for-product :");
 }
 
+static void ParseNetworkSerialTest(const std::string& description, const std::string& serial,
+                                   const std::string& expected_address,
+                                   const Socket::Protocol expected_protocol,
+                                   const int expected_port) {
+    const Result<NetworkSerial, FastbootError> parsed = ParseNetworkSerial(serial);
+
+    ASSERT_RESULT_OK(parsed) << description;
+
+    const NetworkSerial network_serial = parsed.value();
+    EXPECT_EQ(network_serial.address, expected_address) << description;
+    EXPECT_EQ(network_serial.protocol, expected_protocol) << description;
+    EXPECT_EQ(network_serial.port, expected_port) << description;
+}
+
+static void ParseNetworkSerialNegativeTest(const std::string& description,
+                                           const std::string& serial,
+                                           const FastbootError::Type expected_error) {
+    const Result<NetworkSerial, FastbootError> parsed = ParseNetworkSerial(serial);
+
+    EXPECT_FALSE(parsed.ok()) << description;
+    EXPECT_EQ(parsed.error().code(), expected_error) << description;
+}
+
+TEST(FastBoot, ParseNetworkSerial) {
+    ParseNetworkSerialTest("tcp IPv4 parsed", "tcp:192.168.1.0", "192.168.1.0",
+                           Socket::Protocol::kTcp, 5554);
+
+    ParseNetworkSerialTest("udp IPv4 parsed", "udp:192.168.1.0", "192.168.1.0",
+                           Socket::Protocol::kUdp, 5554);
+
+    ParseNetworkSerialTest("port parsed", "udp:192.168.1.0:9999", "192.168.1.0",
+                           Socket::Protocol::kUdp, 9999);
+
+    ParseNetworkSerialTest("IPv6 parsed", "tcp:2001:db8:3333:4444:5555:6666:7777:8888",
+                           "2001:db8:3333:4444:5555:6666:7777:8888", Socket::Protocol::kTcp, 5554);
+
+    ParseNetworkSerialTest("empty IPv6 parsed", "tcp:::", "::", Socket::Protocol::kTcp, 5554);
+
+    ParseNetworkSerialNegativeTest("wrong prefix", "tcpa:192.168.1.0",
+                                   FastbootError::Type::NETWORK_SERIAL_WRONG_PREFIX);
+
+    ParseNetworkSerialNegativeTest("no prefix", "192.168.1.0",
+                                   FastbootError::Type::NETWORK_SERIAL_WRONG_PREFIX);
+
+    ParseNetworkSerialNegativeTest("wrong port", "tcp:192.168.1.0:-1",
+                                   FastbootError::Type::NETWORK_SERIAL_WRONG_ADDRESS);
+}
+
 int main(int argc, char* argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
     android::base::InitLogging(argv);

@@ -400,6 +400,12 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_metadata_sectors(0);
     status->set_using_snapuserd(cow_creator->using_snapuserd);
     status->set_compression_algorithm(cow_creator->compression_algorithm);
+    if (cow_creator->enable_threading) {
+        status->set_enable_threading(cow_creator->enable_threading);
+    }
+    if (cow_creator->batched_writes) {
+        status->set_batched_writes(cow_creator->batched_writes);
+    }
 
     if (!WriteSnapshotStatus(lock, *status)) {
         PLOG(ERROR) << "Could not write snapshot status: " << status->name();
@@ -2895,6 +2901,20 @@ std::ostream& operator<<(std::ostream& os, UpdateState state) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, MergePhase phase) {
+    switch (phase) {
+        case MergePhase::NO_MERGE:
+            return os << "none";
+        case MergePhase::FIRST_PHASE:
+            return os << "first";
+        case MergePhase::SECOND_PHASE:
+            return os << "second";
+        default:
+            LOG(ERROR) << "Unknown merge phase: " << static_cast<uint32_t>(phase);
+            return os << "unknown(" << static_cast<uint32_t>(phase) << ")";
+    }
+}
+
 UpdateState SnapshotManager::ReadUpdateState(LockedFile* lock) {
     SnapshotUpdateStatus status = ReadSnapshotUpdateStatus(lock);
     return status.state();
@@ -3210,6 +3230,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         vabc_disable_reason = "recovery";
     } else if (!cow_format_support) {
         vabc_disable_reason = "cow format not supported";
+    } else if (!KernelSupportsCompressedSnapshots()) {
+        vabc_disable_reason = "kernel missing userspace block device support";
     }
 
     if (!vabc_disable_reason.empty()) {
@@ -3248,6 +3270,12 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .using_snapuserd = using_snapuserd,
             .compression_algorithm = compression_algorithm,
     };
+    if (dap_metadata.vabc_feature_set().has_threaded()) {
+        cow_creator.enable_threading = dap_metadata.vabc_feature_set().threaded();
+    }
+    if (dap_metadata.vabc_feature_set().has_batch_writes()) {
+        cow_creator.batched_writes = dap_metadata.vabc_feature_set().batch_writes();
+    }
 
     auto ret = CreateUpdateSnapshotsInternal(lock.get(), manifest, &cow_creator, &created_devices,
                                              &all_snapshot_status);
@@ -3635,6 +3663,8 @@ std::unique_ptr<ISnapshotWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     CowOptions cow_options;
     cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
+    cow_options.batch_write = status.batched_writes();
+    cow_options.num_compress_threads = status.enable_threading() ? 2 : 0;
     // Disable scratch space for vts tests
     if (device()->IsTestDevice()) {
         cow_options.scratch_space = false;
@@ -3745,7 +3775,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
 
     auto update_status = ReadSnapshotUpdateStatus(file.get());
 
-    ss << "Update state: " << ReadUpdateState(file.get()) << std::endl;
+    ss << "Update state: " << update_status.state() << std::endl;
     ss << "Using snapuserd: " << update_status.using_snapuserd() << std::endl;
     ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
@@ -3759,6 +3789,17 @@ bool SnapshotManager::Dump(std::ostream& os) {
        << (access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0 ? "exists" : strerror(errno))
        << std::endl;
     ss << "Source build fingerprint: " << update_status.source_build_fingerprint() << std::endl;
+
+    if (update_status.state() == UpdateState::Merging) {
+        ss << "Merge completion: ";
+        if (!EnsureSnapuserdConnected()) {
+            ss << "N/A";
+        } else {
+            ss << snapuserd_client_->GetMergePercent() << "%";
+        }
+        ss << std::endl;
+        ss << "Merge phase: " << update_status.merge_phase() << std::endl;
+    }
 
     bool ok = true;
     std::vector<std::string> snapshots;
@@ -3782,6 +3823,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
         ss << "    compression: " << status.compression_algorithm() << std::endl;
+        ss << "    merge phase: " << DecideMergePhase(status) << std::endl;
     }
     os << ss.rdbuf();
     return ok;

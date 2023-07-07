@@ -242,6 +242,10 @@ BatteryHealth getBatteryHealthStatus(int status) {
         value = BatteryHealth::DEAD;
     else if (status == BatteryMonitor::BH_FAILED)
         value = BatteryHealth::UNSPECIFIED_FAILURE;
+    else if (status == BatteryMonitor::BH_NOT_AVAILABLE)
+        value = BatteryHealth::NOT_AVAILABLE;
+    else if (status == BatteryMonitor::BH_INCONSISTENT)
+        value = BatteryHealth::INCONSISTENT;
     else
         value = BatteryHealth::UNKNOWN;
 
@@ -392,11 +396,12 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->batteryFullChargeDesignCapacityUah =
                 getIntField(mHealthdConfig->batteryFullChargeDesignCapacityUahPath);
 
-    if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
-        mHealthInfo->batteryStateOfHealth = getIntField(mHealthdConfig->batteryStateOfHealthPath);
-
     if (!mHealthdConfig->batteryHealthStatusPath.isEmpty())
         mBatteryHealthStatus = getIntField(mHealthdConfig->batteryHealthStatusPath);
+
+    if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
+        mHealthInfo->batteryHealthData->batteryStateOfHealth =
+                getIntField(mHealthdConfig->batteryStateOfHealthPath);
 
     if (!mHealthdConfig->batteryManufacturingDatePath.isEmpty())
         mHealthInfo->batteryHealthData->batteryManufacturingDateSeconds =
@@ -591,6 +596,10 @@ int BatteryMonitor::getBatteryHealthData(int id) {
         if (!mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
             return getIntField(mHealthdConfig->batteryFirstUsageDatePath);
     }
+    if (id == BATTERY_PROP_STATE_OF_HEALTH) {
+        if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
+            return getIntField(mHealthdConfig->batteryStateOfHealthPath);
+    }
     return 0;
 }
 
@@ -666,6 +675,11 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_FIRST_USAGE_DATE:
         val->valueInt64 = getBatteryHealthData(BATTERY_PROP_FIRST_USAGE_DATE);
+        ret = OK;
+        break;
+
+    case BATTERY_PROP_STATE_OF_HEALTH:
+        val->valueInt64 = getBatteryHealthData(BATTERY_PROP_STATE_OF_HEALTH);
         ret = OK;
         break;
 

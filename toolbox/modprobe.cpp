@@ -85,6 +85,26 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     }
 }
 
+// Find directories in format of "/lib/modules/x.y.z-*".
+static int KernelVersionNameFilter(const dirent* de) {
+    unsigned int major, minor;
+    static std::string kernel_version;
+    utsname uts;
+
+    if (kernel_version.empty()) {
+        if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
+            LOG(ERROR) << "Could not parse the kernel version from uname";
+            return 0;
+        }
+        kernel_version = android::base::StringPrintf("%u.%u", major, minor);
+    }
+
+    if (android::base::StartsWith(de->d_name, kernel_version)) {
+        return 1;
+    }
+    return 0;
+}
+
 }  // anonymous namespace
 
 extern "C" int modprobe_main(int argc, char** argv) {
@@ -192,9 +212,22 @@ extern "C" int modprobe_main(int argc, char** argv) {
     }
 
     if (mod_dirs.empty()) {
-        utsname uts;
-        uname(&uts);
-        mod_dirs.emplace_back(android::base::StringPrintf("/lib/modules/%s", uts.release));
+        static constexpr auto LIB_MODULES_PREFIX = "/lib/modules/";
+        dirent** kernel_dirs = NULL;
+
+        int n = scandir(LIB_MODULES_PREFIX, &kernel_dirs, KernelVersionNameFilter, NULL);
+        if (n == -1) {
+            PLOG(ERROR) << "Failed to scan dir " << LIB_MODULES_PREFIX;
+            return EXIT_FAILURE;
+        } else if (n > 0) {
+            while (n--) {
+                mod_dirs.emplace_back(LIB_MODULES_PREFIX + std::string(kernel_dirs[n]->d_name));
+            }
+        }
+        free(kernel_dirs);
+
+        // Allow modules to be directly inside /lib/modules
+        mod_dirs.emplace_back(LIB_MODULES_PREFIX);
     }
 
     LOG(DEBUG) << "mode is " << mode;
@@ -211,11 +244,6 @@ extern "C" int modprobe_main(int argc, char** argv) {
             print_usage();
             return EXIT_FAILURE;
         }
-    }
-    if (mod_dirs.empty()) {
-        LOG(ERROR) << "No module configuration directories given.";
-        print_usage();
-        return EXIT_FAILURE;
     }
     if (parameter_count && modules.size() > 1) {
         LOG(ERROR) << "Only one module may be loaded when specifying module parameters.";

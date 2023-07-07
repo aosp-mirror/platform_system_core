@@ -29,6 +29,7 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
+#include <android-base/strings.h>
 #include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
 #include "snapuserd_server.h"
@@ -101,7 +102,7 @@ void UserSnapshotServer::ShutdownThreads() {
     JoinAllThreads();
 }
 
-UserSnapshotDmUserHandler::UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd)
+HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
     : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
 bool UserSnapshotServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
@@ -307,7 +308,7 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
     }
 }
 
-void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler) {
+void UserSnapshotServer::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
     if (!handler->snapuserd()->Start()) {
@@ -428,7 +429,7 @@ bool UserSnapshotServer::Run() {
 
 void UserSnapshotServer::JoinAllThreads() {
     // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<UserSnapshotDmUserHandler>> dm_users;
+    std::vector<std::shared_ptr<HandlerThread>> dm_users;
     {
         std::lock_guard<std::mutex> guard(lock_);
         dm_users = std::move(dm_users_);
@@ -483,25 +484,42 @@ void UserSnapshotServer::Interrupt() {
     SetTerminating();
 }
 
-std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
-        const std::string& misc_name, const std::string& cow_device_path,
-        const std::string& backing_device, const std::string& base_path_merge) {
+std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string& misc_name,
+                                                              const std::string& cow_device_path,
+                                                              const std::string& backing_device,
+                                                              const std::string& base_path_merge) {
+    // We will need multiple worker threads only during
+    // device boot after OTA. For all other purposes,
+    // one thread is sufficient. We don't want to consume
+    // unnecessary memory especially during OTA install phase
+    // when daemon will be up during entire post install phase.
+    //
+    // During boot up, we need multiple threads primarily for
+    // update-verification.
+    int num_worker_threads = kNumWorkerThreads;
+    if (is_socket_present_) {
+        num_worker_threads = 1;
+    }
+
+    bool perform_verification = true;
+    if (android::base::EndsWith(misc_name, "-init") || is_socket_present_) {
+        perform_verification = false;
+    }
+
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge);
+                                                       base_path_merge, num_worker_threads,
+                                                       io_uring_enabled_, perform_verification);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;
     }
-
-    snapuserd->SetSocketPresent(is_socket_present_);
-    snapuserd->SetIouringEnabled(io_uring_enabled_);
 
     if (!snapuserd->InitializeWorkers()) {
         LOG(ERROR) << "Failed to initialize workers";
         return nullptr;
     }
 
-    auto handler = std::make_shared<UserSnapshotDmUserHandler>(snapuserd);
+    auto handler = std::make_shared<HandlerThread>(snapuserd);
     {
         std::lock_guard<std::mutex> lock(lock_);
         if (FindHandler(&lock, misc_name) != dm_users_.end()) {
@@ -513,7 +531,7 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
     return handler;
 }
 
-bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+bool UserSnapshotServer::StartHandler(const std::shared_ptr<HandlerThread>& handler) {
     if (handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler already attached";
         return false;
@@ -526,7 +544,7 @@ bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHa
 }
 
 bool UserSnapshotServer::StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
-                                    const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+                                    const std::shared_ptr<HandlerThread>& handler) {
     CHECK(proof_of_lock);
 
     if (!handler->snapuserd()->IsAttached()) {
@@ -568,8 +586,7 @@ void UserSnapshotServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proo
     }
 }
 
-std::string UserSnapshotServer::GetMergeStatus(
-        const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+std::string UserSnapshotServer::GetMergeStatus(const std::shared_ptr<HandlerThread>& handler) {
     return handler->snapuserd()->GetMergeStatus();
 }
 
@@ -604,7 +621,7 @@ double UserSnapshotServer::GetMergePercentage(std::lock_guard<std::mutex>* proof
 }
 
 bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
-    std::shared_ptr<UserSnapshotDmUserHandler> handler;
+    std::shared_ptr<HandlerThread> handler;
     {
         std::lock_guard<std::mutex> lock(lock_);
 
