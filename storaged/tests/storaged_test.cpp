@@ -284,6 +284,8 @@ TEST(storaged_test, disk_stats_monitor) {
     dsm_detect.update_mean();
     dsm_detect.update_std();
 
+    // FixLater: avoid floating point loop counters
+    // NOLINTNEXTLINE(clang-analyzer-security.FloatLoopCounter,cert-flp30-c)
     for (double i = 0; i < 2 * dsm_detect.mSigma; i += 0.5) {
         struct disk_perf test_perf;
         struct disk_perf test_mean = dsm_detect.mMean;
