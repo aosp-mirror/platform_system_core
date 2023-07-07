@@ -21,7 +21,6 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
-#include <android/hardware/boot/1.0/IBootControl.h>
 #include <fstab/fstab.h>
 #include <liblp/liblp.h>
 
@@ -124,7 +123,7 @@ bool LogicalPartitionExists(FastbootDevice* device, const std::string& name,
 bool OpenPartition(FastbootDevice* device, const std::string& name, PartitionHandle* handle,
                    int flags = O_WRONLY);
 
-bool GetSlotNumber(const std::string& slot, android::hardware::boot::V1_0::Slot* number);
+bool GetSlotNumber(const std::string& slot, int32_t* number);
 std::vector<std::string> ListPartitions(FastbootDevice* device);
 bool GetDeviceLockStatus();
 

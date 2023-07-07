@@ -27,6 +27,9 @@ ndk_library {
     name: "libsync",
     symbol_file: "libsync.map.txt",
     first_version: "26",
+    export_header_libs: [
+        "libsync_headers",
+    ],
 }
 
 cc_defaults {

@@ -14,13 +14,27 @@
 // limitations under the License.
 //
 
-#include <cstdio>
+#include <string>
+#include <vector>
 
 #include <fstab/fstab.h>
+#include <fuzzer/FuzzedDataProvider.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    std::string make_fstab_str(reinterpret_cast<const char*>(data), size);
+    FuzzedDataProvider fdp(data, size);
+
+    std::string make_fstab_str = fdp.ConsumeRandomLengthString();
+    std::string dsu_slot = fdp.ConsumeRandomLengthString(30);
+    std::vector<std::string> dsu_partitions = {
+            fdp.ConsumeRandomLengthString(30),
+            fdp.ConsumeRandomLengthString(30),
+    };
+    std::string skip_mount_config = fdp.ConsumeRemainingBytesAsString();
+
     android::fs_mgr::Fstab fstab;
     android::fs_mgr::ParseFstabFromString(make_fstab_str, /* proc_mounts = */ false, &fstab);
+    android::fs_mgr::TransformFstabForDsu(&fstab, dsu_slot, dsu_partitions);
+    android::fs_mgr::SkipMountWithConfig(skip_mount_config, &fstab, /* verbose = */ false);
+
     return 0;
 }

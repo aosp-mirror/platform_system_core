@@ -158,7 +158,7 @@ def main():
           curtype = format("Fill with 0x%08X" % (fill))
           if showhash:
             h = hashlib.sha1()
-            data = fill_bin * (blk_sz / 4);
+            data = fill_bin * (blk_sz // 4);
             for block in range(chunk_sz):
               h.update(data)
             curhash = h.hexdigest()
