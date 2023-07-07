@@ -90,19 +90,3 @@ cc_test {
         min_shipping_api_level: 29,
     },
 }
-
-cc_fuzz {
-    name: "dm_linear_table_fuzzer",
-    defaults: ["fs_mgr_defaults"],
-    srcs: [
-        "dm_linear_fuzzer.cpp",
-        "test_util.cpp",
-    ],
-    static_libs: [
-        "libdm",
-        "libbase",
-        "libext2_uuid",
-        "libfs_mgr",
-        "liblog",
-    ],
-}
