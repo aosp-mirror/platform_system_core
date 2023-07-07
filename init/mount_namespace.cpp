@@ -190,15 +190,33 @@ bool SetupMountNamespaces() {
     return success;
 }
 
+// Switch the mount namespace of the current process from bootstrap to default OR from default to
+// bootstrap. If the current mount namespace is neither bootstrap nor default, keep it that way.
 Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace) {
     if (IsRecoveryMode() || !IsApexUpdatable()) {
         // we don't have multiple namespaces in recovery mode or if apex is not updatable
         return {};
     }
-    const auto& ns_id = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_id : default_ns_id;
+
+    const std::string current_namespace_id = GetMountNamespaceId();
+    MountNamespace current_mount_namespace;
+    if (current_namespace_id == bootstrap_ns_id) {
+        current_mount_namespace = NS_BOOTSTRAP;
+    } else if (current_namespace_id == default_ns_id) {
+        current_mount_namespace = NS_DEFAULT;
+    } else {
+        // services with `namespace mnt` start in its own mount namespace. So we need to keep it.
+        return {};
+    }
+
+    // We're already in the target mount namespace.
+    if (current_mount_namespace == target_mount_namespace) {
+        return {};
+    }
+
     const auto& ns_fd = target_mount_namespace == NS_BOOTSTRAP ? bootstrap_ns_fd : default_ns_fd;
     const auto& ns_name = target_mount_namespace == NS_BOOTSTRAP ? "bootstrap" : "default";
-    if (ns_id != GetMountNamespaceId() && ns_fd.get() != -1) {
+    if (ns_fd.get() != -1) {
         if (setns(ns_fd.get(), CLONE_NEWNS) == -1) {
             return ErrnoError() << "Failed to switch to " << ns_name << " mount namespace.";
         }

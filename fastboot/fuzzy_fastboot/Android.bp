@@ -9,6 +9,7 @@ package {
 
 cc_test_host {
   name: "fuzzy_fastboot",
+  isolated: false,
   compile_multilib: "first",
 
   srcs: [

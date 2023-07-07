@@ -24,11 +24,10 @@ package {
 }
 
 cc_binary {
-    name: "android.hardware.gatekeeper@1.0-service.trusty",
-    defaults: ["hidl_defaults"],
+    name: "android.hardware.gatekeeper-service.trusty",
     vendor: true,
     relative_install_path: "hw",
-    init_rc: ["android.hardware.gatekeeper@1.0-service.trusty.rc"],
+    init_rc: ["android.hardware.gatekeeper-service.trusty.rc"],
 
     srcs: [
         "service.cpp",
@@ -42,16 +41,21 @@ cc_binary {
         "-Werror",
     ],
 
+    static_libs: [
+        "libgflags",
+    ],
+
     shared_libs: [
-        "android.hardware.gatekeeper@1.0",
+        "android.hardware.gatekeeper-V1-ndk",
         "libbase",
-        "libhidlbase",
+        "libbinder_ndk",
         "libgatekeeper",
+        "libhardware",
         "libutils",
         "liblog",
         "libcutils",
         "libtrusty",
     ],
 
-    vintf_fragments: ["android.hardware.gatekeeper@1.0-service.trusty.xml"],
+    vintf_fragments: ["android.hardware.gatekeeper-service.trusty.xml"],
 }

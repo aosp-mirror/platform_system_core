@@ -39,6 +39,7 @@ init_common_sources = [
     "epoll.cpp",
     "import_parser.cpp",
     "interface_utils.cpp",
+    "interprocess_fifo.cpp",
     "keychords.cpp",
     "parser.cpp",
     "property_type.cpp",
@@ -53,6 +54,7 @@ init_common_sources = [
     "util.cpp",
 ]
 init_device_sources = [
+    "apex_init_util.cpp",
     "block_dev_initializer.cpp",
     "bootchart.cpp",
     "builtins.cpp",
@@ -107,21 +109,22 @@ libinit_cc_defaults {
         misc_undefined: ["signed-integer-overflow"],
     },
     cflags: [
-        "-DLOG_UEVENTS=0",
-        "-Wall",
-        "-Wextra",
-        "-Wno-unused-parameter",
-        "-Werror",
-        "-Wthread-safety",
         "-DALLOW_FIRST_STAGE_CONSOLE=0",
         "-DALLOW_LOCAL_PROP_OVERRIDE=0",
         "-DALLOW_PERMISSIVE_SELINUX=0",
-        "-DREBOOT_BOOTLOADER_ON_PANIC=0",
-        "-DWORLD_WRITABLE_KMSG=0",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
         "-DDUMP_ON_UMOUNT_FAILURE=0",
-        "-DSHUTDOWN_ZERO_TIMEOUT=0",
         "-DINIT_FULL_SOURCES",
         "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=0",
+        "-DLOG_UEVENTS=0",
+        "-DREBOOT_BOOTLOADER_ON_PANIC=0",
+        "-DSHUTDOWN_ZERO_TIMEOUT=0",
+        "-DWORLD_WRITABLE_KMSG=0",
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wthread-safety",
     ],
     product_variables: {
         debuggable: {
@@ -160,10 +163,12 @@ libinit_cc_defaults {
     },
     static_libs: [
         "libavb",
+        "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
         "libfsverity_init",
         "liblmkd_utils",
+        "liblz4",
         "libmini_keyctl_static",
         "libmodprobe",
         "libprocinfo",
@@ -178,9 +183,7 @@ libinit_cc_defaults {
         "update_metadata-protos",
     ],
     shared_libs: [
-        "libbacktrace",
         "libbase",
-        "libbootloader_message",
         "libcrypto",
         "libcutils",
         "libdl",
@@ -195,10 +198,18 @@ libinit_cc_defaults {
         "libprocessgroup",
         "libprocessgroup_setup",
         "libselinux",
+        "libunwindstack",
         "libutils",
         "libziparchive",
     ],
+    header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
+    visibility: [":__subpackages__"],
+}
+
+cc_library_headers {
+    name: "libinit_headers",
+    export_include_dirs: ["."],
     visibility: [":__subpackages__"],
 }
 
@@ -210,13 +221,14 @@ cc_library_static {
         "selinux_policy_version",
     ],
     srcs: init_common_sources + init_device_sources,
+    export_include_dirs: ["."],
     generated_sources: [
         "apex-info-list",
     ],
     whole_static_libs: [
         "libcap",
-        "com.android.sysprop.apex",
-        "com.android.sysprop.init",
+        "libcom.android.sysprop.apex",
+        "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
@@ -239,6 +251,10 @@ cc_library_static {
             ],
         },
     },
+    visibility: [
+        "//system/apex/apexd",
+        "//frameworks/native/cmds/installd",
+    ],
 }
 
 phony {
@@ -262,7 +278,7 @@ cc_binary {
                 "init.rc",
                 "ueventd.rc",
                 "e2fsdroid",
-                "extra_free_kbytes.sh",
+                "extra_free_kbytes",
                 "make_f2fs",
                 "mke2fs",
                 "sload_f2fs",
@@ -294,7 +310,7 @@ soong_config_module_type {
     name: "init_first_stage_cc_defaults",
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
-    bool_variables: ["BOARD_BUILD_SYSTEM_ROOT_IMAGE", "BOARD_USES_RECOVERY_AS_BOOT"],
+    bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
     properties: ["installable"],
 }
 
@@ -303,9 +319,6 @@ soong_config_module_type {
 init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
-        BOARD_BUILD_SYSTEM_ROOT_IMAGE: {
-            installable: false,
-        },
         BOARD_USES_RECOVERY_AS_BOOT: {
             installable: false,
         },
@@ -352,11 +365,11 @@ cc_binary {
         "libgsi",
         "liblzma",
         "libunwindstack_no_dex",
-        "libbacktrace_no_dex",
         "libmodprobe",
         "libext2_uuid",
         "libprotobuf-cpp-lite",
         "libsnapshot_cow",
+        "liblz4",
         "libsnapshot_init",
         "update_metadata-protos",
         "libprocinfo",
@@ -441,21 +454,14 @@ cc_test {
     defaults: ["init_defaults"],
     require_root: true,
 
-    compile_multilib: "both",
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
+    compile_multilib: "first",
 
     srcs: [
         "devices_test.cpp",
         "epoll_test.cpp",
         "firmware_handler_test.cpp",
         "init_test.cpp",
+        "interprocess_fifo_test.cpp",
         "keychords_test.cpp",
         "oneshot_on_test.cpp",
         "persistent_properties_test.cpp",
@@ -470,7 +476,10 @@ cc_test {
         "ueventd_test.cpp",
         "util_test.cpp",
     ],
-    static_libs: ["libinit"],
+    static_libs: [
+        "libgmock",
+        "libinit",
+    ],
 
     test_suites: [
         "cts",
@@ -493,10 +502,12 @@ cc_defaults {
         "libbase",
         "libcutils",
         "libselinux",
-        "libhidl-gen-utils",
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "libhidl-gen-utils",
     ],
 }
 
@@ -516,6 +527,7 @@ cc_library_static {
         "libcap",
     ],
     export_include_dirs: ["test_utils/include"], // for tests
+    header_libs: ["bionic_libc_platform_headers"],
 }
 
 // Host Verifier
@@ -594,6 +606,7 @@ cc_library_host_static {
 }
 
 sh_binary {
-    name: "extra_free_kbytes.sh",
+    name: "extra_free_kbytes",
     src: "extra_free_kbytes.sh",
+    filename_from_src: true,
 }

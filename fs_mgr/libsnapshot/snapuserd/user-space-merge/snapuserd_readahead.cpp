@@ -727,6 +727,10 @@ bool ReadAhead::RunThread() {
 
     InitializeIouring();
 
+    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    }
+
     while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
             break;
@@ -768,7 +772,7 @@ bool ReadAhead::InitReader() {
 }
 
 void ReadAhead::InitializeRAIter() {
-    cowop_iter_ = reader_->GetMergeOpIter();
+    cowop_iter_ = reader_->GetOpIter(true);
 }
 
 bool ReadAhead::RAIterDone() {

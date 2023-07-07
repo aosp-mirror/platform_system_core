@@ -14,11 +14,13 @@
 // limitations under the License.
 //
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 
 #include <chrono>
 #include <iostream>
@@ -26,12 +28,14 @@
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <ext4_utils/ext4_utils.h>
 #include <fs_mgr/file_wait.h>
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
+#include <libdm/loop_control.h>
 #include <libfiemap/image_manager.h>
 
 #include "utility.h"
@@ -46,7 +50,7 @@ using android::fs_mgr::PartitionOpener;
 using android::fs_mgr::WaitForFile;
 
 static std::string gDataPath;
-static std::string gDataMountPath;
+static std::string gTestDir;
 static constexpr char kMetadataPath[] = "/metadata/gsi/test";
 
 static constexpr uint64_t kTestImageSize = 1024 * 1024;
@@ -178,6 +182,119 @@ std::vector<IsSubdirTestParam> IsSubdirTestValues() {
 
 INSTANTIATE_TEST_SUITE_P(IsSubdirTest, IsSubdirTest, ::testing::ValuesIn(IsSubdirTestValues()));
 
+// This allows test cases for filesystems with larger than 4KiB alignment.
+// It creates a loop device, formats it with a FAT filesystem, and then
+// creates an ImageManager so backing images can be created on that filesystem.
+class VfatTest : public ::testing::Test {
+  protected:
+    // 64MB Filesystem and 32k block size by default
+    static constexpr uint64_t kBlockSize = 32768;
+    static constexpr uint64_t kFilesystemSize = 64 * 1024 * 1024;
+
+    void SetUp() override {
+        const ::testing::TestInfo* tinfo = ::testing::UnitTest::GetInstance()->current_test_info();
+        base_name_ = tinfo->name();
+
+        fs_path_ = gTestDir + "/vfat.img";
+        uint64_t count = kFilesystemSize / kBlockSize;
+        std::string dd_cmd =
+                ::android::base::StringPrintf("/system/bin/dd if=/dev/zero of=%s bs=%" PRIu64
+                                              " count=%" PRIu64 " > /dev/null 2>&1",
+                                              fs_path_.c_str(), kBlockSize, count);
+        // create mount point
+        mntpoint_ = std::string(getenv("TMPDIR")) + "/fiemap_mnt";
+        if (mkdir(mntpoint_.c_str(), S_IRWXU) < 0) {
+            ASSERT_EQ(errno, EEXIST) << strerror(errno);
+        }
+
+        // create file for the file system
+        int ret = system(dd_cmd.c_str());
+        ASSERT_EQ(ret, 0);
+
+        // Get and attach a loop device to the filesystem we created
+        loop_device_.emplace(fs_path_, 10s);
+        ASSERT_TRUE(loop_device_->valid());
+
+        // create file system
+        uint64_t sectors = kFilesystemSize / 512;
+        std::string mkfs_cmd =
+                ::android::base::StringPrintf("/system/bin/newfs_msdos -A -O Android -s %" PRIu64
+                                              " -b %" PRIu64 " %s > /dev/null 2>&1",
+                                              sectors, kBlockSize, loop_device_->device().c_str());
+        ret = system(mkfs_cmd.c_str());
+        ASSERT_EQ(ret, 0);
+
+        // Create a wrapping DM device to prevent gsid taking the loopback path.
+        auto& dm = DeviceMapper::Instance();
+        DmTable table;
+        table.Emplace<DmTargetLinear>(0, kFilesystemSize / 512, loop_device_->device(), 0);
+
+        dm_name_ = android::base::Basename(loop_device_->device()) + "-wrapper";
+        ASSERT_TRUE(dm.CreateDevice(dm_name_, table, &dm_path_, 10s));
+
+        // mount the file system
+        ASSERT_EQ(mount(dm_path_.c_str(), mntpoint_.c_str(), "vfat", 0, nullptr), 0)
+                << strerror(errno);
+    }
+
+    void TearDown() override {
+        // Clear up anything backed on the temporary FS.
+        if (manager_) {
+            manager_->UnmapImageIfExists(base_name_);
+            manager_->DeleteBackingImage(base_name_);
+        }
+
+        // Unmount temporary FS.
+        if (umount(mntpoint_.c_str()) < 0) {
+            ASSERT_EQ(errno, EINVAL) << strerror(errno);
+        }
+
+        // Destroy the dm wrapper.
+        auto& dm = DeviceMapper::Instance();
+        ASSERT_TRUE(dm.DeleteDeviceIfExists(dm_name_));
+
+        // Destroy the loop device.
+        loop_device_ = {};
+
+        // Destroy the temporary FS.
+        if (rmdir(mntpoint_.c_str()) < 0) {
+            ASSERT_EQ(errno, ENOENT) << strerror(errno);
+        }
+        if (unlink(fs_path_.c_str()) < 0) {
+            ASSERT_EQ(errno, ENOENT) << strerror(errno);
+        }
+    }
+
+    std::string base_name_;
+    std::string mntpoint_;
+    std::string fs_path_;
+    std::optional<LoopDevice> loop_device_;
+    std::string dm_name_;
+    std::string dm_path_;
+    std::unique_ptr<ImageManager> manager_;
+};
+
+// The actual size of the block device should be the requested size. For
+// example, a 16KB image should be mapped as a 16KB device, even if the
+// underlying filesystem requires 32KB to be fallocated.
+TEST_F(VfatTest, DeviceIsRequestedSize) {
+    manager_ = ImageManager::Open(kMetadataPath, mntpoint_);
+    ASSERT_NE(manager_, nullptr);
+
+    manager_->set_partition_opener(std::make_unique<TestPartitionOpener>());
+
+    // Create something not aligned to the backing fs block size.
+    constexpr uint64_t kTestSize = (kBlockSize * 64) - (kBlockSize / 2);
+    ASSERT_TRUE(manager_->CreateBackingImage(base_name_, kTestSize, false, nullptr));
+
+    std::string path;
+    ASSERT_TRUE(manager_->MapImageDevice(base_name_, 10s, &path));
+
+    unique_fd fd(open(path.c_str(), O_RDONLY | O_CLOEXEC));
+    ASSERT_GE(fd, 0);
+    ASSERT_EQ(get_block_device_size(fd.get()), kTestSize);
+}
+
 }  // namespace
 
 bool Mkdir(const std::string& path) {
@@ -194,13 +311,27 @@ int main(int argc, char** argv) {
     if (argc >= 2) {
         gDataPath = argv[1];
     } else {
-        gDataPath = "/data/gsi/test";
+        gDataPath = "/data/local/tmp";
     }
-    gDataMountPath = gDataPath + "/mnt"s;
 
-    if (!Mkdir(gDataPath) || !Mkdir(kMetadataPath) || !Mkdir(gDataMountPath) ||
-        !Mkdir(kMetadataPath + "/mnt"s)) {
+    if (!Mkdir(gDataPath) || !Mkdir(kMetadataPath) || !Mkdir(kMetadataPath + "/mnt"s)) {
         return 1;
     }
-    return RUN_ALL_TESTS();
+
+    std::string tempdir = gDataPath + "/XXXXXX";
+    if (!mkdtemp(tempdir.data())) {
+        std::cerr << "unable to create tempdir on " << tempdir << "\n";
+        exit(EXIT_FAILURE);
+    }
+    if (!android::base::Realpath(tempdir, &gTestDir)) {
+        std::cerr << "unable to find realpath for " << tempdir;
+        exit(EXIT_FAILURE);
+    }
+
+    auto rv = RUN_ALL_TESTS();
+
+    std::string cmd = "rm -rf " + gTestDir;
+    system(cmd.c_str());
+
+    return rv;
 }

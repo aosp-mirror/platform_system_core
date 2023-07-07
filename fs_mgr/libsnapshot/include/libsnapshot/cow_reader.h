@@ -74,7 +74,7 @@ class ICowReader {
     virtual bool GetLastLabel(uint64_t* label) = 0;
 
     // Return an iterator for retrieving CowOperation entries.
-    virtual std::unique_ptr<ICowOpIter> GetOpIter() = 0;
+    virtual std::unique_ptr<ICowOpIter> GetOpIter(bool merge_progress) = 0;
 
     // Return an iterator for retrieving CowOperation entries in reverse merge order
     virtual std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress) = 0;
@@ -115,7 +115,7 @@ class CowReader final : public ICowReader {
         USERSPACE_MERGE = 1,
     };
 
-    CowReader(ReaderFlags reader_flag = ReaderFlags::DEFAULT);
+    CowReader(ReaderFlags reader_flag = ReaderFlags::DEFAULT, bool is_merge = false);
     ~CowReader() { owned_fd_ = {}; }
 
     // Parse the COW, optionally, up to the given label. If no label is
@@ -135,7 +135,7 @@ class CowReader final : public ICowReader {
     // CowOperation objects. Get() returns a unique CowOperation object
     // whose lifetime depends on the CowOpIter object; the return
     // value of these will never be null.
-    std::unique_ptr<ICowOpIter> GetOpIter() override;
+    std::unique_ptr<ICowOpIter> GetOpIter(bool merge_progress = false) override;
     std::unique_ptr<ICowOpIter> GetRevMergeOpIter(bool ignore_progress = false) override;
     std::unique_ptr<ICowOpIter> GetMergeOpIter(bool ignore_progress = false) override;
 
@@ -170,14 +170,14 @@ class CowReader final : public ICowReader {
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
     std::shared_ptr<std::vector<CowOperation>> ops_;
-    std::shared_ptr<std::vector<uint32_t>> merge_op_blocks_;
     uint64_t merge_op_start_{};
-    std::shared_ptr<std::unordered_map<uint32_t, int>> block_map_;
+    std::shared_ptr<std::vector<int>> block_pos_index_;
     uint64_t num_total_data_ops_{};
     uint64_t num_ordered_ops_to_merge_{};
     bool has_seq_ops_{};
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     ReaderFlags reader_flag_;
+    bool is_merge_{};
 };
 
 }  // namespace snapshot
