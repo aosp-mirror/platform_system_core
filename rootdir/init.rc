@@ -47,6 +47,9 @@ on early-init
     # Allow up to 32K FDs per process
     setrlimit nofile 32768 32768
 
+    # set RLIMIT_MEMLOCK to 64KB
+    setrlimit memlock 65536 65536
+
     # Set up linker config subdirectories based on mount namespaces
     mkdir /linkerconfig/bootstrap 0755
     mkdir /linkerconfig/default 0755
@@ -55,10 +58,11 @@ on early-init
     # Read more in b/136247322
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
 
-    # Generate ld.config.txt for early executed processes
-    exec -- /system/bin/bootstrap/linkerconfig --target /linkerconfig/bootstrap
+    # Generate empty ld.config.txt for early executed processes which rely on
+    # /system/lib libraries.
+    write /linkerconfig/bootstrap/ld.config.txt \#
+    write /linkerconfig/default/ld.config.txt \#
     chmod 644 /linkerconfig/bootstrap/ld.config.txt
-    copy /linkerconfig/bootstrap/ld.config.txt /linkerconfig/default/ld.config.txt
     chmod 644 /linkerconfig/default/ld.config.txt
 
     # Mount bootstrap linker configuration as current
@@ -86,31 +90,9 @@ on early-init
     mkdir /dev/sys/fs 0755 system system
     mkdir /dev/sys/block 0755 system system
 
-# Run boringssl self test for each ABI so that later processes can skip it. http://b/139348610
-on early-init && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test32
-on early-init && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test64
-on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test_apex32
-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test_apex64
-
-service boringssl_self_test32 /system/bin/boringssl_self_test32
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test64 /system/bin/boringssl_self_test64
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
-
-service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
-    reboot_on_failure reboot,boringssl-self-check-failed
-    stdio_to_kmsg
+    # Create location for fs_mgr to store abbreviated output from filesystem
+    # checker programs.
+    mkdir /dev/fscklogs 0770 root system
 
 on init
     sysclktz 0
@@ -333,7 +315,7 @@ on init
     write /proc/sys/kernel/randomize_va_space 2
     write /proc/sys/vm/mmap_min_addr 32768
     write /proc/sys/net/ipv4/ping_group_range "0 2147483647"
-    write /proc/sys/net/unix/max_dgram_qlen 600
+    write /proc/sys/net/unix/max_dgram_qlen 2400
 
     # Assign reasonable ceiling values for socket rcv/snd buffers.
     # These should almost always be overridden by the target per the
@@ -443,10 +425,6 @@ on init
 
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
-    # Create location for fs_mgr to store abbreviated output from filesystem
-    # checker programs.
-    mkdir /dev/fscklogs 0770 root system
-
     # pstore/ramoops previous console log
     mount pstore pstore /sys/fs/pstore nodev noexec nosuid
     chown system log /sys/fs/pstore
@@ -501,6 +479,44 @@ on init
     start servicemanager
     start hwservicemanager
     start vndservicemanager
+
+# Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
+on init && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test32
+on init && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
+    exec_start boringssl_self_test_apex32
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test_apex64
+
+service boringssl_self_test32 /system/bin/boringssl_self_test32
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test32 doesn't require any capabilities
+    capabilities
+    user nobody
+
+service boringssl_self_test64 /system/bin/boringssl_self_test64
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test64 doesn't require any capabilities
+    capabilities
+    user nobody
+
+service boringssl_self_test_apex32 /apex/com.android.conscrypt/bin/boringssl_self_test32
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex32 doesn't require any capabilities
+    capabilities
+    user nobody
+
+service boringssl_self_test_apex64 /apex/com.android.conscrypt/bin/boringssl_self_test64
+    reboot_on_failure reboot,boringssl-self-check-failed
+    stdio_to_kmsg
+    # Explicitly specify that boringssl_self_test_apex64 doesn't require any capabilities
+    capabilities
+    user nobody
 
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
@@ -630,7 +646,7 @@ on late-fs
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
-    # HALs required before storage encryption can get unlocked (FBE/FDE)
+    # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
 
     # Load trusted keys from dm-verity protected partitions
@@ -684,8 +700,6 @@ on post-fs-data
     copy /data/system/entropy.dat /dev/urandom
 
     mkdir /data/vendor 0771 root root encryption=Require
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
     mkdir /data/vendor/hardware 0771 root root
 
     # Start tombstoned early to be able to store tombstones.
@@ -720,9 +734,13 @@ on post-fs-data
     # Multi-installed APEXes are selected using persist props.
     # Load persist properties and override properties (if enabled) from /data,
     # before starting apexd.
+    # /data/property should be created before `load_persist_props`
+    mkdir /data/property 0700 root root encryption=Require
     load_persist_props
+
     start logd
     start logd-reinit
+
     # Some existing vendor rc files use 'on load_persist_props_action' to know
     # when persist props are ready. These are difficult to change due to GRF,
     # so continue triggering this action here even though props are already loaded
@@ -731,9 +749,15 @@ on post-fs-data
 
     # /data/apex is now available. Start apexd to scan and activate APEXes.
     #
-    # To handle userspace reboots as well as devices that use FDE, make sure
-    # that apexd is started cleanly here (set apexd.status="") and that it is
-    # restarted if it's already running.
+    # To handle userspace reboots, make sure that apexd is started cleanly here
+    # (set apexd.status="") and that it is restarted if it's already running.
+    #
+    # /data/apex uses encryption=None because direct I/O support is needed on
+    # APEX files, but some devices don't support direct I/O on encrypted files.
+    # Also, APEXes are public information, similar to the system image.
+    # /data/apex/decompressed and /data/apex/ota_reserved override this setting;
+    # they are encrypted so that files in them can be hard-linked into
+    # /data/rollback which is encrypted.
     mkdir /data/apex 0755 root system encryption=None
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
@@ -777,12 +801,12 @@ on post-fs-data
     mkdir /data/misc/carrierid 0770 system radio
     mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/emergencynumberdb 0770 system radio
-    mkdir /data/misc/zoneinfo 0775 system system
     mkdir /data/misc/network_watchlist 0774 system system
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
     mkdir /data/misc/systemkeys 0700 system system
+    mkdir /data/misc/threadnetwork 0770 thread_network thread_network
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
@@ -828,21 +852,21 @@ on post-fs-data
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
     chmod 0770 /data/misc/virtualizationservice
     exec - virtualizationservice system -- /bin/rm -rf /data/misc/virtualizationservice
-    mkdir /data/misc/virtualizationservice 0770 system system
+    mkdir /data/misc/virtualizationservice 0771 system system
 
+    # /data/preloads uses encryption=None because it only contains preloaded
+    # files that are public information, similar to the system image.
     mkdir /data/preloads 0775 system system encryption=None
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/local/traces 0777 shell shell
-    mkdir /data/data 0771 system system encryption=None
     mkdir /data/app-private 0771 system system encryption=Require
     mkdir /data/app-ephemeral 0771 system system encryption=Require
     mkdir /data/app-asec 0700 root root encryption=Require
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
-    mkdir /data/property 0700 root root encryption=Require
 
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
@@ -874,7 +898,10 @@ on post-fs-data
     chown system system /data/resource-cache
     chmod 0771 /data/resource-cache
 
-    # create the lost+found directories, so as to enforce our permissions
+    # Ensure that lost+found exists and has the correct permissions.  Linux
+    # filesystems expect this directory to exist; it's where the fsck tool puts
+    # any recovered files that weren't present in any directory.  It must be
+    # unencrypted, as fsck must be able to write to it.
     mkdir /data/lost+found 0770 root root encryption=None
 
     # create directory for DRM plug-ins - give drm the read/write access to
@@ -901,37 +928,55 @@ on post-fs-data
     mkdir /data/system/dropbox 0700 system system
     mkdir /data/system/heapdump 0700 system system
     mkdir /data/system/users 0775 system system
+    # Mkdir and set SELinux security contexts for shutdown-checkpoints.
+    # TODO(b/270286197): remove these after couple releases.
+    mkdir /data/system/shutdown-checkpoints 0700 system system
+    restorecon_recursive /data/system/shutdown-checkpoints
 
-    mkdir /data/system_de 0770 system system encryption=None
-    mkdir /data/system_ce 0770 system system encryption=None
-
-    mkdir /data/misc_de 01771 system misc encryption=None
+    # Create the parent directories of the user CE and DE storage directories.
+    # These parent directories must use encryption=None, since each of their
+    # subdirectories uses a different encryption policy (a per-user one), and
+    # encryption policies apply recursively.  These directories should never
+    # contain any subdirectories other than the per-user ones.  /data/media/obb
+    # is an exception that exists for legacy reasons.
+    mkdir /data/media 0770 media_rw media_rw encryption=None
     mkdir /data/misc_ce 01771 system misc encryption=None
-
+    mkdir /data/misc_de 01771 system misc encryption=None
+    mkdir /data/system_ce 0770 system system encryption=None
+    mkdir /data/system_de 0770 system system encryption=None
     mkdir /data/user 0711 system system encryption=None
     mkdir /data/user_de 0711 system system encryption=None
+    mkdir /data/vendor_ce 0771 root root encryption=None
+    mkdir /data/vendor_de 0771 root root encryption=None
 
-    # Unlink /data/user/0 if we previously symlink it to /data/data
-    rm /data/user/0
+    # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
+    # needed first to relabel the directory from media_rw_data_file.
+    restorecon /data/media
+    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
 
-    # Bind mount /data/user/0 to /data/data
-    mkdir /data/user/0 0700 system system encryption=None
-    mount none /data/data /data/user/0 bind rec
-
-    # A tmpfs directory, which will contain all apps CE DE data directory that
-    # bind mount from the original source.
+    # A tmpfs directory, which will contain all apps and sdk sandbox CE and DE
+    # data directory that bind mount from the original source.
     mount tmpfs tmpfs /data_mirror nodev noexec nosuid mode=0700,uid=0,gid=1000
     restorecon /data_mirror
     mkdir /data_mirror/data_ce 0700 root root
     mkdir /data_mirror/data_de 0700 root root
+    mkdir /data_mirror/misc_ce 0700 root root
+    mkdir /data_mirror/misc_de 0700 root root
 
     # Create CE and DE data directory for default volume
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
+    mkdir /data_mirror/misc_ce/null 0700 root root
+    mkdir /data_mirror/misc_de/null 0700 root root
 
-    # Bind mount CE and DE data directory to mirror's default volume directory
+    # Bind mount CE and DE data directory to mirror's default volume directory.
+    # Note that because the /data mount has the "shared" propagation type, the
+    # later bind mount of /data/data onto /data/user/0 will automatically
+    # propagate to /data_mirror/data_ce/null/0 as well.
     mount none /data/user /data_mirror/data_ce/null bind rec
     mount none /data/user_de /data_mirror/data_de/null bind rec
+    mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
+    mount none /data/misc_de /data_mirror/misc_de/null bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
@@ -955,6 +1000,7 @@ on post-fs-data
     # Create directories for statsd
     mkdir /data/misc/stats-active-metric/ 0770 statsd system
     mkdir /data/misc/stats-data/ 0770 statsd system
+    mkdir /data/misc/stats-data/restricted-data 0770 statsd system
     mkdir /data/misc/stats-metadata/ 0770 statsd system
     mkdir /data/misc/stats-service/ 0770 statsd system
     mkdir /data/misc/train-info/ 0770 statsd system
@@ -962,11 +1008,6 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
-
-    # Special-case /data/media/obb per b/64566063
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    exec - media_rw media_rw -- /system/bin/chattr +F /data/media
-    mkdir /data/media/obb 0770 media_rw media_rw encryption=Attempt
 
     # Create directories for boot animation.
     mkdir /data/bootanim 0755 system system encryption=DeleteIfNecessary
@@ -982,6 +1023,11 @@ on post-fs-data
     # Must start before 'odsign', as odsign depends on *CLASSPATH variables
     exec_start derive_classpath
     load_exports /data/system/environ/classpath
+
+    # Start ART's oneshot boot service to propagate boot experiment flags to
+    # dalvik.vm.*. This needs to be done before odsign since odrefresh uses and
+    # validates those properties against the signed cache-info.xml.
+    exec_start art_boot
 
     # Start the on-device signing daemon, and wait for it to finish, to ensure
     # ART artifacts are generated if needed.
@@ -1006,10 +1052,6 @@ on post-fs-data
     # completed and apexd.status becomes "ready".
     exec_start apexd-snapshotde
 
-    # Check any timezone data in /data is newer than the copy in the time zone data
-    # module, delete if not.
-    exec - system system -- /system/bin/tzdatacheck /apex/com.android.tzdata/etc/tz /data/misc/zoneinfo
-
     # sys.memfd_use set to false by default, which keeps it disabled
     # until it is confirmed that apps and vendor processes don't make
     # IOCTLs on ashmem fds any more.
@@ -1021,6 +1063,9 @@ on post-fs-data
 
     # Enable FUSE by default
     setprop persist.sys.fuse true
+
+    # Update dm-verity state and set partition.*.verified properties.
+    verity_update_state
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
@@ -1093,6 +1138,7 @@ on boot
     # are not aware of using fsync()/sync() to prepare sudden power-cut.
     write /dev/sys/fs/by-name/userdata/cp_interval 200
     write /dev/sys/fs/by-name/userdata/gc_urgent_sleep_time 50
+    write /dev/sys/fs/by-name/userdata/iostat_period_ms 1000
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
     # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
@@ -1131,10 +1177,6 @@ on boot
     chown system system /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/io_is_busy
 
-    # Assume SMP uses shared cpufreq policy for all CPUs
-    chown system system /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-    chmod 0660 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-
     chown system system /sys/class/leds/vibrator/trigger
     chown system system /sys/class/leds/vibrator/activate
     chown system system /sys/class/leds/vibrator/brightness
@@ -1159,12 +1201,10 @@ on boot
     chown system system /sys/kernel/ipv4/tcp_rmem_def
     chown system system /sys/kernel/ipv4/tcp_rmem_max
     chown root radio /proc/cmdline
+    chown root system /proc/bootconfig
 
     # Define default initial receive window size in segments.
     setprop net.tcp_def_init_rwnd 60
-
-    # Update dm-verity state and set partition.*.verified properties.
-    verity_update_state
 
     # Start standard binderized HAL daemons
     class_start hal
@@ -1210,7 +1250,7 @@ on property:net.tcp_def_init_rwnd=*
 # controlling access. On older kernels, the paranoid value is the only means of
 # controlling access. It is normally 3 (allow only root), but the shell user
 # can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
-on property:sys.init.perf_lsm_hooks=1
+on load_bpf_programs && property:sys.init.perf_lsm_hooks=1
     write /proc/sys/kernel/perf_event_paranoid -1
 on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
@@ -1248,6 +1288,7 @@ service ueventd /system/bin/ueventd
     class core
     critical
     seclabel u:r:ueventd:s0
+    user root
     shutdown critical
 
 service console /system/bin/sh
@@ -1258,13 +1299,16 @@ service console /system/bin/sh
     group shell log readproc
     seclabel u:r:shell:s0
     setenv HOSTNAME console
+    shutdown critical
 
 on property:ro.debuggable=1
-    # Give writes to anyone for the trace folder on debug builds.
+    # Give writes to the same group for the trace folder on debug builds,
+    # it's further protected by selinux policy.
     # The folder is used to store method traces.
     chmod 0773 /data/misc/trace
-    # Give reads to anyone for the window trace folder on debug builds.
-    chmod 0775 /data/misc/wmtrace
+    # Give writes and reads to anyone for the window trace folder on debug builds,
+    # it's further protected by selinux policy.
+    chmod 0777 /data/misc/wmtrace
     # Give reads to anyone for the accessibility trace folder on debug builds.
     chmod 0775 /data/misc/a11ytrace
 

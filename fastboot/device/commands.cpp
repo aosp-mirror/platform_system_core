@@ -40,6 +40,9 @@
 #include <storage_literals/storage_literals.h>
 #include <uuid/uuid.h>
 
+#include <bootloader_message/bootloader_message.h>
+
+#include "BootControlClient.h"
 #include "constants.h"
 #include "fastboot_device.h"
 #include "flashing.h"
@@ -52,15 +55,10 @@ static constexpr bool kEnableFetch = false;
 #endif
 
 using android::fs_mgr::MetadataBuilder;
+using android::hal::CommandResult;
 using ::android::hardware::hidl_string;
-using ::android::hardware::boot::V1_0::BoolResult;
-using ::android::hardware::boot::V1_0::CommandResult;
-using ::android::hardware::boot::V1_0::Slot;
-using ::android::hardware::boot::V1_1::MergeStatus;
-using ::android::hardware::fastboot::V1_0::Result;
-using ::android::hardware::fastboot::V1_0::Status;
 using android::snapshot::SnapshotManager;
-using IBootControl1_1 = ::android::hardware::boot::V1_1::IBootControl;
+using MergeStatus = android::hal::BootControlClient::MergeStatus;
 
 using namespace android::storage_literals;
 
@@ -112,52 +110,74 @@ static void GetAllVars(FastbootDevice* device, const std::string& name,
     }
 }
 
-bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
-    const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
-            {FB_VAR_VERSION, {GetVersion, nullptr}},
-            {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
-            {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
-            {FB_VAR_VERSION_OS, {GetOsVersion, nullptr}},
-            {FB_VAR_VERSION_VNDK, {GetVndkVersion, nullptr}},
-            {FB_VAR_PRODUCT, {GetProduct, nullptr}},
-            {FB_VAR_SERIALNO, {GetSerial, nullptr}},
-            {FB_VAR_VARIANT, {GetVariant, nullptr}},
-            {FB_VAR_SECURE, {GetSecure, nullptr}},
-            {FB_VAR_UNLOCKED, {GetUnlocked, nullptr}},
-            {FB_VAR_MAX_DOWNLOAD_SIZE, {GetMaxDownloadSize, nullptr}},
-            {FB_VAR_CURRENT_SLOT, {::GetCurrentSlot, nullptr}},
-            {FB_VAR_SLOT_COUNT, {GetSlotCount, nullptr}},
-            {FB_VAR_HAS_SLOT, {GetHasSlot, GetAllPartitionArgsNoSlot}},
-            {FB_VAR_SLOT_SUCCESSFUL, {GetSlotSuccessful, nullptr}},
-            {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
-            {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
-            {FB_VAR_PARTITION_TYPE, {GetPartitionType, GetAllPartitionArgsWithSlot}},
-            {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
-            {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
-            {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
-            {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
-            {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
-            {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
-            {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
-            {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
-            {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}},
-            {FB_VAR_SYSTEM_FINGERPRINT, {GetSystemFingerprint, nullptr}},
-            {FB_VAR_VENDOR_FINGERPRINT, {GetVendorFingerprint, nullptr}},
-            {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
-            {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
-            {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
-            {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}},
-            {FB_VAR_MAX_FETCH_SIZE, {GetMaxFetchSize, nullptr}},
-    };
+const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
+        {FB_VAR_VERSION, {GetVersion, nullptr}},
+        {FB_VAR_VERSION_BOOTLOADER, {GetBootloaderVersion, nullptr}},
+        {FB_VAR_VERSION_BASEBAND, {GetBasebandVersion, nullptr}},
+        {FB_VAR_VERSION_OS, {GetOsVersion, nullptr}},
+        {FB_VAR_VERSION_VNDK, {GetVndkVersion, nullptr}},
+        {FB_VAR_PRODUCT, {GetProduct, nullptr}},
+        {FB_VAR_SERIALNO, {GetSerial, nullptr}},
+        {FB_VAR_VARIANT, {GetVariant, nullptr}},
+        {FB_VAR_SECURE, {GetSecure, nullptr}},
+        {FB_VAR_UNLOCKED, {GetUnlocked, nullptr}},
+        {FB_VAR_MAX_DOWNLOAD_SIZE, {GetMaxDownloadSize, nullptr}},
+        {FB_VAR_CURRENT_SLOT, {::GetCurrentSlot, nullptr}},
+        {FB_VAR_SLOT_COUNT, {GetSlotCount, nullptr}},
+        {FB_VAR_HAS_SLOT, {GetHasSlot, GetAllPartitionArgsNoSlot}},
+        {FB_VAR_SLOT_SUCCESSFUL, {GetSlotSuccessful, nullptr}},
+        {FB_VAR_SLOT_UNBOOTABLE, {GetSlotUnbootable, nullptr}},
+        {FB_VAR_PARTITION_SIZE, {GetPartitionSize, GetAllPartitionArgsWithSlot}},
+        {FB_VAR_PARTITION_TYPE, {GetPartitionType, GetAllPartitionArgsWithSlot}},
+        {FB_VAR_IS_LOGICAL, {GetPartitionIsLogical, GetAllPartitionArgsWithSlot}},
+        {FB_VAR_IS_USERSPACE, {GetIsUserspace, nullptr}},
+        {FB_VAR_IS_FORCE_DEBUGGABLE, {GetIsForceDebuggable, nullptr}},
+        {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
+        {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
+        {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
+        {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
+        {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
+        {FB_VAR_SNAPSHOT_UPDATE_STATUS, {GetSnapshotUpdateStatus, nullptr}},
+        {FB_VAR_CPU_ABI, {GetCpuAbi, nullptr}},
+        {FB_VAR_SYSTEM_FINGERPRINT, {GetSystemFingerprint, nullptr}},
+        {FB_VAR_VENDOR_FINGERPRINT, {GetVendorFingerprint, nullptr}},
+        {FB_VAR_DYNAMIC_PARTITION, {GetDynamicPartition, nullptr}},
+        {FB_VAR_FIRST_API_LEVEL, {GetFirstApiLevel, nullptr}},
+        {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
+        {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}},
+        {FB_VAR_MAX_FETCH_SIZE, {GetMaxFetchSize, nullptr}},
+};
 
+static bool GetVarAll(FastbootDevice* device) {
+    for (const auto& [name, handlers] : kVariableMap) {
+        GetAllVars(device, name, handlers);
+    }
+    return true;
+}
+
+static void PostWipeData() {
+    std::string err;
+    // Reset mte state of device.
+    if (!WriteMiscMemtagMessage({}, &err)) {
+        LOG(ERROR) << "Failed to reset MTE state: " << err;
+    }
+}
+
+const std::unordered_map<std::string, std::function<bool(FastbootDevice*)>> kSpecialVars = {
+        {"all", GetVarAll},
+        {"dmesg", GetDmesg},
+};
+
+bool GetVarHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return device->WriteFail("Missing argument");
     }
 
-    // Special case: return all variables that we can.
-    if (args[1] == "all") {
-        for (const auto& [name, handlers] : kVariableMap) {
-            GetAllVars(device, name, handlers);
+    // "all" and "dmesg" are multiline and handled specially.
+    auto found_special = kSpecialVars.find(args[1]);
+    if (found_special != kSpecialVars.end()) {
+        if (!found_special->second(device)) {
+            return false;
         }
         return device->WriteOkay("");
     }
@@ -182,20 +202,21 @@ bool OemPostWipeData(FastbootDevice* device) {
         return false;
     }
 
-    Result ret;
-    auto ret_val = fastboot_hal->doOemSpecificErase([&](Result result) { ret = result; });
-    if (!ret_val.isOk()) {
-        return false;
-    }
-    if (ret.status == Status::NOT_SUPPORTED) {
-        return false;
-    } else if (ret.status != Status::SUCCESS) {
-        device->WriteStatus(FastbootResult::FAIL, ret.message);
-    } else {
+    auto status = fastboot_hal->doOemSpecificErase();
+    if (status.isOk()) {
         device->WriteStatus(FastbootResult::OKAY, "Erasing succeeded");
+        return true;
     }
-
-    return true;
+    switch (status.getExceptionCode()) {
+        case EX_UNSUPPORTED_OPERATION:
+            return false;
+        case EX_SERVICE_SPECIFIC:
+            device->WriteStatus(FastbootResult::FAIL, status.getDescription());
+            return false;
+        default:
+            LOG(ERROR) << "Erase operation failed" << status.getDescription();
+            return false;
+    }
 }
 
 bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) {
@@ -221,6 +242,7 @@ bool EraseHandler(FastbootDevice* device, const std::vector<std::string>& args) 
         //Perform oem PostWipeData if Android userdata partition has been erased
         bool support_oem_postwipedata = false;
         if (partition_name == "userdata") {
+            PostWipeData();
             support_oem_postwipedata = OemPostWipeData(device);
         }
 
@@ -244,17 +266,16 @@ bool OemCmdHandler(FastbootDevice* device, const std::vector<std::string>& args)
     if (args[0] == "oem postwipedata userdata") {
         return device->WriteStatus(FastbootResult::FAIL, "Unable to do oem postwipedata userdata");
     }
-
-    Result ret;
-    auto ret_val = fastboot_hal->doOemCommand(args[0], [&](Result result) { ret = result; });
-    if (!ret_val.isOk()) {
-        return device->WriteStatus(FastbootResult::FAIL, "Unable to do OEM command");
-    }
-    if (ret.status != Status::SUCCESS) {
-        return device->WriteStatus(FastbootResult::FAIL, ret.message);
+    std::string message;
+    auto status = fastboot_hal->doOemCommand(args[0], &message);
+    if (!status.isOk()) {
+        LOG(ERROR) << "Unable to do OEM command " << args[0].c_str() << status.getDescription();
+        return device->WriteStatus(FastbootResult::FAIL,
+                                   "Unable to do OEM command " + status.getDescription());
     }
 
-    return device->WriteStatus(FastbootResult::OKAY, ret.message);
+    device->WriteInfo(message);
+    return device->WriteStatus(FastbootResult::OKAY, message);
 }
 
 bool DownloadHandler(FastbootDevice* device, const std::vector<std::string>& args) {
@@ -303,7 +324,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
                                    "set_active command is not allowed on locked devices");
     }
 
-    Slot slot;
+    int32_t slot = 0;
     if (!GetSlotNumber(args[1], &slot)) {
         // Slot suffix needs to be between 'a' and 'z'.
         return device->WriteStatus(FastbootResult::FAIL, "Bad slot suffix");
@@ -315,7 +336,7 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
         return device->WriteStatus(FastbootResult::FAIL,
                                    "Cannot set slot: boot control HAL absent");
     }
-    if (slot >= boot_control_hal->getNumberSlots()) {
+    if (slot >= boot_control_hal->GetNumSlots()) {
         return device->WriteStatus(FastbootResult::FAIL, "Slot out of range");
     }
 
@@ -344,10 +365,8 @@ bool SetActiveHandler(FastbootDevice* device, const std::vector<std::string>& ar
         }
     }
 
-    CommandResult ret;
-    auto cb = [&ret](CommandResult result) { ret = result; };
-    auto result = boot_control_hal->setActiveBootSlot(slot, cb);
-    if (result.isOk() && ret.success) {
+    CommandResult ret = boot_control_hal->SetActiveBootSlot(slot);
+    if (ret.success) {
         // Save as slot suffix to match the suffix format as returned from
         // the boot control HAL.
         auto current_slot = "_" + args[1];
@@ -600,6 +619,10 @@ bool FlashHandler(FastbootDevice* device, const std::vector<std::string>& args) 
     if (ret < 0) {
         return device->WriteStatus(FastbootResult::FAIL, strerror(-ret));
     }
+    if (partition_name == "userdata") {
+        PostWipeData();
+    }
+
     return device->WriteStatus(FastbootResult::OKAY, "Flashing succeeded");
 }
 
@@ -668,9 +691,14 @@ bool SnapshotUpdateHandler(FastbootDevice* device, const std::vector<std::string
     if (args[1] == "cancel") {
         switch (status) {
             case MergeStatus::SNAPSHOTTED:
-            case MergeStatus::MERGING:
-                hal->setSnapshotMergeStatus(MergeStatus::CANCELLED);
+            case MergeStatus::MERGING: {
+                const auto ret = hal->SetSnapshotMergeStatus(MergeStatus::CANCELLED);
+                if (!ret.success) {
+                    device->WriteFail("Failed to SetSnapshotMergeStatus(MergeStatus::CANCELLED) " +
+                                      ret.errMsg);
+                }
                 break;
+            }
             default:
                 break;
         }
