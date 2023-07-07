@@ -28,15 +28,16 @@ cc_binary {
         "rpmb.c",
         "storage.c",
         "proxy.c",
+        "watchdog.cpp",
     ],
 
     shared_libs: [
         "libbase",
+        "libcutils",
         "liblog",
         "libhardware_legacy",
     ],
     header_libs: [
-        "libcutils_headers",
         "libgsi_headers",
     ],
 

@@ -249,7 +249,7 @@ TEST_F(PartitionCowCreatorTest, CompressionEnabled) {
                                 .target_partition = system_b,
                                 .current_metadata = builder_a.get(),
                                 .current_suffix = "_a",
-                                .compression_enabled = true,
+                                .using_snapuserd = true,
                                 .update = &update};
 
     auto ret = creator.Run();
@@ -275,7 +275,7 @@ TEST_F(PartitionCowCreatorTest, CompressionWithNoManifest) {
                                 .target_partition = system_b,
                                 .current_metadata = builder_a.get(),
                                 .current_suffix = "_a",
-                                .compression_enabled = true,
+                                .using_snapuserd = true,
                                 .update = nullptr};
 
     auto ret = creator.Run();

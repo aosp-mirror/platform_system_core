@@ -29,10 +29,12 @@
 #include <chrono>
 #include <sstream>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
+#include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
 
 namespace android {
@@ -90,6 +92,21 @@ std::unique_ptr<SnapuserdClient> SnapuserdClient::Connect(const std::string& soc
         return nullptr;
     }
     return client;
+}
+
+void SnapuserdClient::WaitForServiceToTerminate(std::chrono::milliseconds timeout_ms) {
+    auto start = std::chrono::steady_clock::now();
+    while (android::base::GetProperty("init.svc.snapuserd", "") == "running") {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+        if (elapsed >= timeout_ms) {
+            LOG(ERROR) << "Timed out - Snapuserd service did not stop - Forcefully terminating the "
+                          "service";
+            android::base::SetProperty("ctl.stop", "snapuserd");
+            return;
+        }
+        std::this_thread::sleep_for(100ms);
+    }
 }
 
 bool SnapuserdClient::ValidateConnection() {
@@ -236,6 +253,8 @@ bool SnapuserdClient::DetachSnapuserd() {
         LOG(ERROR) << "Failed to detach snapuserd.";
         return false;
     }
+
+    WaitForServiceToTerminate(3s);
     return true;
 }
 
@@ -267,6 +286,53 @@ std::string SnapuserdClient::QuerySnapshotStatus(const std::string& misc_name) {
         return "snapshot-merge-failed";
     }
     return Receivemsg();
+}
+
+bool SnapuserdClient::QueryUpdateVerification() {
+    std::string msg = "update-verify";
+    if (!Sendmsg(msg)) {
+        LOG(ERROR) << "Failed to send message " << msg << " to snapuserd";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
+}
+
+std::string SnapuserdClient::GetDaemonAliveIndicatorPath() {
+    return "/metadata/ota/" + std::string(kDaemonAliveIndicator);
+}
+
+bool SnapuserdClient::IsTransitionedDaemonReady() {
+    if (!android::fs_mgr::WaitForFile(GetDaemonAliveIndicatorPath(), 10s)) {
+        LOG(ERROR) << "Timed out waiting for daemon indicator path: "
+                   << GetDaemonAliveIndicatorPath();
+        return false;
+    }
+
+    return true;
+}
+
+bool SnapuserdClient::RemoveTransitionedDaemonIndicator() {
+    std::string error;
+    std::string filePath = GetDaemonAliveIndicatorPath();
+    if (!android::base::RemoveFileIfExists(filePath, &error)) {
+        LOG(ERROR) << "Failed to remove DaemonAliveIndicatorPath - error: " << error;
+        return false;
+    }
+
+    if (!android::fs_mgr::WaitForFileDeleted(filePath, 5s)) {
+        LOG(ERROR) << "Timed out waiting for " << filePath << " to unlink";
+        return false;
+    }
+
+    return true;
+}
+
+void SnapuserdClient::NotifyTransitionDaemonIsReady() {
+    if (!android::base::WriteStringToFile("1", GetDaemonAliveIndicatorPath())) {
+        PLOG(ERROR) << "Unable to write daemon alive indicator path: "
+                    << GetDaemonAliveIndicatorPath();
+    }
 }
 
 }  // namespace snapshot

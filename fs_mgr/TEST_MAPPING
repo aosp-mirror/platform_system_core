@@ -22,10 +22,28 @@
       "name": "vts_libsnapshot_test"
     },
     {
-      "name": "libsnapshot_fuzzer_test"
+      "name": "vab_legacy_tests"
     },
+    // TODO: b/279009697
+    //{"name": "vabc_legacy_tests"},
     {
       "name": "cow_api_test"
     }
+  ],
+  "kernel-presubmit": [
+    {
+      "name": "vts_libdm_test"
+    },
+    {
+      "name": "vts_core_liblp_test"
+    },
+    {
+      "name": "vts_libsnapshot_test"
+    },
+    {
+      "name": "vab_legacy_tests"
+    }
+    // TODO: b/279009697
+    //{"name": "vabc_legacy_tests"}
   ]
 }

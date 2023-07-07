@@ -97,8 +97,8 @@ message SnapshotStatus {
     // This is non-zero when |state| == MERGING or MERGE_COMPLETED.
     uint64 metadata_sectors = 8;
 
-    // True if compression is enabled, false otherwise.
-    bool compression_enabled = 9;
+    // True if using snapuserd, false otherwise.
+    bool using_snapuserd = 9;
 
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
@@ -108,6 +108,12 @@ message SnapshotStatus {
 
     // Estimated COW size from OTA manifest.
     uint64 estimated_cow_size = 12;
+
+    // Enable multi-threaded compression
+    bool enable_threading = 13;
+
+    // Enable batching for COW writes
+    bool batched_writes = 14;
 }
 
 // Next: 8
@@ -184,7 +190,7 @@ message SnapshotUpdateStatus {
     uint64 metadata_sectors = 4;
 
     // Whether compression/dm-user was used for any snapshots.
-    bool compression_enabled = 5;
+    bool using_snapuserd = 5;
 
     // Merge phase (if state == MERGING).
     MergePhase merge_phase = 6;
@@ -235,4 +241,13 @@ message SnapshotMergeReport {
 
     // The source fingerprint at the time the OTA was downloaded.
     string source_build_fingerprint = 10;
+
+    // Whether this update attempt uses userspace snapshots.
+    bool userspace_snapshots_used = 11;
+
+    // Whether this update attempt uses XOR compression.
+    bool xor_compression_used = 12;
+
+    // Whether this update attempt used io_uring.
+    bool iouring_used = 13;
 }
