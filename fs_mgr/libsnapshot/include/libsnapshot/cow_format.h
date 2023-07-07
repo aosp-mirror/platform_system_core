@@ -154,9 +154,12 @@ static constexpr uint8_t kCowXorOp = 6;
 static constexpr uint8_t kCowSequenceOp = 7;
 static constexpr uint8_t kCowFooterOp = -1;
 
-static constexpr uint8_t kCowCompressNone = 0;
-static constexpr uint8_t kCowCompressGz = 1;
-static constexpr uint8_t kCowCompressBrotli = 2;
+enum CowCompressionAlgorithm : uint8_t {
+    kCowCompressNone = 0,
+    kCowCompressGz = 1,
+    kCowCompressBrotli = 2,
+    kCowCompressLz4 = 3
+};
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;

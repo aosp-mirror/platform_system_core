@@ -131,9 +131,9 @@ void Parser::ParseData(const std::string& filename, std::string* data) {
     }
 }
 
-bool Parser::ParseConfigFileInsecure(const std::string& path) {
+bool Parser::ParseConfigFileInsecure(const std::string& path, bool follow_symlinks = false) {
     std::string config_contents;
-    if (!android::base::ReadFileToString(path, &config_contents)) {
+    if (!android::base::ReadFileToString(path, &config_contents, follow_symlinks)) {
         return false;
     }
 
@@ -141,71 +141,19 @@ bool Parser::ParseConfigFileInsecure(const std::string& path) {
     return true;
 }
 
-bool Parser::ParseConfigFile(const std::string& path) {
+Result<void> Parser::ParseConfigFile(const std::string& path) {
     LOG(INFO) << "Parsing file " << path << "...";
     android::base::Timer t;
     auto config_contents = ReadFile(path);
     if (!config_contents.ok()) {
-        LOG(INFO) << "Unable to read config file '" << path << "': " << config_contents.error();
-        return false;
+        return Error() << "Unable to read config file '" << path
+                       << "': " << config_contents.error();
     }
 
     ParseData(path, &config_contents.value());
 
     LOG(VERBOSE) << "(Parsing " << path << " took " << t << ".)";
-    return true;
-}
-
-std::vector<std::string> Parser::FilterVersionedConfigs(const std::vector<std::string>& configs,
-                                                        int active_sdk) {
-    std::vector<std::string> filtered_configs;
-
-    std::map<std::string, std::pair<std::string, int>> script_map;
-    for (const auto& c : configs) {
-        int sdk = 0;
-        const std::vector<std::string> parts = android::base::Split(c, ".");
-        std::string base;
-        if (parts.size() < 2) {
-            continue;
-        }
-
-        // parts[size()-1], aka the suffix, should be "rc" or "#rc"
-        // any other pattern gets discarded
-
-        const auto& suffix = parts[parts.size() - 1];
-        if (suffix == "rc") {
-            sdk = 0;
-        } else {
-            char trailer[9] = {0};
-            int r = sscanf(suffix.c_str(), "%d%8s", &sdk, trailer);
-            if (r != 2) {
-                continue;
-            }
-            if (strlen(trailer) > 2 || strcmp(trailer, "rc") != 0) {
-                continue;
-            }
-        }
-
-        if (sdk < 0 || sdk > active_sdk) {
-            continue;
-        }
-
-        base = parts[0];
-        for (unsigned int i = 1; i < parts.size() - 1; i++) {
-            base = base + "." + parts[i];
-        }
-
-        // is this preferred over what we already have
-        auto it = script_map.find(base);
-        if (it == script_map.end() || it->second.second < sdk) {
-            script_map[base] = std::make_pair(c, sdk);
-        }
-    }
-
-    for (const auto& m : script_map) {
-        filtered_configs.push_back(m.second.first);
-    }
-    return filtered_configs;
+    return {};
 }
 
 bool Parser::ParseConfigDir(const std::string& path) {
@@ -228,8 +176,8 @@ bool Parser::ParseConfigDir(const std::string& path) {
     // Sort first so we load files in a consistent order (bug 31996208)
     std::sort(files.begin(), files.end());
     for (const auto& file : files) {
-        if (!ParseConfigFile(file)) {
-            LOG(ERROR) << "could not import file '" << file << "'";
+        if (auto result = ParseConfigFile(file); !result.ok()) {
+            LOG(ERROR) << "could not import file '" << file << "': " << result.error();
         }
     }
     return true;
@@ -239,7 +187,11 @@ bool Parser::ParseConfig(const std::string& path) {
     if (is_dir(path.c_str())) {
         return ParseConfigDir(path);
     }
-    return ParseConfigFile(path);
+    auto result = ParseConfigFile(path);
+    if (!result.ok()) {
+        LOG(INFO) << result.error();
+    }
+    return result.ok();
 }
 
 }  // namespace init

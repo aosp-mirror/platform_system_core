@@ -72,18 +72,12 @@ class Parser {
     Parser();
 
     bool ParseConfig(const std::string& path);
-    bool ParseConfigFile(const std::string& path);
+    Result<void> ParseConfigFile(const std::string& path);
     void AddSectionParser(const std::string& name, std::unique_ptr<SectionParser> parser);
     void AddSingleLineParser(const std::string& prefix, LineCallback callback);
 
-    // Compare all files */path.#rc and */path.rc with the same path prefix.
-    // Keep the one with the highest # that doesn't exceed the system's SDK.
-    // (.rc == .0rc for ranking purposes)
-    std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
-                                                    int active_sdk);
-
     // Host init verifier check file permissions.
-    bool ParseConfigFileInsecure(const std::string& path);
+    bool ParseConfigFileInsecure(const std::string& path, bool follow_symlinks);
 
     size_t parse_error_count() const { return parse_error_count_; }
 
