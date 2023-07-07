@@ -30,7 +30,7 @@ namespace init {
 
 Result<void> RunBuiltinFunction(const BuiltinFunction& function,
                                 const std::vector<std::string>& args, const std::string& context) {
-    auto builtin_arguments = BuiltinArguments(context);
+    BuiltinArguments builtin_arguments{.context = context};
 
     builtin_arguments.args.resize(args.size());
     builtin_arguments.args[0] = args[0];
@@ -69,7 +69,7 @@ Result<void> Command::InvokeFunc(Subcontext* subcontext) const {
 }
 
 Result<void> Command::CheckCommand() const {
-    auto builtin_arguments = BuiltinArguments("host_init_verifier");
+    BuiltinArguments builtin_arguments{.context = "host_init_verifier"};
 
     builtin_arguments.args.resize(args_.size());
     builtin_arguments.args[0] = args_[0];

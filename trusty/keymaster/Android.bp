@@ -109,6 +109,7 @@ cc_binary {
         "keymint_use_latest_hal_aidl_ndk_shared",
     ],
     shared_libs: [
+        "android.hardware.security.rkp-V3-ndk",
         "android.hardware.security.secureclock-V1-ndk",
         "android.hardware.security.sharedsecret-V1-ndk",
         "lib_android_keymaster_keymint_utils",
@@ -123,7 +124,6 @@ cc_binary {
     ],
     required: [
         "android.hardware.hardware_keystore.xml",
-        "RemoteProvisioner",
     ],
 }
 
@@ -175,6 +175,33 @@ cc_binary {
         "libkeymaster_messages",
         "libutils",
         "libxml2",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+cc_binary {
+    name: "trusty_keymaster_set_attestation_ids",
+    vendor: true,
+
+    srcs: [
+        "set_attestation_ids/set_attestation_ids.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "libbase",
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libutils",
     ],
     cflags: [
         "-Wall",

@@ -16,6 +16,7 @@
 
 #include "service.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <linux/securebits.h>
@@ -25,6 +26,7 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
+#include <thread>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -36,9 +38,16 @@
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
 
+#include <string>
+
+#include "interprocess_fifo.h"
 #include "lmkd_service.h"
 #include "service_list.h"
 #include "util.h"
+
+#if defined(__BIONIC__)
+#include <bionic/reserved_signals.h>
+#endif
 
 #ifdef INIT_FULL_SOURCES
 #include <ApexProperties.sysprop.h>
@@ -53,6 +62,7 @@
 
 using android::base::boot_clock;
 using android::base::GetBoolProperty;
+using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::Join;
 using android::base::make_scope_guard;
@@ -127,17 +137,15 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
-pid_t Service::exec_service_pid_ = -1;
-std::chrono::time_point<std::chrono::steady_clock> Service::exec_service_started_;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args, bool from_apex)
-    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, args, from_apex) {}
+                 const std::string& filename, const std::vector<std::string>& args)
+    : Service(name, 0, 0, 0, {}, 0, "", subcontext_for_restart_commands, filename, args) {}
 
 Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
                  const std::vector<gid_t>& supp_gids, int namespace_flags,
                  const std::string& seclabel, Subcontext* subcontext_for_restart_commands,
-                 const std::vector<std::string>& args, bool from_apex)
+                 const std::string& filename, const std::vector<std::string>& args)
     : name_(name),
       classnames_({"default"}),
       flags_(flags),
@@ -157,7 +165,7 @@ Service::Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
       oom_score_adjust_(DEFAULT_OOM_SCORE_ADJUST),
       start_order_(0),
       args_(args),
-      from_apex_(from_apex) {}
+      filename_(filename) {}
 
 void Service::NotifyStateChange(const std::string& new_state) const {
     if ((flags_ & SVC_TEMPORARY) != 0) {
@@ -218,7 +226,7 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
     }
 }
 
-void Service::SetProcessAttributesAndCaps() {
+void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
     // Keep capabilites on uid change.
     if (capabilities_ && proc_attr_.uid) {
         // If Android is running in a container, some securebits might already
@@ -233,7 +241,7 @@ void Service::SetProcessAttributesAndCaps() {
         }
     }
 
-    if (auto result = SetProcessAttributes(proc_attr_); !result.ok()) {
+    if (auto result = SetProcessAttributes(proc_attr_, std::move(setsid_finished)); !result.ok()) {
         LOG(FATAL) << "cannot set attribute for " << name_ << ": " << result.error();
     }
 
@@ -283,7 +291,8 @@ void Service::Reap(const siginfo_t& siginfo) {
     }
 
     if ((siginfo.si_code != CLD_EXITED || siginfo.si_status != 0) && on_failure_reboot_target_) {
-        LOG(ERROR) << "Service with 'reboot_on_failure' option failed, shutting down system.";
+        LOG(ERROR) << "Service " << name_
+                   << " has 'reboot_on_failure' option and failed, shutting down system.";
         trigger_shutdown(*on_failure_reboot_target_);
     }
 
@@ -316,7 +325,37 @@ void Service::Reap(const siginfo_t& siginfo) {
 #else
     static bool is_apex_updatable = false;
 #endif
-    const bool is_process_updatable = !use_bootstrap_ns_ && is_apex_updatable;
+    const bool use_default_mount_ns =
+            mount_namespace_.has_value() && *mount_namespace_ == NS_DEFAULT;
+    const bool is_process_updatable = use_default_mount_ns && is_apex_updatable;
+
+#if defined(__BIONIC__) && defined(SEGV_MTEAERR)
+    // As a precaution, we only upgrade a service once per reboot, to limit
+    // the potential impact.
+    //
+    // BIONIC_SIGNAL_ART_PROFILER is a magic value used by deuggerd to signal
+    // that the process crashed with SIGSEGV and SEGV_MTEAERR. This signal will
+    // never be seen otherwise in a crash, because it always gets handled by the
+    // profiling signal handlers in bionic. See also
+    // debuggerd/handler/debuggerd_handler.cpp.
+    bool should_upgrade_mte = siginfo.si_code != CLD_EXITED &&
+                              siginfo.si_status == BIONIC_SIGNAL_ART_PROFILER && !upgraded_mte_;
+
+    if (should_upgrade_mte) {
+        constexpr int kDefaultUpgradeSecs = 60;
+        int secs = GetIntProperty("persist.device_config.memory_safety_native.upgrade_secs.default",
+                                  kDefaultUpgradeSecs);
+        secs = GetIntProperty(
+                "persist.device_config.memory_safety_native.upgrade_secs.service." + name_, secs);
+        if (secs > 0) {
+            LOG(INFO) << "Upgrading service " << name_ << " to sync MTE for " << secs << " seconds";
+            once_environment_vars_.emplace_back("BIONIC_MEMTAG_UPGRADE_SECS", std::to_string(secs));
+            upgraded_mte_ = true;
+        } else {
+            LOG(INFO) << "Not upgrading service " << name_ << " to sync MTE due to device config";
+        }
+    }
+#endif
 
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
@@ -394,8 +433,6 @@ Result<void> Service::ExecStart() {
 
     flags_ |= SVC_EXEC;
     is_exec_service_running_ = true;
-    exec_service_pid_ = pid_;
-    exec_service_started_ = std::chrono::steady_clock::now();
 
     LOG(INFO) << "SVC_EXEC service '" << name_ << "' pid " << pid_ << " (uid " << proc_attr_.uid
               << " gid " << proc_attr_.gid << "+" << proc_attr_.supp_gids.size() << " context "
@@ -405,16 +442,18 @@ Result<void> Service::ExecStart() {
     return {};
 }
 
-static void ClosePipe(const std::array<int, 2>* pipe) {
-    for (const auto fd : *pipe) {
-        if (fd >= 0) {
-            close(fd);
-        }
-    }
-}
-
 Result<void> Service::CheckConsole() {
     if (!(flags_ & SVC_CONSOLE)) {
+        return {};
+    }
+
+    // On newer kernels, /dev/console will always exist because
+    // "console=ttynull" is hard-coded in CONFIG_CMDLINE. This new boot
+    // property should be set via "androidboot.serialconsole=0" to explicitly
+    // disable services requiring the console. For older kernels and boot
+    // images, not setting this at all will fall back to the old behavior
+    if (GetProperty("ro.boot.serialconsole", "") == "0") {
+        flags_ |= SVC_DISABLED;
         return {};
     }
 
@@ -476,13 +515,15 @@ void Service::ConfigureMemcg() {
 }
 
 // Enters namespaces, sets environment variables, writes PID files and runs the service executable.
-void Service::RunService(const std::optional<MountNamespace>& override_mount_namespace,
-                         const std::vector<Descriptor>& descriptors,
-                         std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd) {
-    if (auto result = EnterNamespaces(namespaces_, name_, override_mount_namespace); !result.ok()) {
+void Service::RunService(const std::vector<Descriptor>& descriptors,
+                         InterprocessFifo cgroups_activated, InterprocessFifo setsid_finished) {
+    if (auto result = EnterNamespaces(namespaces_, name_, mount_namespace_); !result.ok()) {
         LOG(FATAL) << "Service '" << name_ << "' failed to set up namespaces: " << result.error();
     }
 
+    for (const auto& [key, value] : once_environment_vars_) {
+        setenv(key.c_str(), value.c_str(), 1);
+    }
     for (const auto& [key, value] : environment_vars_) {
         setenv(key.c_str(), value.c_str(), 1);
     }
@@ -497,23 +538,33 @@ void Service::RunService(const std::optional<MountNamespace>& override_mount_nam
 
     // Wait until the cgroups have been created and until the cgroup controllers have been
     // activated.
-    char byte = 0;
-    if (read((*pipefd)[0], &byte, 1) < 0) {
-        PLOG(ERROR) << "failed to read from notification channel";
+    Result<uint8_t> byte = cgroups_activated.Read();
+    if (!byte.ok()) {
+        LOG(ERROR) << name_ << ": failed to read from notification channel: " << byte.error();
     }
-    pipefd.reset();
-    if (!byte) {
+    cgroups_activated.Close();
+    if (*byte != kCgroupsActivated) {
         LOG(FATAL) << "Service '" << name_  << "' failed to start due to a fatal error";
         _exit(EXIT_FAILURE);
     }
 
-    if (task_profiles_.size() > 0 && !SetTaskProfiles(getpid(), task_profiles_)) {
-        LOG(ERROR) << "failed to set task profiles";
+    if (task_profiles_.size() > 0) {
+        bool succeeded = SelinuxGetVendorAndroidVersion() < __ANDROID_API_U__
+                                 ?
+                                 // Compatibility mode: apply the task profiles to the current
+                                 // thread.
+                                 SetTaskProfiles(getpid(), task_profiles_)
+                                 :
+                                 // Apply the task profiles to the current process.
+                                 SetProcessProfiles(getuid(), getpid(), task_profiles_);
+        if (!succeeded) {
+            LOG(ERROR) << "failed to set task profiles";
+        }
     }
 
     // As requested, set our gid, supplemental gids, uid, context, and
     // priority. Aborts on failure.
-    SetProcessAttributesAndCaps();
+    SetProcessAttributesAndCaps(std::move(setsid_finished));
 
     if (!ExpandArgsAndExecv(args_, sigstop_)) {
         PLOG(ERROR) << "cannot execv('" << args_[0]
@@ -556,11 +607,14 @@ Result<void> Service::Start() {
         return {};
     }
 
-    std::unique_ptr<std::array<int, 2>, decltype(&ClosePipe)> pipefd(new std::array<int, 2>{-1, -1},
-                                                                     ClosePipe);
-    if (pipe(pipefd->data()) < 0) {
-        return ErrnoError() << "pipe()";
-    }
+    // cgroups_activated is used for communication from the parent to the child
+    // while setsid_finished is used for communication from the child process to
+    // the parent process. These two communication channels are separate because
+    // combining these into a single communication channel would introduce a
+    // race between the Write() calls by the parent and by the child.
+    InterprocessFifo cgroups_activated, setsid_finished;
+    OR_RETURN(cgroups_activated.Initialize());
+    OR_RETURN(setsid_finished.Initialize());
 
     if (Result<void> result = CheckConsole(); !result.ok()) {
         return result;
@@ -583,26 +637,9 @@ Result<void> Service::Start() {
         scon = *result;
     }
 
-    // APEXd is always started in the "current" namespace because it is the process to set up
-    // the current namespace.
-    const bool is_apexd = args_[0] == "/system/bin/apexd";
-
-    if (!IsDefaultMountNamespaceReady() && !is_apexd) {
-        // If this service is started before APEXes and corresponding linker configuration
-        // get available, mark it as pre-apexd one. Note that this marking is
-        // permanent. So for example, if the service is re-launched (e.g., due
-        // to crash), it is still recognized as pre-apexd... for consistency.
-        use_bootstrap_ns_ = true;
-    }
-
-    // For pre-apexd services, override mount namespace as "bootstrap" one before starting.
-    // Note: "ueventd" is supposed to be run in "default" mount namespace even if it's pre-apexd
-    // to support loading firmwares from APEXes.
-    std::optional<MountNamespace> override_mount_namespace;
-    if (name_ == "ueventd") {
-        override_mount_namespace = NS_DEFAULT;
-    } else if (use_bootstrap_ns_) {
-        override_mount_namespace = NS_BOOTSTRAP;
+    if (!mount_namespace_.has_value()) {
+        // remember from which mount namespace the service should start
+        SetMountNamespace();
     }
 
     post_data_ = ServiceList::GetInstance().IsPostData();
@@ -635,14 +672,21 @@ Result<void> Service::Start() {
 
     if (pid == 0) {
         umask(077);
-        RunService(override_mount_namespace, descriptors, std::move(pipefd));
+        cgroups_activated.CloseWriteFd();
+        setsid_finished.CloseReadFd();
+        RunService(descriptors, std::move(cgroups_activated), std::move(setsid_finished));
         _exit(127);
+    } else {
+        cgroups_activated.CloseReadFd();
+        setsid_finished.CloseWriteFd();
     }
 
     if (pid < 0) {
         pid_ = 0;
         return ErrnoError() << "Failed to fork";
     }
+
+    once_environment_vars_.clear();
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         std::string oom_str = std::to_string(oom_score_adjust_);
@@ -658,32 +702,100 @@ Result<void> Service::Start() {
     start_order_ = next_start_order_++;
     process_cgroup_empty_ = false;
 
-    bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
-                      limit_percent_ != -1 || !limit_property_.empty();
-    errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
-    if (errno != 0) {
-        if (char byte = 0; write((*pipefd)[1], &byte, 1) < 0) {
-            return ErrnoError() << "sending notification failed";
+    if (CgroupsAvailable()) {
+        bool use_memcg = swappiness_ != -1 || soft_limit_in_bytes_ != -1 || limit_in_bytes_ != -1 ||
+                         limit_percent_ != -1 || !limit_property_.empty();
+        errno = -createProcessGroup(proc_attr_.uid, pid_, use_memcg);
+        if (errno != 0) {
+            Result<void> result = cgroups_activated.Write(kActivatingCgroupsFailed);
+            if (!result.ok()) {
+                return Error() << "Sending notification failed: " << result.error();
+            }
+            return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_ << ", "
+                           << use_memcg << ") failed for service '" << name_
+                           << "': " << strerror(errno);
         }
-        return Error() << "createProcessGroup(" << proc_attr_.uid << ", " << pid_
-                       << ") failed for service '" << name_ << "'";
-    }
 
-    if (use_memcg) {
-        ConfigureMemcg();
+        // When the blkio controller is mounted in the v1 hierarchy, NormalIoPriority is
+        // the default (/dev/blkio). When the blkio controller is mounted in the v2 hierarchy, the
+        // NormalIoPriority profile has to be applied explicitly.
+        SetProcessProfiles(proc_attr_.uid, pid_, {"NormalIoPriority"});
+
+        if (use_memcg) {
+            ConfigureMemcg();
+        }
     }
 
     if (oom_score_adjust_ != DEFAULT_OOM_SCORE_ADJUST) {
         LmkdRegister(name_, proc_attr_.uid, pid_, oom_score_adjust_);
     }
 
-    if (char byte = 1; write((*pipefd)[1], &byte, 1) < 0) {
-        return ErrnoError() << "sending notification failed";
+    if (Result<void> result = cgroups_activated.Write(kCgroupsActivated); !result.ok()) {
+        return Error() << "Sending cgroups activated notification failed: " << result.error();
     }
+
+    cgroups_activated.Close();
+
+    // Call setpgid() from the parent process to make sure that this call has
+    // finished before the parent process calls kill(-pgid, ...).
+    if (!RequiresConsole(proc_attr_)) {
+        if (setpgid(pid, pid) < 0) {
+            switch (errno) {
+                case EACCES:  // Child has already performed setpgid() followed by execve().
+                case ESRCH:   // Child process no longer exists.
+                    break;
+                default:
+                    PLOG(ERROR) << "setpgid() from parent failed";
+            }
+        }
+    } else {
+        // The Read() call below will return an error if the child is killed.
+        if (Result<uint8_t> result = setsid_finished.Read();
+            !result.ok() || *result != kSetSidFinished) {
+            if (!result.ok()) {
+                return Error() << "Waiting for setsid() failed: " << result.error();
+            } else {
+                return Error() << "Waiting for setsid() failed: " << static_cast<uint32_t>(*result)
+                               << " <> " << static_cast<uint32_t>(kSetSidFinished);
+            }
+        }
+    }
+
+    setsid_finished.Close();
 
     NotifyStateChange("running");
     reboot_on_failure.Disable();
+
+    LOG(INFO) << "... started service '" << name_ << "' has pid " << pid_;
+
     return {};
+}
+
+// Set mount namespace for the service.
+// The reason why remember the mount namespace:
+//   If this service is started before APEXes and corresponding linker configuration
+//   get available, mark it as pre-apexd one. Note that this marking is
+//   permanent. So for example, if the service is re-launched (e.g., due
+//   to crash), it is still recognized as pre-apexd... for consistency.
+void Service::SetMountNamespace() {
+    // APEXd is always started in the "current" namespace because it is the process to set up
+    // the current namespace. So, leave mount_namespace_ as empty.
+    if (args_[0] == "/system/bin/apexd") {
+        return;
+    }
+    // Services in the following list start in the "default" mount namespace.
+    // Note that they should use bootstrap bionic if they start before APEXes are ready.
+    static const std::set<std::string> kUseDefaultMountNamespace = {
+            "ueventd",           // load firmwares from APEXes
+            "hwservicemanager",  // load VINTF fragments from APEXes
+            "servicemanager",    // load VINTF fragments from APEXes
+    };
+    if (kUseDefaultMountNamespace.find(name_) != kUseDefaultMountNamespace.end()) {
+        mount_namespace_ = NS_DEFAULT;
+        return;
+    }
+    // Use the "default" mount namespace only if it's ready
+    mount_namespace_ = IsDefaultMountNamespaceReady() ? NS_DEFAULT : NS_BOOTSTRAP;
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {
@@ -769,6 +881,8 @@ void Service::StopOrReset(int how) {
 
     if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
         // An illegal flag: default to SVC_DISABLED.
+        LOG(ERROR) << "service '" << name_ << "' requested unknown flag " << how
+                   << ", defaulting to disabling it.";
         how = SVC_DISABLED;
     }
 
@@ -787,6 +901,10 @@ void Service::StopOrReset(int how) {
     }
 
     if (pid_) {
+        if (flags_ & SVC_GENTLE_KILL) {
+            KillProcessGroup(SIGTERM);
+            if (!process_cgroup_empty()) std::this_thread::sleep_for(200ms);
+        }
         KillProcessGroup(SIGKILL);
         NotifyStateChange("stopping");
     } else {
@@ -851,7 +969,7 @@ Result<std::unique_ptr<Service>> Service::MakeTemporaryOneshotService(
     }
 
     return std::make_unique<Service>(name, flags, *uid, *gid, supp_gids, namespace_flags, seclabel,
-                                     nullptr, str_args, false);
+                                     nullptr, /*filename=*/"", str_args);
 }
 
 // This is used for snapuserd_proxy, which hands off a socket to snapuserd. It's

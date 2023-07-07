@@ -130,12 +130,10 @@ cc_defaults {
         "-Werror",
         "-Wvla",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+        "-Wthread-safety",
     ],
     rtti: true,
 
-    clang_cflags: [
-        "-Wthread-safety",
-    ],
 }
 
 cc_binary {
@@ -156,6 +154,7 @@ cc_binary {
         "device/flashing.cpp",
         "device/main.cpp",
         "device/usb.cpp",
+        "device/usb_iouring.cpp",
         "device/usb_client.cpp",
         "device/tcp_client.cpp",
         "device/utility.cpp",
@@ -166,9 +165,12 @@ cc_binary {
     shared_libs: [
         "android.hardware.boot@1.0",
         "android.hardware.boot@1.1",
+        "android.hardware.boot-V1-ndk",
+        "libboot_control_client",
         "android.hardware.fastboot@1.1",
+        "android.hardware.fastboot-V1-ndk",
         "android.hardware.health@2.0",
-        "android.hardware.health-V1-ndk",
+        "android.hardware.health-V2-ndk",
         "libasyncio",
         "libbase",
         "libbinder_ndk",
@@ -191,10 +193,14 @@ cc_binary {
         "libc++fs",
         "libhealthhalutils",
         "libhealthshim",
+        "libfastbootshim",
         "libsnapshot_cow",
+        "liblz4",
         "libsnapshot_nobinder",
         "update_metadata-protos",
+        "liburing",
     ],
+    include_dirs: ["bionic/libc/kernel"],
 
     header_libs: [
         "avb_headers",
@@ -215,7 +221,7 @@ cc_defaults {
         "-Werror",
         "-Wunreachable-code",
         "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
-        "-D_FILE_OFFSET_BITS=64"
+        "-D_FILE_OFFSET_BITS=64",
     ],
 
     target: {
@@ -256,6 +262,7 @@ cc_defaults {
         "libsparse",
         "libutils",
         "liblog",
+        "liblz4",
         "libz",
         "libdiagnose_usb",
         "libbase",
@@ -276,14 +283,18 @@ cc_library_host_static {
 
     srcs: [
         "bootimg_utils.cpp",
+        "fastboot_driver.cpp",
         "fastboot.cpp",
+        "filesystem.cpp",
         "fs.cpp",
         "socket.cpp",
+        "storage.cpp",
+        "super_flash_helper.cpp",
         "tcp.cpp",
         "udp.cpp",
         "util.cpp",
         "vendor_boot_img_utils.cpp",
-        "fastboot_driver.cpp",
+        "task.cpp",
     ],
 
     // Only version the final binaries
@@ -337,6 +348,8 @@ cc_binary_host {
         targets: [
             "dist_files",
             "sdk",
+            "sdk-repo-platform-tools",
+            "sdk_repo",
             "win_sdk",
         ],
     },
@@ -344,9 +357,7 @@ cc_binary_host {
     target: {
         not_windows: {
             required: [
-                "e2fsdroid",
                 "mke2fs.conf",
-                "sload_f2fs",
             ],
         },
         windows: {
@@ -365,14 +376,20 @@ cc_test_host {
     defaults: ["fastboot_host_defaults"],
 
     srcs: [
+        "fastboot_driver_test.cpp",
         "fastboot_test.cpp",
         "socket_mock.cpp",
         "socket_test.cpp",
+        "super_flash_helper_test.cpp",
+        "task_test.cpp",
         "tcp_test.cpp",
         "udp_test.cpp",
     ],
 
-    static_libs: ["libfastboot"],
+    static_libs: [
+        "libfastboot",
+        "libgmock",
+    ],
 
     target: {
         windows: {
@@ -383,6 +400,14 @@ cc_test_host {
             enabled: false,
         },
     },
+
+    test_suites: ["general-tests"],
+
+    data: [
+        "testdata/super.img",
+        "testdata/super_empty.img",
+        "testdata/system.img",
+    ],
 }
 
 cc_test_host {
@@ -411,7 +436,7 @@ cc_test_host {
         ":fastboot_test_vendor_ramdisk_replace",
         ":fastboot_test_vendor_boot_v3",
         ":fastboot_test_vendor_boot_v4_without_frag",
-        ":fastboot_test_vendor_boot_v4_with_frag"
+        ":fastboot_test_vendor_boot_v4_with_frag",
     ],
 }
 
