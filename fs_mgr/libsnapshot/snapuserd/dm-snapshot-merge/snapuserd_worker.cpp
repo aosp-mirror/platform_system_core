@@ -116,13 +116,7 @@ bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
         offset *= BLOCK_SZ;
     }
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
-        std::string op;
-        if (cow_op->type == kCowCopyOp)
-            op = "Copy-op";
-        else {
-            op = "Xor-op";
-        }
-        SNAP_PLOG(ERROR) << op << " failed. Read from backing store: " << backing_store_device_
+        SNAP_PLOG(ERROR) << "Copy op failed. Read from backing store: " << backing_store_device_
                          << "at block :" << offset / BLOCK_SZ << " offset:" << offset % BLOCK_SZ;
         return false;
     }
@@ -153,23 +147,6 @@ bool WorkerThread::ProcessCopyOp(const CowOperation* cow_op) {
         if (!ReadFromBaseDevice(cow_op)) {
             return false;
         }
-    }
-
-    return true;
-}
-
-bool WorkerThread::ProcessXorOp(const CowOperation* cow_op) {
-    if (!GetReadAheadPopulatedBuffer(cow_op)) {
-        SNAP_LOG(DEBUG) << " GetReadAheadPopulatedBuffer failed..."
-                        << " new_block: " << cow_op->new_block;
-        if (!ReadFromBaseDevice(cow_op)) {
-            return false;
-        }
-    }
-    xorsink_.Reset();
-    if (!reader_->ReadData(*cow_op, &xorsink_)) {
-        SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block;
-        return false;
     }
 
     return true;
@@ -206,12 +183,8 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
             return ProcessCopyOp(cow_op);
         }
 
-        case kCowXorOp: {
-            return ProcessXorOp(cow_op);
-        }
-
         default: {
-            SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
+            SNAP_LOG(ERROR) << "Unsupported operation-type found: " << cow_op->type;
         }
     }
     return false;
@@ -830,7 +803,6 @@ void WorkerThread::InitializeBufsink() {
 
 bool WorkerThread::RunThread() {
     InitializeBufsink();
-    xorsink_.Initialize(&bufsink_, BLOCK_SZ);
 
     if (!InitializeFds()) {
         return false;

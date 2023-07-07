@@ -13,6 +13,7 @@
 #include <sys/prctl.h>
 #include <unistd.h>
 #include <iostream>
+#include <string>
 
 #define SECTOR_SIZE ((__u64)512)
 #define BUFFER_BYTES 4096
@@ -133,16 +134,16 @@ int not_splice(int from, int to, __u64 count) {
     return 0;
 }
 
-int simple_daemon(char* control_path, char* backing_path) {
-    int control_fd = open(control_path, O_RDWR);
+static int simple_daemon(const std::string& control_path, const std::string& backing_path) {
+    int control_fd = open(control_path.c_str(), O_RDWR);
     if (control_fd < 0) {
-        fprintf(stderr, "Unable to open control device %s\n", control_path);
+        fprintf(stderr, "Unable to open control device %s\n", control_path.c_str());
         return -1;
     }
 
-    int backing_fd = open(backing_path, O_RDWR);
+    int backing_fd = open(backing_path.c_str(), O_RDWR);
     if (backing_fd < 0) {
-        fprintf(stderr, "Unable to open backing device %s\n", backing_path);
+        fprintf(stderr, "Unable to open backing device %s\n", backing_path.c_str());
         return -1;
     }
 
@@ -286,8 +287,8 @@ void usage(char* prog) {
 }
 
 int main(int argc, char* argv[]) {
-    char* control_path = NULL;
-    char* backing_path = NULL;
+    std::string control_path;
+    std::string backing_path;
     char* store;
     int c;
 
@@ -299,10 +300,10 @@ int main(int argc, char* argv[]) {
                 usage(basename(argv[0]));
                 exit(0);
             case 'c':
-                control_path = strdup(optarg);
+                control_path = optarg;
                 break;
             case 'b':
-                backing_path = strdup(optarg);
+                backing_path = optarg;
                 break;
             case 'v':
                 verbose = true;
