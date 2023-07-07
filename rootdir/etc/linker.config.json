@@ -22,8 +22,6 @@
     "libnetd_resolv.so",
     // netd
     "libnetd_updatable.so",
-    // nn
-    "libneuralnetworks.so",
     // statsd
     "libstatspull.so",
     "libstatssocket.so",
@@ -31,6 +29,9 @@
     "libadb_pairing_auth.so",
     "libadb_pairing_connection.so",
     "libadb_pairing_server.so"
+
+    // LLNDK libraries in APEXes will be added automatically from the build,
+    // using build variable LLNDK_MOVED_TO_APEX_LIBRARIES.
   ],
   "provideLibs": [
     "libaptX_encoder.so",

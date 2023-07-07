@@ -29,6 +29,7 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
+#include <android-base/strings.h>
 #include <fs_mgr/file_wait.h>
 #include <snapuserd/snapuserd_client.h>
 #include "snapuserd_server.h"
@@ -55,8 +56,17 @@ DaemonOps UserSnapshotServer::Resolveop(std::string& input) {
     if (input == "initiate_merge") return DaemonOps::INITIATE;
     if (input == "merge_percent") return DaemonOps::PERCENTAGE;
     if (input == "getstatus") return DaemonOps::GETSTATUS;
+    if (input == "update-verify") return DaemonOps::UPDATE_VERIFY;
 
     return DaemonOps::INVALID;
+}
+
+UserSnapshotServer::UserSnapshotServer() {
+    monitor_merge_event_fd_.reset(eventfd(0, EFD_CLOEXEC));
+    if (monitor_merge_event_fd_ == -1) {
+        PLOG(FATAL) << "monitor_merge_event_fd_: failed to create eventfd";
+    }
+    terminating_ = false;
 }
 
 UserSnapshotServer::~UserSnapshotServer() {
@@ -92,7 +102,7 @@ void UserSnapshotServer::ShutdownThreads() {
     JoinAllThreads();
 }
 
-UserSnapshotDmUserHandler::UserSnapshotDmUserHandler(std::shared_ptr<SnapshotHandler> snapuserd)
+HandlerThread::HandlerThread(std::shared_ptr<SnapshotHandler> snapuserd)
     : snapuserd_(snapuserd), misc_name_(snapuserd_->GetMiscName()) {}
 
 bool UserSnapshotServer::Sendmsg(android::base::borrowed_fd fd, const std::string& msg) {
@@ -249,7 +259,7 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
                     return Sendmsg(fd, "fail");
                 }
 
-                if (!StartMerge(*iter)) {
+                if (!StartMerge(&lock, *iter)) {
                     return Sendmsg(fd, "fail");
                 }
 
@@ -282,6 +292,14 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
                 return Sendmsg(fd, merge_status);
             }
         }
+        case DaemonOps::UPDATE_VERIFY: {
+            std::lock_guard<std::mutex> lock(lock_);
+            if (!UpdateVerification(&lock)) {
+                return Sendmsg(fd, "fail");
+            }
+
+            return Sendmsg(fd, "success");
+        }
         default: {
             LOG(ERROR) << "Received unknown message type from client";
             Sendmsg(fd, "fail");
@@ -290,7 +308,7 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
     }
 }
 
-void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> handler) {
+void UserSnapshotServer::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
     if (!handler->snapuserd()->Start()) {
@@ -298,7 +316,7 @@ void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> ha
     }
 
     handler->snapuserd()->CloseFds();
-    handler->snapuserd()->CheckMergeCompletionStatus();
+    bool merge_completed = handler->snapuserd()->CheckMergeCompletionStatus();
     handler->snapuserd()->UnmapBufferRegion();
 
     auto misc_name = handler->misc_name();
@@ -306,7 +324,11 @@ void UserSnapshotServer::RunThread(std::shared_ptr<UserSnapshotDmUserHandler> ha
 
     {
         std::lock_guard<std::mutex> lock(lock_);
-        num_partitions_merge_complete_ += 1;
+        if (merge_completed) {
+            num_partitions_merge_complete_ += 1;
+            active_merge_threads_ -= 1;
+            WakeupMonitorMergeThread();
+        }
         handler->SetThreadTerminated();
         auto iter = FindHandler(&lock, handler->misc_name());
         if (iter == dm_users_.end()) {
@@ -407,7 +429,7 @@ bool UserSnapshotServer::Run() {
 
 void UserSnapshotServer::JoinAllThreads() {
     // Acquire the thread list within the lock.
-    std::vector<std::shared_ptr<UserSnapshotDmUserHandler>> dm_users;
+    std::vector<std::shared_ptr<HandlerThread>> dm_users;
     {
         std::lock_guard<std::mutex> guard(lock_);
         dm_users = std::move(dm_users_);
@@ -418,6 +440,9 @@ void UserSnapshotServer::JoinAllThreads() {
 
         if (th.joinable()) th.join();
     }
+
+    stop_monitor_merge_thread_ = true;
+    WakeupMonitorMergeThread();
 }
 
 void UserSnapshotServer::AddWatchedFd(android::base::borrowed_fd fd, int events) {
@@ -438,13 +463,12 @@ void UserSnapshotServer::AcceptClient() {
 }
 
 bool UserSnapshotServer::HandleClient(android::base::borrowed_fd fd, int revents) {
-    if (revents & POLLHUP) {
-        LOG(DEBUG) << "Snapuserd client disconnected";
-        return false;
-    }
-
     std::string str;
     if (!Recv(fd, &str)) {
+        return false;
+    }
+    if (str.empty() && (revents & POLLHUP)) {
+        LOG(DEBUG) << "Snapuserd client disconnected";
         return false;
     }
     if (!Receivemsg(fd, str)) {
@@ -460,25 +484,42 @@ void UserSnapshotServer::Interrupt() {
     SetTerminating();
 }
 
-std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
-        const std::string& misc_name, const std::string& cow_device_path,
-        const std::string& backing_device, const std::string& base_path_merge) {
+std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string& misc_name,
+                                                              const std::string& cow_device_path,
+                                                              const std::string& backing_device,
+                                                              const std::string& base_path_merge) {
+    // We will need multiple worker threads only during
+    // device boot after OTA. For all other purposes,
+    // one thread is sufficient. We don't want to consume
+    // unnecessary memory especially during OTA install phase
+    // when daemon will be up during entire post install phase.
+    //
+    // During boot up, we need multiple threads primarily for
+    // update-verification.
+    int num_worker_threads = kNumWorkerThreads;
+    if (is_socket_present_) {
+        num_worker_threads = 1;
+    }
+
+    bool perform_verification = true;
+    if (android::base::EndsWith(misc_name, "-init") || is_socket_present_) {
+        perform_verification = false;
+    }
+
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge);
+                                                       base_path_merge, num_worker_threads,
+                                                       io_uring_enabled_, perform_verification);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;
     }
-
-    snapuserd->SetSocketPresent(is_socket_present_);
-    snapuserd->SetIouringEnabled(io_uring_enabled_);
 
     if (!snapuserd->InitializeWorkers()) {
         LOG(ERROR) << "Failed to initialize workers";
         return nullptr;
     }
 
-    auto handler = std::make_shared<UserSnapshotDmUserHandler>(snapuserd);
+    auto handler = std::make_shared<HandlerThread>(snapuserd);
     {
         std::lock_guard<std::mutex> lock(lock_);
         if (FindHandler(&lock, misc_name) != dm_users_.end()) {
@@ -490,7 +531,7 @@ std::shared_ptr<UserSnapshotDmUserHandler> UserSnapshotServer::AddHandler(
     return handler;
 }
 
-bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+bool UserSnapshotServer::StartHandler(const std::shared_ptr<HandlerThread>& handler) {
     if (handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler already attached";
         return false;
@@ -502,13 +543,24 @@ bool UserSnapshotServer::StartHandler(const std::shared_ptr<UserSnapshotDmUserHa
     return true;
 }
 
-bool UserSnapshotServer::StartMerge(const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+bool UserSnapshotServer::StartMerge(std::lock_guard<std::mutex>* proof_of_lock,
+                                    const std::shared_ptr<HandlerThread>& handler) {
+    CHECK(proof_of_lock);
+
     if (!handler->snapuserd()->IsAttached()) {
         LOG(ERROR) << "Handler not attached to dm-user - Merge thread cannot be started";
         return false;
     }
 
-    handler->snapuserd()->InitiateMerge();
+    handler->snapuserd()->MonitorMerge();
+
+    if (!is_merge_monitor_started_.has_value()) {
+        std::thread(&UserSnapshotServer::MonitorMerge, this).detach();
+        is_merge_monitor_started_ = true;
+    }
+
+    merge_handlers_.push(handler);
+    WakeupMonitorMergeThread();
     return true;
 }
 
@@ -534,8 +586,7 @@ void UserSnapshotServer::TerminateMergeThreads(std::lock_guard<std::mutex>* proo
     }
 }
 
-std::string UserSnapshotServer::GetMergeStatus(
-        const std::shared_ptr<UserSnapshotDmUserHandler>& handler) {
+std::string UserSnapshotServer::GetMergeStatus(const std::shared_ptr<HandlerThread>& handler) {
     return handler->snapuserd()->GetMergeStatus();
 }
 
@@ -570,7 +621,7 @@ double UserSnapshotServer::GetMergePercentage(std::lock_guard<std::mutex>* proof
 }
 
 bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
-    std::shared_ptr<UserSnapshotDmUserHandler> handler;
+    std::shared_ptr<HandlerThread> handler;
     {
         std::lock_guard<std::mutex> lock(lock_);
 
@@ -588,6 +639,48 @@ bool UserSnapshotServer::RemoveAndJoinHandler(const std::string& misc_name) {
         th.join();
     }
     return true;
+}
+
+void UserSnapshotServer::WakeupMonitorMergeThread() {
+    uint64_t notify = 1;
+    ssize_t rc = TEMP_FAILURE_RETRY(write(monitor_merge_event_fd_.get(), &notify, sizeof(notify)));
+    if (rc < 0) {
+        PLOG(FATAL) << "failed to notify monitor merge thread";
+    }
+}
+
+void UserSnapshotServer::MonitorMerge() {
+    while (!stop_monitor_merge_thread_) {
+        uint64_t testVal;
+        ssize_t ret =
+                TEMP_FAILURE_RETRY(read(monitor_merge_event_fd_.get(), &testVal, sizeof(testVal)));
+        if (ret == -1) {
+            PLOG(FATAL) << "Failed to read from eventfd";
+        } else if (ret == 0) {
+            LOG(FATAL) << "Hit EOF on eventfd";
+        }
+
+        LOG(INFO) << "MonitorMerge: active-merge-threads: " << active_merge_threads_;
+        {
+            std::lock_guard<std::mutex> lock(lock_);
+            while (active_merge_threads_ < kMaxMergeThreads && merge_handlers_.size() > 0) {
+                auto handler = merge_handlers_.front();
+                merge_handlers_.pop();
+
+                if (!handler->snapuserd()) {
+                    LOG(INFO) << "MonitorMerge: skipping deleted handler: " << handler->misc_name();
+                    continue;
+                }
+
+                LOG(INFO) << "Starting merge for partition: "
+                          << handler->snapuserd()->GetMiscName();
+                handler->snapuserd()->InitiateMerge();
+                active_merge_threads_ += 1;
+            }
+        }
+    }
+
+    LOG(INFO) << "Exiting MonitorMerge: size: " << merge_handlers_.size();
 }
 
 bool UserSnapshotServer::WaitForSocket() {
@@ -637,7 +730,7 @@ bool UserSnapshotServer::WaitForSocket() {
 
     // We don't care if the ACK is received.
     code[0] = 'a';
-    if (TEMP_FAILURE_RETRY(send(fd, code, sizeof(code), MSG_NOSIGNAL) < 0)) {
+    if (TEMP_FAILURE_RETRY(send(fd, code, sizeof(code), MSG_NOSIGNAL)) < 0) {
         PLOG(ERROR) << "Failed to send ACK to proxy";
         return false;
     }
@@ -646,6 +739,7 @@ bool UserSnapshotServer::WaitForSocket() {
     if (!StartWithSocket(true)) {
         return false;
     }
+
     return Run();
 }
 
@@ -685,6 +779,23 @@ bool UserSnapshotServer::RunForSocketHandoff() {
         PLOG(FATAL) << "Proxy could not receive terminating code from snapuserd";
     }
     return true;
+}
+
+bool UserSnapshotServer::UpdateVerification(std::lock_guard<std::mutex>* proof_of_lock) {
+    CHECK(proof_of_lock);
+
+    bool status = true;
+    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
+        auto& th = (*iter)->thread();
+        if (th.joinable() && status) {
+            status = (*iter)->snapuserd()->CheckPartitionVerification() && status;
+        } else {
+            // return immediately if there is a failure
+            return false;
+        }
+    }
+
+    return status;
 }
 
 }  // namespace snapshot
