@@ -4,7 +4,7 @@
       "name": "liblp_test"
     }
   ],
-  "hwasan-postsubmit": [
+  "hwasan-presubmit": [
     {
       "name": "liblp_test"
     }

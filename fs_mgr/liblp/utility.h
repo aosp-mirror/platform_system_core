@@ -30,7 +30,7 @@
 
 #include "liblp/liblp.h"
 
-#define LP_TAG "[liblp]"
+#define LP_TAG "[liblp] "
 #define LWARN LOG(WARNING) << LP_TAG
 #define LINFO LOG(INFO) << LP_TAG
 #define LERROR LOG(ERROR) << LP_TAG

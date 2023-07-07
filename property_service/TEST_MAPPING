@@ -4,7 +4,7 @@
       "name": "propertyinfoserializer_tests"
     }
   ],
-  "hwasan-postsubmit": [
+  "hwasan-presubmit": [
     {
       "name": "propertyinfoserializer_tests"
     }

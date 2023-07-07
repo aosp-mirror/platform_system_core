@@ -41,9 +41,11 @@
  */
 
 #define AID_ROOT 0 /* traditional unix root user */
-/* The following are for LTP and should only be used for testing */
-#define AID_DAEMON 1 /* traditional unix daemon owner */
-#define AID_BIN 2    /* traditional unix binaries owner */
+
+/* The following are for tests like LTP and should only be used for testing. */
+#define AID_DAEMON 1 /* Traditional unix daemon owner. */
+#define AID_BIN 2    /* Traditional unix binaries owner. */
+#define AID_SYS 3    /* A group with the same gid on Linux/macOS/Android. */
 
 #define AID_SYSTEM 1000 /* system server */
 
@@ -138,6 +140,7 @@
 #define AID_JC_IDENTITYCRED 1089  /* Javacard Identity Cred HAL - to manage omapi ARA rules */
 #define AID_SDK_SANDBOX 1090      /* SDK sandbox virtual UID */
 #define AID_SECURITY_LOG_WRITER 1091 /* write to security log */
+#define AID_PRNG_SEEDER 1092         /* PRNG seeder daemon */
 /* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL 2000 /* adb and debug shell user */
