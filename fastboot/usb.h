@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "transport.h"
 
 struct usb_ifc_info {
@@ -61,7 +63,7 @@ class UsbTransport : public Transport {
     virtual int Reset() = 0;
 };
 
-typedef int (*ifc_match_func)(usb_ifc_info *ifc);
+typedef std::function<int(usb_ifc_info*)> ifc_match_func;
 
 // 0 is non blocking
 UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms = 0);

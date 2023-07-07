@@ -253,6 +253,11 @@ bool Worker::Init() {
 
 bool Worker::RunThread() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
+
+    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    }
+
     // Start serving IO
     while (true) {
         if (!ProcessIORequest()) {

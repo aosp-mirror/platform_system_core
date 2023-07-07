@@ -25,7 +25,6 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
-#include <fs_mgr_overlayfs.h>
 #include <fs_mgr_vendor_overlay.h>
 #include <fstab/fstab.h>
 
