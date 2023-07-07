@@ -901,19 +901,19 @@ TEST_F(Fuzz, BadCommandTooLarge) {
             << "Device did not respond with failure after sending length " << s.size()
             << " string of random ASCII chars";
     if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
-    std::string s1 = RandomString(1000, rand_legal);
+    std::string s1 = RandomString(10000, rand_legal);
     ret = fb->RawCommand(s1);
     EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
             << "Device did not respond with failure after sending length " << s1.size()
             << " string of random ASCII chars";
     if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
-    std::string s2 = RandomString(1000, rand_illegal);
+    std::string s2 = RandomString(10000, rand_illegal);
     ret = fb->RawCommand(s2);
     EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
             << "Device did not respond with failure after sending length " << s2.size()
             << " string of random non-ASCII chars";
     if (ret == IO_ERROR) EXPECT_EQ(transport->Reset(), 0) << "USB reset failed";
-    std::string s3 = RandomString(1000, rand_char);
+    std::string s3 = RandomString(10000, rand_char);
     ret = fb->RawCommand(s3);
     EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)
             << "Device did not respond with failure after sending length " << s3.size()
@@ -935,7 +935,7 @@ TEST_F(Fuzz, BadCommandTooLarge) {
 
 TEST_F(Fuzz, CommandTooLarge) {
     for (const std::string& s : CMDS) {
-        std::string rs = RandomString(1000, rand_char);
+        std::string rs = RandomString(10000, rand_char);
         RetCode ret;
         ret = fb->RawCommand(s + rs);
         EXPECT_TRUE(ret == DEVICE_FAIL || ret == IO_ERROR)

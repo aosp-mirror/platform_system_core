@@ -1,0 +1,47 @@
+// Copyright (C) 2021 The Android Open-Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_test {
+    name: "trusty_stats_test",
+    vendor: true,
+    srcs: [
+        "stats_test.cpp",
+    ],
+    static_libs: [
+        "libgmock",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+        "libtrusty",
+        "libbinder",
+        "libbinder_trusty",
+        "libutils",
+
+        // AIDL interface deps versions, please refer to below link
+        // https://source.android.com/docs/core/architecture/aidl/stable-aidl#module-naming-rules
+        "android.frameworks.stats-V1-cpp",
+        "android.trusty.stats.nw.setter-cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    require_root: true,
+    proprietary: true,
+}

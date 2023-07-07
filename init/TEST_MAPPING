@@ -8,9 +8,17 @@
     },
     {
       "name": "MicrodroidHostTestCases"
+    },
+    {
+      "name": "CtsSecurityHostTestCases",
+      "options": [
+        {
+          "include-filter": "android.security.cts.SeamendcHostTest"
+        }
+      ]
     }
   ],
-  "hwasan-postsubmit": [
+  "hwasan-presubmit": [
     {
       "name": "CtsInitTestCases"
     },
@@ -19,6 +27,14 @@
     },
     {
       "name": "MicrodroidHostTestCases"
+    },
+    {
+      "name": "CtsSecurityHostTestCases",
+      "options": [
+        {
+          "include-filter": "android.security.cts.SeamendcHostTest"
+        }
+      ]
     }
   ]
 }

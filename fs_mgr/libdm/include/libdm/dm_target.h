@@ -323,6 +323,14 @@ class DmTargetUser final : public DmTarget {
     std::string control_device_;
 };
 
+class DmTargetError final : public DmTarget {
+  public:
+    DmTargetError(uint64_t start, uint64_t length) : DmTarget(start, length) {}
+
+    std::string name() const override { return "error"; }
+    std::string GetParameterString() const override { return ""; }
+};
+
 }  // namespace dm
 }  // namespace android
 
