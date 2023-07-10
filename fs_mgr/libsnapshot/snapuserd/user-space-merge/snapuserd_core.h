@@ -120,7 +120,7 @@ class Worker {
 
     // Functions interacting with dm-user
     bool ReadDmUserHeader();
-    bool WriteDmUserPayload(size_t size, bool header_response);
+    bool WriteDmUserPayload(size_t size);
     bool DmuserReadRequest();
 
     // IO Path
@@ -130,11 +130,11 @@ class Worker {
     bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
     bool ReadFromSourceDevice(const CowOperation* cow_op);
 
-    bool ReadAlignedSector(sector_t sector, size_t sz, bool header_response);
+    bool ReadAlignedSector(sector_t sector, size_t sz);
     bool ReadUnalignedSector(sector_t sector, size_t size);
     int ReadUnalignedSector(sector_t sector, size_t size,
                             std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
-    bool RespondIOError(bool header_response);
+    bool RespondIOError();
 
     // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
@@ -176,6 +176,7 @@ class Worker {
     unique_fd backing_store_fd_;
     unique_fd base_path_merge_fd_;
     unique_fd ctrl_fd_;
+    bool header_response_ = false;
 
     std::unique_ptr<ICowOpIter> cowop_iter_;
     size_t ra_block_index_ = 0;
