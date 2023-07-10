@@ -134,7 +134,7 @@ class Worker {
     bool ReadUnalignedSector(sector_t sector, size_t size);
     int ReadUnalignedSector(sector_t sector, size_t size,
                             std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
-    bool RespondIOError();
+    void RespondIOError();
 
     // Processing COW operations
     bool ProcessCowOp(const CowOperation* cow_op);
