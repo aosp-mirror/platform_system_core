@@ -150,15 +150,10 @@ NetlinkEvent::NetlinkEvent() {
 }
 
 NetlinkEvent::~NetlinkEvent() {
-    int i;
-    if (mPath)
-        free(mPath);
-    if (mSubsystem)
-        free(mSubsystem);
-    for (i = 0; i < NL_PARAMS_MAX; i++) {
-        if (!mParams[i])
-            break;
-        free(mParams[i]);
+    free(mPath);
+    free(mSubsystem);
+    for (auto param : mParams) {
+        free(param);
     }
 }
 
