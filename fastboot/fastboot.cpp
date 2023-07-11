@@ -1489,10 +1489,13 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
 
 void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
               const FlashingPlan* fp) {
+    if (!fp) {
+        die("do flash was called without a valid flashing plan");
+    }
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
-    if (fp && fp->source) {
+    if (fp->source) {
         unique_fd fd = fp->source->OpenFile(fname);
         if (fd < 0 || !load_buf_fd(std::move(fd), &buf, fp)) {
             die("could not load '%s': %s", fname, strerror(errno));
