@@ -187,7 +187,7 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
 int64_t get_sparse_limit(int64_t size, const FlashingPlan* fp);
 std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
 
-bool is_retrofit_device();
+bool is_retrofit_device(fastboot::IFastBootDriver* fb);
 bool is_logical(const std::string& partition);
 void fb_perform_format(const std::string& partition, int skip_if_not_supported,
                        const std::string& type_override, const std::string& size_override,
