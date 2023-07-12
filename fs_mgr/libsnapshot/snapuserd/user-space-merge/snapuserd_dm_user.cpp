@@ -290,21 +290,6 @@ bool Worker::RunThread() {
     return true;
 }
 
-// Read Header from dm-user misc device. This gives
-// us the sector number for which IO is issued by dm-snapshot device
-bool Worker::ReadDmUserHeader() {
-    if (!android::base::ReadFully(ctrl_fd_, bufsink_.GetBufPtr(), sizeof(struct dm_user_header))) {
-        if (errno != ENOTBLK) {
-            SNAP_PLOG(ERROR) << "Control-read failed";
-        }
-
-        SNAP_PLOG(DEBUG) << "ReadDmUserHeader failed....";
-        return false;
-    }
-
-    return true;
-}
-
 // Send the payload/data back to dm-user misc device.
 bool Worker::WriteDmUserPayload(size_t size) {
     size_t payload_size = size;
@@ -345,19 +330,15 @@ bool Worker::ReadDataFromBaseDevice(sector_t sector, size_t read_size) {
 }
 
 bool Worker::ReadAlignedSector(sector_t sector, size_t sz) {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
     size_t remaining_size = sz;
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
-    bool io_error = false;
     int ret = 0;
 
     do {
         // Process 1MB payload at a time
         size_t read_size = std::min(PAYLOAD_BUFFER_SZ, remaining_size);
 
-        header->type = DM_USER_RESP_SUCCESS;
         size_t total_bytes_read = 0;
-        io_error = false;
         bufsink_.ResetBufferOffset();
 
         while (read_size) {
@@ -375,7 +356,7 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz) {
                 // device.
                 if (!ReadDataFromBaseDevice(sector, size)) {
                     SNAP_LOG(ERROR) << "ReadDataFromBaseDevice failed";
-                    header->type = DM_USER_RESP_ERROR;
+                    return false;
                 }
 
                 ret = size;
@@ -384,17 +365,10 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz) {
                 // process it.
                 if (!ProcessCowOp(it->second)) {
                     SNAP_LOG(ERROR) << "ProcessCowOp failed";
-                    header->type = DM_USER_RESP_ERROR;
+                    return false;
                 }
 
                 ret = BLOCK_SZ;
-            }
-
-            // Just return the header if it is an error
-            if (header->type == DM_USER_RESP_ERROR) {
-                RespondIOError();
-                io_error = true;
-                break;
             }
 
             read_size -= ret;
@@ -403,16 +377,14 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz) {
             bufsink_.UpdateBufferOffset(ret);
         }
 
-        if (!io_error) {
-            if (!WriteDmUserPayload(total_bytes_read)) {
-                return false;
-            }
-
-            SNAP_LOG(DEBUG) << "WriteDmUserPayload success total_bytes_read: " << total_bytes_read
-                            << " remaining_size: " << remaining_size;
-            remaining_size -= total_bytes_read;
+        if (!WriteDmUserPayload(total_bytes_read)) {
+            return false;
         }
-    } while (remaining_size > 0 && !io_error);
+
+        SNAP_LOG(DEBUG) << "WriteDmUserPayload success total_bytes_read: " << total_bytes_read
+                        << " remaining_size: " << remaining_size;
+        remaining_size -= total_bytes_read;
+    } while (remaining_size > 0);
 
     return true;
 }
@@ -453,8 +425,6 @@ int Worker::ReadUnalignedSector(
 }
 
 bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
-    header->type = DM_USER_RESP_SUCCESS;
     bufsink_.ResetBufferOffset();
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
 
@@ -622,9 +592,15 @@ bool Worker::DmuserReadRequest() {
 }
 
 bool Worker::ProcessIORequest() {
+    // Read Header from dm-user misc device. This gives
+    // us the sector number for which IO is issued by dm-snapshot device
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
+    if (!android::base::ReadFully(ctrl_fd_, header, sizeof(*header))) {
+        if (errno != ENOTBLK) {
+            SNAP_PLOG(ERROR) << "Control-read failed";
+        }
 
-    if (!ReadDmUserHeader()) {
+        SNAP_PLOG(DEBUG) << "ReadDmUserHeader failed....";
         return false;
     }
 
@@ -634,26 +610,34 @@ bool Worker::ProcessIORequest() {
     SNAP_LOG(DEBUG) << "Daemon: msg->type: " << std::dec << header->type;
     SNAP_LOG(DEBUG) << "Daemon: msg->flags: " << std::dec << header->flags;
 
+    // Use the same header buffer as the response header.
+    int request_type = header->type;
+    header->type = DM_USER_RESP_SUCCESS;
     header_response_ = true;
 
-    switch (header->type) {
-        case DM_USER_REQ_MAP_READ: {
-            if (!DmuserReadRequest()) {
-                return false;
-            }
+    bool ok;
+    switch (request_type) {
+        case DM_USER_REQ_MAP_READ:
+            ok = DmuserReadRequest();
             break;
-        }
 
-        case DM_USER_REQ_MAP_WRITE: {
+        case DM_USER_REQ_MAP_WRITE:
             // TODO: We should not get any write request
             // to dm-user as we mount all partitions
             // as read-only. Need to verify how are TRIM commands
             // handled during mount.
-            return false;
-        }
+            ok = false;
+            break;
+
+        default:
+            ok = false;
+            break;
     }
 
-    return true;
+    if (!ok && header->type != DM_USER_RESP_ERROR) {
+        RespondIOError();
+    }
+    return ok;
 }
 
 }  // namespace snapshot
