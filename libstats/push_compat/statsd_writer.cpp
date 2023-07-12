@@ -15,9 +15,9 @@
  */
 #include "statsd_writer.h"
 
+#include <android-base/threads.h>
 #include <cutils/fs.h>
 #include <cutils/sockets.h>
-#include <cutils/threads.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -108,7 +108,7 @@ static int statsdOpen() {
                     case -ECONNREFUSED:
                     case -ENOENT:
                         i = atomic_exchange(&statsdLoggerWrite.sock, ret);
-                    /* FALLTHRU */
+                        break;
                     default:
                         break;
                 }
@@ -188,7 +188,7 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
      *  };
      */
 
-    header.tid = gettid();
+    header.tid = android::base::GetThreadId();
     header.realtime.tv_sec = ts->tv_sec;
     header.realtime.tv_nsec = ts->tv_nsec;
 
@@ -272,7 +272,7 @@ static int statsdWrite(struct timespec* ts, struct iovec* vec, size_t nr) {
             if (ret < 0) {
                 ret = -errno;
             }
-        /* FALLTHRU */
+            break;
         default:
             break;
     }
