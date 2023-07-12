@@ -97,7 +97,7 @@ struct FlashingPlan {
     bool skip_secondary = false;
     bool force_flash = false;
     bool should_optimize_flash_super = true;
-    bool should_use_fastboot_info = false;
+    bool should_use_fastboot_info = true;
     uint64_t sparse_limit = 0;
 
     std::string slot_override;
