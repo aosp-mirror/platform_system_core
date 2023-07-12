@@ -119,7 +119,6 @@ class Worker {
     }
 
     // Functions interacting with dm-user
-    bool ReadDmUserHeader();
     bool WriteDmUserPayload(size_t size);
     bool DmuserReadRequest();
 
