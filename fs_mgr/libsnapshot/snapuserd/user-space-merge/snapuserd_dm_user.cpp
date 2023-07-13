@@ -585,7 +585,7 @@ bool Worker::DmuserReadRequest() {
 
     // Unaligned I/O request
     if (!IsBlockAligned(header->sector << SECTOR_SHIFT)) {
-        return ReadUnalignedSector(header->sector, header->len) != -1;
+        return ReadUnalignedSector(header->sector, header->len);
     }
 
     return ReadAlignedSector(header->sector, header->len);
