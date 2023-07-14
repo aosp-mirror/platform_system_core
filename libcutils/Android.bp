@@ -219,11 +219,19 @@ cc_library {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
         product: {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
     },
 
