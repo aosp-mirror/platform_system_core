@@ -166,7 +166,6 @@ cc_defaults {
     header_libs: [
         "libupdate_engine_headers",
     ],
-    export_include_dirs: ["include"],
 }
 
 cc_library_static {
@@ -184,6 +183,7 @@ cc_library_static {
         "libsnapshot_cow/writer_base.cpp",
         "libsnapshot_cow/writer_v2.cpp",
     ],
+    export_include_dirs: ["include"],
     host_supported: true,
     recovery_available: true,
     ramdisk_available: true,
