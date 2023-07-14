@@ -1079,7 +1079,7 @@ on post-fs-data
 on zygote-start
     wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
+    exec_start update_verifier
     start statsd
     start netd
     start zygote
