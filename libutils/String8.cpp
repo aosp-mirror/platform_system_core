@@ -393,6 +393,11 @@ ssize_t String8::find(const char* other, size_t start) const
 }
 
 bool String8::removeAll(const char* other) {
+    ALOG_ASSERT(other, "String8::removeAll() requires a non-NULL string");
+
+    if (*other == '\0')
+        return true;
+
     ssize_t index = find(other);
     if (index < 0) return false;
 
