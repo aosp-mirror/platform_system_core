@@ -119,6 +119,9 @@ fastboot::FastBootDriver* fb = nullptr;
 static std::vector<Image> images = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { "bootloader",
+                  "bootloader.img",   "",             "bootloader",
+                                                                  true,  ImageType::Extra },
     { "init_boot",
                   "init_boot.img",    "init_boot.sig",
                                                       "init_boot",
@@ -131,6 +134,7 @@ static std::vector<Image> images = {
     { "odm_dlkm", "odm_dlkm.img",     "odm_dlkm.sig", "odm_dlkm", true,  ImageType::Normal },
     { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
     { "pvmfw",    "pvmfw.img",        "pvmfw.sig",    "pvmfw",    true,  ImageType::BootCritical },
+    { "radio",    "radio.img",        "",             "radio",    true,  ImageType::Extra },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  ImageType::BootCritical },
     { "super",    "super.img",        "super.sig",    "super",    true,  ImageType::Extra },
     { "system",   "system.img",       "system.sig",   "system",   false, ImageType::Normal },
