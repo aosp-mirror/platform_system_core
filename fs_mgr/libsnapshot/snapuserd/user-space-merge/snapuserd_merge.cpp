@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "snapuserd_merge.h"
 
 #include "snapuserd_core.h"
 
@@ -23,8 +24,13 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
-int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
-                         std::vector<const CowOperation*>* replace_zero_vec) {
+MergeWorker::MergeWorker(const std::string& cow_device, const std::string& misc_name,
+                         const std::string& base_path_merge,
+                         std::shared_ptr<SnapshotHandler> snapuserd)
+    : Worker(cow_device, misc_name, base_path_merge, snapuserd) {}
+
+int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
+                              std::vector<const CowOperation*>* replace_zero_vec) {
     int num_ops = *pending_ops;
     int nr_consecutive = 0;
     bool checkOrderedOp = (replace_zero_vec == nullptr);
@@ -70,7 +76,7 @@ int Worker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
     return nr_consecutive;
 }
 
-bool Worker::MergeReplaceZeroOps() {
+bool MergeWorker::MergeReplaceZeroOps() {
     // Flush after merging 2MB. Since all ops are independent and there is no
     // dependency between COW ops, we will flush the data and the number
     // of ops merged in COW block device. If there is a crash, we will
@@ -99,17 +105,20 @@ bool Worker::MergeReplaceZeroOps() {
 
         for (size_t i = 0; i < replace_zero_vec.size(); i++) {
             const CowOperation* cow_op = replace_zero_vec[i];
+
+            void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+            if (!buffer) {
+                SNAP_LOG(ERROR) << "Failed to acquire buffer in merge";
+                return false;
+            }
             if (cow_op->type == kCowReplaceOp) {
-                if (!ProcessReplaceOp(cow_op)) {
-                    SNAP_LOG(ERROR) << "Merge - ReplaceOp failed for block: " << cow_op->new_block;
+                if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
+                    SNAP_LOG(ERROR) << "Failed to read COW in merge";
                     return false;
                 }
             } else {
                 CHECK(cow_op->type == kCowZeroOp);
-                if (!ProcessZeroOp()) {
-                    SNAP_LOG(ERROR) << "Merge ZeroOp failed.";
-                    return false;
-                }
+                memset(buffer, 0, BLOCK_SZ);
             }
 
             bufsink_.UpdateBufferOffset(BLOCK_SZ);
@@ -149,7 +158,7 @@ bool Worker::MergeReplaceZeroOps() {
 
         if (snapuserd_->IsIOTerminated()) {
             SNAP_LOG(ERROR)
-                    << "MergeReplaceZeroOps: Worker threads terminated - shutting down merge";
+                    << "MergeReplaceZeroOps: MergeWorker threads terminated - shutting down merge";
             return false;
         }
     }
@@ -173,7 +182,7 @@ bool Worker::MergeReplaceZeroOps() {
     return true;
 }
 
-bool Worker::MergeOrderedOpsAsync() {
+bool MergeWorker::MergeOrderedOpsAsync() {
     void* mapped_addr = snapuserd_->GetMappedAddr();
     void* read_ahead_buffer =
             static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferDataOffset());
@@ -354,7 +363,7 @@ bool Worker::MergeOrderedOpsAsync() {
     return true;
 }
 
-bool Worker::MergeOrderedOps() {
+bool MergeWorker::MergeOrderedOps() {
     void* mapped_addr = snapuserd_->GetMappedAddr();
     void* read_ahead_buffer =
             static_cast<void*>((char*)mapped_addr + snapuserd_->GetBufferDataOffset());
@@ -439,7 +448,7 @@ bool Worker::MergeOrderedOps() {
     return true;
 }
 
-bool Worker::AsyncMerge() {
+bool MergeWorker::AsyncMerge() {
     if (!MergeOrderedOpsAsync()) {
         SNAP_LOG(ERROR) << "MergeOrderedOpsAsync failed - Falling back to synchronous I/O";
         // Reset the iter so that we retry the merge
@@ -455,7 +464,7 @@ bool Worker::AsyncMerge() {
     return true;
 }
 
-bool Worker::SyncMerge() {
+bool MergeWorker::SyncMerge() {
     if (!MergeOrderedOps()) {
         SNAP_LOG(ERROR) << "Merge failed for ordered ops";
         return false;
@@ -465,7 +474,7 @@ bool Worker::SyncMerge() {
     return true;
 }
 
-bool Worker::Merge() {
+bool MergeWorker::Merge() {
     cowop_iter_ = reader_->GetOpIter(true);
 
     bool retry = false;
@@ -511,7 +520,7 @@ bool Worker::Merge() {
     return true;
 }
 
-bool Worker::InitializeIouring() {
+bool MergeWorker::InitializeIouring() {
     if (!snapuserd_->IsIouringSupported()) {
         return false;
     }
@@ -530,13 +539,13 @@ bool Worker::InitializeIouring() {
     return true;
 }
 
-void Worker::FinalizeIouring() {
+void MergeWorker::FinalizeIouring() {
     if (merge_async_) {
         io_uring_queue_exit(ring_.get());
     }
 }
 
-bool Worker::RunMergeThread() {
+bool MergeWorker::Run() {
     SNAP_LOG(DEBUG) << "Waiting for merge begin...";
     if (!snapuserd_->WaitForMergeBegin()) {
         SNAP_LOG(ERROR) << "Merge terminated early...";
