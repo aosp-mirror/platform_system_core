@@ -604,8 +604,8 @@ on post-fs
     chmod 0700 /metadata/vold
     mkdir /metadata/password_slots 0771 root system
     mkdir /metadata/bootstat 0750 system log
-    mkdir /metadata/ota 0700 root system
-    mkdir /metadata/ota/snapshots 0700 root system
+    mkdir /metadata/ota 0750 root system
+    mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/userspacereboot 0770 root system
     mkdir /metadata/watchdog 0770 root system
 
