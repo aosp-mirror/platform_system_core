@@ -2490,9 +2490,6 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
         }
         created_devices.EmplaceBack<AutoUnmapDevice>(&dm_, name);
 
-        remaining_time = GetRemainingTime(params.timeout_ms, begin);
-        if (remaining_time.count() < 0) return false;
-
         cow_device = new_cow_device;
     }
 
@@ -2507,6 +2504,9 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     // the user-space will not start the merge. We have to explicitly inform the
     // daemon to resume the merge. Check ProcessUpdateState() call stack.
     if (!UpdateUsesUserSnapshots(lock)) {
+        remaining_time = GetRemainingTime(params.timeout_ms, begin);
+        if (remaining_time.count() < 0) return false;
+
         std::string path;
         if (!MapSnapshot(lock, params.GetPartitionName(), base_device, cow_device, remaining_time,
                          &path)) {
