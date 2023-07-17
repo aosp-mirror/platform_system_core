@@ -57,6 +57,7 @@ cc_library_static {
     defaults: [
         "fs_mgr_defaults",
     ],
+    local_include_dirs: ["include/"],
     srcs: [
         "dm-snapshot-merge/snapuserd.cpp",
         "dm-snapshot-merge/snapuserd_worker.cpp",
