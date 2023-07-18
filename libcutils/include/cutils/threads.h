@@ -31,7 +31,7 @@ extern "C" {
 //
 // Deprecated: use android::base::GetThreadId instead, which doesn't truncate on Mac/Windows.
 //
-#if !defined(__GLIBC__) || __GLIBC__ >= 2 && __GLIBC_MINOR__ < 32
+#if !defined(__GLIBC__) || __GLIBC__ >= 2 && __GLIBC_MINOR__ < 30
 extern pid_t gettid();
 #endif
 
