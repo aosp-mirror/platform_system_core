@@ -37,21 +37,22 @@ class ReadWorker : public Worker {
     bool ProcessIORequest();
     bool WriteDmUserPayload(size_t size);
     bool DmuserReadRequest();
+    bool SendBufferedIo();
     void RespondIOError();
 
-    bool ProcessCowOp(const CowOperation* cow_op);
-    bool ProcessXorOp(const CowOperation* cow_op);
-    bool ProcessOrderedOp(const CowOperation* cow_op);
-    bool ProcessCopyOp(const CowOperation* cow_op);
-    bool ProcessReplaceOp(const CowOperation* cow_op);
-    bool ProcessZeroOp();
+    bool ProcessCowOp(const CowOperation* cow_op, void* buffer);
+    bool ProcessXorOp(const CowOperation* cow_op, void* buffer);
+    bool ProcessOrderedOp(const CowOperation* cow_op, void* buffer);
+    bool ProcessCopyOp(const CowOperation* cow_op, void* buffer);
+    bool ProcessReplaceOp(const CowOperation* cow_op, void* buffer);
+    bool ProcessZeroOp(void* buffer);
 
     bool ReadAlignedSector(sector_t sector, size_t sz);
     bool ReadUnalignedSector(sector_t sector, size_t size);
     int ReadUnalignedSector(sector_t sector, size_t size,
                             std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
-    bool ReadFromSourceDevice(const CowOperation* cow_op);
-    bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
+    bool ReadFromSourceDevice(const CowOperation* cow_op, void* buffer);
+    bool ReadDataFromBaseDevice(sector_t sector, void* buffer, size_t read_size);
 
     constexpr bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
     constexpr sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
@@ -62,8 +63,8 @@ class ReadWorker : public Worker {
     std::string control_device_;
     unique_fd ctrl_fd_;
 
-    XorSink xorsink_;
     bool header_response_ = false;
+    std::basic_string<uint8_t> xor_buffer_;
 };
 
 }  // namespace snapshot
