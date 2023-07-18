@@ -667,10 +667,16 @@ void CleanupApexSepolicy() {
 //
 void PrepareApexSepolicy() {
     // If apex sepolicy zip exists in /metadata/sepolicy, use that, otherwise use version on
-    // /system.
-    auto dir = (access((kSepolicyApexMetadataDir + kSepolicyZip).c_str(), F_OK) == 0)
-                       ? kSepolicyApexMetadataDir
-                       : kSepolicyApexSystemDir;
+    // /system. If neither exists, do nothing.
+    std::string dir;
+    if (access((kSepolicyApexMetadataDir + kSepolicyZip).c_str(), F_OK) == 0) {
+        dir = kSepolicyApexMetadataDir;
+    } else if (access((kSepolicyApexSystemDir + kSepolicyZip).c_str(), F_OK) == 0) {
+        dir = kSepolicyApexSystemDir;
+    } else {
+        LOG(INFO) << "APEX Sepolicy not found";
+        return;
+    }
 
     auto sepolicyVerify = SepolicyVerify(dir);
     if (!sepolicyVerify.ok()) {
