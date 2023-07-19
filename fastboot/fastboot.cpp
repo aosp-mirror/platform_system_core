@@ -634,6 +634,9 @@ static int show_help() {
             " --skip-reboot              Don't reboot device after flashing.\n"
             " --disable-verity           Sets disable-verity when flashing vbmeta.\n"
             " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
+            " --disable-super-optimization\n"
+            "                            Disables optimizations on flashing super partition.\n"
+            " --disable-fastboot-info    Will collects tasks from image list rather than $OUT/fastboot-info.txt.\n"
             " --fs-options=OPTION[,OPTION]\n"
             "                            Enable filesystem features. OPTION supports casefold, projid, compress\n"
             // TODO: remove --unbuffered?
