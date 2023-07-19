@@ -502,33 +502,18 @@ std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     return boot_devices;
 }
 
-FstabEntry BuildDsuUserdataFstabEntry() {
-    constexpr uint32_t kFlags = MS_NOATIME | MS_NOSUID | MS_NODEV;
-
-    FstabEntry userdata = {
-            .blk_device = "userdata_gsi",
-            .mount_point = "/data",
-            .fs_type = "ext4",
-            .flags = kFlags,
-            .reserved_size = 128 * 1024 * 1024,
-    };
-    userdata.fs_mgr_flags.wait = true;
-    userdata.fs_mgr_flags.check = true;
-    userdata.fs_mgr_flags.logical = true;
-    userdata.fs_mgr_flags.quota = true;
-    userdata.fs_mgr_flags.late_mount = true;
-    userdata.fs_mgr_flags.formattable = true;
-    return userdata;
-}
-
-bool EraseFstabEntry(Fstab* fstab, const std::string& mount_point) {
-    auto iter = std::remove_if(fstab->begin(), fstab->end(),
-                               [&](const auto& entry) { return entry.mount_point == mount_point; });
-    if (iter != fstab->end()) {
-        fstab->erase(iter, fstab->end());
-        return true;
+template <typename Pred>
+std::vector<FstabEntry*> GetEntriesByPred(Fstab* fstab, const Pred& pred) {
+    if (fstab == nullptr) {
+        return {};
     }
-    return false;
+    std::vector<FstabEntry*> entries;
+    for (auto&& entry : *fstab) {
+        if (pred(entry)) {
+            entries.push_back(&entry);
+        }
+    }
+    return entries;
 }
 
 }  // namespace
@@ -591,38 +576,28 @@ bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab*
 void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
                           const std::vector<std::string>& dsu_partitions) {
     static constexpr char kDsuKeysDir[] = "/avb";
-    // Convert userdata
-    // Inherit fstab properties for userdata.
-    FstabEntry userdata;
-    if (FstabEntry* entry = GetEntryForMountPoint(fstab, "/data")) {
-        userdata = *entry;
-        userdata.blk_device = android::gsi::kDsuUserdata;
-        userdata.fs_mgr_flags.logical = true;
-        userdata.fs_mgr_flags.formattable = true;
-        if (!userdata.metadata_key_dir.empty()) {
-            userdata.metadata_key_dir = android::gsi::GetDsuMetadataKeyDir(dsu_slot);
-        }
-    } else {
-        userdata = BuildDsuUserdataFstabEntry();
-    }
-
-    if (EraseFstabEntry(fstab, "/data")) {
-        fstab->emplace_back(userdata);
-    }
-
-    // Convert others
     for (auto&& partition : dsu_partitions) {
         if (!EndsWith(partition, gsi::kDsuPostfix)) {
-            continue;
-        }
-        // userdata has been handled
-        if (partition == android::gsi::kDsuUserdata) {
             continue;
         }
         // scratch is handled by fs_mgr_overlayfs
         if (partition == android::gsi::kDsuScratch) {
             continue;
         }
+        // Convert userdata partition.
+        if (partition == android::gsi::kDsuUserdata) {
+            for (auto&& entry : GetEntriesForMountPoint(fstab, "/data")) {
+                entry->blk_device = android::gsi::kDsuUserdata;
+                entry->fs_mgr_flags.logical = true;
+                entry->fs_mgr_flags.formattable = true;
+                if (!entry->metadata_key_dir.empty()) {
+                    entry->metadata_key_dir = android::gsi::GetDsuMetadataKeyDir(dsu_slot);
+                }
+            }
+            continue;
+        }
+        // Convert RO partitions.
+        //
         // dsu_partition_name = corresponding_partition_name + kDsuPostfix
         // e.g.
         //    system_gsi for system
@@ -630,45 +605,51 @@ void TransformFstabForDsu(Fstab* fstab, const std::string& dsu_slot,
         //    vendor_gsi for vendor
         std::string lp_name = partition.substr(0, partition.length() - strlen(gsi::kDsuPostfix));
         std::string mount_point = "/" + lp_name;
-        std::vector<FstabEntry*> entries = GetEntriesForMountPoint(fstab, mount_point);
-        if (entries.empty()) {
-            FstabEntry entry = {
-                    .blk_device = partition,
-                    // .logical_partition_name is required to look up AVB Hashtree descriptors.
-                    .logical_partition_name = "system",
-                    .mount_point = mount_point,
-                    .fs_type = "ext4",
-                    .flags = MS_RDONLY,
-                    .fs_options = "barrier=1",
-                    .avb_keys = kDsuKeysDir,
-            };
-            entry.fs_mgr_flags.wait = true;
-            entry.fs_mgr_flags.logical = true;
-            entry.fs_mgr_flags.first_stage_mount = true;
-            fstab->emplace_back(entry);
-        } else {
-            // If the corresponding partition exists, transform all its Fstab
-            // by pointing .blk_device to the DSU partition.
-            for (auto&& entry : entries) {
-                entry->blk_device = partition;
-                // AVB keys for DSU should always be under kDsuKeysDir.
-                entry->avb_keys = kDsuKeysDir;
-                entry->fs_mgr_flags.logical = true;
+
+        // List of fs_type entries we're lacking, need to synthesis these later.
+        std::vector<std::string> lack_fs_list = {"ext4", "erofs"};
+
+        // Only support early mount (first_stage_mount) partitions.
+        auto pred = [&mount_point](const FstabEntry& entry) {
+            return entry.fs_mgr_flags.first_stage_mount && entry.mount_point == mount_point;
+        };
+
+        // Transform all matching entries and assume they are all adjacent for simplicity.
+        for (auto&& entry : GetEntriesByPred(fstab, pred)) {
+            // .blk_device is replaced with the DSU partition.
+            entry->blk_device = partition;
+            // .avb_keys hints first_stage_mount to load the chained-vbmeta image from partition
+            // footer. See aosp/932779 for more details.
+            entry->avb_keys = kDsuKeysDir;
+            // .logical_partition_name is required to look up AVB Hashtree descriptors.
+            entry->logical_partition_name = lp_name;
+            entry->fs_mgr_flags.logical = true;
+            entry->fs_mgr_flags.slot_select = false;
+            entry->fs_mgr_flags.slot_select_other = false;
+
+            if (auto it = std::find(lack_fs_list.begin(), lack_fs_list.end(), entry->fs_type);
+                it != lack_fs_list.end()) {
+                lack_fs_list.erase(it);
             }
-            // Make sure the ext4 is included to support GSI.
-            auto partition_ext4 =
-                    std::find_if(fstab->begin(), fstab->end(), [&](const auto& entry) {
-                        return entry.mount_point == mount_point && entry.fs_type == "ext4";
-                    });
-            if (partition_ext4 == fstab->end()) {
-                auto new_entry = *GetEntryForMountPoint(fstab, mount_point);
-                new_entry.fs_type = "ext4";
-                auto it = std::find_if(fstab->rbegin(), fstab->rend(),
-                                       [&mount_point](const auto& entry) {
-                                           return entry.mount_point == mount_point;
-                                       });
-                auto end_of_mount_point_group = fstab->begin() + std::distance(it, fstab->rend());
-                fstab->insert(end_of_mount_point_group, new_entry);
+        }
+
+        if (!lack_fs_list.empty()) {
+            // Insert at the end of the existing mountpoint group, or at the end of fstab.
+            // We assume there is at most one matching mountpoint group, which is the common case.
+            auto it = std::find_if_not(std::find_if(fstab->begin(), fstab->end(), pred),
+                                       fstab->end(), pred);
+            for (const auto& fs_type : lack_fs_list) {
+                it = std::next(fstab->insert(it, {.blk_device = partition,
+                                                  .logical_partition_name = lp_name,
+                                                  .mount_point = mount_point,
+                                                  .fs_type = fs_type,
+                                                  .flags = MS_RDONLY,
+                                                  .avb_keys = kDsuKeysDir,
+                                                  .fs_mgr_flags{
+                                                          .wait = true,
+                                                          .logical = true,
+                                                          .first_stage_mount = true,
+                                                  }}));
             }
         }
     }
@@ -857,18 +838,8 @@ FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path) {
 }
 
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path) {
-    std::vector<FstabEntry*> entries;
-    if (fstab == nullptr) {
-        return entries;
-    }
-
-    for (auto& entry : *fstab) {
-        if (entry.mount_point == path) {
-            entries.emplace_back(&entry);
-        }
-    }
-
-    return entries;
+    return GetEntriesByPred(fstab,
+                            [&path](const FstabEntry& entry) { return entry.mount_point == path; });
 }
 
 std::set<std::string> GetBootDevices() {
