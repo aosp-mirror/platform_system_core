@@ -19,9 +19,12 @@
 #include <unistd.h>
 
 #include <android-base/logging.h>
+#include "writer_v2.h"
 
 namespace android {
 namespace snapshot {
+
+using android::base::unique_fd;
 
 std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
     os << "CowOperation(type:";
@@ -101,6 +104,28 @@ bool IsOrderedOp(const CowOperation& op) {
         default:
             return false;
     }
+}
+
+std::unique_ptr<ICowWriter> CreateCowWriter(uint32_t version, const CowOptions& options,
+                                            unique_fd&& fd, std::optional<uint64_t> label) {
+    std::unique_ptr<CowWriterBase> base;
+    switch (version) {
+        case 1:
+        case 2:
+            base = std::make_unique<CowWriterV2>(options, std::move(fd));
+            break;
+        default:
+            LOG(ERROR) << "Cannot create unknown cow version: " << version;
+            return nullptr;
+    }
+    if (!base->Initialize(label)) {
+        return nullptr;
+    }
+    return base;
+}
+
+std::unique_ptr<ICowWriter> CreateCowEstimator(uint32_t version, const CowOptions& options) {
+    return CreateCowWriter(version, options, unique_fd{-1}, std::nullopt);
 }
 
 }  // namespace snapshot

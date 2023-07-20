@@ -498,7 +498,7 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
 bool OpenMonolithicPolicy(PolicyFile* policy_file) {
     static constexpr char kSepolicyFile[] = "/sepolicy";
 
-    LOG(VERBOSE) << "Opening SELinux policy from monolithic file";
+    LOG(INFO) << "Opening SELinux policy from monolithic file " << kSepolicyFile;
     policy_file->fd.reset(open(kSepolicyFile, O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (policy_file->fd < 0) {
         PLOG(ERROR) << "Failed to open monolithic SELinux policy";
@@ -851,6 +851,10 @@ void SelinuxSetupKernelLogging() {
 }
 
 int SelinuxGetVendorAndroidVersion() {
+    if (IsMicrodroid()) {
+        // As of now Microdroid doesn't have any vendor code.
+        return __ANDROID_API_FUTURE__;
+    }
     static int vendor_android_version = [] {
         if (!IsSplitPolicyDevice()) {
             // If this device does not split sepolicy files, it's not a Treble device and therefore,
@@ -954,6 +958,26 @@ static void LoadSelinuxPolicy(std::string& policy) {
     }
 }
 
+// Encapsulates steps to load SELinux policy in Microdroid.
+// So far the process is very straightforward - just load the precompiled policy from /system.
+void LoadSelinuxPolicyMicrodroid() {
+    constexpr const char kMicrodroidPrecompiledSepolicy[] =
+            "/system/etc/selinux/microdroid_precompiled_sepolicy";
+
+    LOG(INFO) << "Opening SELinux policy from " << kMicrodroidPrecompiledSepolicy;
+    unique_fd policy_fd(open(kMicrodroidPrecompiledSepolicy, O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+    if (policy_fd < 0) {
+        PLOG(FATAL) << "Failed to open " << kMicrodroidPrecompiledSepolicy;
+    }
+
+    std::string policy;
+    if (!android::base::ReadFdToString(policy_fd, &policy)) {
+        PLOG(FATAL) << "Failed to read policy file: " << kMicrodroidPrecompiledSepolicy;
+    }
+
+    LoadSelinuxPolicy(policy);
+}
+
 // The SELinux setup process is carefully orchestrated around snapuserd. Policy
 // must be loaded off dynamic partitions, and during an OTA, those partitions
 // cannot be read without snapuserd. But, with kernel-privileged snapuserd
@@ -969,19 +993,8 @@ static void LoadSelinuxPolicy(std::string& policy) {
 //  (5) Re-launch snapuserd and attach it to the dm-user devices from step (2).
 //
 // After this sequence, it is safe to enable enforcing mode and continue booting.
-int SetupSelinux(char** argv) {
-    SetStdioToDevNull(argv);
-    InitKernelLogging(argv);
-
-    if (REBOOT_BOOTLOADER_ON_PANIC) {
-        InstallRebootSignalHandlers();
-    }
-
-    boot_clock::time_point start_time = boot_clock::now();
-
+void LoadSelinuxPolicyAndroid() {
     MountMissingSystemPartitions();
-
-    SelinuxSetupKernelLogging();
 
     LOG(INFO) << "Opening SELinux policy";
 
@@ -994,9 +1007,8 @@ int SetupSelinux(char** argv) {
 
     auto snapuserd_helper = SnapuserdSelinuxHelper::CreateIfNeeded();
     if (snapuserd_helper) {
-        // Kill the old snapused to avoid audit messages. After this we cannot
-        // read from /system (or other dynamic partitions) until we call
-        // FinishTransition().
+        // Kill the old snapused to avoid audit messages. After this we cannot read from /system
+        // (or other dynamic partitions) until we call FinishTransition().
         snapuserd_helper->StartTransition();
     }
 
@@ -1013,6 +1025,26 @@ int SetupSelinux(char** argv) {
     // any process after selinux is set into enforcing mode.
     if (selinux_android_restorecon("/dev/selinux/", SELINUX_ANDROID_RESTORECON_RECURSE) == -1) {
         PLOG(FATAL) << "restorecon failed of /dev/selinux failed";
+    }
+}
+
+int SetupSelinux(char** argv) {
+    SetStdioToDevNull(argv);
+    InitKernelLogging(argv);
+
+    if (REBOOT_BOOTLOADER_ON_PANIC) {
+        InstallRebootSignalHandlers();
+    }
+
+    boot_clock::time_point start_time = boot_clock::now();
+
+    SelinuxSetupKernelLogging();
+
+    // TODO(b/287206497): refactor into different headers to only include what we need.
+    if (IsMicrodroid()) {
+        LoadSelinuxPolicyMicrodroid();
+    } else {
+        LoadSelinuxPolicyAndroid();
     }
 
     SelinuxSetEnforcement();
