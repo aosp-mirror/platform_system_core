@@ -96,20 +96,22 @@ std::string RebootTask::ToString() {
     return "reboot " + reboot_target_;
 }
 
-FlashSuperLayoutTask::FlashSuperLayoutTask(const std::string& super_name,
-                                           std::unique_ptr<SuperFlashHelper> helper,
-                                           SparsePtr sparse_layout, uint64_t super_size)
+OptimizedFlashSuperTask::OptimizedFlashSuperTask(const std::string& super_name,
+                                                 std::unique_ptr<SuperFlashHelper> helper,
+                                                 SparsePtr sparse_layout, uint64_t super_size,
+                                                 const FlashingPlan* fp)
     : super_name_(super_name),
       helper_(std::move(helper)),
       sparse_layout_(std::move(sparse_layout)),
-      super_size_(super_size) {}
+      super_size_(super_size),
+      fp_(fp) {}
 
-void FlashSuperLayoutTask::Run() {
+void OptimizedFlashSuperTask::Run() {
     // Use the reported super partition size as the upper limit, rather than
     // sparse_file_len, which (1) can fail and (2) is kind of expensive, since
     // it will map in all of the embedded fds.
     std::vector<SparsePtr> files;
-    if (int limit = get_sparse_limit(super_size_)) {
+    if (int limit = get_sparse_limit(super_size_, fp_)) {
         files = resparse_file(sparse_layout_.get(), limit);
     } else {
         files.emplace_back(std::move(sparse_layout_));
@@ -118,12 +120,16 @@ void FlashSuperLayoutTask::Run() {
     // Send the data to the device.
     flash_partition_files(super_name_, files);
 }
-std::string FlashSuperLayoutTask::ToString() {
+std::string OptimizedFlashSuperTask::ToString() {
     return "optimized-flash-super";
 }
 
-std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
+std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
         const FlashingPlan* fp, std::vector<ImageEntry>& os_images) {
+    if (!fp->should_optimize_flash_super) {
+        LOG(INFO) << "super optimization is disabled";
+        return nullptr;
+    }
     if (!supports_AB()) {
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
@@ -182,12 +188,16 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::Initialize(
     };
     os_images.erase(std::remove_if(os_images.begin(), os_images.end(), remove_if_callback),
                     os_images.end());
-    return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s),
-                                                  partition_size);
+    return std::make_unique<OptimizedFlashSuperTask>(super_name, std::move(helper), std::move(s),
+                                                     partition_size, fp);
 }
 
-std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
+std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::InitializeFromTasks(
         const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks) {
+    if (!fp->should_optimize_flash_super) {
+        LOG(INFO) << "super optimization is disabled";
+        return nullptr;
+    }
     if (!supports_AB()) {
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
@@ -251,8 +261,8 @@ std::unique_ptr<FlashSuperLayoutTask> FlashSuperLayoutTask::InitializeFromTasks(
     };
     tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
 
-    return std::make_unique<FlashSuperLayoutTask>(super_name, std::move(helper), std::move(s),
-                                                  partition_size);
+    return std::make_unique<OptimizedFlashSuperTask>(super_name, std::move(helper), std::move(s),
+                                                     partition_size, fp);
 }
 
 UpdateSuperTask::UpdateSuperTask(const FlashingPlan* fp) : fp_(fp) {}
@@ -322,7 +332,7 @@ void WipeTask::Run() {
         LOG(ERROR) << "wipe task erase failed with partition: " << pname_;
         return;
     }
-    fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options);
+    fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options, fp_);
 }
 
 std::string WipeTask::ToString() {

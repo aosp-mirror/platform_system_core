@@ -79,13 +79,13 @@ class RebootTask : public Task {
     const FlashingPlan* fp_;
 };
 
-class FlashSuperLayoutTask : public Task {
+class OptimizedFlashSuperTask : public Task {
   public:
-    FlashSuperLayoutTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
-                         SparsePtr sparse_layout, uint64_t super_size);
-    static std::unique_ptr<FlashSuperLayoutTask> Initialize(const FlashingPlan* fp,
-                                                            std::vector<ImageEntry>& os_images);
-    static std::unique_ptr<FlashSuperLayoutTask> InitializeFromTasks(
+    OptimizedFlashSuperTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
+                            SparsePtr sparse_layout, uint64_t super_size, const FlashingPlan* fp);
+    static std::unique_ptr<OptimizedFlashSuperTask> Initialize(const FlashingPlan* fp,
+                                                               std::vector<ImageEntry>& os_images);
+    static std::unique_ptr<OptimizedFlashSuperTask> InitializeFromTasks(
             const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
     using ImageEntry = std::pair<const Image*, std::string>;
     void Run() override;
@@ -96,6 +96,7 @@ class FlashSuperLayoutTask : public Task {
     std::unique_ptr<SuperFlashHelper> helper_;
     SparsePtr sparse_layout_;
     uint64_t super_size_;
+    const FlashingPlan* fp_;
 };
 
 class UpdateSuperTask : public Task {

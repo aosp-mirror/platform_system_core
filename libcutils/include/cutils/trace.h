@@ -89,6 +89,36 @@ __BEGIN_DECLS
 #error ATRACE_TAG must be defined to be one of the tags defined in cutils/trace.h
 #endif
 
+/** Internal implementation detail. Do not use. */
+void atrace_begin_body(const char*);
+
+/** Internal implementation detail. Do not use. */
+void atrace_end_body();
+
+/** Internal implementation detail. Do not use. */
+void atrace_async_begin_body(const char*, int32_t);
+
+/** Internal implementation detail. Do not use. */
+void atrace_async_end_body(const char*, int32_t);
+
+/** Internal implementation detail. Do not use. */
+void atrace_async_for_track_begin_body(const char*, const char*, int32_t);
+
+/** Internal implementation detail. Do not use. */
+void atrace_async_for_track_end_body(const char*, int32_t);
+
+/** Internal implementation detail. Do not use. */
+void atrace_instant_body(const char*);
+
+/** Internal implementation detail. Do not use. */
+void atrace_instant_for_track_body(const char*, const char*);
+
+/** Internal implementation detail. Do not use. */
+void atrace_int_body(const char*, int32_t);
+
+/** Internal implementation detail. Do not use. */
+void atrace_int64_body(const char*, int64_t);
+
 /**
  * Opens the trace file for writing and reads the property for initial tags.
  * The atrace.tags.enableflags property sets the tags to trace.
@@ -159,7 +189,6 @@ static inline uint64_t atrace_is_tag_enabled(uint64_t tag)
 static inline void atrace_begin(uint64_t tag, const char* name)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_begin_body(const char*);
         atrace_begin_body(name);
     }
 }
@@ -172,7 +201,6 @@ static inline void atrace_begin(uint64_t tag, const char* name)
 static inline void atrace_end(uint64_t tag)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_end_body();
         atrace_end_body();
     }
 }
@@ -190,7 +218,6 @@ static inline void atrace_async_begin(uint64_t tag, const char* name,
         int32_t cookie)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_async_begin_body(const char*, int32_t);
         atrace_async_begin_body(name, cookie);
     }
 }
@@ -203,7 +230,6 @@ static inline void atrace_async_begin(uint64_t tag, const char* name,
 static inline void atrace_async_end(uint64_t tag, const char* name, int32_t cookie)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_async_end_body(const char*, int32_t);
         atrace_async_end_body(name, cookie);
     }
 }
@@ -221,7 +247,6 @@ static inline void atrace_async_end(uint64_t tag, const char* name, int32_t cook
 static inline void atrace_async_for_track_begin(uint64_t tag, const char* track_name,
                                                 const char* name, int32_t cookie) {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_async_for_track_begin_body(const char*, const char*, int32_t);
         atrace_async_for_track_begin_body(track_name, name, cookie);
     }
 }
@@ -235,7 +260,6 @@ static inline void atrace_async_for_track_begin(uint64_t tag, const char* track_
 static inline void atrace_async_for_track_end(uint64_t tag, const char* track_name,
                                               int32_t cookie) {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_async_for_track_end_body(const char*, int32_t);
         atrace_async_for_track_end_body(track_name, cookie);
     }
 }
@@ -252,7 +276,6 @@ static inline void atrace_async_for_track_end(uint64_t tag, const char* track_na
 #define ATRACE_INSTANT(name) atrace_instant(ATRACE_TAG, name)
 static inline void atrace_instant(uint64_t tag, const char* name) {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_instant_body(const char*);
         atrace_instant_body(name);
     }
 }
@@ -269,7 +292,6 @@ static inline void atrace_instant(uint64_t tag, const char* name) {
 static inline void atrace_instant_for_track(uint64_t tag, const char* track_name,
                                             const char* name) {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_instant_for_track_body(const char*, const char*);
         atrace_instant_for_track_body(track_name, name);
     }
 }
@@ -282,7 +304,6 @@ static inline void atrace_instant_for_track(uint64_t tag, const char* track_name
 static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_int_body(const char*, int32_t);
         atrace_int_body(name, value);
     }
 }
@@ -295,7 +316,6 @@ static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
 static inline void atrace_int64(uint64_t tag, const char* name, int64_t value)
 {
     if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
-        void atrace_int64_body(const char*, int64_t);
         atrace_int64_body(name, value);
     }
 }

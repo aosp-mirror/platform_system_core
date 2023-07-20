@@ -448,5 +448,9 @@ bool SnapshotHandler::IsIouringSupported() {
     return android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false);
 }
 
+bool SnapshotHandler::CheckPartitionVerification() {
+    return update_verify_->CheckPartitionVerification();
+}
+
 }  // namespace snapshot
 }  // namespace android

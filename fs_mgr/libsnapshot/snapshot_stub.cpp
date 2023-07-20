@@ -154,8 +154,8 @@ ISnapshotMergeStats* SnapshotManagerStub::GetSnapshotMergeStatsInstance() {
     return &snapshot_merge_stats;
 }
 
-std::unique_ptr<ISnapshotWriter> SnapshotManagerStub::OpenSnapshotWriter(
-        const CreateLogicalPartitionParams&, const std::optional<std::string>&) {
+std::unique_ptr<ICowWriter> SnapshotManagerStub::OpenSnapshotWriter(
+        const CreateLogicalPartitionParams&, std::optional<uint64_t>) {
     LOG(ERROR) << __FUNCTION__ << " should never be called.";
     return nullptr;
 }

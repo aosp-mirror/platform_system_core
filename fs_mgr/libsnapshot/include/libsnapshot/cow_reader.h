@@ -24,6 +24,10 @@
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
 
+namespace chromeos_update_engine {
+class FileDescriptor;
+}  // namespace chromeos_update_engine
+
 namespace android {
 namespace snapshot {
 
@@ -32,6 +36,8 @@ class ICowOpIter;
 // Interface for reading from a snapuserd COW.
 class ICowReader {
   public:
+    using FileDescriptor = chromeos_update_engine::FileDescriptor;
+
     virtual ~ICowReader() {}
 
     // Return the file header.
@@ -67,7 +73,19 @@ class ICowReader {
     // The operation pointer must derive from ICowOpIter::Get().
     virtual ssize_t ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
                              size_t ignore_bytes = 0) = 0;
+
+    // Get the absolute source offset, in bytes, of a CowOperation. Returns
+    // false if the operation does not read from source partitions.
+    virtual bool GetSourceOffset(const CowOperation* op, uint64_t* source_offset) = 0;
 };
+
+static constexpr uint64_t GetBlockFromOffset(const CowHeader& header, uint64_t offset) {
+    return offset / header.block_size;
+}
+
+static constexpr uint64_t GetBlockRelativeOffset(const CowHeader& header, uint64_t offset) {
+    return offset % header.block_size;
+}
 
 // Iterate over a sequence of COW operations. The iterator is bidirectional.
 class ICowOpIter {
@@ -109,11 +127,11 @@ class CowReader final : public ICowReader {
     bool Parse(android::base::borrowed_fd fd, std::optional<uint64_t> label = {});
 
     bool InitForMerge(android::base::unique_fd&& fd);
+
     bool VerifyMergeOps() override;
-
     bool GetFooter(CowFooter* footer) override;
-
     bool GetLastLabel(uint64_t* label) override;
+    bool GetSourceOffset(const CowOperation* op, uint64_t* source_offset) override;
 
     // Create a CowOpIter object which contains footer_.num_ops
     // CowOperation objects. Get() returns a unique CowOperation object
@@ -128,6 +146,7 @@ class CowReader final : public ICowReader {
 
     CowHeader& GetHeader() override { return header_; }
 
+    bool GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read);
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
 
     // Returns the total number of data ops that should be merged. This is the
@@ -149,6 +168,7 @@ class CowReader final : public ICowReader {
     bool ParseOps(std::optional<uint64_t> label);
     bool PrepMergeOps();
     uint64_t FindNumCopyops();
+    uint8_t GetCompressionType(const CowOperation* op);
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
