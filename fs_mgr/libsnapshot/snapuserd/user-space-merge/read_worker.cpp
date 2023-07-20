@@ -305,7 +305,7 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
                     return false;
                 }
 
-                ret = BLOCK_SZ;
+                ret = std::min(BLOCK_SZ, read_size);
             }
 
             read_size -= ret;
