@@ -18,17 +18,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fs.h>
-#include <selinux/selinux.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/mount.h>
-#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
-#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -38,13 +31,9 @@
 #include <vector>
 
 #include <android-base/file.h>
-#include <android-base/macros.h>
 #include <android-base/properties.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
-#include <ext4_utils/ext4_utils.h>
 #include <fs_mgr.h>
-#include <fs_mgr/file_wait.h>
 #include <fs_mgr_dm_linear.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
@@ -89,7 +78,7 @@ static bool ScratchIsOnData() {
     if (fs_mgr_is_dsu_running()) {
         return false;
     }
-    return fs_mgr_access(kScratchImageMetadata);
+    return access(kScratchImageMetadata, F_OK) == 0;
 }
 
 static bool fs_mgr_rm_all(const std::string& path, bool* change = nullptr, int level = 0) {
@@ -198,10 +187,6 @@ static uint32_t fs_mgr_overlayfs_slot_number() {
     return SlotNumberForSlotSuffix(fs_mgr_get_slot_suffix());
 }
 
-static std::string fs_mgr_overlayfs_super_device(uint32_t slot_number) {
-    return kPhysicalDevice + fs_mgr_get_super_partition_name(slot_number);
-}
-
 static bool fs_mgr_overlayfs_has_logical(const Fstab& fstab) {
     for (const auto& entry : fstab) {
         if (entry.fs_mgr_flags.logical) {
@@ -261,8 +246,8 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& ove
     }
 
     auto slot_number = fs_mgr_overlayfs_slot_number();
-    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-    if (!fs_mgr_rw_access(super_device)) {
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
+    if (access(super_device.c_str(), R_OK | W_OK)) {
         return OverlayfsTeardownResult::Ok;
     }
 
@@ -295,7 +280,7 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
                                    bool* change, bool* should_destroy_scratch = nullptr) {
     const auto top = overlay + "/" + kOverlayTopDir;
 
-    if (!fs_mgr_access(top)) {
+    if (access(top.c_str(), F_OK)) {
         if (should_destroy_scratch) *should_destroy_scratch = true;
         return true;
     }
@@ -443,7 +428,7 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
 
     auto partition_create = !*partition_exists;
     auto slot_number = fs_mgr_overlayfs_slot_number();
-    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
     auto builder = MetadataBuilder::New(super_device, slot_number);
     if (!builder) {
         LERROR << "open " << super_device << " metadata";
@@ -583,8 +568,8 @@ static bool CreateScratchOnData(std::string* scratch_device, bool* partition_exi
 
 static bool CanUseSuperPartition(const Fstab& fstab) {
     auto slot_number = fs_mgr_overlayfs_slot_number();
-    auto super_device = fs_mgr_overlayfs_super_device(slot_number);
-    if (!fs_mgr_rw_access(super_device) || !fs_mgr_overlayfs_has_logical(fstab)) {
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
+    if (access(super_device.c_str(), R_OK | W_OK) || !fs_mgr_overlayfs_has_logical(fstab)) {
         return false;
     }
     auto metadata = ReadMetadata(super_device, slot_number);
@@ -634,8 +619,8 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab) {
     // If the partition exists, assume first that it can be mounted.
     if (partition_exists) {
         if (MountScratch(scratch_device)) {
-            if (fs_mgr_access(kScratchMountPoint + "/"s + kOverlayTopDir) ||
-                fs_mgr_filesystem_has_space(kScratchMountPoint)) {
+            const auto top = kScratchMountPoint + "/"s + kOverlayTopDir;
+            if (access(top.c_str(), F_OK) == 0 || fs_mgr_filesystem_has_space(kScratchMountPoint)) {
                 return true;
             }
             // declare it useless, no overrides and no free space
@@ -755,7 +740,7 @@ static std::optional<MapInfo> EnsureScratchMapped() {
     if (!info.device.empty()) {
         return {std::move(info)};
     }
-    if (!fs_mgr_in_recovery()) {
+    if (!InRecovery()) {
         return {};
     }
 
@@ -778,8 +763,7 @@ static std::optional<MapInfo> EnsureScratchMapped() {
     }
 
     // Avoid uart spam by first checking for a scratch partition.
-    auto metadata_slot = fs_mgr_overlayfs_slot_number();
-    auto super_device = fs_mgr_overlayfs_super_device(metadata_slot);
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
     auto metadata = ReadCurrentMetadata(super_device);
     if (!metadata) {
         return {};
@@ -941,7 +925,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
     if (!OverlayfsTeardownAllowed()) {
         return;
     }
-    if (!fs_mgr_in_recovery()) {
+    if (!InRecovery()) {
         LERROR << __FUNCTION__ << "(): must be called within recovery.";
         return;
     }

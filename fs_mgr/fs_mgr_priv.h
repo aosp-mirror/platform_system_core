@@ -97,8 +97,6 @@ bool is_dt_compatible();
 bool fs_mgr_is_ext4(const std::string& blk_device);
 bool fs_mgr_is_f2fs(const std::string& blk_device);
 
-bool fs_mgr_teardown_verity(android::fs_mgr::FstabEntry* fstab);
-
 bool fs_mgr_filesystem_available(const std::string& filesystem);
 std::string fs_mgr_get_context(const std::string& mount_point);
 

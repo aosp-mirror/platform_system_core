@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <string>
-
 #include <fstab/fstab.h>
 
 // If "mount_point" is non-null, set up exactly one overlay.

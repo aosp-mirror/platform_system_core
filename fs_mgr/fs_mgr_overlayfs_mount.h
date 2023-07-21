@@ -49,9 +49,6 @@ class AutoSetFsCreateCon final {
 };
 
 bool fs_mgr_is_dsu_running();
-bool fs_mgr_in_recovery();
-bool fs_mgr_access(const std::string& path);
-bool fs_mgr_rw_access(const std::string& path);
 bool fs_mgr_filesystem_has_space(const std::string& mount_point);
 const std::string fs_mgr_mount_point(const std::string& mount_point);
 bool OverlayfsSetupAllowed(bool verbose = false);
