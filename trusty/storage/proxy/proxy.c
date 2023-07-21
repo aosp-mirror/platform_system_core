@@ -243,9 +243,12 @@ int main(int argc, char* argv[]) {
      * Start binder threadpool. At least one extra binder thread is needed to
      * connect to the wakelock service without relying on polling. If we poll on
      * the main thread we end up pausing for at least 1s even if the service
-     * starts faster.
+     * starts faster. We set the max thread count to 0 because startThreadPool
+     * "Starts one thread, PLUS those requested in setThreadPoolMaxThreadCount,
+     * PLUS those manually requested in joinThreadPool." We only need a single
+     * binder thread to receive notifications on.
      */
-    ABinderProcess_setThreadPoolMaxThreadCount(1);
+    ABinderProcess_setThreadPoolMaxThreadCount(0);
     ABinderProcess_startThreadPool();
 
     /* initialize secure storage directory */
