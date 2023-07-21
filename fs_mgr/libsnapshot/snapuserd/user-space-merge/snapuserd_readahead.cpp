@@ -592,7 +592,7 @@ bool ReadAhead::ReadAheadSyncIO() {
             // Check if this block is an XOR op
             if (xor_op->new_block == new_block) {
                 // Read the xor'ed data from COW
-                void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+                void* buffer = bufsink.GetPayloadBuffer(BLOCK_SZ);
                 if (!buffer) {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer";
                     return false;
