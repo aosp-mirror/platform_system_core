@@ -62,12 +62,15 @@ using namespace android::storage_literals;
 
 constexpr char kPreferCacheBackingStorageProp[] = "fs_mgr.overlayfs.prefer_cache_backing_storage";
 
+constexpr char kCacheMountPoint[] = "/cache";
+constexpr char kPhysicalDevice[] = "/dev/block/by-name/";
+
+constexpr char kLowerdirOption[] = "lowerdir=";
+constexpr char kUpperdirOption[] = "upperdir=";
+
 bool fs_mgr_access(const std::string& path) {
     return access(path.c_str(), F_OK) == 0;
 }
-
-const auto kLowerdirOption = "lowerdir=";
-const auto kUpperdirOption = "upperdir=";
 
 bool fs_mgr_in_recovery() {
     // Check the existence of recovery binary instead of using the compile time
@@ -88,8 +91,6 @@ bool fs_mgr_is_dsu_running() {
     if (fs_mgr_in_recovery()) return false;
     return android::gsi::IsGsiRunning();
 }
-
-const auto kCacheMountPoint = "/cache";
 
 static bool IsABDevice() {
     return !android::base::GetProperty("ro.boot.slot_suffix", "").empty();
@@ -141,8 +142,6 @@ bool fs_mgr_filesystem_has_space(const std::string& mount_point) {
            (static_cast<uint64_t>(vst.f_bfree) * vst.f_frsize) >= kSizeThreshold;
 }
 
-const auto kPhysicalDevice = "/dev/block/by-name/";
-
 static bool fs_mgr_update_blk_device(FstabEntry* entry) {
     if (entry->fs_mgr_flags.logical) {
         fs_mgr_update_logical_partition(entry);
@@ -155,7 +154,7 @@ static bool fs_mgr_update_blk_device(FstabEntry* entry) {
     }
 
     // special case for system-as-root (taimen and others)
-    auto blk_device = std::string(kPhysicalDevice) + "system";
+    auto blk_device = kPhysicalDevice + "system"s;
     if (!fs_mgr_access(blk_device)) {
         blk_device += fs_mgr_get_slot_suffix();
         if (!fs_mgr_access(blk_device)) {
@@ -237,7 +236,7 @@ static std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point
     if (!fs_mgr_is_dir(mount_point)) return "";
     const auto base = android::base::Basename(mount_point) + "/";
     for (const auto& overlay_mount_point : OverlayMountPoints()) {
-        auto dir = overlay_mount_point + kOverlayTopDir + "/" + base;
+        auto dir = overlay_mount_point + "/" + kOverlayTopDir + "/" + base;
         auto upper = dir + kUpperName;
         if (!fs_mgr_is_dir(upper)) continue;
         auto work = dir + kWorkName;
@@ -527,7 +526,7 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
 }
 
 // Mount kScratchMountPoint
-static bool MountScratch(const std::string& device_path, bool readonly = false) {
+bool MountScratch(const std::string& device_path, bool readonly) {
     if (readonly) {
         if (!fs_mgr_access(device_path)) {
             LOG(ERROR) << "Path does not exist: " << device_path;
@@ -589,9 +588,6 @@ static bool MountScratch(const std::string& device_path, bool readonly = false) 
     return true;
 }
 
-const std::string kMkF2fs("/system/bin/make_f2fs");
-const std::string kMkExt4("/system/bin/mke2fs");
-
 // Note: The scratch partition of DSU is managed by gsid, and should be initialized during
 // first-stage-mount. Just check if the DM device for DSU scratch partition is created or not.
 static std::string GetDsuScratchDevice() {
@@ -633,7 +629,7 @@ static std::string GetBootScratchDevice() {
 
 // NOTE: OverlayfsSetupAllowed() must be "stricter" than OverlayfsTeardownAllowed().
 // Setup is allowed only if teardown is also allowed.
-bool OverlayfsSetupAllowed(bool verbose = false) {
+bool OverlayfsSetupAllowed(bool verbose) {
     if (!kAllowOverlayfs) {
         if (verbose) {
             LOG(ERROR) << "Overlayfs remounts can only be used in debuggable builds";
@@ -737,7 +733,7 @@ static void TryMountScratch() {
     if (!MountScratch(scratch_device, true /* readonly */)) {
         return;
     }
-    auto has_overlayfs_dir = fs_mgr_access(std::string(kScratchMountPoint) + kOverlayTopDir);
+    auto has_overlayfs_dir = fs_mgr_access(kScratchMountPoint + "/"s + kOverlayTopDir);
     fs_mgr_overlayfs_umount_scratch();
     if (has_overlayfs_dir) {
         MountScratch(scratch_device);
