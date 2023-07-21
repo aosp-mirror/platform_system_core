@@ -146,7 +146,7 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
 
     const std::string& file_name =
             controller()->version() == 2 && !file_v2_name_.empty() ? file_v2_name_ : file_name_;
-    *path = StringPrintf("%s/uid_%d/%s", controller()->path(), uid, file_name.c_str());
+    *path = StringPrintf("%s/uid_%u/%s", controller()->path(), uid, file_name.c_str());
     return true;
 }
 
