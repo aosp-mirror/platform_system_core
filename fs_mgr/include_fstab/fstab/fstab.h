@@ -131,5 +131,7 @@ std::set<std::string> GetBootDevices();
 // expected name.
 std::string GetVerityDeviceName(const FstabEntry& entry);
 
+bool InRecovery();
+
 }  // namespace fs_mgr
 }  // namespace android
