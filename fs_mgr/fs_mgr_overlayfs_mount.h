@@ -20,9 +20,12 @@
 
 #include <fstab/fstab.h>
 
-bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
-bool fs_mgr_wants_overlayfs(android::fs_mgr::FstabEntry* entry);
-android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
+constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
+
+constexpr char kScratchMountPoint[] = "/mnt/scratch";
+constexpr char kOverlayTopDir[] = "overlay";
+constexpr char kUpperName[] = "upper";
+constexpr char kWorkName[] = "work";
 
 #if ALLOW_ADBD_DISABLE_VERITY
 constexpr bool kAllowOverlayfs = true;
@@ -45,18 +48,13 @@ class AutoSetFsCreateCon final {
     bool restored_ = false;
 };
 
-constexpr auto kScratchMountPoint = "/mnt/scratch";
-constexpr char kOverlayfsFileContext[] = "u:object_r:overlayfs_file:s0";
-
-constexpr auto kUpperName = "upper";
-constexpr auto kWorkName = "work";
-constexpr auto kOverlayTopDir = "/overlay";
-
 bool fs_mgr_is_dsu_running();
-bool fs_mgr_in_recovery();
-bool fs_mgr_access(const std::string& path);
-bool fs_mgr_rw_access(const std::string& path);
 bool fs_mgr_filesystem_has_space(const std::string& mount_point);
 const std::string fs_mgr_mount_point(const std::string& mount_point);
+bool OverlayfsSetupAllowed(bool verbose = false);
+bool MountScratch(const std::string& device_path, bool readonly = false);
 bool fs_mgr_overlayfs_umount_scratch();
 std::vector<const std::string> OverlayMountPoints();
+bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
+bool fs_mgr_wants_overlayfs(android::fs_mgr::FstabEntry* entry);
+android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
