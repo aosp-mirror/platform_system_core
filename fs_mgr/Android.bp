@@ -60,7 +60,6 @@ cc_defaults {
     defaults: ["fs_mgr_defaults"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include/"],
-    include_dirs: ["system/vold"],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
     ],
