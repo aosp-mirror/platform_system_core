@@ -328,8 +328,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     // some recovery fstabs still contain the FDE options since they didn't do
     // anything in recovery mode anyway (except possibly to cause the
     // reservation of a crypto footer) and thus never got removed.
-    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed &&
-        access("/system/bin/recovery", F_OK) != 0) {
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed && !InRecovery()) {
         LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
                   "storage";
         return false;
@@ -520,6 +519,9 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 // ramdisk's copy of the fstab had to be located in the root directory, but now
 // the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
+    if (InRecovery()) {
+        return "/etc/recovery.fstab";
+    }
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;
 
@@ -835,15 +837,8 @@ bool ReadDefaultFstab(Fstab* fstab) {
     fstab->clear();
     ReadFstabFromDt(fstab, false /* verbose */);
 
-    std::string default_fstab_path;
-    // Use different fstab paths for normal boot and recovery boot, respectively
-    if ((access("/sbin/recovery", F_OK) == 0) || (access("/system/bin/recovery", F_OK) == 0)) {
-        default_fstab_path = "/etc/recovery.fstab";
-    } else {  // normal boot
-        default_fstab_path = GetFstabPath();
-    }
-
     Fstab default_fstab;
+    const std::string default_fstab_path = GetFstabPath();
     if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
         for (auto&& entry : default_fstab) {
             fstab->emplace_back(std::move(entry));
@@ -934,6 +929,17 @@ std::string GetVerityDeviceName(const FstabEntry& entry) {
         base_device = android::base::Basename(entry.mount_point);
     }
     return base_device + "-verity";
+}
+
+bool InRecovery() {
+    // Check the existence of recovery binary instead of using the compile time
+    // __ANDROID_RECOVERY__ macro.
+    // If BOARD_USES_RECOVERY_AS_BOOT is true, both normal and recovery boot
+    // mode would use the same init binary, which would mean during normal boot
+    // the '/init' binary is actually a symlink pointing to
+    // init_second_stage.recovery, which would be compiled with
+    // __ANDROID_RECOVERY__ defined.
+    return access("/system/bin/recovery", F_OK) == 0 || access("/sbin/recovery", F_OK) == 0;
 }
 
 }  // namespace fs_mgr
