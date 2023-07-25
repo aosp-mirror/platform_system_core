@@ -111,7 +111,9 @@ lazy_static! {
     static ref COOKIES: Mutex<HashMap<i32, fn() -> StatsPullResult>> = Mutex::new(HashMap::new());
 }
 
-// Safety: We store our callbacks in the global so they are valid.
+/// # Safety
+///
+/// `data` must be a valid pointer with no aliases.
 unsafe extern "C" fn callback_wrapper(
     atom_tag: i32,
     data: *mut AStatsEventList,
@@ -126,7 +128,8 @@ unsafe extern "C" fn callback_wrapper(
                 let stats = cb();
                 let result = stats
                     .iter()
-                    .map(|stat| stat.add_astats_event(&mut *data))
+                    // Safety: The caller promises that `data` is valid and unaliased.
+                    .map(|stat| stat.add_astats_event(unsafe { &mut *data }))
                     .collect::<Result<Vec<()>, StatsError>>();
                 match result {
                     Ok(_) => {
