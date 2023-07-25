@@ -539,6 +539,7 @@ cc_defaults {
         "libprotobuf-cpp-lite",
     ],
     static_libs: [
+        "libfs_mgr",
         "libhidl-gen-utils",
     ],
 }

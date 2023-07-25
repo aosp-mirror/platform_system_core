@@ -51,7 +51,6 @@ namespace android {
 namespace fs_mgr {
 namespace {
 
-constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
 constexpr char kProcMountsPath[] = "/proc/mounts";
 
 struct FlagList {
@@ -337,25 +336,14 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     return true;
 }
 
-std::string InitAndroidDtDir() {
-    std::string android_dt_dir;
-    // The platform may specify a custom Android DT path in kernel cmdline
-    if (!fs_mgr_get_boot_config_from_bootconfig_source("android_dt_dir", &android_dt_dir) &&
-        !fs_mgr_get_boot_config_from_kernel_cmdline("android_dt_dir", &android_dt_dir)) {
-        // Fall back to the standard procfs-based path
-        android_dt_dir = kDefaultAndroidDtDir;
-    }
-    return android_dt_dir;
-}
-
 bool IsDtFstabCompatible() {
     std::string dt_value;
-    std::string file_name = get_android_dt_dir() + "/fstab/compatible";
+    std::string file_name = GetAndroidDtDir() + "fstab/compatible";
 
     if (ReadDtFile(file_name, &dt_value) && dt_value == "android,fstab") {
         // If there's no status property or its set to "ok" or "okay", then we use the DT fstab.
         std::string status_value;
-        std::string status_file_name = get_android_dt_dir() + "/fstab/status";
+        std::string status_file_name = GetAndroidDtDir() + "fstab/status";
         return !ReadDtFile(status_file_name, &status_value) || status_value == "ok" ||
                status_value == "okay";
     }
@@ -368,7 +356,7 @@ std::string ReadFstabFromDt() {
         return {};
     }
 
-    std::string fstabdir_name = get_android_dt_dir() + "/fstab";
+    std::string fstabdir_name = GetAndroidDtDir() + "fstab";
     std::unique_ptr<DIR, int (*)(DIR*)> fstabdir(opendir(fstabdir_name.c_str()), closedir);
     if (!fstabdir) return {};
 
@@ -876,7 +864,7 @@ const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& p
 
 std::set<std::string> GetBootDevices() {
     // First check bootconfig, then kernel commandline, then the device tree
-    std::string dt_file_name = get_android_dt_dir() + "/boot_devices";
+    std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
     std::string value;
     if (fs_mgr_get_boot_config_from_bootconfig_source("boot_devices", &value) ||
         fs_mgr_get_boot_config_from_bootconfig_source("boot_device", &value)) {
@@ -948,15 +936,8 @@ bool InRecovery() {
 }  // namespace fs_mgr
 }  // namespace android
 
-// FIXME: The same logic is duplicated in system/core/init/
-const std::string& get_android_dt_dir() {
-    // Set once and saves time for subsequent calls to this function
-    static const std::string kAndroidDtDir = android::fs_mgr::InitAndroidDtDir();
-    return kAndroidDtDir;
-}
-
 bool is_dt_compatible() {
-    std::string file_name = get_android_dt_dir() + "/compatible";
+    std::string file_name = android::fs_mgr::GetAndroidDtDir() + "compatible";
     std::string dt_value;
     if (android::fs_mgr::ReadDtFile(file_name, &dt_value)) {
         if (dt_value == "android,firmware") {
