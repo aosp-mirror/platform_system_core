@@ -114,9 +114,16 @@ bool FdCacheHelper::IsAppDependentPath(const std::string& path) {
 
 IProfileAttribute::~IProfileAttribute() = default;
 
-void ProfileAttribute::Reset(const CgroupController& controller, const std::string& file_name) {
+const std::string& ProfileAttribute::file_name() const {
+    if (controller()->version() == 2 && !file_v2_name_.empty()) return file_v2_name_;
+    return file_name_;
+}
+
+void ProfileAttribute::Reset(const CgroupController& controller, const std::string& file_name,
+                             const std::string& file_v2_name) {
     controller_ = controller;
     file_name_ = file_name;
+    file_v2_name_ = file_v2_name;
 }
 
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
@@ -129,12 +136,11 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
         return true;
     }
 
-    const std::string& file_name =
-            controller()->version() == 2 && !file_v2_name_.empty() ? file_v2_name_ : file_name_;
     if (subgroup.empty()) {
-        *path = StringPrintf("%s/%s", controller()->path(), file_name.c_str());
+        *path = StringPrintf("%s/%s", controller()->path(), file_name().c_str());
     } else {
-        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(), file_name.c_str());
+        *path = StringPrintf("%s/%s/%s", controller()->path(), subgroup.c_str(),
+                             file_name().c_str());
     }
     return true;
 }
@@ -144,9 +150,7 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
         return true;
     }
 
-    const std::string& file_name =
-            controller()->version() == 2 && !file_v2_name_.empty() ? file_v2_name_ : file_name_;
-    *path = StringPrintf("%s/uid_%d/%s", controller()->path(), uid, file_name.c_str());
+    *path = StringPrintf("%s/uid_%u/%s", controller()->path(), uid, file_name().c_str());
     return true;
 }
 
@@ -816,7 +820,7 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 attributes_[name] =
                         std::make_unique<ProfileAttribute>(controller, file_attr, file_v2_attr);
             } else {
-                iter->second->Reset(controller, file_attr);
+                iter->second->Reset(controller, file_attr, file_v2_attr);
             }
         } else {
             LOG(WARNING) << "Controller " << controller_name << " is not found";
