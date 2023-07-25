@@ -32,7 +32,8 @@
 class IProfileAttribute {
   public:
     virtual ~IProfileAttribute() = 0;
-    virtual void Reset(const CgroupController& controller, const std::string& file_name) = 0;
+    virtual void Reset(const CgroupController& controller, const std::string& file_name,
+                       const std::string& file_v2_name) = 0;
     virtual const CgroupController* controller() const = 0;
     virtual const std::string& file_name() const = 0;
     virtual bool GetPathForTask(int tid, std::string* path) const = 0;
@@ -50,8 +51,9 @@ class ProfileAttribute : public IProfileAttribute {
     ~ProfileAttribute() = default;
 
     const CgroupController* controller() const override { return &controller_; }
-    const std::string& file_name() const override { return file_name_; }
-    void Reset(const CgroupController& controller, const std::string& file_name) override;
+    const std::string& file_name() const override;
+    void Reset(const CgroupController& controller, const std::string& file_name,
+               const std::string& file_v2_name) override;
 
     bool GetPathForTask(int tid, std::string* path) const override;
     bool GetPathForUID(uid_t uid, std::string* path) const override;

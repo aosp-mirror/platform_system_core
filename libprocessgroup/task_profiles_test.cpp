@@ -102,7 +102,8 @@ class ProfileAttributeMock : public IProfileAttribute {
   public:
     ProfileAttributeMock(const std::string& file_name) : file_name_(file_name) {}
     ~ProfileAttributeMock() override = default;
-    void Reset(const CgroupController& controller, const std::string& file_name) override {
+    void Reset(const CgroupController& controller, const std::string& file_name,
+               const std::string& file_v2_name) override {
         CHECK(false);
     }
     const CgroupController* controller() const override {
@@ -125,9 +126,7 @@ class ProfileAttributeMock : public IProfileAttribute {
         return true;
     };
 
-    bool GetPathForUID(uid_t, std::string*) const override {
-        return false;
-    }
+    bool GetPathForUID(uid_t, std::string*) const override { return false; }
 
   private:
     const std::string file_name_;
