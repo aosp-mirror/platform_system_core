@@ -649,9 +649,6 @@ on late-fs
     # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
 
-    # Load trusted keys from dm-verity protected partitions
-    exec -- /system/bin/fsverity_init --load-verified-keys
-
 # Only enable the bootreceiver tracing instance for kernels 5.10 and above.
 on late-fs && property:ro.kernel.version=4.9
     setprop bootreceiver.enable 0
