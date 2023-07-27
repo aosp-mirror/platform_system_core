@@ -206,11 +206,11 @@ bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
 }
 
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
-    return StringPrintf("%s/uid_%d", cgroup, uid);
+    return StringPrintf("%s/uid_%u", cgroup, uid);
 }
 
 static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
-    return StringPrintf("%s/uid_%d/pid_%d", cgroup, uid, pid);
+    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
 }
 
 static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
