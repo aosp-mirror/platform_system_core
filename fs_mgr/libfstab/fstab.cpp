@@ -36,7 +36,8 @@
 #include <android-base/strings.h>
 #include <libgsi/libgsi.h>
 
-#include "fs_mgr_priv.h"
+#include "fstab_priv.h"
+#include "logging_macros.h"
 
 using android::base::EndsWith;
 using android::base::ParseByteCount;
@@ -54,7 +55,7 @@ constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
 constexpr char kProcMountsPath[] = "/proc/mounts";
 
 struct FlagList {
-    const char *name;
+    const char* name;
     uint64_t flag;
 };
 
@@ -80,7 +81,7 @@ FlagList kMountFlagsList[] = {
 off64_t CalculateZramSize(int percentage) {
     off64_t total;
 
-    total  = sysconf(_SC_PHYS_PAGES);
+    total = sysconf(_SC_PHYS_PAGES);
     total *= percentage;
     total /= 100;
 
@@ -400,7 +401,7 @@ std::string ReadFstabFromDt() {
 
         std::string mount_point;
         file_name =
-            android::base::StringPrintf("%s/%s/mnt_point", fstabdir_name.c_str(), dp->d_name);
+                android::base::StringPrintf("%s/%s/mnt_point", fstabdir_name.c_str(), dp->d_name);
         if (ReadDtFile(file_name, &value)) {
             LINFO << "dt_fstab: Using a specified mount point " << value << " for " << dp->d_name;
             mount_point = value;
@@ -416,14 +417,16 @@ std::string ReadFstabFromDt() {
         }
         fstab_entry.push_back(value);
 
-        file_name = android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
+        file_name =
+                android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             return {};
         }
         fstab_entry.push_back(value);
 
-        file_name = android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
+        file_name =
+                android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             return {};
