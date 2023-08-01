@@ -832,12 +832,6 @@ static void MountExtraFilesystems() {
     CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
 
-    if (NeedsTwoMountNamespaces()) {
-        // /bootstrap-apex is used to mount "bootstrap" APEXes.
-        CHECKCALL(mount("tmpfs", "/bootstrap-apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-                        "mode=0755,uid=0,gid=0"));
-    }
-
     // /linkerconfig is used to keep generated linker configuration
     CHECKCALL(mount("tmpfs", "/linkerconfig", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
