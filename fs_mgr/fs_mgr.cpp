@@ -2227,8 +2227,8 @@ bool fs_mgr_create_canonical_mount_point(const std::string& mount_point) {
 }
 
 bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
-    auto overlayfs_valid_result = fs_mgr_overlayfs_valid();
-    if (overlayfs_valid_result == OverlayfsValidResult::kNotSupported) {
+    const auto overlayfs_check_result = android::fs_mgr::CheckOverlayfs();
+    if (!overlayfs_check_result.supported) {
         LERROR << __FUNCTION__ << "(): kernel does not support overlayfs";
         return false;
     }
@@ -2280,10 +2280,7 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
         }
     }
 
-    auto options = "lowerdir=" + lowerdir;
-    if (overlayfs_valid_result == OverlayfsValidResult::kOverrideCredsRequired) {
-        options += ",override_creds=off";
-    }
+    const auto options = "lowerdir=" + lowerdir + overlayfs_check_result.mount_flags;
 
     // Use "overlay-" + entry.blk_device as the mount() source, so that adb-remout-test don't
     // confuse this with adb remount overlay, whose device name is "overlay".
@@ -2339,30 +2336,34 @@ std::string fs_mgr_get_context(const std::string& mount_point) {
     return context;
 }
 
-OverlayfsValidResult fs_mgr_overlayfs_valid() {
-    // Overlayfs available in the kernel, and patched for override_creds?
-    if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
-        return OverlayfsValidResult::kOverrideCredsRequired;
-    }
+namespace android {
+namespace fs_mgr {
+
+OverlayfsCheckResult CheckOverlayfs() {
     if (!fs_mgr_filesystem_available("overlay")) {
-        return OverlayfsValidResult::kNotSupported;
+        return {.supported = false};
     }
     struct utsname uts;
     if (uname(&uts) == -1) {
-        return OverlayfsValidResult::kNotSupported;
+        return {.supported = false};
     }
     int major, minor;
     if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
-        return OverlayfsValidResult::kNotSupported;
+        return {.supported = false};
     }
-    if (major < 4) {
-        return OverlayfsValidResult::kOk;
+    // Overlayfs available in the kernel, and patched for override_creds?
+    if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
+        auto mount_flags = ",override_creds=off"s;
+        if (major > 5 || (major == 5 && minor >= 15)) {
+            mount_flags += ",userxattr"s;
+        }
+        return {.supported = true, .mount_flags = mount_flags};
     }
-    if (major > 4) {
-        return OverlayfsValidResult::kNotSupported;
+    if (major < 4 || (major == 4 && minor <= 3)) {
+        return {.supported = true};
     }
-    if (minor > 3) {
-        return OverlayfsValidResult::kNotSupported;
-    }
-    return OverlayfsValidResult::kOk;
+    return {.supported = false};
 }
+
+}  // namespace fs_mgr
+}  // namespace android
