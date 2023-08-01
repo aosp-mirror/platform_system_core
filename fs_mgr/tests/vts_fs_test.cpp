@@ -23,6 +23,8 @@
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 
+#include "../fs_mgr_priv.h"
+
 using testing::Contains;
 using testing::Not;
 
