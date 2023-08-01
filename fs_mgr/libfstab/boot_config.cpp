@@ -20,11 +20,12 @@
 #include <vector>
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/properties.h>
 
-#include "fs_mgr_priv.h"
+#include "fstab_priv.h"
+#include "logging_macros.h"
 
 std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std::string& cmdline) {
     static constexpr char quote = '"';
@@ -84,7 +85,7 @@ std::vector<std::pair<std::string, std::string>> fs_mgr_parse_proc_bootconfig(
 
 bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig,
                                             const std::string& android_key, std::string* out_val) {
-    FS_MGR_CHECK(out_val != nullptr);
+    FSTAB_CHECK(out_val != nullptr);
 
     const std::string bootconfig_key("androidboot." + android_key);
     for (const auto& [key, value] : fs_mgr_parse_proc_bootconfig(bootconfig)) {
@@ -100,7 +101,7 @@ bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig,
 
 bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::string& android_key,
                                         std::string* out_val) {
-    FS_MGR_CHECK(out_val != nullptr);
+    FSTAB_CHECK(out_val != nullptr);
 
     const std::string cmdline_key("androidboot." + android_key);
     for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
@@ -140,7 +141,7 @@ bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::str
 // kernel cmdline (in that order).  Returns 'true' if successfully
 // found, 'false' otherwise.
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
-    FS_MGR_CHECK(out_val != nullptr);
+    FSTAB_CHECK(out_val != nullptr);
 
     // firstly, check the device tree
     if (is_dt_compatible()) {

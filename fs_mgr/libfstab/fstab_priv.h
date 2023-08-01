@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef __CORE_FS_MGR_PRIV_BOOTCONFIG_H
-#define __CORE_FS_MGR_PRIV_BOOTCONFIG_H
+#pragma once
 
-#include <sys/cdefs.h>
 #include <string>
 #include <utility>
 #include <vector>
 
-std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std::string& cmdline);
+#include <fstab/fstab.h>
 
+// Do not include logging_macros.h here as this header is used by fs_mgr, too.
+
+std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std::string& cmdline);
 bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::string& key,
                                         std::string* out_val);
 bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val);
@@ -34,4 +35,17 @@ bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig, const
                                             std::string* out_val);
 bool fs_mgr_get_boot_config_from_bootconfig_source(const std::string& key, std::string* out_val);
 
-#endif /* __CORE_FS_MGR_PRIV_BOOTCONFIG_H */
+bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
+const std::string& get_android_dt_dir();
+bool is_dt_compatible();
+
+namespace android {
+namespace fs_mgr {
+
+bool InRecovery();
+bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
+bool SkipMountWithConfig(const std::string& skip_config, Fstab* fstab, bool verbose);
+std::string GetFstabPath();
+
+}  // namespace fs_mgr
+}  // namespace android

@@ -60,7 +60,6 @@ cc_defaults {
     defaults: ["fs_mgr_defaults"],
     export_include_dirs: ["include"],
     local_include_dirs: ["include/"],
-    include_dirs: ["system/vold"],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
     ],
@@ -90,8 +89,6 @@ cc_defaults {
     static_libs: [
         "libavb",
         "libfs_avb",
-        "libfstab",
-        "libdm",
         "libgsi",
     ],
     export_static_lib_headers: [
@@ -172,47 +169,6 @@ cc_library {
         "libfs_mgr_defaults",
         "libfiemap_binder_defaults",
     ],
-}
-
-cc_library_static {
-    // Do not ever make this a shared library as long as it is vendor_available.
-    // It does not have a stable interface.
-    name: "libfstab",
-    vendor_available: true,
-    ramdisk_available: true,
-    vendor_ramdisk_available: true,
-    recovery_available: true,
-    apex_available: [
-        "//apex_available:anyapex",
-        "//apex_available:platform",
-    ],
-    host_supported: true,
-    defaults: ["fs_mgr_defaults"],
-    local_include_dirs: ["include/"],
-    srcs: [
-        "fs_mgr_fstab.cpp",
-        "fs_mgr_boot_config.cpp",
-        "fs_mgr_slotselect.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-        vendor: {
-            cflags: [
-                // Skipping entries in fstab should only be done in a system
-                // process as the config file is in /system_ext.
-                // Remove the op from the vendor variant.
-                "-DNO_SKIP_MOUNT",
-            ],
-        },
-    },
-    export_include_dirs: ["include_fstab"],
-    header_libs: [
-        "libbase_headers",
-        "libgsi_headers",
-    ],
-    min_sdk_version: "31",
 }
 
 cc_binary {
