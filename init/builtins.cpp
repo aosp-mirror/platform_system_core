@@ -1297,7 +1297,6 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return create_dirs.error();
     }
     auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
-    ServiceList::GetInstance().MarkServicesUpdate();
     if (!parse_configs.ok()) {
         return parse_configs.error();
     }
@@ -1307,6 +1306,8 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return update_linker_config.error();
     }
 
+    // Now start delayed services
+    ServiceList::GetInstance().MarkServicesUpdate();
     return {};
 }
 
