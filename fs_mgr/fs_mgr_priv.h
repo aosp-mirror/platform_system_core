@@ -109,6 +109,9 @@ OverlayfsValidResult fs_mgr_overlayfs_valid();
 
 namespace android {
 namespace fs_mgr {
+
 bool UnmapDevice(const std::string& name);
+bool InRecovery();
+
 }  // namespace fs_mgr
 }  // namespace android
