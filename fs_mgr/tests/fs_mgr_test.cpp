@@ -31,7 +31,7 @@
 #include <fstab/fstab.h>
 #include <gtest/gtest.h>
 
-#include "../fs_mgr_priv_boot_config.h"
+#include "../fs_mgr_priv.h"
 
 using namespace android::fs_mgr;
 

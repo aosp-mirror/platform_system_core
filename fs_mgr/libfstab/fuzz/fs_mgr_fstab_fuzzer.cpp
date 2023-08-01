@@ -20,6 +20,8 @@
 #include <fstab/fstab.h>
 #include <fuzzer/FuzzedDataProvider.h>
 
+#include "../fstab_priv.h"
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     FuzzedDataProvider fdp(data, size);
 
