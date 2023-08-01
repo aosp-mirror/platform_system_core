@@ -1262,51 +1262,6 @@ static Result<void> MountLinkerConfigForDefaultNamespace() {
 
     return {};
 }
-
-static Result<void> MountApexRootForDefaultNamespace() {
-    auto mount_namespace_id = GetCurrentMountNamespace();
-    if (!mount_namespace_id.ok()) {
-        return mount_namespace_id.error();
-    }
-    // There's nothing to do if it's still in the bootstrap mount namespace.
-    // This happens when we don't need to update APEXes (e.g. Microdroid)
-    // where bootstrap mount namespace == default mount namespace.
-    if (mount_namespace_id.value() == NS_BOOTSTRAP) {
-        return {};
-    }
-
-    // Now, we're in the "default" mount namespace and need a fresh /apex for
-    // the default mount namespace.
-    //
-    // At this point, there are two mounts at the same mount point: /apex
-    // - to tmpfs (private)
-    // - to /bootstrap-apex (shared)
-    //
-    // We need unmount the second mount so that /apex in the default mount
-    // namespace becomes RW/empty and "private" (we don't want mount events to
-    // propagate to the bootstrap mount namespace).
-    //
-    // Likewise, we don't want the unmount event itself to propagate to the
-    // bootstrap mount namespace. Otherwise, /apex in the bootstrap mount
-    // namespace would become empty due to the unmount.
-    //
-    // Hence, before unmounting, we make /apex (the second one) "private" first.
-    // so that the unmouting below doesn't affect to the bootstrap mount namespace.
-    if (mount(nullptr, "/apex", nullptr, MS_PRIVATE | MS_REC, nullptr) == -1) {
-        return ErrnoError() << "Failed to remount /apex as private";
-    }
-
-    // Now we can unmount /apex (bind-mount to /bootstrap-apex). This only affects
-    // in the default mount namespace and /apex is now seen as tmpfs mount.
-    // Note that /apex in the bootstrap mount namespace is still a bind-mount to
-    // /bootstrap-apex and holds the APEX mounts.
-    if (umount2("/apex", MNT_DETACH) == -1) {
-        return ErrnoError() << "Failed to umount /apex";
-    }
-
-    return {};
-}
-
 static Result<void> do_update_linker_config(const BuiltinArguments&) {
     return GenerateLinkerConfiguration();
 }
@@ -1359,11 +1314,6 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     if (auto result = SwitchToMountNamespaceIfNeeded(NS_DEFAULT); !result.ok()) {
         return result.error();
     }
-
-    if (auto result = MountApexRootForDefaultNamespace(); !result.ok()) {
-        return result.error();
-    }
-
     if (auto result = MountLinkerConfigForDefaultNamespace(); !result.ok()) {
         return result.error();
     }
