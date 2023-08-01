@@ -23,7 +23,6 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
@@ -218,17 +217,6 @@ static std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point
     return "";
 }
 
-static inline bool KernelSupportsUserXattrs() {
-    struct utsname uts;
-    uname(&uts);
-
-    int major, minor;
-    if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
-        return false;
-    }
-    return major > 5 || (major == 5 && minor >= 15);
-}
-
 const std::string fs_mgr_mount_point(const std::string& mount_point) {
     if ("/"s != mount_point) return mount_point;
     return "/system";
@@ -240,13 +228,7 @@ static std::string fs_mgr_get_overlayfs_options(const FstabEntry& entry) {
     auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
     if (candidate.empty()) return "";
     auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + candidate + kUpperName +
-               ",workdir=" + candidate + kWorkName;
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
-        ret += ",override_creds=off";
-    }
-    if (KernelSupportsUserXattrs()) {
-        ret += ",userxattr";
-    }
+               ",workdir=" + candidate + kWorkName + android::fs_mgr::CheckOverlayfs().mount_flags;
     for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
         if (android::base::StartsWith(flag, "context=")) {
             ret += "," + flag;
@@ -608,7 +590,7 @@ bool OverlayfsSetupAllowed(bool verbose) {
         return false;
     }
     // Check mandatory kernel patches.
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
+    if (!android::fs_mgr::CheckOverlayfs().supported) {
         if (verbose) {
             LOG(ERROR) << "Kernel does not support overlayfs";
         }
