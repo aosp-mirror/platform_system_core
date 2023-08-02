@@ -46,21 +46,21 @@ bool SuperLayoutBuilder::Open(const void* data, size_t size) {
 bool SuperLayoutBuilder::Open(const LpMetadata& metadata) {
     for (const auto& partition : metadata.partitions) {
         if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
-            // Retrofit devices are not supported.
+            LOG(ERROR) << "Retrofit devices are not supported";
             return false;
         }
         if (!(partition.attributes & LP_PARTITION_ATTR_READONLY)) {
-            // Writable partitions are not supported.
+            LOG(ERROR) << "Writable partitions are not supported";
             return false;
         }
     }
     if (!metadata.extents.empty()) {
-        // Partitions that already have extents are not supported (should
-        // never be true of super_empty.img).
+        LOG(ERROR) << "Partitions that already have extents are not supported";
+        // should never be true of super_empty.img.
         return false;
     }
     if (metadata.block_devices.size() != 1) {
-        // Only one "super" is supported.
+        LOG(ERROR) << "Only one 'super' is supported";
         return false;
     }
 
