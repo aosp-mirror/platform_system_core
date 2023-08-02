@@ -124,5 +124,9 @@ std::set<std::string> GetBootDevices();
 // expected name.
 std::string GetVerityDeviceName(const FstabEntry& entry);
 
+// Returns the Android Device Tree directory as specified in the kernel bootconfig or cmdline.
+// If the platform does not configure a custom DT path, returns the standard one (based in procfs).
+const std::string& GetAndroidDtDir();
+
 }  // namespace fs_mgr
 }  // namespace android
