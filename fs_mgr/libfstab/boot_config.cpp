@@ -122,10 +122,8 @@ void ImportKernelCmdlineFromString(const std::string& cmdline,
             if ((found = cmdline.find(quote, found + 1)) == cmdline.npos) break;
             ++found;
         }
-        std::string piece;
-        auto source = cmdline.substr(base, found - base);
-        std::remove_copy(source.begin(), source.end(),
-                         std::back_insert_iterator<std::string>(piece), quote);
+        std::string piece = cmdline.substr(base, found - base);
+        piece.erase(std::remove(piece.begin(), piece.end(), quote), piece.end());
         auto equal_sign = piece.find('=');
         if (equal_sign == piece.npos) {
             if (!piece.empty()) {
@@ -133,7 +131,9 @@ void ImportKernelCmdlineFromString(const std::string& cmdline,
                 fn(std::move(piece), "");
             }
         } else {
-            fn(piece.substr(0, equal_sign), piece.substr(equal_sign + 1));
+            std::string value = piece.substr(equal_sign + 1);
+            piece.resize(equal_sign);
+            fn(std::move(piece), std::move(value));
         }
         if (found == cmdline.npos) break;
         base = found + 1;
