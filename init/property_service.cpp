@@ -57,6 +57,7 @@
 #include <android-base/result.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <fs_mgr.h>
 #include <private/android_filesystem_config.h>
 #include <property_info_parser/property_info_parser.h>
 #include <property_info_serializer/property_info_serializer.h>
@@ -1324,7 +1325,8 @@ static void ProcessKernelDt() {
         return;
     }
 
-    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(get_android_dt_dir().c_str()), closedir);
+    std::unique_ptr<DIR, int (*)(DIR*)> dir(opendir(android::fs_mgr::GetAndroidDtDir().c_str()),
+                                            closedir);
     if (!dir) return;
 
     std::string dt_file;
@@ -1335,7 +1337,7 @@ static void ProcessKernelDt() {
             continue;
         }
 
-        std::string file_name = get_android_dt_dir() + dp->d_name;
+        std::string file_name = android::fs_mgr::GetAndroidDtDir() + dp->d_name;
 
         android::base::ReadFileToString(file_name, &dt_file);
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
