@@ -36,7 +36,6 @@ bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig, const
 bool fs_mgr_get_boot_config_from_bootconfig_source(const std::string& key, std::string* out_val);
 
 bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
-const std::string& get_android_dt_dir();
 bool is_dt_compatible();
 
 namespace android {
