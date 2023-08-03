@@ -864,21 +864,19 @@ const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& p
 
 std::set<std::string> GetBootDevices() {
     // First check bootconfig, then kernel commandline, then the device tree
-    std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
     std::string value;
-    if (fs_mgr_get_boot_config_from_bootconfig_source("boot_devices", &value) ||
-        fs_mgr_get_boot_config_from_bootconfig_source("boot_device", &value)) {
+    if (GetBootconfig("androidboot.boot_devices", &value) ||
+        GetBootconfig("androidboot.boot_device", &value)) {
         std::set<std::string> boot_devices;
-        // remove quotes and split by spaces
-        auto boot_device_strings = base::Split(base::StringReplace(value, "\"", "", true), " ");
-        for (std::string_view device : boot_device_strings) {
-            // trim the trailing comma, keep the rest.
+        // split by spaces and trim the trailing comma.
+        for (std::string_view device : android::base::Split(value, " ")) {
             base::ConsumeSuffix(&device, ",");
             boot_devices.emplace(device);
         }
         return boot_devices;
     }
 
+    std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
     if (fs_mgr_get_boot_config_from_kernel_cmdline("boot_devices", &value) ||
         ReadDtFile(dt_file_name, &value)) {
         auto boot_devices = Split(value, ",");
