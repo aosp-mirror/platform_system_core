@@ -23,15 +23,7 @@
 #include <fs_mgr.h>
 #include <fstab/fstab.h>
 
-#include "fs_mgr_priv_boot_config.h"
-
-/* The CHECK() in logging.h will use program invocation name as the tag.
- * Thus, the log will have prefix "init: " when libfs_mgr is statically
- * linked in the init process. This might be opaque when debugging.
- * Appends "in libfs_mgr" at the end of the abort message to explicitly
- * indicate the check happens in fs_mgr.
- */
-#define FS_MGR_CHECK(x) CHECK(x) << "in libfs_mgr "
+#include "libfstab/fstab_priv.h"
 
 #define FS_MGR_TAG "[libfs_mgr] "
 
@@ -89,28 +81,25 @@
 using namespace std::chrono_literals;
 
 bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
-bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool fs_mgr_is_device_unlocked();
-const std::string& get_android_dt_dir();
-bool is_dt_compatible();
 
 bool fs_mgr_is_ext4(const std::string& blk_device);
 bool fs_mgr_is_f2fs(const std::string& blk_device);
 
-bool fs_mgr_teardown_verity(android::fs_mgr::FstabEntry* fstab);
-
 bool fs_mgr_filesystem_available(const std::string& filesystem);
 std::string fs_mgr_get_context(const std::string& mount_point);
 
-enum class OverlayfsValidResult {
-    kNotSupported = 0,
-    kOk,
-    kOverrideCredsRequired,
-};
-OverlayfsValidResult fs_mgr_overlayfs_valid();
-
 namespace android {
 namespace fs_mgr {
+
 bool UnmapDevice(const std::string& name);
+
+struct OverlayfsCheckResult {
+    bool supported;
+    std::string mount_flags;
+};
+
+OverlayfsCheckResult CheckOverlayfs();
+
 }  // namespace fs_mgr
 }  // namespace android

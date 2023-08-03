@@ -74,10 +74,8 @@
 #include <android-base/unique_fd.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
-#include <fsverity_init.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
-#include <mini_keyctl_utils.h>
 #include <selinux/android.h>
 #include <ziparchive/zip_archive.h>
 
@@ -112,11 +110,11 @@ EnforcingStatus StatusFromProperty() {
     });
 
     if (status == SELINUX_ENFORCING) {
-        ImportBootconfig([&](const std::string& key, const std::string& value) {
-            if (key == "androidboot.selinux" && value == "permissive") {
-                status = SELINUX_PERMISSIVE;
-            }
-        });
+        std::string value;
+        if (android::fs_mgr::GetBootconfig("androidboot.selinux", &value) &&
+            value == "permissive") {
+            status = SELINUX_PERMISSIVE;
+        }
     }
 
     return status;
@@ -510,7 +508,6 @@ bool OpenMonolithicPolicy(PolicyFile* policy_file) {
 
 constexpr const char* kSigningCertRelease =
         "/system/etc/selinux/com.android.sepolicy.cert-release.der";
-constexpr const char* kFsVerityProcPath = "/proc/sys/fs/verity";
 const std::string kSepolicyApexMetadataDir = "/metadata/sepolicy/";
 const std::string kSepolicyApexSystemDir = "/system/etc/selinux/apex/";
 const std::string kSepolicyZip = "SEPolicy.zip";
@@ -614,24 +611,6 @@ Result<void> GetPolicyFromApex(const std::string& dir) {
     return {};
 }
 
-Result<void> LoadSepolicyApexCerts() {
-    key_serial_t keyring_id = android::GetKeyringId(".fs-verity");
-    if (keyring_id < 0) {
-        return Error() << "Failed to find .fs-verity keyring id";
-    }
-
-    // TODO(b/199914227) the release key should always exist. Once it's checked in, start
-    // throwing an error here if it doesn't exist.
-    if (access(kSigningCertRelease, F_OK) == 0) {
-        LoadKeyFromFile(keyring_id, "fsv_sepolicy_apex_release", kSigningCertRelease);
-    }
-    return {};
-}
-
-Result<void> SepolicyFsVerityCheck() {
-    return Error() << "TODO implement support for fsverity SEPolicy.";
-}
-
 Result<void> SepolicyCheckSignature(const std::string& dir) {
     std::string signature;
     if (!android::base::ReadFileToString(dir + kSepolicySignature, &signature)) {
@@ -654,18 +633,7 @@ Result<void> SepolicyCheckSignature(const std::string& dir) {
     return verifySignature(sepolicyStr, signature, *releaseKey);
 }
 
-Result<void> SepolicyVerify(const std::string& dir, bool supportsFsVerity) {
-    if (supportsFsVerity) {
-        auto fsVerityCheck = SepolicyFsVerityCheck();
-        if (fsVerityCheck.ok()) {
-            return fsVerityCheck;
-        }
-        // TODO(b/199914227) If the device supports fsverity, but we fail here, we should fail to
-        // boot and not carry on. For now, fallback to a signature checkuntil the fsverity
-        // logic is implemented.
-        LOG(INFO) << "Falling back to standard signature check. " << fsVerityCheck.error();
-    }
-
+Result<void> SepolicyVerify(const std::string& dir) {
     auto sepolicySignature = SepolicyCheckSignature(dir);
     if (!sepolicySignature.ok()) {
         return Error() << "Apex SEPolicy failed signature check";
@@ -698,23 +666,19 @@ void CleanupApexSepolicy() {
 // 6. Sets selinux into enforcing mode and continues normal booting.
 //
 void PrepareApexSepolicy() {
-    bool supportsFsVerity = access(kFsVerityProcPath, F_OK) == 0;
-    if (supportsFsVerity) {
-        auto loadSepolicyApexCerts = LoadSepolicyApexCerts();
-        if (!loadSepolicyApexCerts.ok()) {
-            // TODO(b/199914227) If the device supports fsverity, but we fail here, we should fail
-            // to boot and not carry on. For now, fallback to a signature checkuntil the fsverity
-            // logic is implemented.
-            LOG(INFO) << loadSepolicyApexCerts.error();
-        }
-    }
     // If apex sepolicy zip exists in /metadata/sepolicy, use that, otherwise use version on
-    // /system.
-    auto dir = (access((kSepolicyApexMetadataDir + kSepolicyZip).c_str(), F_OK) == 0)
-                       ? kSepolicyApexMetadataDir
-                       : kSepolicyApexSystemDir;
+    // /system. If neither exists, do nothing.
+    std::string dir;
+    if (access((kSepolicyApexMetadataDir + kSepolicyZip).c_str(), F_OK) == 0) {
+        dir = kSepolicyApexMetadataDir;
+    } else if (access((kSepolicyApexSystemDir + kSepolicyZip).c_str(), F_OK) == 0) {
+        dir = kSepolicyApexSystemDir;
+    } else {
+        LOG(INFO) << "APEX Sepolicy not found";
+        return;
+    }
 
-    auto sepolicyVerify = SepolicyVerify(dir, supportsFsVerity);
+    auto sepolicyVerify = SepolicyVerify(dir);
     if (!sepolicyVerify.ok()) {
         LOG(INFO) << "Error: " << sepolicyVerify.error();
         // If signature verification fails, fall back to version on /system.
