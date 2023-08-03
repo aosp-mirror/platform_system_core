@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -93,14 +94,8 @@ struct FstabEntry {
 // Unless explicitly requested, a lookup on mount point should always return the 1st one.
 using Fstab = std::vector<FstabEntry>;
 
-// Exported for testability. Regular users should use ReadFstabFromFile().
-bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
-// Exported for testability. Regular users should use ReadDefaultFstab().
-std::string GetFstabPath();
-// Exported for testability.
-bool SkipMountWithConfig(const std::string& skip_config, Fstab* fstab, bool verbose);
-
 bool ReadFstabFromFile(const std::string& path, Fstab* fstab);
+bool ReadFstabFromProcMounts(Fstab* fstab);
 bool ReadFstabFromDt(Fstab* fstab, bool verbose = true);
 bool ReadDefaultFstab(Fstab* fstab);
 bool SkipMountingPartitions(Fstab* fstab, bool verbose = false);
@@ -129,6 +124,18 @@ std::set<std::string> GetBootDevices();
 // not check whether the device is valid or exists; it merely returns the
 // expected name.
 std::string GetVerityDeviceName(const FstabEntry& entry);
+
+// Returns the Android Device Tree directory as specified in the kernel bootconfig or cmdline.
+// If the platform does not configure a custom DT path, returns the standard one (based in procfs).
+const std::string& GetAndroidDtDir();
+
+// Import the kernel bootconfig by calling the callback |fn| with each key-value pair.
+void ImportBootconfig(const std::function<void(std::string, std::string)>& fn);
+
+// Get the kernel bootconfig value for |key|.
+// Returns true if |key| is found in bootconfig.
+// Otherwise returns false and |*out| is not modified.
+bool GetBootconfig(const std::string& key, std::string* out);
 
 }  // namespace fs_mgr
 }  // namespace android

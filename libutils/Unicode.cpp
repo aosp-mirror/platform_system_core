@@ -280,158 +280,181 @@ int strzcmp16(const char16_t *s1, size_t n1, const char16_t *s2, size_t n2)
            : 0);
 }
 
+// is_any_surrogate() returns true if w is either a high or low surrogate
+static constexpr bool is_any_surrogate(char16_t w) {
+    return (w & 0xf800) == 0xd800;
+}
+
+// is_surrogate_pair() returns true if w1 and w2 form a valid surrogate pair
+static constexpr bool is_surrogate_pair(char16_t w1, char16_t w2) {
+    return ((w1 & 0xfc00) == 0xd800) && ((w2 & 0xfc00) == 0xdc00);
+}
+
+// TODO: currently utf16_to_utf8_length() returns -1 if src_len == 0,
+// which is inconsistent with utf8_to_utf16_length(), here we keep the
+// current behavior as intended not to break compatibility
+ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
+{
+    if (src == nullptr || src_len == 0)
+        return -1;
+
+    const char16_t* const end = src + src_len;
+    const char16_t* in = src;
+    size_t utf8_len = 0;
+
+    while (in < end) {
+        char16_t w = *in++;
+        if (LIKELY(w < 0x0080)) {
+            utf8_len += 1;
+            continue;
+        }
+        if (LIKELY(w < 0x0800)) {
+            utf8_len += 2;
+            continue;
+        }
+        if (LIKELY(!is_any_surrogate(w))) {
+            utf8_len += 3;
+            continue;
+        }
+        if (in < end && is_surrogate_pair(w, *in)) {
+            utf8_len += 4;
+            in++;
+            continue;
+        }
+        /* skip if at the end of the string or invalid surrogate pair */
+    }
+    return (in == end && utf8_len < SSIZE_MAX) ? utf8_len : -1;
+}
+
 void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_len)
 {
     if (src == nullptr || src_len == 0 || dst == nullptr) {
         return;
     }
 
-    const char16_t* cur_utf16 = src;
-    const char16_t* const end_utf16 = src + src_len;
-    char *cur = dst;
-    while (cur_utf16 < end_utf16) {
-        char32_t utf32;
-        // surrogate pairs
-        if((*cur_utf16 & 0xFC00) == 0xD800 && (cur_utf16 + 1) < end_utf16
-                && (*(cur_utf16 + 1) & 0xFC00) == 0xDC00) {
-            utf32 = (*cur_utf16++ - 0xD800) << 10;
-            utf32 |= *cur_utf16++ - 0xDC00;
-            utf32 += 0x10000;
-        } else {
-            utf32 = (char32_t) *cur_utf16++;
+    const char16_t* in = src;
+    const char16_t* const in_end = src + src_len;
+    char* out = dst;
+    const char* const out_end = dst + dst_len;
+    char16_t w2;
+
+    auto err_out = [&out, &out_end, &dst_len]() {
+        LOG_ALWAYS_FATAL_IF(out >= out_end,
+                "target utf8 string size %zu too short", dst_len);
+    };
+
+    while (in < in_end) {
+        char16_t w = *in++;
+        if (LIKELY(w < 0x0080)) {
+            if (out + 1 > out_end)
+                return err_out();
+            *out++ = (char)(w & 0xff);
+            continue;
         }
-        const size_t len = utf32_codepoint_utf8_length(utf32);
-        LOG_ALWAYS_FATAL_IF(dst_len < len, "%zu < %zu", dst_len, len);
-        utf32_codepoint_to_utf8((uint8_t*)cur, utf32, len);
-        cur += len;
-        dst_len -= len;
+        if (LIKELY(w < 0x0800)) {
+            if (out + 2 > out_end)
+                return err_out();
+            *out++ = (char)(0xc0 | ((w >> 6) & 0x1f));
+            *out++ = (char)(0x80 | ((w >> 0) & 0x3f));
+            continue;
+        }
+        if (LIKELY(!is_any_surrogate(w))) {
+            if (out + 3 > out_end)
+                return err_out();
+            *out++ = (char)(0xe0 | ((w >> 12) & 0xf));
+            *out++ = (char)(0x80 | ((w >> 6) & 0x3f));
+            *out++ = (char)(0x80 | ((w >> 0) & 0x3f));
+            continue;
+        }
+        /* surrogate pair */
+        if (in < in_end && (w2 = *in, is_surrogate_pair(w, w2))) {
+            if (out + 4 > out_end)
+                return err_out();
+            char32_t dw = (char32_t)(0x10000 + ((w - 0xd800) << 10) + (w2 - 0xdc00));
+            *out++ = (char)(0xf0 | ((dw >> 18) & 0x07));
+            *out++ = (char)(0x80 | ((dw >> 12) & 0x3f));
+            *out++ = (char)(0x80 | ((dw >> 6)  & 0x3f));
+            *out++ = (char)(0x80 | ((dw >> 0)  & 0x3f));
+            in++;
+        }
+        /* We reach here in two cases:
+         *  1) (in == in_end), which means end of the input string
+         *  2) (w2 & 0xfc00) != 0xdc00, which means invalid surrogate pair
+         * In either case, we intentionally do nothing and skip
+         */
     }
-    LOG_ALWAYS_FATAL_IF(dst_len < 1, "%zu < 1", dst_len);
-    *cur = '\0';
+    *out = '\0';
+    return;
 }
 
 // --------------------------------------------------------------------------
 // UTF-8
 // --------------------------------------------------------------------------
 
-ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
-{
-    if (src == nullptr || src_len == 0) {
-        return -1;
-    }
-
-    size_t ret = 0;
-    const char16_t* const end = src + src_len;
-    while (src < end) {
-        size_t char_len;
-        if ((*src & 0xFC00) == 0xD800 && (src + 1) < end
-                && (*(src + 1) & 0xFC00) == 0xDC00) {
-            // surrogate pairs are always 4 bytes.
-            char_len = 4;
-            src += 2;
-        } else {
-            char_len = utf32_codepoint_utf8_length((char32_t)*src++);
-        }
-        if (SSIZE_MAX - char_len < ret) {
-            // If this happens, we would overflow the ssize_t type when
-            // returning from this function, so we cannot express how
-            // long this string is in an ssize_t.
-            android_errorWriteLog(0x534e4554, "37723026");
-            return -1;
-        }
-        ret += char_len;
-    }
-    return ret;
+static char32_t utf8_4b_to_utf32(uint8_t c1, uint8_t c2, uint8_t c3, uint8_t c4) {
+    return ((c1 & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f);
 }
 
-/**
- * Returns 1-4 based on the number of leading bits.
- *
- * 1111 -> 4
- * 1110 -> 3
- * 110x -> 2
- * 10xx -> 1
- * 0xxx -> 1
- */
-static inline size_t utf8_codepoint_len(uint8_t ch)
-{
-    return ((0xe5000000 >> ((ch >> 3) & 0x1e)) & 3) + 1;
-}
-
-static inline void utf8_shift_and_mask(uint32_t* codePoint, const uint8_t byte)
-{
-    *codePoint <<= 6;
-    *codePoint |= 0x3F & byte;
-}
-
-static inline uint32_t utf8_to_utf32_codepoint(const uint8_t *src, size_t length)
-{
-    uint32_t unicode;
-
-    switch (length)
-    {
-        case 1:
-            return src[0];
-        case 2:
-            unicode = src[0] & 0x1f;
-            utf8_shift_and_mask(&unicode, src[1]);
-            return unicode;
-        case 3:
-            unicode = src[0] & 0x0f;
-            utf8_shift_and_mask(&unicode, src[1]);
-            utf8_shift_and_mask(&unicode, src[2]);
-            return unicode;
-        case 4:
-            unicode = src[0] & 0x07;
-            utf8_shift_and_mask(&unicode, src[1]);
-            utf8_shift_and_mask(&unicode, src[2]);
-            utf8_shift_and_mask(&unicode, src[3]);
-            return unicode;
-        default:
-            return 0xffff;
-    }
-
-    //printf("Char at %p: len=%d, utf-16=%p\n", src, length, (void*)result);
-}
+// TODO: current behavior of converting UTF8 to UTF-16 has a few issues below
+//
+// 1. invalid trailing bytes (i.e. not b'10xxxxxx) are treated as valid trailing
+//    bytes and follows normal conversion rules
+// 2. invalid leading byte (b'10xxxxxx) is treated as a valid single UTF-8 byte
+// 3. invalid leading byte (b'11111xxx) is treated as a valid leading byte
+//    (same as b'11110xxx) for a 4-byte UTF-8 sequence
+// 4. an invalid 4-byte UTF-8 sequence that translates to a codepoint < U+10000
+//    will be converted as a valid UTF-16 character
+//
+// We keep the current behavior as is but with warnings logged, so as not to
+// break compatibility.  However, this needs to be addressed later.
 
 ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len, bool overreadIsFatal)
 {
-    const uint8_t* const u8end = u8str + u8len;
-    const uint8_t* u8cur = u8str;
-
-    /* Validate that the UTF-8 is the correct len */
-    size_t u16measuredLen = 0;
-    while (u8cur < u8end) {
-        u16measuredLen++;
-        int u8charLen = utf8_codepoint_len(*u8cur);
-        // Malformed utf8, some characters are beyond the end.
-        // Cases:
-        // If u8charLen == 1, this becomes u8cur >= u8end, which cannot happen as u8cur < u8end,
-        // then this condition fail and we continue, as expected.
-        // If u8charLen == 2, this becomes u8cur + 1 >= u8end, which fails only if
-        // u8cur == u8end - 1, that is, there was only one remaining character to read but we need
-        // 2 of them. This condition holds and we return -1, as expected.
-        if (u8cur + u8charLen - 1 >= u8end) {
-            if (overreadIsFatal) {
-                LOG_ALWAYS_FATAL("Attempt to overread computing length of utf8 string");
-            } else {
-                return -1;
-            }
-        }
-        uint32_t codepoint = utf8_to_utf32_codepoint(u8cur, u8charLen);
-        if (codepoint > 0xFFFF) u16measuredLen++; // this will be a surrogate pair in utf16
-        u8cur += u8charLen;
-    }
-
-    /**
-     * Make sure that we ended where we thought we would and the output UTF-16
-     * will be exactly how long we were told it would be.
-     */
-    if (u8cur != u8end) {
+    if (u8str == nullptr)
         return -1;
-    }
 
-    return u16measuredLen;
+    const uint8_t* const in_end = u8str + u8len;
+    const uint8_t* in = u8str;
+    size_t utf16_len = 0;
+
+    while (in < in_end) {
+        uint8_t c = *in;
+        utf16_len++;
+        if (LIKELY((c & 0x80) == 0)) {
+            in++;
+            continue;
+        }
+        if (UNLIKELY(c < 0xc0)) {
+            ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
+            in++;
+            continue;
+        }
+        if (LIKELY(c < 0xe0)) {
+            in += 2;
+            continue;
+        }
+        if (LIKELY(c < 0xf0)) {
+            in += 3;
+            continue;
+        } else {
+            uint8_t c2, c3, c4;
+            if (UNLIKELY(c >= 0xf8)) {
+                ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
+            }
+            c2 = in[1]; c3 = in[2]; c4 = in[3];
+            if (utf8_4b_to_utf32(c, c2, c3, c4) >= 0x10000) {
+                utf16_len++;
+            }
+            in += 4;
+            continue;
+        }
+    }
+    if (in == in_end) {
+        return utf16_len < SSIZE_MAX ? utf16_len : -1;
+    }
+    if (overreadIsFatal)
+        LOG_ALWAYS_FATAL("Attempt to overread computing length of utf8 string");
+    return -1;
 }
 
 char16_t* utf8_to_utf16(const uint8_t* u8str, size_t u8len, char16_t* u16str, size_t u16len) {
@@ -444,38 +467,75 @@ char16_t* utf8_to_utf16(const uint8_t* u8str, size_t u8len, char16_t* u16str, si
 
 char16_t* utf8_to_utf16_no_null_terminator(
         const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen) {
-    if (dstLen == 0) {
+    if (src == nullptr || srcLen == 0 || dstLen == 0) {
         return dst;
     }
     // A value > SSIZE_MAX is probably a negative value returned as an error and casted.
     LOG_ALWAYS_FATAL_IF(dstLen > SSIZE_MAX, "dstLen is %zu", dstLen);
-    const uint8_t* const u8end = src + srcLen;
-    const uint8_t* u8cur = src;
-    const char16_t* const u16end = dst + dstLen;
-    char16_t* u16cur = dst;
 
-    while (u8cur < u8end && u16cur < u16end) {
-        size_t u8len = utf8_codepoint_len(*u8cur);
-        uint32_t codepoint = utf8_to_utf32_codepoint(u8cur, u8len);
+    const uint8_t* const in_end = src + srcLen;
+    const uint8_t* in = src;
+    const char16_t* const out_end = dst + dstLen;
+    char16_t* out = dst;
+    uint8_t c, c2, c3, c4;
+    char32_t w;
 
-        // Convert the UTF32 codepoint to one or more UTF16 codepoints
-        if (codepoint <= 0xFFFF) {
-            // Single UTF16 character
-            *u16cur++ = (char16_t) codepoint;
-        } else {
-            // Multiple UTF16 characters with surrogates
-            codepoint = codepoint - 0x10000;
-            *u16cur++ = (char16_t) ((codepoint >> 10) + 0xD800);
-            if (u16cur >= u16end) {
-                // Ooops...  not enough room for this surrogate pair.
-                return u16cur-1;
-            }
-            *u16cur++ = (char16_t) ((codepoint & 0x3FF) + 0xDC00);
+    auto err_in = [&c, &out]() {
+        ALOGW("Unended UTF-8 byte: 0x%02x", c);
+        return out;
+    };
+
+    while (in < in_end && out < out_end) {
+        c = *in++;
+        if (LIKELY((c & 0x80) == 0)) {
+            *out++ = (char16_t)(c);
+            continue;
         }
-
-        u8cur += u8len;
+        if (UNLIKELY(c < 0xc0)) {
+            ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
+            *out++ = (char16_t)(c);
+            continue;
+        }
+        if (LIKELY(c < 0xe0)) {
+            if (UNLIKELY(in + 1 > in_end)) {
+                return err_in();
+            }
+            c2 = *in++;
+            *out++ = (char16_t)(((c & 0x1f) << 6) | (c2 & 0x3f));
+            continue;
+        }
+        if (LIKELY(c < 0xf0)) {
+            if (UNLIKELY(in + 2 > in_end)) {
+                return err_in();
+            }
+            c2 = *in++; c3 = *in++;
+            *out++ = (char16_t)(((c & 0x0f) << 12) |
+                                ((c2 & 0x3f) << 6) | (c3 & 0x3f));
+            continue;
+        } else {
+            if (UNLIKELY(in + 3 > in_end)) {
+                return err_in();
+            }
+            if (UNLIKELY(c >= 0xf8)) {
+                ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
+            }
+            // Multiple UTF16 characters with surrogates
+            c2 = *in++; c3 = *in++; c4 = *in++;
+            w = utf8_4b_to_utf32(c, c2, c3, c4);
+            if (UNLIKELY(w < 0x10000)) {
+                *out++ = (char16_t)(w);
+            } else {
+                if (UNLIKELY(out + 2 > out_end)) {
+                    // Ooops.... not enough room for this surrogate pair.
+                    return out;
+                }
+                *out++ = (char16_t)(((w - 0x10000) >> 10) + 0xd800);
+                *out++ = (char16_t)(((w - 0x10000) & 0x3ff) + 0xdc00);
+            }
+            continue;
+        }
     }
-    return u16cur;
+    return out;
 }
 
 }

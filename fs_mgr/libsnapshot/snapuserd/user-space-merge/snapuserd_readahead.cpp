@@ -492,7 +492,7 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
         if (xor_op_index < xor_op_vec.size()) {
             const CowOperation* xor_op = xor_op_vec[xor_op_index];
             if (xor_op->new_block == new_block) {
-                void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+                void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ);
                 if (!buffer) {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer for block: "
                                     << xor_op->new_block;
@@ -506,7 +506,6 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
                 }
 
                 xor_op_index += 1;
-                bufsink_.UpdateBufferOffset(BLOCK_SZ);
             }
         }
         block_index += 1;
@@ -593,7 +592,7 @@ bool ReadAhead::ReadAheadSyncIO() {
             // Check if this block is an XOR op
             if (xor_op->new_block == new_block) {
                 // Read the xor'ed data from COW
-                void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+                void* buffer = bufsink.GetPayloadBuffer(BLOCK_SZ);
                 if (!buffer) {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer";
                     return false;

@@ -18,8 +18,8 @@
 
 #include <string>
 
-#include "fs_mgr.h"
-#include "fs_mgr_priv.h"
+#include "fstab_priv.h"
+#include "logging_macros.h"
 
 // Realistically, this file should be part of the android::fs_mgr namespace;
 using namespace android::fs_mgr;
