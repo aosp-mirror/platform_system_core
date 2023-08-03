@@ -17,7 +17,6 @@
 
 #include <fcntl.h>
 #include <linux/fs.h>
-#include <linux/memfd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -97,7 +96,7 @@ class SnapuserdTest : public ::testing::Test {
     void InitDaemon();
     void CreateUserDevice();
 
-    unique_ptr<LoopDevice> base_loop_;
+    unique_ptr<IBackingDevice> base_dev_;
     unique_ptr<IUserDevice> dmuser_dev_;
 
     std::string system_device_ctrl_name_;
@@ -115,24 +114,6 @@ class SnapuserdTest : public ::testing::Test {
     int total_base_size_;
     std::unique_ptr<ITestHarness> harness_;
 };
-
-static unique_fd CreateTempFile(const std::string& name, size_t size) {
-    unique_fd fd(syscall(__NR_memfd_create, name.c_str(), MFD_ALLOW_SEALING));
-    if (fd < 0) {
-        return {};
-    }
-    if (size) {
-        if (ftruncate(fd, size) < 0) {
-            perror("ftruncate");
-            return {};
-        }
-        if (fcntl(fd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK) < 0) {
-            perror("fcntl");
-            return {};
-        }
-    }
-    return fd;
-}
 
 void SnapuserdTest::SetUp() {
     harness_ = std::make_unique<DmUserTestHarness>();
@@ -189,14 +170,16 @@ bool SnapuserdTest::SetupDaemon() {
 }
 
 void SnapuserdTest::CreateBaseDevice() {
-    unique_fd rnd_fd;
-
     total_base_size_ = (size_ * 5);
-    base_fd_ = CreateTempFile("base_device", total_base_size_);
+
+    base_dev_ = harness_->CreateBackingDevice(total_base_size_);
+    ASSERT_NE(base_dev_, nullptr);
+
+    base_fd_.reset(open(base_dev_->GetPath().c_str(), O_RDWR | O_CLOEXEC));
     ASSERT_GE(base_fd_, 0);
 
-    rnd_fd.reset(open("/dev/random", O_RDONLY));
-    ASSERT_TRUE(rnd_fd > 0);
+    unique_fd rnd_fd(open("/dev/random", O_RDONLY));
+    ASSERT_GE(rnd_fd, 0);
 
     std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(1_MiB);
 
@@ -206,9 +189,6 @@ void SnapuserdTest::CreateBaseDevice() {
     }
 
     ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
-
-    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
-    ASSERT_TRUE(base_loop_->valid());
 }
 
 void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
@@ -544,8 +524,8 @@ void SnapuserdTest::InitCowDevice() {
     auto factory = harness_->GetBlockServerFactory();
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     auto handler =
-            handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_loop_->device(),
-                                 base_loop_->device(), opener, 1, use_iouring, false);
+            handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
+                                 base_dev_->GetPath(), opener, 1, use_iouring, false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -566,11 +546,8 @@ void SnapuserdTest::SetDeviceControlName() {
 }
 
 void SnapuserdTest::CreateUserDevice() {
-    unique_fd fd(TEMP_FAILURE_RETRY(open(base_loop_->device().c_str(), O_RDONLY | O_CLOEXEC)));
-    ASSERT_TRUE(fd > 0);
-
-    uint64_t dev_sz = get_block_device_size(fd.get());
-    ASSERT_TRUE(dev_sz > 0);
+    auto dev_sz = base_dev_->GetSize();
+    ASSERT_NE(dev_sz, 0);
 
     cow_num_sectors_ = dev_sz >> 9;
 
