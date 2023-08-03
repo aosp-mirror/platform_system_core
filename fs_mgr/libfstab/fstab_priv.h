@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,11 +30,6 @@ bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::s
                                         std::string* out_val);
 bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val);
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val);
-std::vector<std::pair<std::string, std::string>> fs_mgr_parse_proc_bootconfig(
-        const std::string& bootconfig);
-bool fs_mgr_get_boot_config_from_bootconfig(const std::string& bootconfig, const std::string& key,
-                                            std::string* out_val);
-bool fs_mgr_get_boot_config_from_bootconfig_source(const std::string& key, std::string* out_val);
 
 bool fs_mgr_update_for_slotselect(android::fs_mgr::Fstab* fstab);
 bool is_dt_compatible();
@@ -45,6 +41,12 @@ bool InRecovery();
 bool ParseFstabFromString(const std::string& fstab_str, bool proc_mounts, Fstab* fstab_out);
 bool SkipMountWithConfig(const std::string& skip_config, Fstab* fstab, bool verbose);
 std::string GetFstabPath();
+
+void ImportBootconfigFromString(const std::string& bootconfig,
+                                const std::function<void(std::string, std::string)>& fn);
+
+bool GetBootconfigFromString(const std::string& bootconfig, const std::string& key,
+                             std::string* out);
 
 }  // namespace fs_mgr
 }  // namespace android
