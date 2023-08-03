@@ -254,21 +254,6 @@ void ImportKernelCmdline(const std::function<void(const std::string&, const std:
     }
 }
 
-void ImportBootconfig(const std::function<void(const std::string&, const std::string&)>& fn) {
-    std::string bootconfig;
-    android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
-
-    for (const auto& entry : android::base::Split(bootconfig, "\n")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        if (pieces.size() == 2) {
-            // get rid of the extra space between a list of values and remove the quotes.
-            std::string value = android::base::StringReplace(pieces[1], "\", \"", ",", true);
-            value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
-            fn(android::base::Trim(pieces[0]), android::base::Trim(value));
-        }
-    }
-}
-
 bool make_dir(const std::string& path, mode_t mode) {
     std::string secontext;
     if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {

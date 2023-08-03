@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -127,6 +128,14 @@ std::string GetVerityDeviceName(const FstabEntry& entry);
 // Returns the Android Device Tree directory as specified in the kernel bootconfig or cmdline.
 // If the platform does not configure a custom DT path, returns the standard one (based in procfs).
 const std::string& GetAndroidDtDir();
+
+// Import the kernel bootconfig by calling the callback |fn| with each key-value pair.
+void ImportBootconfig(const std::function<void(std::string, std::string)>& fn);
+
+// Get the kernel bootconfig value for |key|.
+// Returns true if |key| is found in bootconfig.
+// Otherwise returns false and |*out| is not modified.
+bool GetBootconfig(const std::string& key, std::string* out);
 
 }  // namespace fs_mgr
 }  // namespace android
