@@ -38,6 +38,8 @@ cc_test {
     ],
     static_libs: [
         "libfs_mgr",
+        "libgmock",
+        "libgtest",
     ],
     srcs: [
         "file_wait_test.cpp",
