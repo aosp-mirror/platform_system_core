@@ -72,6 +72,7 @@ cc_library_static {
         "user-space-merge/snapuserd_transitions.cpp",
         "user-space-merge/snapuserd_verify.cpp",
         "user-space-merge/worker.cpp",
+        "utility.cpp",
     ],
     static_libs: [
         "libbase",

@@ -17,6 +17,7 @@
 #include "read_worker.h"
 
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -208,8 +209,8 @@ bool ReadWorker::Init() {
 bool ReadWorker::Run() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
     // Start serving IO

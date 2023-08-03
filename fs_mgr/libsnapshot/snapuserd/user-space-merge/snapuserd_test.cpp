@@ -43,6 +43,7 @@
 #include "snapuserd_core.h"
 #include "testing/dm_user_harness.h"
 #include "testing/temp_device.h"
+#include "utility.h"
 
 DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
 
