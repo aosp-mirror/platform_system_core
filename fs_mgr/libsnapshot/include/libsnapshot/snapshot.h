@@ -624,7 +624,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool CollapseSnapshotDevice(LockedFile* lock, const std::string& name,
                                 const SnapshotStatus& status);
 
-    struct MergeResult {
+    struct [[nodiscard]] MergeResult {
         explicit MergeResult(UpdateState state,
                              MergeFailureCode failure_code = MergeFailureCode::Ok)
             : state(state), failure_code(failure_code) {}
