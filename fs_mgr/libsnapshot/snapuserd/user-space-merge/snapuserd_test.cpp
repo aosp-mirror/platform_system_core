@@ -41,6 +41,7 @@
 #include <storage_literals/storage_literals.h>
 #include "handler_manager.h"
 #include "snapuserd_core.h"
+#include "testing/dm_user_harness.h"
 #include "testing/temp_device.h"
 
 DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
@@ -75,10 +76,9 @@ class SnapuserdTest : public ::testing::Test {
     static const uint64_t kSectorSize = 512;
 
   protected:
-    void SetUp() override {}
+    void SetUp() override;
     void TearDown() override { Shutdown(); }
 
-  private:
     void SetupImpl();
 
     void SimulateDaemonRestart();
@@ -94,10 +94,10 @@ class SnapuserdTest : public ::testing::Test {
     void InitCowDevice();
     void SetDeviceControlName();
     void InitDaemon();
-    void CreateDmUserDevice();
+    void CreateUserDevice();
 
     unique_ptr<LoopDevice> base_loop_;
-    unique_ptr<Tempdevice> dmuser_dev_;
+    unique_ptr<IUserDevice> dmuser_dev_;
 
     std::string system_device_ctrl_name_;
     std::string system_device_name_;
@@ -112,6 +112,7 @@ class SnapuserdTest : public ::testing::Test {
     size_t size_ = 100_MiB;
     int cow_num_sectors_;
     int total_base_size_;
+    std::unique_ptr<ITestHarness> harness_;
 };
 
 static unique_fd CreateTempFile(const std::string& name, size_t size) {
@@ -130,6 +131,10 @@ static unique_fd CreateTempFile(const std::string& name, size_t size) {
         }
     }
     return fd;
+}
+
+void SnapuserdTest::SetUp() {
+    harness_ = std::make_unique<DmUserTestHarness>();
 }
 
 void SnapuserdTest::Shutdown() {
@@ -173,7 +178,7 @@ bool SnapuserdTest::SetupCopyOverlap_2() {
 bool SnapuserdTest::SetupDaemon() {
     SetDeviceControlName();
 
-    CreateDmUserDevice();
+    CreateUserDevice();
     InitCowDevice();
     InitDaemon();
 
@@ -206,7 +211,7 @@ void SnapuserdTest::CreateBaseDevice() {
 }
 
 void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
-    unique_fd fd(open(dmuser_dev_->path().c_str(), O_RDONLY));
+    unique_fd fd(open(dmuser_dev_->GetPath().c_str(), O_RDONLY));
     ASSERT_GE(fd, 0);
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
 
@@ -535,9 +540,8 @@ void SnapuserdTest::InitCowDevice() {
         use_iouring = false;
     }
 
-    DmUserBlockServerFactory factory;
-
-    auto opener = factory.CreateOpener(system_device_ctrl_name_);
+    auto factory = harness_->GetBlockServerFactory();
+    auto opener = factory->CreateOpener(system_device_ctrl_name_);
     auto handler =
             handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_loop_->device(),
                                  base_loop_->device(), opener, 1, use_iouring, false);
@@ -560,7 +564,7 @@ void SnapuserdTest::SetDeviceControlName() {
     system_device_ctrl_name_ = system_device_name_ + "-ctrl";
 }
 
-void SnapuserdTest::CreateDmUserDevice() {
+void SnapuserdTest::CreateUserDevice() {
     unique_fd fd(TEMP_FAILURE_RETRY(open(base_loop_->device().c_str(), O_RDONLY | O_CLOEXEC)));
     ASSERT_TRUE(fd > 0);
 
@@ -569,17 +573,9 @@ void SnapuserdTest::CreateDmUserDevice() {
 
     cow_num_sectors_ = dev_sz >> 9;
 
-    DmTable dmuser_table;
-    ASSERT_TRUE(dmuser_table.AddTarget(
-            std::make_unique<DmTargetUser>(0, cow_num_sectors_, system_device_ctrl_name_)));
-    ASSERT_TRUE(dmuser_table.valid());
-
-    dmuser_dev_ = std::make_unique<Tempdevice>(system_device_name_, dmuser_table);
-    ASSERT_TRUE(dmuser_dev_->valid());
-    ASSERT_FALSE(dmuser_dev_->path().empty());
-
-    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
-    ASSERT_TRUE(android::fs_mgr::WaitForFile(misc_device, 10s));
+    dmuser_dev_ = harness_->CreateUserDevice(system_device_name_, system_device_ctrl_name_,
+                                             cow_num_sectors_);
+    ASSERT_NE(dmuser_dev_, nullptr);
 }
 
 void SnapuserdTest::InitDaemon() {
@@ -603,7 +599,7 @@ void SnapuserdTest::SetupImpl() {
 
     SetDeviceControlName();
 
-    CreateDmUserDevice();
+    CreateUserDevice();
     InitCowDevice();
     InitDaemon();
 
@@ -632,7 +628,7 @@ void SnapuserdTest::SimulateDaemonRestart() {
     Shutdown();
     std::this_thread::sleep_for(500ms);
     SetDeviceControlName();
-    CreateDmUserDevice();
+    CreateUserDevice();
     InitCowDevice();
     InitDaemon();
 }
@@ -695,6 +691,9 @@ void SnapuserdTest::MergeInterrupt() {
 }
 
 TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
     ASSERT_TRUE(SetupDefault());
     // I/O before merge
     ReadSnapshotDeviceAndValidate();
@@ -707,6 +706,9 @@ TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
     ASSERT_TRUE(SetupDefault());
     // Issue I/O before merge begins
     std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
@@ -717,6 +719,9 @@ TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
     ASSERT_TRUE(SetupDefault());
     // Start the merge
     StartMerge();

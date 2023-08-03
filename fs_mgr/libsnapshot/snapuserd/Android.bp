@@ -219,6 +219,7 @@ cc_test {
         "libsnapshot_cow_defaults",
     ],
     srcs: [
+        "testing/dm_user_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
     ],
     shared_libs: [
