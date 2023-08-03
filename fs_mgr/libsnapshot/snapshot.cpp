@@ -1248,14 +1248,12 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
            GetMetadataPartitionState(*current_metadata, name) == MetadataPartitionState::Updated);
 
     if (UpdateUsesUserSnapshots(lock)) {
-        std::string merge_status;
-        if (EnsureSnapuserdConnected()) {
-            // Query the snapshot status from the daemon
-            merge_status = snapuserd_client_->QuerySnapshotStatus(name);
-        } else {
-            MergeResult(UpdateState::MergeFailed, MergeFailureCode::QuerySnapshotStatus);
+        if (!EnsureSnapuserdConnected()) {
+            return MergeResult(UpdateState::MergeFailed, MergeFailureCode::QuerySnapshotStatus);
         }
 
+        // Query the snapshot status from the daemon
+        const auto merge_status = snapuserd_client_->QuerySnapshotStatus(name);
         if (merge_status == "snapshot-merge-failed") {
             return MergeResult(UpdateState::MergeFailed, MergeFailureCode::UnknownTargetType);
         }
