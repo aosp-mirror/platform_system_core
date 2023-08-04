@@ -166,11 +166,9 @@ libinit_cc_defaults {
         "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
-        "libfsverity_init",
         "liblmkd_utils",
         "liblz4",
         "libzstd",
-        "libmini_keyctl_static",
         "libmodprobe",
         "libprocinfo",
         "libprotobuf-cpp-lite",
@@ -394,6 +392,10 @@ init_first_stage_cc_defaults {
     ],
 
     static_executable: true,
+    lto: {
+        // b/169004486 ThinLTO breaks x86 static executables.
+        never: true,
+    },
     system_shared_libs: [],
 
     cflags: [
@@ -537,6 +539,7 @@ cc_defaults {
         "libprotobuf-cpp-lite",
     ],
     static_libs: [
+        "libfs_mgr",
         "libhidl-gen-utils",
     ],
 }
