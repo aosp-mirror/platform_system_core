@@ -137,5 +137,13 @@ void ImportBootconfig(const std::function<void(std::string, std::string)>& fn);
 // Otherwise returns false and |*out| is not modified.
 bool GetBootconfig(const std::string& key, std::string* out);
 
+// Import the kernel cmdline by calling the callback |fn| with each key-value pair.
+void ImportKernelCmdline(const std::function<void(std::string, std::string)>& fn);
+
+// Get the kernel cmdline value for |key|.
+// Returns true if |key| is found in the kernel cmdline.
+// Otherwise returns false and |*out| is not modified.
+bool GetKernelCmdline(const std::string& key, std::string* out);
+
 }  // namespace fs_mgr
 }  // namespace android

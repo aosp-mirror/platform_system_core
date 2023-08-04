@@ -204,7 +204,7 @@ std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_de
                 partition_map.emplace_back(map_pieces[0], map_pieces[1]);
             }
         };
-        ImportKernelCmdline(parser);
+        android::fs_mgr::ImportKernelCmdline(parser);
         android::fs_mgr::ImportBootconfig(parser);
         return partition_map;
     }();
