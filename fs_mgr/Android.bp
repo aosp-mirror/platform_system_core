@@ -171,6 +171,25 @@ cc_library {
     ],
 }
 
+cc_library_static {
+    name: "libfs_mgr_file_wait",
+    defaults: ["fs_mgr_defaults"],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
+    srcs: [
+        "file_wait.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+    ],
+    host_supported: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
+    recovery_available: true,
+}
+
 cc_binary {
     name: "remount",
     defaults: ["fs_mgr_defaults"],
