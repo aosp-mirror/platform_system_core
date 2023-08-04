@@ -224,23 +224,32 @@ bool CompareFlags(FstabEntry::FsMgrFlags& lhs, FstabEntry::FsMgrFlags& rhs) {
 
 }  // namespace
 
-TEST(fs_mgr, fs_mgr_parse_cmdline) {
-    EXPECT_EQ(result_space, fs_mgr_parse_cmdline(cmdline));
+TEST(fs_mgr, ImportKernelCmdline) {
+    std::vector<std::pair<std::string, std::string>> result;
+    ImportKernelCmdlineFromString(
+            cmdline, [&](std::string key, std::string value) { result.emplace_back(key, value); });
+    EXPECT_THAT(result, ContainerEq(result_space));
 }
 
-TEST(fs_mgr, fs_mgr_get_boot_config_from_kernel_cmdline) {
+TEST(fs_mgr, GetKernelCmdline) {
     std::string content;
-    for (const auto& entry : result_space) {
-        static constexpr char androidboot[] = "androidboot.";
-        if (!android::base::StartsWith(entry.first, androidboot)) continue;
-        auto key = entry.first.substr(strlen(androidboot));
-        EXPECT_TRUE(fs_mgr_get_boot_config_from_kernel(cmdline, key, &content)) << " for " << key;
-        EXPECT_EQ(entry.second, content);
+    for (const auto& [key, value] : result_space) {
+        EXPECT_TRUE(GetKernelCmdlineFromString(cmdline, key, &content)) << " for " << key;
+        EXPECT_EQ(content, value);
     }
-    EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "vbmeta.avb_versio", &content));
-    EXPECT_TRUE(content.empty()) << content;
-    EXPECT_FALSE(fs_mgr_get_boot_config_from_kernel(cmdline, "nospace", &content));
-    EXPECT_TRUE(content.empty()) << content;
+
+    const std::string kUnmodifiedToken = "<UNMODIFIED>";
+    content = kUnmodifiedToken;
+    EXPECT_FALSE(GetKernelCmdlineFromString(cmdline, "", &content));
+    EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
+
+    content = kUnmodifiedToken;
+    EXPECT_FALSE(GetKernelCmdlineFromString(cmdline, "androidboot.vbmeta.avb_versio", &content));
+    EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
+
+    content = kUnmodifiedToken;
+    EXPECT_FALSE(GetKernelCmdlineFromString(bootconfig, "androidboot.nospace", &content));
+    EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
 }
 
 TEST(fs_mgr, ImportBootconfig) {
@@ -260,17 +269,15 @@ TEST(fs_mgr, GetBootconfig) {
 
     const std::string kUnmodifiedToken = "<UNMODIFIED>";
     content = kUnmodifiedToken;
-    EXPECT_FALSE(android::fs_mgr::GetBootconfigFromString(bootconfig, "", &content));
+    EXPECT_FALSE(GetBootconfigFromString(bootconfig, "", &content));
     EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
 
     content = kUnmodifiedToken;
-    EXPECT_FALSE(android::fs_mgr::GetBootconfigFromString(
-            bootconfig, "androidboot.vbmeta.avb_versio", &content));
+    EXPECT_FALSE(GetBootconfigFromString(bootconfig, "androidboot.vbmeta.avb_versio", &content));
     EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
 
     content = kUnmodifiedToken;
-    EXPECT_FALSE(
-            android::fs_mgr::GetBootconfigFromString(bootconfig, "androidboot.nospace", &content));
+    EXPECT_FALSE(GetBootconfigFromString(bootconfig, "androidboot.nospace", &content));
     EXPECT_EQ(content, kUnmodifiedToken) << "output parameter shouldn't be overridden";
 }
 
