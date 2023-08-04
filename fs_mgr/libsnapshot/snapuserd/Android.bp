@@ -19,7 +19,7 @@ package {
 }
 
 cc_defaults {
-    name: "libsnapshot_snapuserd_defaults",
+    name: "libsnapuserd_client_defaults",
     defaults: [
         "fs_mgr_defaults",
     ],
@@ -33,15 +33,15 @@ cc_defaults {
 }
 
 cc_library_static {
-    name: "libsnapshot_snapuserd",
+    name: "libsnapuserd_client",
     defaults: [
         "fs_mgr_defaults",
-        "libsnapshot_snapuserd_defaults",
+        "libsnapuserd_client_defaults",
     ],
     recovery_available: true,
     static_libs: [
         "libcutils_sockets",
-        "libfs_mgr",
+        "libfs_mgr_file_wait",
     ],
     shared_libs: [
         "libbase",
@@ -75,11 +75,13 @@ cc_library_static {
     static_libs: [
         "libbase",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
         "libsnapshot_cow",
         "liburing",
     ],
     include_dirs: ["bionic/libc/kernel"],
+    export_include_dirs: ["include"],
     header_libs: [
         "libstorage_literals_headers",
     ],
@@ -104,12 +106,13 @@ cc_defaults {
         "libbrotli",
         "libcutils_sockets",
         "libdm",
-        "libfs_mgr",
+        "libext2_uuid",
+        "libfs_mgr_file_wait",
         "libgflags",
         "liblog",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
         "libsnapuserd",
+        "libsnapuserd_client",
         "libz",
         "liblz4",
         "libext4_utils",
@@ -143,6 +146,9 @@ cc_binary {
     defaults: ["snapuserd_defaults"],
     init_rc: [
         "snapuserd.rc",
+    ],
+    static_libs: [
+        "libsnapuserd_client",
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
@@ -186,12 +192,13 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
+        "libsnapuserd_client",
         "libcutils_sockets",
         "libz",
-        "libfs_mgr",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
+        "libfs_mgr_file_wait",
     ],
     header_libs: [
         "libstorage_literals_headers",
@@ -221,12 +228,12 @@ cc_test {
         "libbrotli",
         "libcutils_sockets",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
-        "libfs_mgr",
+        "libfs_mgr_file_wait",
         "libgflags",
         "libgtest",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
         "libsnapuserd",
         "liburing",
         "libz",

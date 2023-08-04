@@ -44,7 +44,7 @@ cc_defaults {
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
-        "libsnapshot_snapuserd",
+        "libsnapuserd_client",
         "libz",
     ],
     header_libs: [
