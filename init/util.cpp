@@ -242,18 +242,6 @@ int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
     return -1;
 }
 
-void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>& fn) {
-    std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
-
-    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        if (pieces.size() == 2) {
-            fn(pieces[0], pieces[1]);
-        }
-    }
-}
-
 bool make_dir(const std::string& path, mode_t mode) {
     std::string secontext;
     if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {
