@@ -831,9 +831,8 @@ bool ReadDefaultFstab(Fstab* fstab) {
     Fstab default_fstab;
     const std::string default_fstab_path = GetFstabPath();
     if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
-        for (auto&& entry : default_fstab) {
-            fstab->emplace_back(std::move(entry));
-        }
+        fstab->insert(fstab->end(), std::make_move_iterator(default_fstab.begin()),
+                      std::make_move_iterator(default_fstab.end()));
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
@@ -879,7 +878,8 @@ std::set<std::string> GetBootDevices() {
     const std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
     if (GetKernelCmdline("androidboot.boot_devices", &value) || ReadDtFile(dt_file_name, &value)) {
         auto boot_devices_list = Split(value, ",");
-        return {boot_devices_list.begin(), boot_devices_list.end()};
+        return {std::make_move_iterator(boot_devices_list.begin()),
+                std::make_move_iterator(boot_devices_list.end())};
     }
 
     ImportKernelCmdline([&](std::string key, std::string value) {
