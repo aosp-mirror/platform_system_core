@@ -577,7 +577,7 @@ static void import_late(const std::vector<std::string>& rc_paths) {
  *
  * return code is processed based on input code
  */
-static Result<void> queue_fs_event(int code, bool userdata_remount) {
+static Result<void> queue_fs_event(int code) {
     if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         SetProperty("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
@@ -591,27 +591,9 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
-    } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
-            return Error() << "FscryptInstallKeyring() failed";
-        }
-        SetProperty("ro.crypto.state", "encrypted");
-
-        // Although encrypted, we have device key, so we do not need to
-        // do anything different from the nonencrypted case.
-        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
-            return Error() << "FscryptInstallKeyring() failed";
-        }
-        SetProperty("ro.crypto.state", "encrypted");
-
-        // Although encrypted, vold has already set the device up, so we do not need to
-        // do anything different from the nonencrypted case.
-        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+    } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED ||
+               code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED ||
+               code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
         if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
@@ -683,7 +665,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(mount_fstab_result.code, false);
+        auto queue_fs_result = queue_fs_event(mount_fstab_result.code);
         if (!queue_fs_result.ok()) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -1217,7 +1199,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
                                          "/metadata/userspacereboot/mount_info.txt");
         trigger_shutdown("reboot,mount_userdata_failed");
     }
-    if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result.ok()) {
+    if (auto result = queue_fs_event(initial_mount_fstab_return_code); !result.ok()) {
         return Error() << "queue_fs_event() failed: " << result.error();
     }
     return {};
@@ -1315,7 +1297,6 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return create_dirs.error();
     }
     auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
-    ServiceList::GetInstance().MarkServicesUpdate();
     if (!parse_configs.ok()) {
         return parse_configs.error();
     }
@@ -1325,6 +1306,8 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return update_linker_config.error();
     }
 
+    // Now start delayed services
+    ServiceList::GetInstance().MarkServicesUpdate();
     return {};
 }
 

@@ -36,7 +36,8 @@
 #include <android-base/strings.h>
 #include <libgsi/libgsi.h>
 
-#include "fs_mgr_priv.h"
+#include "fstab_priv.h"
+#include "logging_macros.h"
 
 using android::base::EndsWith;
 using android::base::ParseByteCount;
@@ -50,11 +51,10 @@ namespace android {
 namespace fs_mgr {
 namespace {
 
-constexpr char kDefaultAndroidDtDir[] = "/proc/device-tree/firmware/android";
 constexpr char kProcMountsPath[] = "/proc/mounts";
 
 struct FlagList {
-    const char *name;
+    const char* name;
     uint64_t flag;
 };
 
@@ -80,7 +80,7 @@ FlagList kMountFlagsList[] = {
 off64_t CalculateZramSize(int percentage) {
     off64_t total;
 
-    total  = sysconf(_SC_PHYS_PAGES);
+    total = sysconf(_SC_PHYS_PAGES);
     total *= percentage;
     total /= 100;
 
@@ -328,8 +328,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     // some recovery fstabs still contain the FDE options since they didn't do
     // anything in recovery mode anyway (except possibly to cause the
     // reservation of a crypto footer) and thus never got removed.
-    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed &&
-        access("/system/bin/recovery", F_OK) != 0) {
+    if (entry->fs_mgr_flags.crypt && !entry->fs_mgr_flags.vold_managed && !InRecovery()) {
         LERROR << "FDE is no longer supported; 'encryptable' can only be used for adoptable "
                   "storage";
         return false;
@@ -337,25 +336,14 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     return true;
 }
 
-std::string InitAndroidDtDir() {
-    std::string android_dt_dir;
-    // The platform may specify a custom Android DT path in kernel cmdline
-    if (!fs_mgr_get_boot_config_from_bootconfig_source("android_dt_dir", &android_dt_dir) &&
-        !fs_mgr_get_boot_config_from_kernel_cmdline("android_dt_dir", &android_dt_dir)) {
-        // Fall back to the standard procfs-based path
-        android_dt_dir = kDefaultAndroidDtDir;
-    }
-    return android_dt_dir;
-}
-
 bool IsDtFstabCompatible() {
     std::string dt_value;
-    std::string file_name = get_android_dt_dir() + "/fstab/compatible";
+    std::string file_name = GetAndroidDtDir() + "fstab/compatible";
 
     if (ReadDtFile(file_name, &dt_value) && dt_value == "android,fstab") {
         // If there's no status property or its set to "ok" or "okay", then we use the DT fstab.
         std::string status_value;
-        std::string status_file_name = get_android_dt_dir() + "/fstab/status";
+        std::string status_file_name = GetAndroidDtDir() + "fstab/status";
         return !ReadDtFile(status_file_name, &status_value) || status_value == "ok" ||
                status_value == "okay";
     }
@@ -368,7 +356,7 @@ std::string ReadFstabFromDt() {
         return {};
     }
 
-    std::string fstabdir_name = get_android_dt_dir() + "/fstab";
+    std::string fstabdir_name = GetAndroidDtDir() + "fstab";
     std::unique_ptr<DIR, int (*)(DIR*)> fstabdir(opendir(fstabdir_name.c_str()), closedir);
     if (!fstabdir) return {};
 
@@ -401,7 +389,7 @@ std::string ReadFstabFromDt() {
 
         std::string mount_point;
         file_name =
-            android::base::StringPrintf("%s/%s/mnt_point", fstabdir_name.c_str(), dp->d_name);
+                android::base::StringPrintf("%s/%s/mnt_point", fstabdir_name.c_str(), dp->d_name);
         if (ReadDtFile(file_name, &value)) {
             LINFO << "dt_fstab: Using a specified mount point " << value << " for " << dp->d_name;
             mount_point = value;
@@ -417,14 +405,16 @@ std::string ReadFstabFromDt() {
         }
         fstab_entry.push_back(value);
 
-        file_name = android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
+        file_name =
+                android::base::StringPrintf("%s/%s/mnt_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             return {};
         }
         fstab_entry.push_back(value);
 
-        file_name = android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
+        file_name =
+                android::base::StringPrintf("%s/%s/fsmgr_flags", fstabdir_name.c_str(), dp->d_name);
         if (!ReadDtFile(file_name, &value)) {
             LERROR << "dt_fstab: Failed to find type for partition " << dp->d_name;
             return {};
@@ -520,6 +510,9 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 // ramdisk's copy of the fstab had to be located in the root directory, but now
 // the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
+    if (InRecovery()) {
+        return "/etc/recovery.fstab";
+    }
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;
 
@@ -835,19 +828,11 @@ bool ReadDefaultFstab(Fstab* fstab) {
     fstab->clear();
     ReadFstabFromDt(fstab, false /* verbose */);
 
-    std::string default_fstab_path;
-    // Use different fstab paths for normal boot and recovery boot, respectively
-    if ((access("/sbin/recovery", F_OK) == 0) || (access("/system/bin/recovery", F_OK) == 0)) {
-        default_fstab_path = "/etc/recovery.fstab";
-    } else {  // normal boot
-        default_fstab_path = GetFstabPath();
-    }
-
     Fstab default_fstab;
+    const std::string default_fstab_path = GetFstabPath();
     if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
-        for (auto&& entry : default_fstab) {
-            fstab->emplace_back(std::move(entry));
-        }
+        fstab->insert(fstab->end(), std::make_move_iterator(default_fstab.begin()),
+                      std::make_move_iterator(default_fstab.end()));
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
@@ -877,40 +862,33 @@ const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& p
 }
 
 std::set<std::string> GetBootDevices() {
+    std::set<std::string> boot_devices;
     // First check bootconfig, then kernel commandline, then the device tree
-    std::string dt_file_name = get_android_dt_dir() + "/boot_devices";
     std::string value;
-    if (fs_mgr_get_boot_config_from_bootconfig_source("boot_devices", &value) ||
-        fs_mgr_get_boot_config_from_bootconfig_source("boot_device", &value)) {
-        std::set<std::string> boot_devices;
-        // remove quotes and split by spaces
-        auto boot_device_strings = base::Split(base::StringReplace(value, "\"", "", true), " ");
-        for (std::string_view device : boot_device_strings) {
-            // trim the trailing comma, keep the rest.
+    if (GetBootconfig("androidboot.boot_devices", &value) ||
+        GetBootconfig("androidboot.boot_device", &value)) {
+        // split by spaces and trim the trailing comma.
+        for (std::string_view device : android::base::Split(value, " ")) {
             base::ConsumeSuffix(&device, ",");
             boot_devices.emplace(device);
         }
         return boot_devices;
     }
 
-    if (fs_mgr_get_boot_config_from_kernel_cmdline("boot_devices", &value) ||
-        ReadDtFile(dt_file_name, &value)) {
-        auto boot_devices = Split(value, ",");
-        return std::set<std::string>(boot_devices.begin(), boot_devices.end());
+    const std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
+    if (GetKernelCmdline("androidboot.boot_devices", &value) || ReadDtFile(dt_file_name, &value)) {
+        auto boot_devices_list = Split(value, ",");
+        return {std::make_move_iterator(boot_devices_list.begin()),
+                std::make_move_iterator(boot_devices_list.end())};
     }
 
-    std::string cmdline;
-    if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
-        std::set<std::string> boot_devices;
-        const std::string cmdline_key = "androidboot.boot_device";
-        for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
-            if (key == cmdline_key) {
-                boot_devices.emplace(value);
-            }
+    ImportKernelCmdline([&](std::string key, std::string value) {
+        if (key == "androidboot.boot_device") {
+            boot_devices.emplace(std::move(value));
         }
-        if (!boot_devices.empty()) {
-            return boot_devices;
-        }
+    });
+    if (!boot_devices.empty()) {
+        return boot_devices;
     }
 
     // Fallback to extract boot devices from fstab.
@@ -936,18 +914,22 @@ std::string GetVerityDeviceName(const FstabEntry& entry) {
     return base_device + "-verity";
 }
 
+bool InRecovery() {
+    // Check the existence of recovery binary instead of using the compile time
+    // __ANDROID_RECOVERY__ macro.
+    // If BOARD_USES_RECOVERY_AS_BOOT is true, both normal and recovery boot
+    // mode would use the same init binary, which would mean during normal boot
+    // the '/init' binary is actually a symlink pointing to
+    // init_second_stage.recovery, which would be compiled with
+    // __ANDROID_RECOVERY__ defined.
+    return access("/system/bin/recovery", F_OK) == 0 || access("/sbin/recovery", F_OK) == 0;
+}
+
 }  // namespace fs_mgr
 }  // namespace android
 
-// FIXME: The same logic is duplicated in system/core/init/
-const std::string& get_android_dt_dir() {
-    // Set once and saves time for subsequent calls to this function
-    static const std::string kAndroidDtDir = android::fs_mgr::InitAndroidDtDir();
-    return kAndroidDtDir;
-}
-
 bool is_dt_compatible() {
-    std::string file_name = get_android_dt_dir() + "/compatible";
+    std::string file_name = android::fs_mgr::GetAndroidDtDir() + "compatible";
     std::string dt_value;
     if (android::fs_mgr::ReadDtFile(file_name, &dt_value)) {
         if (dt_value == "android,firmware") {

@@ -45,6 +45,8 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     str1->toLower();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8* str2) -> void {
+                    if (str2->size() == 0) return;
+
                     str1->removeAll(str2->c_str());
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8* str2) -> void {

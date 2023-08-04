@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "read_worker.h"
+
 #include "snapuserd_core.h"
 
 namespace android {
@@ -23,64 +25,24 @@ using namespace android;
 using namespace android::dm;
 using android::base::unique_fd;
 
-Worker::Worker(const std::string& cow_device, const std::string& backing_device,
-               const std::string& control_device, const std::string& misc_name,
-               const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd) {
-    cow_device_ = cow_device;
-    backing_store_device_ = backing_device;
-    control_device_ = control_device;
-    misc_name_ = misc_name;
-    base_path_merge_ = base_path_merge;
-    snapuserd_ = snapuserd;
+void ReadWorker::CloseFds() {
+    ctrl_fd_ = {};
+    backing_store_fd_ = {};
+    Worker::CloseFds();
 }
 
-bool Worker::InitializeFds() {
-    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
-    if (backing_store_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << backing_store_device_;
-        return false;
-    }
-
-    cow_fd_.reset(open(cow_device_.c_str(), O_RDWR));
-    if (cow_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << cow_device_;
-        return false;
-    }
-
-    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
-    if (ctrl_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
-        return false;
-    }
-
-    // Base device used by merge thread
-    base_path_merge_fd_.reset(open(base_path_merge_.c_str(), O_RDWR));
-    if (base_path_merge_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Open Failed: " << base_path_merge_;
-        return false;
-    }
-
-    return true;
-}
-
-bool Worker::InitReader() {
-    reader_ = snapuserd_->CloneReaderForWorker();
-
-    if (!reader_->InitForMerge(std::move(cow_fd_))) {
-        return false;
-    }
-    return true;
-}
+ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing_device,
+                       const std::string& control_device, const std::string& misc_name,
+                       const std::string& base_path_merge,
+                       std::shared_ptr<SnapshotHandler> snapuserd)
+    : Worker(cow_device, misc_name, base_path_merge, snapuserd),
+      backing_store_device_(backing_device),
+      control_device_(control_device) {}
 
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
-bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
-    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    if (!buffer) {
-        SNAP_LOG(ERROR) << "ProcessReplaceOp failed to allocate buffer";
-        return false;
-    }
+bool ReadWorker::ProcessReplaceOp(const CowOperation* cow_op, void* buffer) {
     if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
         return false;
@@ -88,12 +50,7 @@ bool Worker::ProcessReplaceOp(const CowOperation* cow_op) {
     return true;
 }
 
-bool Worker::ReadFromSourceDevice(const CowOperation* cow_op) {
-    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    if (buffer == nullptr) {
-        SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
-        return false;
-    }
+bool ReadWorker::ReadFromSourceDevice(const CowOperation* cow_op, void* buffer) {
     uint64_t offset;
     if (!reader_->GetSourceOffset(cow_op, &offset)) {
         SNAP_LOG(ERROR) << "ReadFromSourceDevice: Failed to get source offset";
@@ -118,60 +75,43 @@ bool Worker::ReadFromSourceDevice(const CowOperation* cow_op) {
 
 // Start the copy operation. This will read the backing
 // block device which is represented by cow_op->source.
-bool Worker::ProcessCopyOp(const CowOperation* cow_op) {
-    if (!ReadFromSourceDevice(cow_op)) {
+bool ReadWorker::ProcessCopyOp(const CowOperation* cow_op, void* buffer) {
+    if (!ReadFromSourceDevice(cow_op, buffer)) {
         return false;
     }
-
     return true;
 }
 
-bool Worker::ProcessXorOp(const CowOperation* cow_op) {
-    if (!ReadFromSourceDevice(cow_op)) {
+bool ReadWorker::ProcessXorOp(const CowOperation* cow_op, void* buffer) {
+    if (!ReadFromSourceDevice(cow_op, buffer)) {
         return false;
     }
 
-    xorsink_.Reset();
-
-    size_t actual = 0;
-    void* buffer = xorsink_.GetBuffer(BLOCK_SZ, &actual);
-    if (!buffer || actual < BLOCK_SZ) {
-        SNAP_LOG(ERROR) << "ProcessXorOp failed to get buffer of " << BLOCK_SZ << " size, got "
-                        << actual;
-        return false;
+    if (xor_buffer_.empty()) {
+        xor_buffer_.resize(BLOCK_SZ);
     }
-    ssize_t size = reader_->ReadData(cow_op, buffer, BLOCK_SZ);
+    CHECK(xor_buffer_.size() == BLOCK_SZ);
+
+    ssize_t size = reader_->ReadData(cow_op, xor_buffer_.data(), xor_buffer_.size());
     if (size != BLOCK_SZ) {
         SNAP_LOG(ERROR) << "ProcessXorOp failed for block " << cow_op->new_block
                         << ", return value: " << size;
         return false;
     }
-    if (!xorsink_.ReturnData(buffer, size)) {
-        SNAP_LOG(ERROR) << "ProcessXorOp failed to return data";
-        return false;
+
+    auto xor_out = reinterpret_cast<uint8_t*>(buffer);
+    for (size_t i = 0; i < BLOCK_SZ; i++) {
+        xor_out[i] ^= xor_buffer_[i];
     }
     return true;
 }
 
-bool Worker::ProcessZeroOp() {
-    // Zero out the entire block
-    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    if (buffer == nullptr) {
-        SNAP_LOG(ERROR) << "ProcessZeroOp: Failed to get payload buffer";
-        return false;
-    }
-
+bool ReadWorker::ProcessZeroOp(void* buffer) {
     memset(buffer, 0, BLOCK_SZ);
     return true;
 }
 
-bool Worker::ProcessOrderedOp(const CowOperation* cow_op) {
-    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    if (buffer == nullptr) {
-        SNAP_LOG(ERROR) << "ProcessOrderedOp: Failed to get payload buffer";
-        return false;
-    }
-
+bool ReadWorker::ProcessOrderedOp(const CowOperation* cow_op, void* buffer) {
     MERGE_GROUP_STATE state = snapuserd_->ProcessMergingBlock(cow_op->new_block, buffer);
 
     switch (state) {
@@ -181,7 +121,7 @@ bool Worker::ProcessOrderedOp(const CowOperation* cow_op) {
             SNAP_LOG(DEBUG) << "Merge-completed: Reading from base device sector: "
                             << (cow_op->new_block >> SECTOR_SHIFT)
                             << " Block-number: " << cow_op->new_block;
-            if (!ReadDataFromBaseDevice(ChunkToSector(cow_op->new_block), BLOCK_SZ)) {
+            if (!ReadDataFromBaseDevice(ChunkToSector(cow_op->new_block), buffer, BLOCK_SZ)) {
                 SNAP_LOG(ERROR) << "ReadDataFromBaseDevice at sector: "
                                 << (cow_op->new_block >> SECTOR_SHIFT) << " after merge-complete.";
                 return false;
@@ -191,9 +131,9 @@ bool Worker::ProcessOrderedOp(const CowOperation* cow_op) {
         case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
             bool ret;
             if (cow_op->type == kCowCopyOp) {
-                ret = ProcessCopyOp(cow_op);
+                ret = ProcessCopyOp(cow_op, buffer);
             } else {
-                ret = ProcessXorOp(cow_op);
+                ret = ProcessXorOp(cow_op, buffer);
             }
 
             // I/O is complete - decrement the refcount irrespective of the return
@@ -218,7 +158,7 @@ bool Worker::ProcessOrderedOp(const CowOperation* cow_op) {
     return false;
 }
 
-bool Worker::ProcessCowOp(const CowOperation* cow_op) {
+bool ReadWorker::ProcessCowOp(const CowOperation* cow_op, void* buffer) {
     if (cow_op == nullptr) {
         SNAP_LOG(ERROR) << "ProcessCowOp: Invalid cow_op";
         return false;
@@ -226,17 +166,17 @@ bool Worker::ProcessCowOp(const CowOperation* cow_op) {
 
     switch (cow_op->type) {
         case kCowReplaceOp: {
-            return ProcessReplaceOp(cow_op);
+            return ProcessReplaceOp(cow_op, buffer);
         }
 
         case kCowZeroOp: {
-            return ProcessZeroOp();
+            return ProcessZeroOp(buffer);
         }
 
         case kCowCopyOp:
             [[fallthrough]];
         case kCowXorOp: {
-            return ProcessOrderedOp(cow_op);
+            return ProcessOrderedOp(cow_op, buffer);
         }
 
         default: {
@@ -246,31 +186,26 @@ bool Worker::ProcessCowOp(const CowOperation* cow_op) {
     return false;
 }
 
-void Worker::InitializeBufsink() {
-    // Allocate the buffer which is used to communicate between
-    // daemon and dm-user. The buffer comprises of header and a fixed payload.
-    // If the dm-user requests a big IO, the IO will be broken into chunks
-    // of PAYLOAD_BUFFER_SZ.
-    size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_BUFFER_SZ;
-    bufsink_.Initialize(buf_size);
-}
-
-bool Worker::Init() {
-    InitializeBufsink();
-    xorsink_.Initialize(&bufsink_, BLOCK_SZ);
-
-    if (!InitializeFds()) {
+bool ReadWorker::Init() {
+    if (!Worker::Init()) {
         return false;
     }
 
-    if (!InitReader()) {
+    backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
+    if (backing_store_fd_ < 0) {
+        SNAP_PLOG(ERROR) << "Open Failed: " << backing_store_device_;
         return false;
     }
 
+    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
+    if (ctrl_fd_ < 0) {
+        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
+        return false;
+    }
     return true;
 }
 
-bool Worker::RunThread() {
+bool ReadWorker::Run() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
 
     if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
@@ -290,26 +225,11 @@ bool Worker::RunThread() {
     return true;
 }
 
-// Read Header from dm-user misc device. This gives
-// us the sector number for which IO is issued by dm-snapshot device
-bool Worker::ReadDmUserHeader() {
-    if (!android::base::ReadFully(ctrl_fd_, bufsink_.GetBufPtr(), sizeof(struct dm_user_header))) {
-        if (errno != ENOTBLK) {
-            SNAP_PLOG(ERROR) << "Control-read failed";
-        }
-
-        SNAP_PLOG(DEBUG) << "ReadDmUserHeader failed....";
-        return false;
-    }
-
-    return true;
-}
-
 // Send the payload/data back to dm-user misc device.
-bool Worker::WriteDmUserPayload(size_t size, bool header_response) {
+bool ReadWorker::WriteDmUserPayload(size_t size) {
     size_t payload_size = size;
     void* buf = bufsink_.GetPayloadBufPtr();
-    if (header_response) {
+    if (header_response_) {
         payload_size += sizeof(struct dm_user_header);
         buf = bufsink_.GetBufPtr();
     }
@@ -319,17 +239,17 @@ bool Worker::WriteDmUserPayload(size_t size, bool header_response) {
         return false;
     }
 
+    // After the first header is sent in response to a request, we cannot
+    // send any additional headers.
+    header_response_ = false;
+
+    // Reset the buffer for use by the next request.
+    bufsink_.ResetBufferOffset();
     return true;
 }
 
-bool Worker::ReadDataFromBaseDevice(sector_t sector, size_t read_size) {
+bool ReadWorker::ReadDataFromBaseDevice(sector_t sector, void* buffer, size_t read_size) {
     CHECK(read_size <= BLOCK_SZ);
-
-    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
-    if (buffer == nullptr) {
-        SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
-        return false;
-    }
 
     loff_t offset = sector << SECTOR_SHIFT;
     if (!android::base::ReadFullyAtOffset(base_path_merge_fd_, buffer, read_size, offset)) {
@@ -341,21 +261,16 @@ bool Worker::ReadDataFromBaseDevice(sector_t sector, size_t read_size) {
     return true;
 }
 
-bool Worker::ReadAlignedSector(sector_t sector, size_t sz, bool header_response) {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
     size_t remaining_size = sz;
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
-    bool io_error = false;
     int ret = 0;
 
     do {
         // Process 1MB payload at a time
         size_t read_size = std::min(PAYLOAD_BUFFER_SZ, remaining_size);
 
-        header->type = DM_USER_RESP_SUCCESS;
         size_t total_bytes_read = 0;
-        io_error = false;
-        bufsink_.ResetBufferOffset();
 
         while (read_size) {
             // We need to check every 4k block to verify if it is
@@ -366,98 +281,83 @@ bool Worker::ReadAlignedSector(sector_t sector, size_t sz, bool header_response)
                                        std::make_pair(sector, nullptr), SnapshotHandler::compare);
             bool not_found = (it == chunk_vec.end() || it->first != sector);
 
+            void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ, size);
+            if (!buffer) {
+                SNAP_LOG(ERROR) << "AcquireBuffer failed in ReadAlignedSector";
+                return false;
+            }
+
             if (not_found) {
                 // Block not found in map - which means this block was not
                 // changed as per the OTA. Just route the I/O to the base
                 // device.
-                if (!ReadDataFromBaseDevice(sector, size)) {
+                if (!ReadDataFromBaseDevice(sector, buffer, size)) {
                     SNAP_LOG(ERROR) << "ReadDataFromBaseDevice failed";
-                    header->type = DM_USER_RESP_ERROR;
+                    return false;
                 }
 
                 ret = size;
             } else {
                 // We found the sector in mapping. Check the type of COW OP and
                 // process it.
-                if (!ProcessCowOp(it->second)) {
+                if (!ProcessCowOp(it->second, buffer)) {
                     SNAP_LOG(ERROR) << "ProcessCowOp failed";
-                    header->type = DM_USER_RESP_ERROR;
-                }
-
-                ret = BLOCK_SZ;
-            }
-
-            // Just return the header if it is an error
-            if (header->type == DM_USER_RESP_ERROR) {
-                if (!RespondIOError(header_response)) {
                     return false;
                 }
 
-                io_error = true;
-                break;
+                ret = std::min(BLOCK_SZ, read_size);
             }
 
             read_size -= ret;
             total_bytes_read += ret;
             sector += (ret >> SECTOR_SHIFT);
-            bufsink_.UpdateBufferOffset(ret);
         }
 
-        if (!io_error) {
-            if (!WriteDmUserPayload(total_bytes_read, header_response)) {
-                return false;
-            }
-
-            SNAP_LOG(DEBUG) << "WriteDmUserPayload success total_bytes_read: " << total_bytes_read
-                            << " header-response: " << header_response
-                            << " remaining_size: " << remaining_size;
-            header_response = false;
-            remaining_size -= total_bytes_read;
+        if (!SendBufferedIo()) {
+            return false;
         }
-    } while (remaining_size > 0 && !io_error);
+
+        SNAP_LOG(DEBUG) << "SendBufferedIo success total_bytes_read: " << total_bytes_read
+                        << " remaining_size: " << remaining_size;
+        remaining_size -= total_bytes_read;
+    } while (remaining_size > 0);
 
     return true;
 }
 
-int Worker::ReadUnalignedSector(
+int ReadWorker::ReadUnalignedSector(
         sector_t sector, size_t size,
         std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it) {
-    size_t skip_sector_size = 0;
-
     SNAP_LOG(DEBUG) << "ReadUnalignedSector: sector " << sector << " size: " << size
                     << " Aligned sector: " << it->first;
 
-    if (!ProcessCowOp(it->second)) {
+    int num_sectors_skip = sector - it->first;
+    size_t skip_size = num_sectors_skip << SECTOR_SHIFT;
+    size_t write_size = std::min(size, BLOCK_SZ - skip_size);
+    auto buffer = reinterpret_cast<uint8_t*>(bufsink_.AcquireBuffer(BLOCK_SZ, write_size));
+    if (!buffer) {
+        SNAP_LOG(ERROR) << "ProcessCowOp failed to allocate buffer";
+        return -1;
+    }
+
+    if (!ProcessCowOp(it->second, buffer)) {
         SNAP_LOG(ERROR) << "ReadUnalignedSector: " << sector << " failed of size: " << size
                         << " Aligned sector: " << it->first;
         return -1;
     }
 
-    int num_sectors_skip = sector - it->first;
-
-    if (num_sectors_skip > 0) {
-        skip_sector_size = num_sectors_skip << SECTOR_SHIFT;
-        char* buffer = reinterpret_cast<char*>(bufsink_.GetBufPtr());
-        struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
-
-        if (skip_sector_size == BLOCK_SZ) {
+    if (skip_size) {
+        if (skip_size == BLOCK_SZ) {
             SNAP_LOG(ERROR) << "Invalid un-aligned IO request at sector: " << sector
                             << " Base-sector: " << it->first;
             return -1;
         }
-
-        memmove(msg->payload.buf, (char*)msg->payload.buf + skip_sector_size,
-                (BLOCK_SZ - skip_sector_size));
+        memmove(buffer, buffer + skip_size, write_size);
     }
-
-    bufsink_.ResetBufferOffset();
-    return std::min(size, (BLOCK_SZ - skip_sector_size));
+    return write_size;
 }
 
-bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
-    header->type = DM_USER_RESP_SUCCESS;
-    bufsink_.ResetBufferOffset();
+bool ReadWorker::ReadUnalignedSector(sector_t sector, size_t size) {
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
 
     auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(), std::make_pair(sector, nullptr),
@@ -484,7 +384,6 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
     // to any COW ops. In that case, we just need to read from the base
     // device.
     bool merge_complete = false;
-    bool header_response = true;
     if (it == chunk_vec.end()) {
         if (chunk_vec.size() > 0) {
             // I/O request beyond the last mapped sector
@@ -503,7 +402,7 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
             --it;
         }
     } else {
-        return ReadAlignedSector(sector, size, header_response);
+        return ReadAlignedSector(sector, size);
     }
 
     loff_t requested_offset = sector << SECTOR_SHIFT;
@@ -527,7 +426,6 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
     // requested offset in this case is beyond the last mapped COW op size (which
     // is block 1 in this case).
 
-    size_t total_bytes_read = 0;
     size_t remaining_size = size;
     int ret = 0;
     if (!merge_complete && (requested_offset >= final_offset) &&
@@ -537,22 +435,20 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
         if (ret < 0) {
             SNAP_LOG(ERROR) << "ReadUnalignedSector failed for sector: " << sector
                             << " size: " << size << " it->sector: " << it->first;
-            return RespondIOError(header_response);
-        }
-
-        remaining_size -= ret;
-        total_bytes_read += ret;
-        sector += (ret >> SECTOR_SHIFT);
-
-        // Send the data back
-        if (!WriteDmUserPayload(total_bytes_read, header_response)) {
             return false;
         }
 
-        header_response = false;
+        remaining_size -= ret;
+        sector += (ret >> SECTOR_SHIFT);
+
+        // Send the data back
+        if (!SendBufferedIo()) {
+            return false;
+        }
+
         // If we still have pending data to be processed, this will be aligned I/O
         if (remaining_size) {
-            return ReadAlignedSector(sector, remaining_size, header_response);
+            return ReadAlignedSector(sector, remaining_size);
         }
     } else {
         // This is all about handling I/O request to be routed to base device
@@ -564,41 +460,35 @@ bool Worker::ReadUnalignedSector(sector_t sector, size_t size) {
         // Find the diff of the aligned offset
         size_t diff_size = aligned_offset - requested_offset;
         CHECK(diff_size <= BLOCK_SZ);
-        if (remaining_size < diff_size) {
-            if (!ReadDataFromBaseDevice(sector, remaining_size)) {
-                return RespondIOError(header_response);
-            }
-            total_bytes_read += remaining_size;
 
-            if (!WriteDmUserPayload(total_bytes_read, header_response)) {
-                return false;
-            }
-        } else {
-            if (!ReadDataFromBaseDevice(sector, diff_size)) {
-                return RespondIOError(header_response);
-            }
+        size_t read_size = std::min(remaining_size, diff_size);
+        void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ, read_size);
+        if (!buffer) {
+            SNAP_LOG(ERROR) << "AcquireBuffer failed in ReadUnalignedSector";
+            return false;
+        }
+        if (!ReadDataFromBaseDevice(sector, buffer, read_size)) {
+            return false;
+        }
+        if (!SendBufferedIo()) {
+            return false;
+        }
 
-            total_bytes_read += diff_size;
-
-            if (!WriteDmUserPayload(total_bytes_read, header_response)) {
-                return false;
-            }
-
+        if (remaining_size >= diff_size) {
             remaining_size -= diff_size;
             size_t num_sectors_read = (diff_size >> SECTOR_SHIFT);
             sector += num_sectors_read;
             CHECK(IsBlockAligned(sector << SECTOR_SHIFT));
-            header_response = false;
 
             // If we still have pending data to be processed, this will be aligned I/O
-            return ReadAlignedSector(sector, remaining_size, header_response);
+            return ReadAlignedSector(sector, remaining_size);
         }
     }
 
     return true;
 }
 
-bool Worker::RespondIOError(bool header_response) {
+void ReadWorker::RespondIOError() {
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
     header->type = DM_USER_RESP_ERROR;
     // This is an issue with the dm-user interface. There
@@ -610,18 +500,12 @@ bool Worker::RespondIOError(bool header_response) {
     // this back to dm-user.
     //
     // TODO: Fix the interface
-    CHECK(header_response);
+    CHECK(header_response_);
 
-    if (!WriteDmUserPayload(0, header_response)) {
-        return false;
-    }
-
-    // There is no need to process further as we have already seen
-    // an I/O error
-    return true;
+    WriteDmUserPayload(0);
 }
 
-bool Worker::DmuserReadRequest() {
+bool ReadWorker::DmuserReadRequest() {
     struct dm_user_header* header = bufsink_.GetHeaderPtr();
 
     // Unaligned I/O request
@@ -629,13 +513,23 @@ bool Worker::DmuserReadRequest() {
         return ReadUnalignedSector(header->sector, header->len);
     }
 
-    return ReadAlignedSector(header->sector, header->len, true);
+    return ReadAlignedSector(header->sector, header->len);
 }
 
-bool Worker::ProcessIORequest() {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+bool ReadWorker::SendBufferedIo() {
+    return WriteDmUserPayload(bufsink_.GetPayloadBytesWritten());
+}
 
-    if (!ReadDmUserHeader()) {
+bool ReadWorker::ProcessIORequest() {
+    // Read Header from dm-user misc device. This gives
+    // us the sector number for which IO is issued by dm-snapshot device
+    struct dm_user_header* header = bufsink_.GetHeaderPtr();
+    if (!android::base::ReadFully(ctrl_fd_, header, sizeof(*header))) {
+        if (errno != ENOTBLK) {
+            SNAP_PLOG(ERROR) << "Control-read failed";
+        }
+
+        SNAP_PLOG(DEBUG) << "ReadDmUserHeader failed....";
         return false;
     }
 
@@ -645,24 +539,37 @@ bool Worker::ProcessIORequest() {
     SNAP_LOG(DEBUG) << "Daemon: msg->type: " << std::dec << header->type;
     SNAP_LOG(DEBUG) << "Daemon: msg->flags: " << std::dec << header->flags;
 
-    switch (header->type) {
-        case DM_USER_REQ_MAP_READ: {
-            if (!DmuserReadRequest()) {
-                return false;
-            }
-            break;
-        }
+    // Use the same header buffer as the response header.
+    int request_type = header->type;
+    header->type = DM_USER_RESP_SUCCESS;
+    header_response_ = true;
 
-        case DM_USER_REQ_MAP_WRITE: {
+    // Reset the output buffer.
+    bufsink_.ResetBufferOffset();
+
+    bool ok;
+    switch (request_type) {
+        case DM_USER_REQ_MAP_READ:
+            ok = DmuserReadRequest();
+            break;
+
+        case DM_USER_REQ_MAP_WRITE:
             // TODO: We should not get any write request
             // to dm-user as we mount all partitions
             // as read-only. Need to verify how are TRIM commands
             // handled during mount.
-            return false;
-        }
+            ok = false;
+            break;
+
+        default:
+            ok = false;
+            break;
     }
 
-    return true;
+    if (!ok && header->type != DM_USER_RESP_ERROR) {
+        RespondIOError();
+    }
+    return ok;
 }
 
 }  // namespace snapshot

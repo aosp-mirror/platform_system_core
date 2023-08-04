@@ -734,8 +734,8 @@ void Snapuserd::ReadBlocks(const std::string& partition_name, const std::string&
     off_t offset = 0;
 
     for (int i = 0; i < num_threads; i++) {
-        std::async(std::launch::async, &Snapuserd::ReadBlocksToCache, this, dm_block_device,
-                   partition_name, offset, read_sz_per_thread);
+        (void)std::async(std::launch::async, &Snapuserd::ReadBlocksToCache, this, dm_block_device,
+                         partition_name, offset, read_sz_per_thread);
 
         offset += read_sz_per_thread;
     }

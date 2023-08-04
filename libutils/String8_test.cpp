@@ -114,3 +114,21 @@ TEST_F(String8Test, append) {
     EXPECT_EQ(NO_MEMORY, s.append("baz", SIZE_MAX));
     EXPECT_STREQ("foobar", s);
 }
+
+TEST_F(String8Test, removeAll) {
+    String8 s("Hello, world!");
+
+    // NULL input should cause an assertion failure and error message in logcat
+    EXPECT_DEATH(s.removeAll(NULL), "");
+
+    // expect to return true and string content should remain unchanged
+    EXPECT_TRUE(s.removeAll(""));
+    EXPECT_STREQ("Hello, world!", s);
+
+    // expect to return false
+    EXPECT_FALSE(s.removeAll("x"));
+    EXPECT_STREQ("Hello, world!", s);
+
+    EXPECT_TRUE(s.removeAll("o"));
+    EXPECT_STREQ("Hell, wrld!", s);
+}

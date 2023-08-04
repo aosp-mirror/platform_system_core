@@ -42,6 +42,10 @@
 #include <cutils/sockets.h>
 #include <selinux/android.h>
 
+#if defined(__ANDROID__)
+#include <fs_mgr.h>
+#endif
+
 #ifdef INIT_FULL_SOURCES
 #include <android/api-level.h>
 #include <sys/system_properties.h>
@@ -59,8 +63,6 @@ using namespace std::literals::string_literals;
 
 namespace android {
 namespace init {
-
-const std::string kDefaultAndroidDtDir("/proc/device-tree/firmware/android/");
 
 const std::string kDataDirPrefix("/data/");
 
@@ -240,33 +242,6 @@ int wait_for_file(const char* filename, std::chrono::nanoseconds timeout) {
     return -1;
 }
 
-void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>& fn) {
-    std::string cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &cmdline);
-
-    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        if (pieces.size() == 2) {
-            fn(pieces[0], pieces[1]);
-        }
-    }
-}
-
-void ImportBootconfig(const std::function<void(const std::string&, const std::string&)>& fn) {
-    std::string bootconfig;
-    android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
-
-    for (const auto& entry : android::base::Split(bootconfig, "\n")) {
-        std::vector<std::string> pieces = android::base::Split(entry, "=");
-        if (pieces.size() == 2) {
-            // get rid of the extra space between a list of values and remove the quotes.
-            std::string value = android::base::StringReplace(pieces[1], "\", \"", ",", true);
-            value.erase(std::remove(value.begin(), value.end(), '"'), value.end());
-            fn(android::base::Trim(pieces[0]), android::base::Trim(value));
-        }
-    }
-}
-
 bool make_dir(const std::string& path, mode_t mode) {
     std::string secontext;
     if (SelabelLookupFileContext(path, mode, &secontext) && !secontext.empty()) {
@@ -375,45 +350,18 @@ Result<std::string> ExpandProps(const std::string& src) {
     return dst;
 }
 
-static std::string init_android_dt_dir() {
-    // Use the standard procfs-based path by default
-    std::string android_dt_dir = kDefaultAndroidDtDir;
-    // The platform may specify a custom Android DT path in kernel cmdline
-    ImportKernelCmdline([&](const std::string& key, const std::string& value) {
-        if (key == "androidboot.android_dt_dir") {
-            android_dt_dir = value;
-        }
-    });
-    // ..Or bootconfig
-    if (android_dt_dir == kDefaultAndroidDtDir) {
-        ImportBootconfig([&](const std::string& key, const std::string& value) {
-            if (key == "androidboot.android_dt_dir") {
-                android_dt_dir = value;
-            }
-        });
-    }
-
-    LOG(INFO) << "Using Android DT directory " << android_dt_dir;
-    return android_dt_dir;
-}
-
-// FIXME: The same logic is duplicated in system/core/fs_mgr/
-const std::string& get_android_dt_dir() {
-    // Set once and saves time for subsequent calls to this function
-    static const std::string kAndroidDtDir = init_android_dt_dir();
-    return kAndroidDtDir;
-}
-
 // Reads the content of device tree file under the platform's Android DT directory.
 // Returns true if the read is success, false otherwise.
 bool read_android_dt_file(const std::string& sub_path, std::string* dt_content) {
-    const std::string file_name = get_android_dt_dir() + sub_path;
+#if defined(__ANDROID__)
+    const std::string file_name = android::fs_mgr::GetAndroidDtDir() + sub_path;
     if (android::base::ReadFileToString(file_name, dt_content)) {
         if (!dt_content->empty()) {
             dt_content->pop_back();  // Trims the trailing '\0' out.
             return true;
         }
     }
+#endif
     return false;
 }
 
