@@ -222,6 +222,7 @@ cc_test {
     srcs: [
         "testing/dm_user_harness.cpp",
         "testing/harness.cpp",
+        "testing/host_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
     ],
     shared_libs: [
