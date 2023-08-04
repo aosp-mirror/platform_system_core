@@ -17,11 +17,9 @@
 #include <algorithm>
 #include <iterator>
 #include <string>
-#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
-#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 
 #include "fstab_priv.h"
@@ -35,7 +33,7 @@ const std::string& GetAndroidDtDir() {
     static const std::string kAndroidDtDir = [] {
         std::string android_dt_dir;
         if ((GetBootconfig("androidboot.android_dt_dir", &android_dt_dir) ||
-             fs_mgr_get_boot_config_from_kernel_cmdline("android_dt_dir", &android_dt_dir)) &&
+             GetKernelCmdline("androidboot.android_dt_dir", &android_dt_dir)) &&
             !android_dt_dir.empty()) {
             // Ensure the returned path ends with a /
             if (android_dt_dir.back() != '/') {
@@ -110,13 +108,10 @@ bool GetBootconfig(const std::string& key, std::string* out) {
     return GetBootconfigFromString(bootconfig, key, out);
 }
 
-}  // namespace fs_mgr
-}  // namespace android
-
-std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std::string& cmdline) {
+void ImportKernelCmdlineFromString(const std::string& cmdline,
+                                   const std::function<void(std::string, std::string)>& fn) {
     static constexpr char quote = '"';
 
-    std::vector<std::pair<std::string, std::string>> result;
     size_t base = 0;
     while (true) {
         // skip quoted spans
@@ -127,56 +122,54 @@ std::vector<std::pair<std::string, std::string>> fs_mgr_parse_cmdline(const std:
             if ((found = cmdline.find(quote, found + 1)) == cmdline.npos) break;
             ++found;
         }
-        std::string piece;
-        auto source = cmdline.substr(base, found - base);
-        std::remove_copy(source.begin(), source.end(),
-                         std::back_insert_iterator<std::string>(piece), quote);
+        std::string piece = cmdline.substr(base, found - base);
+        piece.erase(std::remove(piece.begin(), piece.end(), quote), piece.end());
         auto equal_sign = piece.find('=');
         if (equal_sign == piece.npos) {
             if (!piece.empty()) {
                 // no difference between <key> and <key>=
-                result.emplace_back(std::move(piece), "");
+                fn(std::move(piece), "");
             }
         } else {
-            result.emplace_back(piece.substr(0, equal_sign), piece.substr(equal_sign + 1));
+            std::string value = piece.substr(equal_sign + 1);
+            piece.resize(equal_sign);
+            fn(std::move(piece), std::move(value));
         }
         if (found == cmdline.npos) break;
         base = found + 1;
     }
-
-    return result;
 }
 
-bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::string& android_key,
-                                        std::string* out_val) {
-    FSTAB_CHECK(out_val != nullptr);
-
-    const std::string cmdline_key("androidboot." + android_key);
-    for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
-        if (key == cmdline_key) {
-            *out_val = value;
-            return true;
+bool GetKernelCmdlineFromString(const std::string& cmdline, const std::string& key,
+                                std::string* out) {
+    bool found = false;
+    ImportKernelCmdlineFromString(cmdline, [&](std::string config_key, std::string value) {
+        if (!found && config_key == key) {
+            *out = std::move(value);
+            found = true;
         }
-    }
-
-    *out_val = "";
-    return false;
+    });
+    return found;
 }
 
-// Tries to get the given boot config value from kernel cmdline.
-// Returns true if successfully found, false otherwise.
-bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val) {
+void ImportKernelCmdline(const std::function<void(std::string, std::string)>& fn) {
     std::string cmdline;
-    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) return false;
-    if (!cmdline.empty() && cmdline.back() == '\n') {
-        cmdline.pop_back();
-    }
-    return fs_mgr_get_boot_config_from_kernel(cmdline, key, out_val);
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    ImportKernelCmdlineFromString(android::base::Trim(cmdline), fn);
 }
 
-// Tries to get the boot config value in device tree, properties and
-// kernel cmdline (in that order).  Returns 'true' if successfully
-// found, 'false' otherwise.
+bool GetKernelCmdline(const std::string& key, std::string* out) {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
+    return GetKernelCmdlineFromString(android::base::Trim(cmdline), key, out);
+}
+
+}  // namespace fs_mgr
+}  // namespace android
+
+// Tries to get the boot config value in device tree, properties, kernel bootconfig and kernel
+// cmdline (in that order).
+// Returns 'true' if successfully found, 'false' otherwise.
 bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
     FSTAB_CHECK(out_val != nullptr);
 
@@ -204,7 +197,7 @@ bool fs_mgr_get_boot_config(const std::string& key, std::string* out_val) {
     }
 
     // finally, fallback to kernel cmdline, properties may not be ready yet
-    if (fs_mgr_get_boot_config_from_kernel_cmdline(key, out_val)) {
+    if (android::fs_mgr::GetKernelCmdline(config_key, out_val)) {
         return true;
     }
 

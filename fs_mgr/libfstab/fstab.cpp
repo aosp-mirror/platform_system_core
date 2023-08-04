@@ -831,9 +831,8 @@ bool ReadDefaultFstab(Fstab* fstab) {
     Fstab default_fstab;
     const std::string default_fstab_path = GetFstabPath();
     if (!default_fstab_path.empty() && ReadFstabFromFile(default_fstab_path, &default_fstab)) {
-        for (auto&& entry : default_fstab) {
-            fstab->emplace_back(std::move(entry));
-        }
+        fstab->insert(fstab->end(), std::make_move_iterator(default_fstab.begin()),
+                      std::make_move_iterator(default_fstab.end()));
     } else {
         LINFO << __FUNCTION__ << "(): failed to find device default fstab";
     }
@@ -863,11 +862,11 @@ const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& p
 }
 
 std::set<std::string> GetBootDevices() {
+    std::set<std::string> boot_devices;
     // First check bootconfig, then kernel commandline, then the device tree
     std::string value;
     if (GetBootconfig("androidboot.boot_devices", &value) ||
         GetBootconfig("androidboot.boot_device", &value)) {
-        std::set<std::string> boot_devices;
         // split by spaces and trim the trailing comma.
         for (std::string_view device : android::base::Split(value, " ")) {
             base::ConsumeSuffix(&device, ",");
@@ -876,25 +875,20 @@ std::set<std::string> GetBootDevices() {
         return boot_devices;
     }
 
-    std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
-    if (fs_mgr_get_boot_config_from_kernel_cmdline("boot_devices", &value) ||
-        ReadDtFile(dt_file_name, &value)) {
-        auto boot_devices = Split(value, ",");
-        return std::set<std::string>(boot_devices.begin(), boot_devices.end());
+    const std::string dt_file_name = GetAndroidDtDir() + "boot_devices";
+    if (GetKernelCmdline("androidboot.boot_devices", &value) || ReadDtFile(dt_file_name, &value)) {
+        auto boot_devices_list = Split(value, ",");
+        return {std::make_move_iterator(boot_devices_list.begin()),
+                std::make_move_iterator(boot_devices_list.end())};
     }
 
-    std::string cmdline;
-    if (android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
-        std::set<std::string> boot_devices;
-        const std::string cmdline_key = "androidboot.boot_device";
-        for (const auto& [key, value] : fs_mgr_parse_cmdline(cmdline)) {
-            if (key == cmdline_key) {
-                boot_devices.emplace(value);
-            }
+    ImportKernelCmdline([&](std::string key, std::string value) {
+        if (key == "androidboot.boot_device") {
+            boot_devices.emplace(std::move(value));
         }
-        if (!boot_devices.empty()) {
-            return boot_devices;
-        }
+    });
+    if (!boot_devices.empty()) {
+        return boot_devices;
     }
 
     // Fallback to extract boot devices from fstab.
