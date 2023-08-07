@@ -280,20 +280,6 @@ bool SnapshotHandler::InitCowDevice() {
         return false;
     }
 
-    unique_fd fd(TEMP_FAILURE_RETRY(open(base_path_merge_.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (fd < 0) {
-        SNAP_LOG(ERROR) << "Cannot open block device";
-        return false;
-    }
-
-    uint64_t dev_sz = get_block_device_size(fd.get());
-    if (!dev_sz) {
-        SNAP_LOG(ERROR) << "Failed to find block device size: " << base_path_merge_;
-        return false;
-    }
-
-    num_sectors_ = dev_sz >> SECTOR_SHIFT;
-
     return ReadMetadata();
 }
 
@@ -458,6 +444,22 @@ void SnapshotHandler::FreeResources() {
     worker_threads_.clear();
     read_ahead_thread_ = nullptr;
     merge_thread_ = nullptr;
+}
+
+uint64_t SnapshotHandler::GetNumSectors() const {
+    unique_fd fd(TEMP_FAILURE_RETRY(open(base_path_merge_.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) {
+        SNAP_LOG(ERROR) << "Cannot open base path: " << base_path_merge_;
+        return false;
+    }
+
+    uint64_t dev_sz = get_block_device_size(fd.get());
+    if (!dev_sz) {
+        SNAP_LOG(ERROR) << "Failed to find block device size: " << base_path_merge_;
+        return false;
+    }
+
+    return dev_sz / SECTOR_SIZE;
 }
 
 }  // namespace snapshot

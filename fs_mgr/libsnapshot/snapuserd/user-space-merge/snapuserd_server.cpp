@@ -130,7 +130,12 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
             return Sendmsg(fd, "fail");
         }
 
-        auto retval = "success," + std::to_string(handler->snapuserd()->GetNumSectors());
+        auto num_sectors = handler->snapuserd()->GetNumSectors();
+        if (!num_sectors) {
+            return Sendmsg(fd, "fail");
+        }
+
+        auto retval = "success," + std::to_string(num_sectors);
         return Sendmsg(fd, retval);
     } else if (cmd == "start") {
         // Message format:

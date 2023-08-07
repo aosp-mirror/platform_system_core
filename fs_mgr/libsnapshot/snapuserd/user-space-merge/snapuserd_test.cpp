@@ -41,6 +41,7 @@
 
 #include "handler_manager.h"
 #include "snapuserd_core.h"
+#include "testing/temp_device.h"
 
 DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
 
@@ -53,49 +54,6 @@ using LoopDevice = android::dm::LoopDevice;
 using namespace std::chrono_literals;
 using namespace android::dm;
 using namespace std;
-
-class Tempdevice {
-  public:
-    Tempdevice(const std::string& name, const DmTable& table)
-        : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
-        valid_ = dm_.CreateDevice(name, table, &path_, std::chrono::seconds(5));
-    }
-    Tempdevice(Tempdevice&& other) noexcept
-        : dm_(other.dm_), name_(other.name_), path_(other.path_), valid_(other.valid_) {
-        other.valid_ = false;
-    }
-    ~Tempdevice() {
-        if (valid_) {
-            dm_.DeleteDeviceIfExists(name_);
-        }
-    }
-    bool Destroy() {
-        if (!valid_) {
-            return true;
-        }
-        valid_ = false;
-        return dm_.DeleteDeviceIfExists(name_);
-    }
-    const std::string& path() const { return path_; }
-    const std::string& name() const { return name_; }
-    bool valid() const { return valid_; }
-
-    Tempdevice(const Tempdevice&) = delete;
-    Tempdevice& operator=(const Tempdevice&) = delete;
-
-    Tempdevice& operator=(Tempdevice&& other) noexcept {
-        name_ = other.name_;
-        valid_ = other.valid_;
-        other.valid_ = false;
-        return *this;
-    }
-
-  private:
-    DeviceMapper& dm_;
-    std::string name_;
-    std::string path_;
-    bool valid_;
-};
 
 class SnapuserdTest : public ::testing::Test {
   public:
@@ -582,7 +540,9 @@ void SnapuserdTest::InitCowDevice() {
                                  base_loop_->device(), 1, use_iouring, false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
+#ifdef __ANDROID__
     ASSERT_NE(handler->snapuserd()->GetNumSectors(), 0);
+#endif
 }
 
 void SnapuserdTest::SetDeviceControlName() {
