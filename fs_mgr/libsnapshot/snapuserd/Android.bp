@@ -90,6 +90,7 @@ cc_library_static {
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
+    host_supported: true,
 }
 
 cc_defaults {
@@ -256,4 +257,5 @@ cc_test {
     },
     auto_gen_config: true,
     require_root: false,
+    host_supported: true,
 }

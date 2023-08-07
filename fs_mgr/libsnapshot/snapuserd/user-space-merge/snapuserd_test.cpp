@@ -41,6 +41,7 @@
 #include "handler_manager.h"
 #include "snapuserd_core.h"
 #include "testing/dm_user_harness.h"
+#include "testing/host_harness.h"
 #include "testing/temp_device.h"
 #include "utility.h"
 
@@ -80,7 +81,11 @@ class SnapuserdTestBase : public ::testing::Test {
 };
 
 void SnapuserdTestBase::SetUp() {
+#if __ANDROID__
     harness_ = std::make_unique<DmUserTestHarness>();
+#else
+    harness_ = std::make_unique<HostTestHarness>();
+#endif
 }
 
 void SnapuserdTestBase::TearDown() {}
@@ -269,7 +274,9 @@ void SnapuserdTest::TearDown() {
 }
 
 void SnapuserdTest::Shutdown() {
-    ASSERT_TRUE(dmuser_dev_->Destroy());
+    if (dmuser_dev_) {
+        ASSERT_TRUE(dmuser_dev_->Destroy());
+    }
 
     auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
     ASSERT_TRUE(handlers_->DeleteHandler(system_device_ctrl_name_));
