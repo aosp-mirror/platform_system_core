@@ -24,6 +24,7 @@ cc_library_headers {
     vendor_ramdisk_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
+    host_supported: true,
 }
 
 filegroup {
