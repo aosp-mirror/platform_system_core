@@ -56,7 +56,167 @@ using namespace std::chrono_literals;
 using namespace android::dm;
 using namespace std;
 
-class SnapuserdTest : public ::testing::Test {
+class SnapuserdTestBase : public ::testing::Test {
+  protected:
+    void SetUp() override;
+    void TearDown() override;
+    void CreateBaseDevice();
+    void CreateCowDevice();
+    void SetDeviceControlName();
+    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
+
+    std::unique_ptr<ITestHarness> harness_;
+    size_t size_ = 100_MiB;
+    int total_base_size_ = 0;
+    std::string system_device_ctrl_name_;
+    std::string system_device_name_;
+
+    unique_ptr<IBackingDevice> base_dev_;
+    unique_fd base_fd_;
+
+    std::unique_ptr<TemporaryFile> cow_system_;
+
+    std::unique_ptr<uint8_t[]> orig_buffer_;
+};
+
+void SnapuserdTestBase::SetUp() {
+    harness_ = std::make_unique<DmUserTestHarness>();
+}
+
+void SnapuserdTestBase::TearDown() {}
+
+void SnapuserdTestBase::CreateBaseDevice() {
+    total_base_size_ = (size_ * 5);
+
+    base_dev_ = harness_->CreateBackingDevice(total_base_size_);
+    ASSERT_NE(base_dev_, nullptr);
+
+    base_fd_.reset(open(base_dev_->GetPath().c_str(), O_RDWR | O_CLOEXEC));
+    ASSERT_GE(base_fd_, 0);
+
+    unique_fd rnd_fd(open("/dev/random", O_RDONLY));
+    ASSERT_GE(rnd_fd, 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(1_MiB);
+
+    for (size_t j = 0; j < ((total_base_size_) / 1_MiB); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), 1_MiB, 0), true);
+        ASSERT_EQ(android::base::WriteFully(base_fd_, random_buffer.get(), 1_MiB), true);
+    }
+
+    ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
+}
+
+std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
+
+    CowOptions options;
+    options.compression = "gz";
+
+    unique_fd fd(cow_system_->fd);
+    cow_system_->fd = -1;
+
+    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+}
+
+void SnapuserdTestBase::CreateCowDevice() {
+    unique_fd rnd_fd;
+    loff_t offset = 0;
+
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
+
+    rnd_fd.reset(open("/dev/random", O_RDONLY));
+    ASSERT_TRUE(rnd_fd > 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
+
+    // Fill random data
+    for (size_t j = 0; j < (size_ / 1_MiB); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
+                  true);
+
+        offset += 1_MiB;
+    }
+
+    size_t num_blocks = size_ / writer->GetBlockSize();
+    size_t blk_end_copy = num_blocks * 2;
+    size_t source_blk = num_blocks - 1;
+    size_t blk_src_copy = blk_end_copy - 1;
+
+    uint32_t sequence[num_blocks * 2];
+    // Sequence for Copy ops
+    for (int i = 0; i < num_blocks; i++) {
+        sequence[i] = num_blocks - 1 - i;
+    }
+    // Sequence for Xor ops
+    for (int i = 0; i < num_blocks; i++) {
+        sequence[num_blocks + i] = 5 * num_blocks - 1 - i;
+    }
+    ASSERT_TRUE(writer->AddSequenceData(2 * num_blocks, sequence));
+
+    size_t x = num_blocks;
+    while (1) {
+        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
+        x -= 1;
+        if (x == 0) {
+            break;
+        }
+        source_blk -= 1;
+        blk_src_copy -= 1;
+    }
+
+    source_blk = num_blocks;
+    blk_src_copy = blk_end_copy;
+
+    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+
+    size_t blk_zero_copy_start = source_blk + num_blocks;
+    size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
+
+    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
+
+    size_t blk_random2_replace_start = blk_zero_copy_end;
+
+    ASSERT_TRUE(writer->AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
+
+    size_t blk_xor_start = blk_random2_replace_start + num_blocks;
+    size_t xor_offset = BLOCK_SZ / 2;
+    ASSERT_TRUE(writer->AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
+                                     xor_offset));
+
+    // Flush operations
+    ASSERT_TRUE(writer->Finalize());
+    // Construct the buffer required for validation
+    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+    std::string zero_buffer(size_, 0);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
+    memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, &orig_buffer_.get()[size_ * 4], size_,
+                                               size_ + xor_offset),
+              true);
+    for (int i = 0; i < size_; i++) {
+        orig_buffer_.get()[(size_ * 4) + i] =
+                (uint8_t)(orig_buffer_.get()[(size_ * 4) + i] ^ random_buffer_1_.get()[i]);
+    }
+}
+
+void SnapuserdTestBase::SetDeviceControlName() {
+    system_device_name_.clear();
+    system_device_ctrl_name_.clear();
+
+    std::string str(cow_system_->path);
+    std::size_t found = str.find_last_of("/\\");
+    ASSERT_NE(found, std::string::npos);
+    system_device_name_ = str.substr(found + 1);
+
+    system_device_ctrl_name_ = system_device_name_ + "-ctrl";
+}
+
+class SnapuserdTest : public SnapuserdTestBase {
   public:
     void SetupDefault();
     void SetupOrderedOps();
@@ -77,45 +237,36 @@ class SnapuserdTest : public ::testing::Test {
 
   protected:
     void SetUp() override;
-    void TearDown() override { Shutdown(); }
+    void TearDown() override;
 
     void SetupImpl();
 
     void SimulateDaemonRestart();
 
-    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
-    void CreateCowDevice();
     void CreateCowDeviceOrderedOps();
     void CreateCowDeviceOrderedOpsInverted();
     void CreateCowDeviceWithCopyOverlap_1();
     void CreateCowDeviceWithCopyOverlap_2();
     void SetupDaemon();
-    void CreateBaseDevice();
     void InitCowDevice();
-    void SetDeviceControlName();
     void InitDaemon();
     void CreateUserDevice();
 
-    unique_ptr<IBackingDevice> base_dev_;
     unique_ptr<IUserDevice> dmuser_dev_;
 
-    std::string system_device_ctrl_name_;
-    std::string system_device_name_;
-
-    unique_fd base_fd_;
-    std::unique_ptr<TemporaryFile> cow_system_;
-    std::unique_ptr<uint8_t[]> orig_buffer_;
     std::unique_ptr<uint8_t[]> merged_buffer_;
     std::unique_ptr<SnapshotHandlerManager> handlers_;
-    size_t size_ = 100_MiB;
     int cow_num_sectors_;
-    int total_base_size_;
-    std::unique_ptr<ITestHarness> harness_;
 };
 
 void SnapuserdTest::SetUp() {
-    harness_ = std::make_unique<DmUserTestHarness>();
+    ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
     handlers_ = std::make_unique<SnapshotHandlerManager>();
+}
+
+void SnapuserdTest::TearDown() {
+    SnapuserdTestBase::TearDown();
+    Shutdown();
 }
 
 void SnapuserdTest::Shutdown() {
@@ -165,28 +316,6 @@ void SnapuserdTest::SetupDaemon() {
     ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
-void SnapuserdTest::CreateBaseDevice() {
-    total_base_size_ = (size_ * 5);
-
-    base_dev_ = harness_->CreateBackingDevice(total_base_size_);
-    ASSERT_NE(base_dev_, nullptr);
-
-    base_fd_.reset(open(base_dev_->GetPath().c_str(), O_RDWR | O_CLOEXEC));
-    ASSERT_GE(base_fd_, 0);
-
-    unique_fd rnd_fd(open("/dev/random", O_RDONLY));
-    ASSERT_GE(rnd_fd, 0);
-
-    std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(1_MiB);
-
-    for (size_t j = 0; j < ((total_base_size_) / 1_MiB); j++) {
-        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer.get(), 1_MiB, 0), true);
-        ASSERT_EQ(android::base::WriteFully(base_fd_, random_buffer.get(), 1_MiB), true);
-    }
-
-    ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
-}
-
 void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
     unique_fd fd(open(dmuser_dev_->GetPath().c_str(), O_RDONLY));
     ASSERT_GE(fd, 0);
@@ -216,19 +345,6 @@ void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
     offset += size_;
     ASSERT_EQ(ReadFullyAtOffset(fd, snapuserd_buffer.get(), size_, offset), true);
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
-}
-
-std::unique_ptr<ICowWriter> SnapuserdTest::CreateCowDeviceInternal() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
-
-    CowOptions options;
-    options.compression = "gz";
-
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
 }
 
 void SnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
@@ -427,90 +543,6 @@ void SnapuserdTest::CreateCowDeviceOrderedOps() {
     }
 }
 
-void SnapuserdTest::CreateCowDevice() {
-    unique_fd rnd_fd;
-    loff_t offset = 0;
-
-    auto writer = CreateCowDeviceInternal();
-    ASSERT_NE(writer, nullptr);
-
-    rnd_fd.reset(open("/dev/random", O_RDONLY));
-    ASSERT_TRUE(rnd_fd > 0);
-
-    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
-
-    // Fill random data
-    for (size_t j = 0; j < (size_ / 1_MiB); j++) {
-        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
-                  true);
-
-        offset += 1_MiB;
-    }
-
-    size_t num_blocks = size_ / writer->GetBlockSize();
-    size_t blk_end_copy = num_blocks * 2;
-    size_t source_blk = num_blocks - 1;
-    size_t blk_src_copy = blk_end_copy - 1;
-
-    uint32_t sequence[num_blocks * 2];
-    // Sequence for Copy ops
-    for (int i = 0; i < num_blocks; i++) {
-        sequence[i] = num_blocks - 1 - i;
-    }
-    // Sequence for Xor ops
-    for (int i = 0; i < num_blocks; i++) {
-        sequence[num_blocks + i] = 5 * num_blocks - 1 - i;
-    }
-    ASSERT_TRUE(writer->AddSequenceData(2 * num_blocks, sequence));
-
-    size_t x = num_blocks;
-    while (1) {
-        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
-        x -= 1;
-        if (x == 0) {
-            break;
-        }
-        source_blk -= 1;
-        blk_src_copy -= 1;
-    }
-
-    source_blk = num_blocks;
-    blk_src_copy = blk_end_copy;
-
-    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
-
-    size_t blk_zero_copy_start = source_blk + num_blocks;
-    size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
-
-    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
-
-    size_t blk_random2_replace_start = blk_zero_copy_end;
-
-    ASSERT_TRUE(writer->AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
-
-    size_t blk_xor_start = blk_random2_replace_start + num_blocks;
-    size_t xor_offset = BLOCK_SZ / 2;
-    ASSERT_TRUE(writer->AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
-                                     xor_offset));
-
-    // Flush operations
-    ASSERT_TRUE(writer->Finalize());
-    // Construct the buffer required for validation
-    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
-    std::string zero_buffer(size_, 0);
-    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
-    memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
-    memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
-    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
-    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, &orig_buffer_.get()[size_ * 4], size_,
-                                               size_ + xor_offset),
-              true);
-    for (int i = 0; i < size_; i++) {
-        orig_buffer_.get()[(size_ * 4) + i] =
-                (uint8_t)(orig_buffer_.get()[(size_ * 4) + i] ^ random_buffer_1_.get()[i]);
-    }
-}
-
 void SnapuserdTest::InitCowDevice() {
     bool use_iouring = true;
     if (FLAGS_force_config == "iouring_disabled") {
@@ -527,18 +559,6 @@ void SnapuserdTest::InitCowDevice() {
 #ifdef __ANDROID__
     ASSERT_NE(handler->snapuserd()->GetNumSectors(), 0);
 #endif
-}
-
-void SnapuserdTest::SetDeviceControlName() {
-    system_device_name_.clear();
-    system_device_ctrl_name_.clear();
-
-    std::string str(cow_system_->path);
-    std::size_t found = str.find_last_of("/\\");
-    ASSERT_NE(found, std::string::npos);
-    system_device_name_ = str.substr(found + 1);
-
-    system_device_ctrl_name_ = system_device_name_ + "-ctrl";
 }
 
 void SnapuserdTest::CreateUserDevice() {
