@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "snapuserd_merge.h"
+#include "merge_worker.h"
 
 #include "snapuserd_core.h"
 
