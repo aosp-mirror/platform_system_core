@@ -14,11 +14,13 @@
 ** limitations under the License.
 */
 
-#include <cutils/threads.h>
+#include <sys/types.h>
 
 #if defined(__APPLE__)
+#include <pthread.h>
 #include <stdint.h>
 #elif defined(__linux__)
+#include <pthread.h>
 #include <syscall.h>
 #include <unistd.h>
 #elif defined(_WIN32)
@@ -29,7 +31,7 @@
 // No definition needed for Android because we'll just pick up bionic's copy.
 // No definition needed for Glibc >= 2.30 because it exposes its own copy.
 #else
-pid_t gettid() {
+extern "C" pid_t gettid() {
 #if defined(__APPLE__)
   uint64_t tid;
   pthread_threadid_np(NULL, &tid);
