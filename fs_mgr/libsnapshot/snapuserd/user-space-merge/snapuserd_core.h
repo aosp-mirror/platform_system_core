@@ -109,7 +109,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     const std::string& GetControlDevicePath() { return control_device_; }
     const std::string& GetMiscName() { return misc_name_; }
-    const uint64_t& GetNumSectors() { return num_sectors_; }
+    uint64_t GetNumSectors() const;
     const bool& IsAttached() const { return attached_; }
     void AttachControlDevice() { attached_ = true; }
 
@@ -201,8 +201,6 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     std::string base_path_merge_;
 
     unique_fd cow_fd_;
-
-    uint64_t num_sectors_;
 
     std::unique_ptr<CowReader> reader_;
 
