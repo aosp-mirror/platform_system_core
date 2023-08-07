@@ -108,8 +108,7 @@ void SnapuserdTestBase::CreateBaseDevice() {
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    cow_system_ = std::make_unique<TemporaryFile>();
 
     CowOptions options;
     options.compression = "gz";
