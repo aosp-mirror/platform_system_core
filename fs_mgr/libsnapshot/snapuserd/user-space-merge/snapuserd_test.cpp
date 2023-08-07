@@ -58,11 +58,11 @@ using namespace std;
 
 class SnapuserdTest : public ::testing::Test {
   public:
-    bool SetupDefault();
-    bool SetupOrderedOps();
-    bool SetupOrderedOpsInverted();
-    bool SetupCopyOverlap_1();
-    bool SetupCopyOverlap_2();
+    void SetupDefault();
+    void SetupOrderedOps();
+    void SetupOrderedOpsInverted();
+    void SetupCopyOverlap_1();
+    void SetupCopyOverlap_2();
     bool Merge();
     void ValidateMerge();
     void ReadSnapshotDeviceAndValidate();
@@ -70,7 +70,7 @@ class SnapuserdTest : public ::testing::Test {
     void MergeInterrupt();
     void MergeInterruptFixed(int duration);
     void MergeInterruptRandomly(int max_duration);
-    void StartMerge();
+    bool StartMerge();
     void CheckMergeCompletion();
 
     static const uint64_t kSectorSize = 512;
@@ -89,7 +89,7 @@ class SnapuserdTest : public ::testing::Test {
     void CreateCowDeviceOrderedOpsInverted();
     void CreateCowDeviceWithCopyOverlap_1();
     void CreateCowDeviceWithCopyOverlap_2();
-    bool SetupDaemon();
+    void SetupDaemon();
     void CreateBaseDevice();
     void InitCowDevice();
     void SetDeviceControlName();
@@ -107,8 +107,6 @@ class SnapuserdTest : public ::testing::Test {
     std::unique_ptr<uint8_t[]> orig_buffer_;
     std::unique_ptr<uint8_t[]> merged_buffer_;
     std::unique_ptr<SnapshotHandlerManager> handlers_;
-    bool setup_ok_ = false;
-    bool merge_ok_ = false;
     size_t size_ = 100_MiB;
     int cow_num_sectors_;
     int total_base_size_;
@@ -131,45 +129,40 @@ void SnapuserdTest::Shutdown() {
     handlers_ = std::make_unique<SnapshotHandlerManager>();
 }
 
-bool SnapuserdTest::SetupDefault() {
-    SetupImpl();
-    return setup_ok_;
+void SnapuserdTest::SetupDefault() {
+    ASSERT_NO_FATAL_FAILURE(SetupImpl());
 }
 
-bool SnapuserdTest::SetupOrderedOps() {
-    CreateBaseDevice();
-    CreateCowDeviceOrderedOps();
-    return SetupDaemon();
+void SnapuserdTest::SetupOrderedOps() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
 }
 
-bool SnapuserdTest::SetupOrderedOpsInverted() {
-    CreateBaseDevice();
-    CreateCowDeviceOrderedOpsInverted();
-    return SetupDaemon();
+void SnapuserdTest::SetupOrderedOpsInverted() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
 }
 
-bool SnapuserdTest::SetupCopyOverlap_1() {
-    CreateBaseDevice();
-    CreateCowDeviceWithCopyOverlap_1();
-    return SetupDaemon();
+void SnapuserdTest::SetupCopyOverlap_1() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceWithCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
 }
 
-bool SnapuserdTest::SetupCopyOverlap_2() {
-    CreateBaseDevice();
-    CreateCowDeviceWithCopyOverlap_2();
-    return SetupDaemon();
+void SnapuserdTest::SetupCopyOverlap_2() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceWithCopyOverlap_2());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
 }
 
-bool SnapuserdTest::SetupDaemon() {
+void SnapuserdTest::SetupDaemon() {
     SetDeviceControlName();
 
-    CreateUserDevice();
-    InitCowDevice();
-    InitDaemon();
-
-    setup_ok_ = true;
-
-    return setup_ok_;
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 void SnapuserdTest::CreateBaseDevice() {
@@ -575,27 +568,26 @@ void SnapuserdTest::CheckMergeCompletion() {
 }
 
 void SnapuserdTest::SetupImpl() {
-    CreateBaseDevice();
-    CreateCowDevice();
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDevice());
 
     SetDeviceControlName();
 
-    CreateUserDevice();
-    InitCowDevice();
-    InitDaemon();
-
-    setup_ok_ = true;
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 bool SnapuserdTest::Merge() {
-    StartMerge();
+    if (!StartMerge()) {
+        return false;
+    }
     CheckMergeCompletion();
-    merge_ok_ = true;
-    return merge_ok_;
+    return true;
 }
 
-void SnapuserdTest::StartMerge() {
-    ASSERT_TRUE(handlers_->InitiateMerge(system_device_ctrl_name_));
+bool SnapuserdTest::StartMerge() {
+    return handlers_->InitiateMerge(system_device_ctrl_name_);
 }
 
 void SnapuserdTest::ValidateMerge() {
@@ -606,67 +598,67 @@ void SnapuserdTest::ValidateMerge() {
 }
 
 void SnapuserdTest::SimulateDaemonRestart() {
-    Shutdown();
+    ASSERT_NO_FATAL_FAILURE(Shutdown());
     std::this_thread::sleep_for(500ms);
     SetDeviceControlName();
-    CreateUserDevice();
-    InitCowDevice();
-    InitDaemon();
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 void SnapuserdTest::MergeInterruptRandomly(int max_duration) {
     std::srand(std::time(nullptr));
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
 
     for (int i = 0; i < 20; i++) {
         int duration = std::rand() % max_duration;
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
-        SimulateDaemonRestart();
-        StartMerge();
+        ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+        ASSERT_TRUE(StartMerge());
     }
 
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
     ASSERT_TRUE(Merge());
 }
 
 void SnapuserdTest::MergeInterruptFixed(int duration) {
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
 
     for (int i = 0; i < 25; i++) {
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
-        SimulateDaemonRestart();
-        StartMerge();
+        ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+        ASSERT_TRUE(StartMerge());
     }
 
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
     ASSERT_TRUE(Merge());
 }
 
 void SnapuserdTest::MergeInterrupt() {
     // Interrupt merge at various intervals
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(250ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(250ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(150ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(100ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(800ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(600ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
     ASSERT_TRUE(Merge());
 }
@@ -675,98 +667,87 @@ TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
-    ASSERT_TRUE(SetupDefault());
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // I/O before merge
-    ReadSnapshotDeviceAndValidate();
+    ASSERT_NO_FATAL_FAILURE(ReadSnapshotDeviceAndValidate());
     ASSERT_TRUE(Merge());
     ValidateMerge();
     // I/O after merge - daemon should read directly
     // from base device
-    ReadSnapshotDeviceAndValidate();
-    Shutdown();
+    ASSERT_NO_FATAL_FAILURE(ReadSnapshotDeviceAndValidate());
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
-    ASSERT_TRUE(SetupDefault());
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // Issue I/O before merge begins
     std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     // Start the merge
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
-    ASSERT_TRUE(SetupDefault());
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // Start the merge
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     // Issue I/O in parallel when merge is in-progress
     std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     CheckMergeCompletion();
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Resume) {
-    ASSERT_TRUE(SetupDefault());
-    MergeInterrupt();
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
+    ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_1) {
-    ASSERT_TRUE(SetupCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_2) {
-    ASSERT_TRUE(SetupCopyOverlap_2());
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_2());
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
-    ASSERT_TRUE(SetupCopyOverlap_1());
-    MergeInterrupt();
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Ordered) {
-    ASSERT_TRUE(SetupOrderedOps());
-    MergeInterruptFixed(300);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(300));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Ordered) {
-    ASSERT_TRUE(SetupOrderedOps());
-    MergeInterruptRandomly(500);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(500));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Inverted) {
-    ASSERT_TRUE(SetupOrderedOpsInverted());
-    MergeInterruptFixed(50);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(50));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Inverted) {
-    ASSERT_TRUE(SetupOrderedOpsInverted());
-    MergeInterruptRandomly(50);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(50));
     ValidateMerge();
-    Shutdown();
 }
 
 }  // namespace snapshot
