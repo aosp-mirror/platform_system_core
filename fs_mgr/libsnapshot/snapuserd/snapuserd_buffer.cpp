@@ -23,9 +23,9 @@ namespace android {
 namespace snapshot {
 
 void BufferSink::Initialize(size_t size) {
-    buffer_size_ = size;
+    buffer_size_ = size + sizeof(struct dm_user_header);
     buffer_offset_ = 0;
-    buffer_ = std::make_unique<uint8_t[]>(size);
+    buffer_ = std::make_unique<uint8_t[]>(buffer_size_);
 }
 
 void* BufferSink::AcquireBuffer(size_t size, size_t to_write) {
