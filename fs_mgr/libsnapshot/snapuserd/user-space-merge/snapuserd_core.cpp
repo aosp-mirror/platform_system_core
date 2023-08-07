@@ -23,8 +23,8 @@
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 
+#include "merge_worker.h"
 #include "read_worker.h"
-#include "snapuserd_merge.h"
 
 namespace android {
 namespace snapshot {
