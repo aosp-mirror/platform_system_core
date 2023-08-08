@@ -72,7 +72,7 @@ class SnapuserdTestBase : public ::testing::Test {
     std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
 
     std::unique_ptr<ITestHarness> harness_;
-    size_t size_ = 100_MiB;
+    size_t size_ = 10_MiB;
     int total_base_size_ = 0;
     std::string system_device_ctrl_name_;
     std::string system_device_name_;
