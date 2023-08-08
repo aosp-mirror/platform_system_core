@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <linux/types.h>
+
 namespace android {
 namespace snapshot {
 
@@ -70,7 +72,7 @@ struct disk_header {
 
     /* In sectors */
     uint32_t chunk_size;
-} __packed;
+} __attribute__((packed));
 
 // A disk exception is a mapping of old_chunk to new_chunk
 // old_chunk is the chunk ID of a dm-snapshot device.
@@ -78,7 +80,7 @@ struct disk_header {
 struct disk_exception {
     uint64_t old_chunk;
     uint64_t new_chunk;
-} __packed;
+} __attribute__((packed));
 
 // Control structures to communicate with dm-user
 // It comprises of header and a payload
