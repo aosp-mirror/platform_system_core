@@ -556,6 +556,8 @@ bool MergeWorker::Run() {
 
     SNAP_LOG(INFO) << "Merge starting..";
 
+    bufsink_.Initialize(PAYLOAD_BUFFER_SZ);
+
     if (!Init()) {
         SNAP_LOG(ERROR) << "Merge thread initialization failed...";
         snapuserd_->MergeFailed();
