@@ -142,5 +142,11 @@ std::unique_ptr<IBlockServer> DmUserBlockServerOpener::Open(IBlockServer::Delega
     return std::make_unique<DmUserBlockServer>(misc_name_, std::move(fd), delegate, buffer_size);
 }
 
+std::shared_ptr<IBlockServerOpener> DmUserBlockServerFactory::CreateOpener(
+        const std::string& misc_name) {
+    auto dm_path = "/dev/dm-user/" + misc_name;
+    return std::make_shared<DmUserBlockServerOpener>(misc_name, dm_path);
+}
+
 }  // namespace snapshot
 }  // namespace android
