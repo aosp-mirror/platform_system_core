@@ -17,6 +17,7 @@
 #include "snapuserd_readahead.h"
 
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -765,8 +766,8 @@ bool ReadAhead::RunThread() {
 
     InitializeIouring();
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
     while (!RAIterDone()) {
