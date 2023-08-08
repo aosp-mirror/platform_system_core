@@ -18,14 +18,11 @@
 
 #include <condition_variable>
 #include <cstdint>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
 #include <android-base/unique_fd.h>
