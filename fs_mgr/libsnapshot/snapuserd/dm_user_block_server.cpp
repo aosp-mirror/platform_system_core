@@ -27,7 +27,7 @@ using android::base::unique_fd;
 DmUserBlockServer::DmUserBlockServer(const std::string& misc_name, unique_fd&& ctrl_fd,
                                      Delegate* delegate, size_t buffer_size)
     : misc_name_(misc_name), ctrl_fd_(std::move(ctrl_fd)), delegate_(delegate) {
-    buffer_.Initialize(sizeof(struct dm_user_header) + buffer_size);
+    buffer_.Initialize(buffer_size);
 }
 
 bool DmUserBlockServer::ProcessRequests() {
