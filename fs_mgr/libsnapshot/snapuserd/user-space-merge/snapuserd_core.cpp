@@ -295,8 +295,6 @@ bool SnapshotHandler::Start() {
     if (ra_thread_) {
         ra_thread_status =
                 std::async(std::launch::async, &ReadAhead::RunThread, read_ahead_thread_.get());
-
-        SNAP_LOG(INFO) << "Read-ahead thread started";
     }
 
     // Launch worker threads

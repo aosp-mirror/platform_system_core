@@ -122,9 +122,9 @@ class SnapshotHandlerManager final : public ISnapshotHandlerManager {
     std::mutex lock_;
     HandlerList dm_users_;
 
-    bool is_merge_monitor_started_ = false;
     bool stop_monitor_merge_thread_ = false;
     int active_merge_threads_ = 0;
+    std::thread merge_monitor_;
     int num_partitions_merge_complete_ = 0;
     std::queue<std::shared_ptr<HandlerThread>> merge_handlers_;
     android::base::unique_fd monitor_merge_event_fd_;
