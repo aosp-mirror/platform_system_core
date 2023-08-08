@@ -68,6 +68,7 @@ class TestBlockServerOpener final : public IBlockServerOpener {
 class TestBlockServerFactory final : public IBlockServerFactory {
   public:
     std::shared_ptr<IBlockServerOpener> CreateOpener(const std::string& misc_name) override;
+    std::shared_ptr<TestBlockServerOpener> CreateTestOpener(const std::string& misc_name);
     bool DeleteQueue(const std::string& misc_name);
 
   private:

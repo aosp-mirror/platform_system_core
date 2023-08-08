@@ -64,7 +64,7 @@ std::unique_ptr<IBlockServer> TestBlockServerOpener::Open(IBlockServer::Delegate
     return std::make_unique<TestBlockServer>(queue_, misc_name_);
 }
 
-std::shared_ptr<IBlockServerOpener> TestBlockServerFactory::CreateOpener(
+std::shared_ptr<TestBlockServerOpener> TestBlockServerFactory::CreateTestOpener(
         const std::string& misc_name) {
     if (queues_.count(misc_name)) {
         LOG(ERROR) << "Cannot create opener for " << misc_name << ", already exists";
@@ -73,6 +73,11 @@ std::shared_ptr<IBlockServerOpener> TestBlockServerFactory::CreateOpener(
     auto queue = std::make_shared<TestBlockServerQueue>();
     queues_.emplace(misc_name, queue);
     return std::make_shared<TestBlockServerOpener>(queue, misc_name);
+}
+
+std::shared_ptr<IBlockServerOpener> TestBlockServerFactory::CreateOpener(
+        const std::string& misc_name) {
+    return CreateTestOpener(misc_name);
 }
 
 bool TestBlockServerFactory::DeleteQueue(const std::string& misc_name) {
