@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <libsnapshot/cow_compress.h>
+
 #include <stdint.h>
 
 #include <condition_variable>
@@ -107,16 +109,14 @@ class ICowWriter {
 
 class CompressWorker {
   public:
-    CompressWorker(CowCompression compression, uint32_t block_size);
+    CompressWorker(std::unique_ptr<ICompressor>&& compressor, uint32_t block_size);
     bool RunThread();
     void EnqueueCompressBlocks(const void* buffer, size_t num_blocks);
     bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
     void Finalize();
     static uint32_t GetDefaultCompressionLevel(CowCompressionAlgorithm compression);
-    static std::basic_string<uint8_t> Compress(CowCompression compression, const void* data,
-                                               size_t length);
 
-    static bool CompressBlocks(CowCompression compression, size_t block_size, const void* buffer,
+    static bool CompressBlocks(ICompressor* compressor, size_t block_size, const void* buffer,
                                size_t num_blocks,
                                std::vector<std::basic_string<uint8_t>>* compressed_data);
 
@@ -128,7 +128,7 @@ class CompressWorker {
         std::vector<std::basic_string<uint8_t>> compressed_data;
     };
 
-    CowCompression compression_;
+    std::unique_ptr<ICompressor> compressor_;
     uint32_t block_size_;
 
     std::queue<CompressWork> work_queue_;
