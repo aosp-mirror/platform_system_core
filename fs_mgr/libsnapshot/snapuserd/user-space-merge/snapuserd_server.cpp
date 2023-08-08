@@ -31,6 +31,7 @@
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <fs_mgr/file_wait.h>
+#include <snapuserd/dm_user_block_server.h>
 #include <snapuserd/snapuserd_client.h>
 #include "snapuserd_server.h"
 
@@ -48,6 +49,7 @@ using android::base::unique_fd;
 UserSnapshotServer::UserSnapshotServer() {
     terminating_ = false;
     handlers_ = std::make_unique<SnapshotHandlerManager>();
+    block_server_factory_ = std::make_unique<DmUserBlockServerFactory>();
 }
 
 UserSnapshotServer::~UserSnapshotServer() {
@@ -363,8 +365,11 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
         perform_verification = false;
     }
 
+    auto opener = block_server_factory_->CreateOpener(misc_name);
+
     return handlers_->AddHandler(misc_name, cow_device_path, backing_device, base_path_merge,
-                                 num_worker_threads, io_uring_enabled_, perform_verification);
+                                 opener, num_worker_threads, io_uring_enabled_,
+                                 perform_verification);
 }
 
 bool UserSnapshotServer::WaitForSocket() {

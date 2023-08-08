@@ -16,6 +16,7 @@
 #include "merge_worker.h"
 
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -550,8 +551,8 @@ bool MergeWorker::Run() {
         return true;
     }
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
     SNAP_LOG(INFO) << "Merge starting..";

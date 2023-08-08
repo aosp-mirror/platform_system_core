@@ -36,12 +36,12 @@ using android::base::unique_fd;
 
 SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
                                  std::string backing_device, std::string base_path_merge,
-                                 int num_worker_threads, bool use_iouring,
-                                 bool perform_verification) {
+                                 std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads,
+                                 bool use_iouring, bool perform_verification) {
     misc_name_ = std::move(misc_name);
     cow_device_ = std::move(cow_device);
     backing_store_device_ = std::move(backing_device);
-    control_device_ = "/dev/dm-user/" + misc_name_;
+    block_server_opener_ = std::move(opener);
     base_path_merge_ = std::move(base_path_merge);
     num_worker_threads_ = num_worker_threads;
     is_io_uring_enabled_ = use_iouring;
@@ -49,10 +49,10 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 }
 
 bool SnapshotHandler::InitializeWorkers() {
-    auto opener = std::make_shared<DmUserBlockServerOpener>(misc_name_, control_device_);
     for (int i = 0; i < num_worker_threads_; i++) {
         auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, misc_name_,
-                                               base_path_merge_, GetSharedPtr(), opener);
+                                               base_path_merge_, GetSharedPtr(),
+                                               block_server_opener_);
         if (!wt->Init()) {
             SNAP_LOG(ERROR) << "Thread initialization failed";
             return false;
