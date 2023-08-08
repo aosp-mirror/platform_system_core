@@ -6,13 +6,15 @@ crash1:
 
 	movl $0, %edx
 	jmp *%rdx
+	.size crash1, .-crash1
 
 
-.globl crashnostack
-crashnostack:
+.globl crash_no_stack
+crash_no_stack:
 	.cfi_startproc
 	movq %rsp, %rax
 	.cfi_def_cfa_register %rax
 	movq $0, %rsp
 	movq (%rsp), %rbx
 	.cfi_endproc
+	.size crash_no_stack, .-crash_no_stack
