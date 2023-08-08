@@ -83,5 +83,13 @@ class IBlockServerOpener {
                                                size_t buffer_size) = 0;
 };
 
+class IBlockServerFactory {
+  public:
+    virtual ~IBlockServerFactory() {}
+
+    // Return a new IBlockServerOpener given a unique device name.
+    virtual std::shared_ptr<IBlockServerOpener> CreateOpener(const std::string& misc_name) = 0;
+};
+
 }  // namespace snapshot
 }  // namespace android
