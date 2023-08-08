@@ -27,18 +27,7 @@ Worker::Worker(const std::string& cow_device, const std::string& misc_name,
     snapuserd_ = snapuserd;
 }
 
-void Worker::InitializeBufsink() {
-    // Allocate the buffer which is used to communicate between
-    // daemon and dm-user. The buffer comprises of header and a fixed payload.
-    // If the dm-user requests a big IO, the IO will be broken into chunks
-    // of PAYLOAD_BUFFER_SZ.
-    size_t buf_size = sizeof(struct dm_user_header) + PAYLOAD_BUFFER_SZ;
-    bufsink_.Initialize(buf_size);
-}
-
 bool Worker::Init() {
-    InitializeBufsink();
-
     if (!InitializeFds()) {
         return false;
     }
