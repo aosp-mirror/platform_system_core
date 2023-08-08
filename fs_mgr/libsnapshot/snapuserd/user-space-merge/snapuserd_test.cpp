@@ -39,8 +39,11 @@
 #include <snapuserd/dm_user_block_server.h>
 #include <storage_literals/storage_literals.h>
 #include "handler_manager.h"
+#include "merge_worker.h"
+#include "read_worker.h"
 #include "snapuserd_core.h"
 #include "testing/dm_user_harness.h"
+#include "testing/host_harness.h"
 #include "testing/temp_device.h"
 #include "utility.h"
 
@@ -55,6 +58,9 @@ using LoopDevice = android::dm::LoopDevice;
 using namespace std::chrono_literals;
 using namespace android::dm;
 using namespace std;
+using testing::AssertionFailure;
+using testing::AssertionResult;
+using testing::AssertionSuccess;
 
 class SnapuserdTestBase : public ::testing::Test {
   protected:
@@ -66,7 +72,7 @@ class SnapuserdTestBase : public ::testing::Test {
     std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
 
     std::unique_ptr<ITestHarness> harness_;
-    size_t size_ = 100_MiB;
+    size_t size_ = 10_MiB;
     int total_base_size_ = 0;
     std::string system_device_ctrl_name_;
     std::string system_device_name_;
@@ -80,7 +86,11 @@ class SnapuserdTestBase : public ::testing::Test {
 };
 
 void SnapuserdTestBase::SetUp() {
+#if __ANDROID__
     harness_ = std::make_unique<DmUserTestHarness>();
+#else
+    harness_ = std::make_unique<HostTestHarness>();
+#endif
 }
 
 void SnapuserdTestBase::TearDown() {}
@@ -108,8 +118,7 @@ void SnapuserdTestBase::CreateBaseDevice() {
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
+    cow_system_ = std::make_unique<TemporaryFile>();
 
     CowOptions options;
     options.compression = "gz";
@@ -270,7 +279,9 @@ void SnapuserdTest::TearDown() {
 }
 
 void SnapuserdTest::Shutdown() {
-    ASSERT_TRUE(dmuser_dev_->Destroy());
+    if (dmuser_dev_) {
+        ASSERT_TRUE(dmuser_dev_->Destroy());
+    }
 
     auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
     ASSERT_TRUE(handlers_->DeleteHandler(system_device_ctrl_name_));
@@ -768,6 +779,110 @@ TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Inverted) {
     ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
     ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(50));
     ValidateMerge();
+}
+
+class HandlerTest : public SnapuserdTestBase {
+  protected:
+    void SetUp() override;
+    void TearDown() override;
+
+    AssertionResult ReadSectors(sector_t sector, uint64_t size, void* buffer);
+
+    TestBlockServerFactory factory_;
+    std::shared_ptr<TestBlockServerOpener> opener_;
+    std::shared_ptr<SnapshotHandler> handler_;
+    std::unique_ptr<ReadWorker> read_worker_;
+    TestBlockServer* block_server_;
+    std::future<bool> handler_thread_;
+};
+
+void HandlerTest::SetUp() {
+    ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDevice());
+    ASSERT_NO_FATAL_FAILURE(SetDeviceControlName());
+
+    opener_ = factory_.CreateTestOpener(system_device_ctrl_name_);
+    ASSERT_NE(opener_, nullptr);
+
+    handler_ = std::make_shared<SnapshotHandler>(system_device_ctrl_name_, cow_system_->path,
+                                                 base_dev_->GetPath(), base_dev_->GetPath(),
+                                                 opener_, 1, false, false);
+    ASSERT_TRUE(handler_->InitCowDevice());
+    ASSERT_TRUE(handler_->InitializeWorkers());
+
+    read_worker_ = std::make_unique<ReadWorker>(cow_system_->path, base_dev_->GetPath(),
+                                                system_device_ctrl_name_, base_dev_->GetPath(),
+                                                handler_->GetSharedPtr(), opener_);
+    ASSERT_TRUE(read_worker_->Init());
+    block_server_ = static_cast<TestBlockServer*>(read_worker_->block_server());
+
+    handler_thread_ = std::async(std::launch::async, &SnapshotHandler::Start, handler_.get());
+}
+
+void HandlerTest::TearDown() {
+    ASSERT_TRUE(factory_.DeleteQueue(system_device_ctrl_name_));
+    ASSERT_TRUE(handler_thread_.get());
+    SnapuserdTestBase::TearDown();
+}
+
+AssertionResult HandlerTest::ReadSectors(sector_t sector, uint64_t size, void* buffer) {
+    if (!read_worker_->RequestSectors(sector, size)) {
+        return AssertionFailure() << "request sectors failed";
+    }
+
+    std::string result = std::move(block_server_->sent_io());
+    if (result.size() != size) {
+        return AssertionFailure() << "size mismatch in result, got " << result.size()
+                                  << ", expected " << size;
+    }
+
+    memcpy(buffer, result.data(), size);
+    return AssertionSuccess();
+}
+
+// This test mirrors ReadSnapshotDeviceAndValidate.
+TEST_F(HandlerTest, Read) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
+
+    // COPY
+    loff_t offset = 0;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + size_, size_), 0);
+
+    // ZERO
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 2), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 3), size_), 0);
+
+    // XOR
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
+}
+
+TEST_F(HandlerTest, ReadUnalignedSector) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(BLOCK_SZ);
+
+    ASSERT_TRUE(ReadSectors(1, BLOCK_SZ, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get() + SECTOR_SIZE, BLOCK_SZ), 0);
+}
+
+TEST_F(HandlerTest, ReadUnalignedSize) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(SECTOR_SIZE);
+
+    ASSERT_TRUE(ReadSectors(0, SECTOR_SIZE, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), SECTOR_SIZE), 0);
 }
 
 }  // namespace snapshot
