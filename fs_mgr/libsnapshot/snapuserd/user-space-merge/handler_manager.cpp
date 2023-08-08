@@ -14,6 +14,7 @@
 
 #include "handler_manager.h"
 
+#include <pthread.h>
 #include <sys/eventfd.h>
 
 #include <android-base/logging.h>
@@ -132,6 +133,8 @@ bool SnapshotHandlerManager::DeleteHandler(const std::string& misc_name) {
 void SnapshotHandlerManager::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
+    pthread_setname_np(pthread_self(), "Handler");
+
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -201,9 +204,8 @@ bool SnapshotHandlerManager::StartMerge(std::lock_guard<std::mutex>* proof_of_lo
 
     handler->snapuserd()->MonitorMerge();
 
-    if (!is_merge_monitor_started_) {
-        std::thread(&SnapshotHandlerManager::MonitorMerge, this).detach();
-        is_merge_monitor_started_ = true;
+    if (!merge_monitor_.joinable()) {
+        merge_monitor_ = std::thread(&SnapshotHandlerManager::MonitorMerge, this);
     }
 
     merge_handlers_.push(handler);
@@ -220,6 +222,7 @@ void SnapshotHandlerManager::WakeupMonitorMergeThread() {
 }
 
 void SnapshotHandlerManager::MonitorMerge() {
+    pthread_setname_np(pthread_self(), "Merge Monitor");
     while (!stop_monitor_merge_thread_) {
         uint64_t testVal;
         ssize_t ret =
@@ -357,8 +360,12 @@ void SnapshotHandlerManager::JoinAllThreads() {
         if (th.joinable()) th.join();
     }
 
-    stop_monitor_merge_thread_ = true;
-    WakeupMonitorMergeThread();
+    if (merge_monitor_.joinable()) {
+        stop_monitor_merge_thread_ = true;
+        WakeupMonitorMergeThread();
+
+        merge_monitor_.join();
+    }
 }
 
 auto SnapshotHandlerManager::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,

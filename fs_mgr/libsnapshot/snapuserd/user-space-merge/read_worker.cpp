@@ -16,6 +16,8 @@
 
 #include "read_worker.h"
 
+#include <pthread.h>
+
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -208,6 +210,8 @@ bool ReadWorker::Init() {
 
 bool ReadWorker::Run() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
+
+    pthread_setname_np(pthread_self(), "ReadWorker");
 
     if (!SetThreadPriority(kNiceValueForMergeThreads)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
