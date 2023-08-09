@@ -28,6 +28,7 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <ostream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -43,6 +44,7 @@
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 #include <liburing.h>
+#include <snapuserd/block_server.h>
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
@@ -67,12 +69,13 @@ static constexpr int kNiceValueForMergeThreads = -5;
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
 
 enum class MERGE_IO_TRANSITION {
+    INVALID,
     MERGE_READY,
     MERGE_BEGIN,
     MERGE_FAILED,
     MERGE_COMPLETE,
     IO_TERMINATED,
-    READ_AHEAD_FAILURE,
+    READ_AHEAD_FAILURE
 };
 
 class MergeWorker;
@@ -102,8 +105,8 @@ struct MergeGroupState {
 class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
   public:
     SnapshotHandler(std::string misc_name, std::string cow_device, std::string backing_device,
-                    std::string base_path_merge, int num_workers, bool use_iouring,
-                    bool perform_verification);
+                    std::string base_path_merge, std::shared_ptr<IBlockServerOpener> opener,
+                    int num_workers, bool use_iouring, bool perform_verification);
     bool InitCowDevice();
     bool Start();
 
@@ -219,7 +222,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool populate_data_from_cow_ = false;
     bool ra_thread_ = false;
     int total_ra_blocks_merged_ = 0;
-    MERGE_IO_TRANSITION io_state_;
+    MERGE_IO_TRANSITION io_state_ = MERGE_IO_TRANSITION::INVALID;
     std::unique_ptr<ReadAhead> read_ahead_thread_;
     std::unordered_map<uint64_t, void*> read_ahead_buffer_map_;
 
@@ -242,7 +245,10 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     std::unique_ptr<struct io_uring> ring_;
     std::unique_ptr<UpdateVerify> update_verify_;
+    std::shared_ptr<IBlockServerOpener> block_server_opener_;
 };
+
+std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value);
 
 }  // namespace snapshot
 }  // namespace android

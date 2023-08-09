@@ -60,17 +60,19 @@ cc_library_static {
     local_include_dirs: ["include/"],
     srcs: [
         "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+        "dm_user_block_server.cpp",
         "snapuserd_buffer.cpp",
         "user-space-merge/handler_manager.cpp",
+        "user-space-merge/merge_worker.cpp",
         "user-space-merge/read_worker.cpp",
         "user-space-merge/snapuserd_core.cpp",
-        "user-space-merge/snapuserd_merge.cpp",
         "user-space-merge/snapuserd_readahead.cpp",
         "user-space-merge/snapuserd_transitions.cpp",
         "user-space-merge/snapuserd_verify.cpp",
         "user-space-merge/worker.cpp",
+        "utility.cpp",
     ],
     static_libs: [
         "libbase",
@@ -88,6 +90,7 @@ cc_library_static {
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
+    host_supported: true,
 }
 
 cc_defaults {
@@ -218,6 +221,9 @@ cc_test {
         "libsnapshot_cow_defaults",
     ],
     srcs: [
+        "testing/dm_user_harness.cpp",
+        "testing/harness.cpp",
+        "testing/host_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
     ],
     shared_libs: [
