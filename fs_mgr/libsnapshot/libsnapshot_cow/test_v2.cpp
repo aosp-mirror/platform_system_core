@@ -472,9 +472,10 @@ TEST_P(CompressionTest, HorribleStream) {
     if (strcmp(GetParam(), "none") == 0) {
         GTEST_SKIP();
     }
-
+    CowCompression compression;
     auto algorithm = CompressionAlgorithmFromString(GetParam());
     ASSERT_TRUE(algorithm.has_value());
+    compression.algorithm = algorithm.value();
 
     std::string expected = "The quick brown fox jumps over the lazy dog.";
     expected.resize(4096, '\0');

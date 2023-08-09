@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <snapuserd/block_server.h>
 
 namespace android {
 namespace snapshot {
@@ -55,6 +56,7 @@ class ISnapshotHandlerManager {
                                                       const std::string& cow_device_path,
                                                       const std::string& backing_device,
                                                       const std::string& base_path_merge,
+                                                      std::shared_ptr<IBlockServerOpener> opener,
                                                       int num_worker_threads, bool use_iouring,
                                                       bool perform_verification) = 0;
 
@@ -91,6 +93,7 @@ class SnapshotHandlerManager final : public ISnapshotHandlerManager {
                                               const std::string& cow_device_path,
                                               const std::string& backing_device,
                                               const std::string& base_path_merge,
+                                              std::shared_ptr<IBlockServerOpener> opener,
                                               int num_worker_threads, bool use_iouring,
                                               bool perform_verification) override;
     bool StartHandler(const std::string& misc_name) override;
@@ -119,9 +122,9 @@ class SnapshotHandlerManager final : public ISnapshotHandlerManager {
     std::mutex lock_;
     HandlerList dm_users_;
 
-    bool is_merge_monitor_started_ = false;
     bool stop_monitor_merge_thread_ = false;
     int active_merge_threads_ = 0;
+    std::thread merge_monitor_;
     int num_partitions_merge_complete_ = 0;
     std::queue<std::shared_ptr<HandlerThread>> merge_handlers_;
     android::base::unique_fd monitor_merge_event_fd_;

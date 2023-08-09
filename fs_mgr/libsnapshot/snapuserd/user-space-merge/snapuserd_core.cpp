@@ -22,9 +22,10 @@
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
+#include <snapuserd/dm_user_block_server.h>
 
+#include "merge_worker.h"
 #include "read_worker.h"
-#include "snapuserd_merge.h"
 
 namespace android {
 namespace snapshot {
@@ -35,12 +36,12 @@ using android::base::unique_fd;
 
 SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
                                  std::string backing_device, std::string base_path_merge,
-                                 int num_worker_threads, bool use_iouring,
-                                 bool perform_verification) {
+                                 std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads,
+                                 bool use_iouring, bool perform_verification) {
     misc_name_ = std::move(misc_name);
     cow_device_ = std::move(cow_device);
     backing_store_device_ = std::move(backing_device);
-    control_device_ = "/dev/dm-user/" + misc_name_;
+    block_server_opener_ = std::move(opener);
     base_path_merge_ = std::move(base_path_merge);
     num_worker_threads_ = num_worker_threads;
     is_io_uring_enabled_ = use_iouring;
@@ -49,8 +50,9 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 
 bool SnapshotHandler::InitializeWorkers() {
     for (int i = 0; i < num_worker_threads_; i++) {
-        auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, control_device_,
-                                               misc_name_, base_path_merge_, GetSharedPtr());
+        auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, misc_name_,
+                                               base_path_merge_, GetSharedPtr(),
+                                               block_server_opener_);
         if (!wt->Init()) {
             SNAP_LOG(ERROR) << "Thread initialization failed";
             return false;
@@ -293,8 +295,6 @@ bool SnapshotHandler::Start() {
     if (ra_thread_) {
         ra_thread_status =
                 std::async(std::launch::async, &ReadAhead::RunThread, read_ahead_thread_.get());
-
-        SNAP_LOG(INFO) << "Read-ahead thread started";
     }
 
     // Launch worker threads

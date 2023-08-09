@@ -1944,7 +1944,6 @@ static void do_update(const char* filename, FlashingPlan* fp) {
     }
     ZipImageSource zp = ZipImageSource(zip);
     fp->source = &zp;
-    fp->wants_wipe = false;
     FlashAllTool tool(fp);
     tool.Flash();
 
