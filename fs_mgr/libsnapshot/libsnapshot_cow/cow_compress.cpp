@@ -46,24 +46,47 @@ std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::strin
     } else if (name == "none" || name.empty()) {
         return {kCowCompressNone};
     } else {
+        LOG(ERROR) << "unable to determine default compression algorithm for: " << name;
         return {};
     }
 }
 
-std::basic_string<uint8_t> CompressWorker::Compress(const void* data, size_t length) {
-    return Compress(compression_, data, length);
+// 1. Default compression level is determined by compression algorithm
+// 2. There might be compatibility issues if a value is changed here, as  some older versions of
+// Android will assume a different compression level, causing cow_size estimation differences that
+// will lead to OTA failure. Ensure that the device and OTA package use the same compression level
+// for OTA to succeed.
+uint32_t CompressWorker::GetDefaultCompressionLevel(CowCompressionAlgorithm compression) {
+    switch (compression) {
+        case kCowCompressGz: {
+            return Z_BEST_COMPRESSION;
+        }
+        case kCowCompressBrotli: {
+            return BROTLI_DEFAULT_QUALITY;
+        }
+        case kCowCompressLz4: {
+            break;
+        }
+        case kCowCompressZstd: {
+            return ZSTD_defaultCLevel();
+        }
+        case kCowCompressNone: {
+            break;
+        }
+    }
+    return 0;
 }
 
-std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm compression,
-                                                    const void* data, size_t length) {
-    switch (compression) {
+std::basic_string<uint8_t> CompressWorker::Compress(CowCompression compression, const void* data,
+                                                    size_t length) {
+    switch (compression.algorithm) {
         case kCowCompressGz: {
             const auto bound = compressBound(length);
             std::basic_string<uint8_t> buffer(bound, '\0');
 
             uLongf dest_len = bound;
             auto rv = compress2(buffer.data(), &dest_len, reinterpret_cast<const Bytef*>(data),
-                                length, Z_BEST_COMPRESSION);
+                                length, compression.compression_level);
             if (rv != Z_OK) {
                 LOG(ERROR) << "compress2 returned: " << rv;
                 return {};
@@ -81,8 +104,8 @@ std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm comp
 
             size_t encoded_size = bound;
             auto rv = BrotliEncoderCompress(
-                    BROTLI_DEFAULT_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE, length,
-                    reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.data());
+                    compression.compression_level, BROTLI_DEFAULT_WINDOW, BROTLI_DEFAULT_MODE,
+                    length, reinterpret_cast<const uint8_t*>(data), &encoded_size, buffer.data());
             if (!rv) {
                 LOG(ERROR) << "BrotliEncoderCompress failed";
                 return {};
@@ -117,8 +140,8 @@ std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm comp
         }
         case kCowCompressZstd: {
             std::basic_string<uint8_t> buffer(ZSTD_compressBound(length), '\0');
-            const auto compressed_size =
-                    ZSTD_compress(buffer.data(), buffer.size(), data, length, 0);
+            const auto compressed_size = ZSTD_compress(buffer.data(), buffer.size(), data, length,
+                                                       compression.compression_level);
             if (compressed_size <= 0) {
                 LOG(ERROR) << "ZSTD compression failed " << compressed_size;
                 return {};
@@ -133,7 +156,7 @@ std::basic_string<uint8_t> CompressWorker::Compress(CowCompressionAlgorithm comp
             return buffer;
         }
         default:
-            LOG(ERROR) << "unhandled compression type: " << compression;
+            LOG(ERROR) << "unhandled compression type: " << compression.algorithm;
             break;
     }
     return {};
@@ -143,7 +166,7 @@ bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks,
     return CompressBlocks(compression_, block_size_, buffer, num_blocks, compressed_data);
 }
 
-bool CompressWorker::CompressBlocks(CowCompressionAlgorithm compression, size_t block_size,
+bool CompressWorker::CompressBlocks(CowCompression compression, size_t block_size,
                                     const void* buffer, size_t num_blocks,
                                     std::vector<std::basic_string<uint8_t>>* compressed_data) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(buffer);
@@ -255,7 +278,7 @@ void CompressWorker::Finalize() {
     cv_.notify_all();
 }
 
-CompressWorker::CompressWorker(CowCompressionAlgorithm compression, uint32_t block_size)
+CompressWorker::CompressWorker(CowCompression compression, uint32_t block_size)
     : compression_(compression), block_size_(block_size) {}
 
 }  // namespace snapshot
