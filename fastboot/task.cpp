@@ -32,7 +32,7 @@ FlashTask::FlashTask(const std::string& slot, const std::string& pname, const st
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
-        if (should_flash_in_userspace(partition) && !is_userspace_fastboot()) {
+        if (should_flash_in_userspace(partition) && !is_userspace_fastboot() && !fp_->force_flash) {
             die("The partition you are trying to flash is dynamic, and "
                 "should be flashed via fastbootd. Please run:\n"
                 "\n"
