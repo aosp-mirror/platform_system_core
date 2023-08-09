@@ -23,10 +23,11 @@ crash1:
 	ldr lr, [lr]
 	b .
 	.cfi_endproc
+	.size crash1, .-crash1
 
-.globl crashnostack
-.type crashnostack, %function
-crashnostack:
+.globl crash_no_stack
+.type crash_no_stack, %function
+crash_no_stack:
 	.cfi_startproc
 	mov r1, sp
 	.cfi_def_cfa_register r1
@@ -35,3 +36,4 @@ crashnostack:
 	ldr r0, [r0]
 	b .
 	.cfi_endproc
+	.size crash_no_stack, .-crash_no_stack

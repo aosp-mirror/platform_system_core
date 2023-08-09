@@ -41,11 +41,12 @@ crash1:
 	ldr x30, [x30]
 	b .
 	.cfi_endproc
+	.size crash1, .-crash1
 
 
-.globl crashnostack
-.type crashnostack, %function
-crashnostack:
+.globl crash_no_stack
+.type crash_no_stack, %function
+crash_no_stack:
 	.cfi_startproc
 	mov x1, sp
 	.cfi_def_cfa_register x1
@@ -54,3 +55,41 @@ crashnostack:
 	ldr x0, [x0]
 	b .
 	.cfi_endproc
+	.size crash_no_stack, .-crash_no_stack
+
+
+.globl crash_bti
+.type crash_bti, %function
+crash_bti:
+	.cfi_startproc
+	adr x16, 1f
+	br x16
+1:	// Deliberatly not a bti instruction so we crash here.
+	b .
+	.cfi_endproc
+	.size crash_bti, .-crash_bti
+
+
+.globl crash_pac
+.type crash_pac, %function
+crash_pac:
+	.cfi_startproc
+	paciasp
+	// Since sp is a pac input, this ensures a mismatch.
+	sub sp, sp, #16
+	autiasp
+	b .
+	.cfi_endproc
+	.size crash_pac, .-crash_pac
+
+// Set the PAC and BTI bits for this object file.
+.section .note.gnu.property, "a"
+.balign 8
+.long 4
+.long 0x10
+.long 0x5
+.asciz "GNU"
+.long 0xc0000000
+.long 4
+.long 0x3
+.long 0
