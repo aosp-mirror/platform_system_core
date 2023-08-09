@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <future>
 #include "writer_base.h"
 
 namespace android {
