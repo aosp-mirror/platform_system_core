@@ -552,8 +552,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   debugger_process_info process_info = {};
+  if (g_callbacks.get_process_info) {
+    process_info = g_callbacks.get_process_info();
+  }
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
   if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
+    // Applications can set abort messages via android_set_abort_message without
+    // actually aborting; ignore those messages in non-fatal dumps.
+    process_info.abort_msg = nullptr;
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
       // Allow for the abort message to be explicitly specified via the sigqueue value.
       // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
@@ -562,8 +568,6 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
         info->si_ptr = reinterpret_cast<void*>(si_val & 1);
       }
     }
-  } else if (g_callbacks.get_process_info) {
-    process_info = g_callbacks.get_process_info();
   }
 
   gwp_asan_callbacks_t gwp_asan_callbacks = {};
