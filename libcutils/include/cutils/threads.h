@@ -13,13 +13,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-#pragma once
-
-#include  <sys/types.h>
-
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
