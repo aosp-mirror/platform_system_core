@@ -161,6 +161,10 @@ enum CowCompressionAlgorithm : uint8_t {
     kCowCompressLz4 = 3,
     kCowCompressZstd = 4,
 };
+struct CowCompression {
+    CowCompressionAlgorithm algorithm = kCowCompressNone;
+    uint32_t compression_level = 0;
+};
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
