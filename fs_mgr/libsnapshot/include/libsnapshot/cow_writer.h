@@ -110,16 +110,17 @@ class ICowWriter {
 
 class CompressWorker {
   public:
-    CompressWorker(CowCompressionAlgorithm compression, uint32_t block_size);
+    CompressWorker(CowCompression compression, uint32_t block_size);
     bool RunThread();
     void EnqueueCompressBlocks(const void* buffer, size_t num_blocks);
     bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
     void Finalize();
-    static std::basic_string<uint8_t> Compress(CowCompressionAlgorithm compression,
-                                               const void* data, size_t length);
+    static uint32_t GetDefaultCompressionLevel(CowCompressionAlgorithm compression);
+    static std::basic_string<uint8_t> Compress(CowCompression compression, const void* data,
+                                               size_t length);
 
-    static bool CompressBlocks(CowCompressionAlgorithm compression, size_t block_size,
-                               const void* buffer, size_t num_blocks,
+    static bool CompressBlocks(CowCompression compression, size_t block_size, const void* buffer,
+                               size_t num_blocks,
                                std::vector<std::basic_string<uint8_t>>* compressed_data);
 
   private:
@@ -130,7 +131,7 @@ class CompressWorker {
         std::vector<std::basic_string<uint8_t>> compressed_data;
     };
 
-    CowCompressionAlgorithm compression_;
+    CowCompression compression_;
     uint32_t block_size_;
 
     std::queue<CompressWork> work_queue_;
@@ -139,7 +140,6 @@ class CompressWorker {
     std::condition_variable cv_;
     bool stopped_ = false;
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length);
     bool CompressBlocks(const void* buffer, size_t num_blocks,
                         std::vector<std::basic_string<uint8_t>>* compressed_data);
 };
