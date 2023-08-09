@@ -33,9 +33,11 @@ class ReadWorker : public Worker, public IBlockServer::Delegate {
     bool Run();
     bool Init() override;
     void CloseFds() override;
+    bool RequestSectors(uint64_t sector, uint64_t size) override;
+
+    IBlockServer* block_server() const { return block_server_.get(); }
 
   private:
-    bool RequestSectors(uint64_t sector, uint64_t size) override;
     bool SendBufferedIo();
 
     bool ProcessCowOp(const CowOperation* cow_op, void* buffer);
