@@ -36,7 +36,7 @@ protected:
 TEST_F(String8Test, Cstr) {
     String8 tmp("Hello, world!");
 
-    EXPECT_STREQ(tmp.string(), "Hello, world!");
+    EXPECT_STREQ(tmp.c_str(), "Hello, world!");
 }
 
 TEST_F(String8Test, OperatorPlus) {
@@ -45,16 +45,16 @@ TEST_F(String8Test, OperatorPlus) {
     // Test adding String8 + const char*
     const char* ccsrc2 = "world!";
     String8 dst1 = src1 + ccsrc2;
-    EXPECT_STREQ(dst1.string(), "Hello, world!");
-    EXPECT_STREQ(src1.string(), "Hello, ");
+    EXPECT_STREQ(dst1.c_str(), "Hello, world!");
+    EXPECT_STREQ(src1.c_str(), "Hello, ");
     EXPECT_STREQ(ccsrc2, "world!");
 
     // Test adding String8 + String8
     String8 ssrc2("world!");
     String8 dst2 = src1 + ssrc2;
-    EXPECT_STREQ(dst2.string(), "Hello, world!");
-    EXPECT_STREQ(src1.string(), "Hello, ");
-    EXPECT_STREQ(ssrc2.string(), "world!");
+    EXPECT_STREQ(dst2.c_str(), "Hello, world!");
+    EXPECT_STREQ(src1.c_str(), "Hello, ");
+    EXPECT_STREQ(ssrc2.c_str(), "world!");
 }
 
 TEST_F(String8Test, OperatorPlusEquals) {
@@ -63,14 +63,14 @@ TEST_F(String8Test, OperatorPlusEquals) {
     // Testing String8 += String8
     String8 src2(" is my passport.");
     src1 += src2;
-    EXPECT_STREQ(src1.string(), "My voice is my passport.");
-    EXPECT_STREQ(src2.string(), " is my passport.");
+    EXPECT_STREQ(src1.c_str(), "My voice is my passport.");
+    EXPECT_STREQ(src2.c_str(), " is my passport.");
 
     // Adding const char* to the previous string.
     const char* src3 = " Verify me.";
     src1 += src3;
-    EXPECT_STREQ(src1.string(), "My voice is my passport. Verify me.");
-    EXPECT_STREQ(src2.string(), " is my passport.");
+    EXPECT_STREQ(src1.c_str(), "My voice is my passport. Verify me.");
+    EXPECT_STREQ(src2.c_str(), " is my passport.");
     EXPECT_STREQ(src3, " Verify me.");
 }
 
