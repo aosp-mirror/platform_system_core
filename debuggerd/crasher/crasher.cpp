@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <dirent.h>
 #include <errno.h>
+#include <error.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -28,6 +29,9 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <unistd.h>
+
+#include <android-base/file.h>
+#include <android-base/strings.h>
 
 // We test both kinds of logging.
 #include <android-base/logging.h>
@@ -59,8 +63,10 @@ typedef int (__kuser_cmpxchg64_t)(const int64_t*, const int64_t*, volatile int64
 // Avoid name mangling so that stacks are more readable.
 extern "C" {
 
-void crash1(void);
-void crashnostack(void);
+void crash1();
+void crash_no_stack();
+void crash_bti();
+void crash_pac();
 
 int do_action(const char* arg);
 
@@ -196,13 +202,6 @@ static int usage() {
     fprintf(stderr, "  fdsan_file            close a file descriptor that's owned by a FILE*\n");
     fprintf(stderr, "  fdsan_dir             close a file descriptor that's owned by a DIR*\n");
     fprintf(stderr, "  seccomp               fail a seccomp check\n");
-#if defined(__arm__)
-    fprintf(stderr, "  kuser_helper_version  call kuser_helper_version\n");
-    fprintf(stderr, "  kuser_get_tls         call kuser_get_tls\n");
-    fprintf(stderr, "  kuser_cmpxchg         call kuser_cmpxchg\n");
-    fprintf(stderr, "  kuser_memory_barrier  call kuser_memory_barrier\n");
-    fprintf(stderr, "  kuser_cmpxchg64       call kuser_cmpxchg64\n");
-#endif
     fprintf(stderr, "  xom                   read execute-only memory\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call liblog LOG_ALWAYS_FATAL\n");
@@ -223,12 +222,41 @@ static int usage() {
     fprintf(stderr, "\n");
     fprintf(stderr, "  no_new_privs          set PR_SET_NO_NEW_PRIVS and then abort\n");
     fprintf(stderr, "\n");
+#if defined(__arm__)
+    fprintf(stderr, "Also, since this is an arm32 binary:\n");
+    fprintf(stderr, "  kuser_helper_version  call kuser_helper_version\n");
+    fprintf(stderr, "  kuser_get_tls         call kuser_get_tls\n");
+    fprintf(stderr, "  kuser_cmpxchg         call kuser_cmpxchg\n");
+    fprintf(stderr, "  kuser_memory_barrier  call kuser_memory_barrier\n");
+    fprintf(stderr, "  kuser_cmpxchg64       call kuser_cmpxchg64\n");
+#endif
+#if defined(__aarch64__)
+    fprintf(stderr, "Also, since this is an arm64 binary:\n");
+    fprintf(stderr, "  bti                   fail a branch target identification (BTI) check\n");
+    fprintf(stderr, "  pac                   fail a pointer authentication (PAC) check\n");
+#endif
+    fprintf(stderr, "\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to run on a new thread\n");
     fprintf(stderr, "prefix any of the above with 'exhaustfd-' to exhaust\n");
     fprintf(stderr, "all available file descriptors before crashing.\n");
     fprintf(stderr, "prefix any of the above with 'wait-' to wait until input is received on stdin\n");
 
     return EXIT_FAILURE;
+}
+
+[[maybe_unused]] static void CheckCpuFeature(const std::string& name) {
+    std::string cpuinfo;
+    if (!android::base::ReadFileToString("/proc/cpuinfo", &cpuinfo)) {
+        error(1, errno, "couldn't read /proc/cpuinfo");
+    }
+    std::vector<std::string> lines = android::base::Split(cpuinfo, "\n");
+    for (std::string_view line : lines) {
+        if (!android::base::ConsumePrefix(&line, "Features\t:")) continue;
+        std::vector<std::string> features = android::base::Split(std::string(line), " ");
+        if (std::find(features.begin(), features.end(), name) == features.end()) {
+          error(1, 0, "/proc/cpuinfo does not report feature '%s'", name.c_str());
+        }
+    }
 }
 
 noinline int do_action(const char* arg) {
@@ -256,7 +284,7 @@ noinline int do_action(const char* arg) {
     } else if (!strcasecmp(arg, "stack-overflow")) {
       overflow_stack(nullptr);
     } else if (!strcasecmp(arg, "nostack")) {
-      crashnostack();
+      crash_no_stack();
     } else if (!strcasecmp(arg, "exit")) {
       exit(1);
     } else if (!strcasecmp(arg, "call-null")) {
@@ -349,6 +377,14 @@ noinline int do_action(const char* arg) {
         __kuser_dmb();
     } else if (!strcasecmp(arg, "kuser_cmpxchg64")) {
         return __kuser_cmpxchg64(0, 0, 0);
+#endif
+#if defined(__aarch64__)
+    } else if (!strcasecmp(arg, "bti")) {
+        CheckCpuFeature("bti");
+        crash_bti();
+    } else if (!strcasecmp(arg, "pac")) {
+        CheckCpuFeature("paca");
+        crash_pac();
 #endif
     } else if (!strcasecmp(arg, "no_new_privs")) {
         if (prctl(PR_SET_NO_NEW_PRIVS, 1) != 0) {

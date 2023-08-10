@@ -39,6 +39,7 @@ class MergeWorker : public Worker {
     void FinalizeIouring();
 
   private:
+    BufferSink bufsink_;
     std::unique_ptr<ICowOpIter> cowop_iter_;
     std::unique_ptr<struct io_uring> ring_;
     size_t ra_block_index_ = 0;

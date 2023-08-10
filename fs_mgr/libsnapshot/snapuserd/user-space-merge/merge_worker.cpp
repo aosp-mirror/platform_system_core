@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "snapuserd_merge.h"
+#include "merge_worker.h"
+
+#include <pthread.h>
 
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -197,6 +200,7 @@ bool MergeWorker::MergeOrderedOpsAsync() {
         // Wait for RA thread to notify that the merge window
         // is ready for merging.
         if (!snapuserd_->WaitForMergeBegin()) {
+            SNAP_LOG(ERROR) << "Failed waiting for merge to begin";
             return false;
         }
 
@@ -302,7 +306,7 @@ bool MergeWorker::MergeOrderedOpsAsync() {
                     // will fallback to synchronous I/O.
                     ret = io_uring_wait_cqe(ring_.get(), &cqe);
                     if (ret) {
-                        SNAP_LOG(ERROR) << "Merge: io_uring_wait_cqe failed: " << ret;
+                        SNAP_LOG(ERROR) << "Merge: io_uring_wait_cqe failed: " << strerror(-ret);
                         status = false;
                         break;
                     }
@@ -545,16 +549,21 @@ void MergeWorker::FinalizeIouring() {
 
 bool MergeWorker::Run() {
     SNAP_LOG(DEBUG) << "Waiting for merge begin...";
+
+    pthread_setname_np(pthread_self(), "MergeWorker");
+
     if (!snapuserd_->WaitForMergeBegin()) {
         SNAP_LOG(ERROR) << "Merge terminated early...";
         return true;
     }
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
     SNAP_LOG(INFO) << "Merge starting..";
+
+    bufsink_.Initialize(PAYLOAD_BUFFER_SZ);
 
     if (!Init()) {
         SNAP_LOG(ERROR) << "Merge thread initialization failed...";

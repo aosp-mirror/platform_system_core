@@ -17,28 +17,28 @@
 #include <utility>
 #include <vector>
 
+#include <snapuserd/block_server.h>
 #include "worker.h"
 
 namespace android {
 namespace snapshot {
 
-class ReadWorker : public Worker {
+class ReadWorker : public Worker, public IBlockServer::Delegate {
   public:
     ReadWorker(const std::string& cow_device, const std::string& backing_device,
-               const std::string& control_device, const std::string& misc_name,
-               const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
+               const std::string& misc_name, const std::string& base_path_merge,
+               std::shared_ptr<SnapshotHandler> snapuserd,
+               std::shared_ptr<IBlockServerOpener> opener);
 
     bool Run();
     bool Init() override;
     void CloseFds() override;
+    bool RequestSectors(uint64_t sector, uint64_t size) override;
+
+    IBlockServer* block_server() const { return block_server_.get(); }
 
   private:
-    // Functions interacting with dm-user
-    bool ProcessIORequest();
-    bool WriteDmUserPayload(size_t size);
-    bool DmuserReadRequest();
     bool SendBufferedIo();
-    void RespondIOError();
 
     bool ProcessCowOp(const CowOperation* cow_op, void* buffer);
     bool ProcessXorOp(const CowOperation* cow_op, void* buffer);
@@ -60,10 +60,9 @@ class ReadWorker : public Worker {
     std::string backing_store_device_;
     unique_fd backing_store_fd_;
 
-    std::string control_device_;
-    unique_fd ctrl_fd_;
+    std::shared_ptr<IBlockServerOpener> block_server_opener_;
+    std::unique_ptr<IBlockServer> block_server_;
 
-    bool header_response_ = false;
     std::basic_string<uint8_t> xor_buffer_;
 };
 
