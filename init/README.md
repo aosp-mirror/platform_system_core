@@ -674,11 +674,12 @@ provides the `aidl_lazy_test_1` interface.
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, e.g. barrier=1,noauto\_da\_alloc
 
-`perform_apex_config`
+`perform_apex_config [--bootstrap]`
 > Performs tasks after APEXes are mounted. For example, creates data directories
   for the mounted APEXes, parses config file(s) from them, and updates linker
   configurations. Intended to be used only once when apexd notifies the mount
   event by setting `apexd.status` to ready.
+  Use --bootstrap when invoking in the bootstrap mount namespace.
 
 `restart [--only-if-running] <service>`
 > Stops and restarts a running service, does nothing if the service is currently
