@@ -43,10 +43,11 @@ crash1:
 	ld t2, 0(zero)
 	j .
 	.cfi_endproc
+	.size crash1, .-crash1
 
 
-.globl crashnostack
-crashnostack:
+.globl crash_no_stack
+crash_no_stack:
 	.cfi_startproc
 	mv t1, sp
 	.cfi_def_cfa_register t1
@@ -54,3 +55,4 @@ crashnostack:
 	ld t2, 0(zero)
 	j .
 	.cfi_endproc
+	.size crash_no_stack, .-crash_no_stack

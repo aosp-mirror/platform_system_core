@@ -31,6 +31,7 @@
 #include <vector>
 
 #include <android-base/unique_fd.h>
+#include <snapuserd/block_server.h>
 #include "handler_manager.h"
 #include "snapuserd_core.h"
 
@@ -50,6 +51,7 @@ class UserSnapshotServer {
     bool is_server_running_ = false;
     bool io_uring_enabled_ = false;
     std::unique_ptr<ISnapshotHandlerManager> handlers_;
+    std::unique_ptr<IBlockServerFactory> block_server_factory_;
 
     std::mutex lock_;
 

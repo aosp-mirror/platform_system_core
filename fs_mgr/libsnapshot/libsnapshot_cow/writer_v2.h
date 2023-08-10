@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <future>
 #include "writer_base.h"
 
 namespace android {
@@ -63,7 +64,7 @@ class CowWriterV2 : public CowWriterBase {
 
   private:
     CowFooter footer_{};
-    CowCompressionAlgorithm compression_ = kCowCompressNone;
+    CowCompression compression_;
     uint64_t current_op_pos_ = 0;
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;

@@ -40,14 +40,11 @@ class Worker {
     virtual bool Init();
 
   protected:
-    // Initialization
-    void InitializeBufsink();
     bool InitializeFds();
     bool InitReader();
     virtual void CloseFds() { base_path_merge_fd_ = {}; }
 
     std::unique_ptr<CowReader> reader_;
-    BufferSink bufsink_;
 
     std::string misc_name_;  // Needed for SNAP_LOG.
 

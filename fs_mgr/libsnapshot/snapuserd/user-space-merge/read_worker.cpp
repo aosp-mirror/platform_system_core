@@ -16,7 +16,10 @@
 
 #include "read_worker.h"
 
+#include <pthread.h>
+
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -26,18 +29,18 @@ using namespace android::dm;
 using android::base::unique_fd;
 
 void ReadWorker::CloseFds() {
-    ctrl_fd_ = {};
+    block_server_ = {};
     backing_store_fd_ = {};
     Worker::CloseFds();
 }
 
 ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing_device,
-                       const std::string& control_device, const std::string& misc_name,
-                       const std::string& base_path_merge,
-                       std::shared_ptr<SnapshotHandler> snapuserd)
+                       const std::string& misc_name, const std::string& base_path_merge,
+                       std::shared_ptr<SnapshotHandler> snapuserd,
+                       std::shared_ptr<IBlockServerOpener> opener)
     : Worker(cow_device, misc_name, base_path_merge, snapuserd),
       backing_store_device_(backing_device),
-      control_device_(control_device) {}
+      block_server_opener_(opener) {}
 
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
@@ -197,9 +200,9 @@ bool ReadWorker::Init() {
         return false;
     }
 
-    ctrl_fd_.reset(open(control_device_.c_str(), O_RDWR));
-    if (ctrl_fd_ < 0) {
-        SNAP_PLOG(ERROR) << "Unable to open " << control_device_;
+    block_server_ = block_server_opener_->Open(this, PAYLOAD_BUFFER_SZ);
+    if (!block_server_) {
+        SNAP_PLOG(ERROR) << "Unable to open block server";
         return false;
     }
     return true;
@@ -208,13 +211,15 @@ bool ReadWorker::Init() {
 bool ReadWorker::Run() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    pthread_setname_np(pthread_self(), "ReadWorker");
+
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
     // Start serving IO
     while (true) {
-        if (!ProcessIORequest()) {
+        if (!block_server_->ProcessRequests()) {
             break;
         }
     }
@@ -222,29 +227,6 @@ bool ReadWorker::Run() {
     CloseFds();
     reader_->CloseCowFd();
 
-    return true;
-}
-
-// Send the payload/data back to dm-user misc device.
-bool ReadWorker::WriteDmUserPayload(size_t size) {
-    size_t payload_size = size;
-    void* buf = bufsink_.GetPayloadBufPtr();
-    if (header_response_) {
-        payload_size += sizeof(struct dm_user_header);
-        buf = bufsink_.GetBufPtr();
-    }
-
-    if (!android::base::WriteFully(ctrl_fd_, buf, payload_size)) {
-        SNAP_PLOG(ERROR) << "Write to dm-user failed size: " << payload_size;
-        return false;
-    }
-
-    // After the first header is sent in response to a request, we cannot
-    // send any additional headers.
-    header_response_ = false;
-
-    // Reset the buffer for use by the next request.
-    bufsink_.ResetBufferOffset();
     return true;
 }
 
@@ -281,7 +263,7 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
                                        std::make_pair(sector, nullptr), SnapshotHandler::compare);
             bool not_found = (it == chunk_vec.end() || it->first != sector);
 
-            void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ, size);
+            void* buffer = block_server_->GetResponseBuffer(BLOCK_SZ, size);
             if (!buffer) {
                 SNAP_LOG(ERROR) << "AcquireBuffer failed in ReadAlignedSector";
                 return false;
@@ -334,7 +316,8 @@ int ReadWorker::ReadUnalignedSector(
     int num_sectors_skip = sector - it->first;
     size_t skip_size = num_sectors_skip << SECTOR_SHIFT;
     size_t write_size = std::min(size, BLOCK_SZ - skip_size);
-    auto buffer = reinterpret_cast<uint8_t*>(bufsink_.AcquireBuffer(BLOCK_SZ, write_size));
+    auto buffer =
+            reinterpret_cast<uint8_t*>(block_server_->GetResponseBuffer(BLOCK_SZ, write_size));
     if (!buffer) {
         SNAP_LOG(ERROR) << "ProcessCowOp failed to allocate buffer";
         return -1;
@@ -462,7 +445,7 @@ bool ReadWorker::ReadUnalignedSector(sector_t sector, size_t size) {
         CHECK(diff_size <= BLOCK_SZ);
 
         size_t read_size = std::min(remaining_size, diff_size);
-        void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ, read_size);
+        void* buffer = block_server_->GetResponseBuffer(BLOCK_SZ, read_size);
         if (!buffer) {
             SNAP_LOG(ERROR) << "AcquireBuffer failed in ReadUnalignedSector";
             return false;
@@ -488,88 +471,17 @@ bool ReadWorker::ReadUnalignedSector(sector_t sector, size_t size) {
     return true;
 }
 
-void ReadWorker::RespondIOError() {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
-    header->type = DM_USER_RESP_ERROR;
-    // This is an issue with the dm-user interface. There
-    // is no way to propagate the I/O error back to dm-user
-    // if we have already communicated the header back. Header
-    // is responded once at the beginning; however I/O can
-    // be processed in chunks. If we encounter an I/O error
-    // somewhere in the middle of the processing, we can't communicate
-    // this back to dm-user.
-    //
-    // TODO: Fix the interface
-    CHECK(header_response_);
-
-    WriteDmUserPayload(0);
-}
-
-bool ReadWorker::DmuserReadRequest() {
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
-
+bool ReadWorker::RequestSectors(uint64_t sector, uint64_t len) {
     // Unaligned I/O request
-    if (!IsBlockAligned(header->sector << SECTOR_SHIFT)) {
-        return ReadUnalignedSector(header->sector, header->len);
+    if (!IsBlockAligned(sector << SECTOR_SHIFT)) {
+        return ReadUnalignedSector(sector, len);
     }
 
-    return ReadAlignedSector(header->sector, header->len);
+    return ReadAlignedSector(sector, len);
 }
 
 bool ReadWorker::SendBufferedIo() {
-    return WriteDmUserPayload(bufsink_.GetPayloadBytesWritten());
-}
-
-bool ReadWorker::ProcessIORequest() {
-    // Read Header from dm-user misc device. This gives
-    // us the sector number for which IO is issued by dm-snapshot device
-    struct dm_user_header* header = bufsink_.GetHeaderPtr();
-    if (!android::base::ReadFully(ctrl_fd_, header, sizeof(*header))) {
-        if (errno != ENOTBLK) {
-            SNAP_PLOG(ERROR) << "Control-read failed";
-        }
-
-        SNAP_PLOG(DEBUG) << "ReadDmUserHeader failed....";
-        return false;
-    }
-
-    SNAP_LOG(DEBUG) << "Daemon: msg->seq: " << std::dec << header->seq;
-    SNAP_LOG(DEBUG) << "Daemon: msg->len: " << std::dec << header->len;
-    SNAP_LOG(DEBUG) << "Daemon: msg->sector: " << std::dec << header->sector;
-    SNAP_LOG(DEBUG) << "Daemon: msg->type: " << std::dec << header->type;
-    SNAP_LOG(DEBUG) << "Daemon: msg->flags: " << std::dec << header->flags;
-
-    // Use the same header buffer as the response header.
-    int request_type = header->type;
-    header->type = DM_USER_RESP_SUCCESS;
-    header_response_ = true;
-
-    // Reset the output buffer.
-    bufsink_.ResetBufferOffset();
-
-    bool ok;
-    switch (request_type) {
-        case DM_USER_REQ_MAP_READ:
-            ok = DmuserReadRequest();
-            break;
-
-        case DM_USER_REQ_MAP_WRITE:
-            // TODO: We should not get any write request
-            // to dm-user as we mount all partitions
-            // as read-only. Need to verify how are TRIM commands
-            // handled during mount.
-            ok = false;
-            break;
-
-        default:
-            ok = false;
-            break;
-    }
-
-    if (!ok && header->type != DM_USER_RESP_ERROR) {
-        RespondIOError();
-    }
-    return ok;
+    return block_server_->SendBufferedIo();
 }
 
 }  // namespace snapshot

@@ -22,9 +22,10 @@
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
+#include <snapuserd/dm_user_block_server.h>
 
+#include "merge_worker.h"
 #include "read_worker.h"
-#include "snapuserd_merge.h"
 
 namespace android {
 namespace snapshot {
@@ -35,12 +36,12 @@ using android::base::unique_fd;
 
 SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
                                  std::string backing_device, std::string base_path_merge,
-                                 int num_worker_threads, bool use_iouring,
-                                 bool perform_verification) {
+                                 std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads,
+                                 bool use_iouring, bool perform_verification) {
     misc_name_ = std::move(misc_name);
     cow_device_ = std::move(cow_device);
     backing_store_device_ = std::move(backing_device);
-    control_device_ = "/dev/dm-user/" + misc_name_;
+    block_server_opener_ = std::move(opener);
     base_path_merge_ = std::move(base_path_merge);
     num_worker_threads_ = num_worker_threads;
     is_io_uring_enabled_ = use_iouring;
@@ -49,8 +50,9 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
 
 bool SnapshotHandler::InitializeWorkers() {
     for (int i = 0; i < num_worker_threads_; i++) {
-        auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, control_device_,
-                                               misc_name_, base_path_merge_, GetSharedPtr());
+        auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, misc_name_,
+                                               base_path_merge_, GetSharedPtr(),
+                                               block_server_opener_);
         if (!wt->Init()) {
             SNAP_LOG(ERROR) << "Thread initialization failed";
             return false;
@@ -280,20 +282,6 @@ bool SnapshotHandler::InitCowDevice() {
         return false;
     }
 
-    unique_fd fd(TEMP_FAILURE_RETRY(open(base_path_merge_.c_str(), O_RDONLY | O_CLOEXEC)));
-    if (fd < 0) {
-        SNAP_LOG(ERROR) << "Cannot open block device";
-        return false;
-    }
-
-    uint64_t dev_sz = get_block_device_size(fd.get());
-    if (!dev_sz) {
-        SNAP_LOG(ERROR) << "Failed to find block device size: " << base_path_merge_;
-        return false;
-    }
-
-    num_sectors_ = dev_sz >> SECTOR_SHIFT;
-
     return ReadMetadata();
 }
 
@@ -307,8 +295,6 @@ bool SnapshotHandler::Start() {
     if (ra_thread_) {
         ra_thread_status =
                 std::async(std::launch::async, &ReadAhead::RunThread, read_ahead_thread_.get());
-
-        SNAP_LOG(INFO) << "Read-ahead thread started";
     }
 
     // Launch worker threads
@@ -458,6 +444,22 @@ void SnapshotHandler::FreeResources() {
     worker_threads_.clear();
     read_ahead_thread_ = nullptr;
     merge_thread_ = nullptr;
+}
+
+uint64_t SnapshotHandler::GetNumSectors() const {
+    unique_fd fd(TEMP_FAILURE_RETRY(open(base_path_merge_.c_str(), O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) {
+        SNAP_LOG(ERROR) << "Cannot open base path: " << base_path_merge_;
+        return false;
+    }
+
+    uint64_t dev_sz = get_block_device_size(fd.get());
+    if (!dev_sz) {
+        SNAP_LOG(ERROR) << "Failed to find block device size: " << base_path_merge_;
+        return false;
+    }
+
+    return dev_sz / SECTOR_SIZE;
 }
 
 }  // namespace snapshot
