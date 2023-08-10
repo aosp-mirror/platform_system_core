@@ -2264,10 +2264,14 @@ TEST_F(CrasherTest, fault_address_after_last_map) {
 
   ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
 
-  // Assumes that the open files section comes after the map section.
-  // If that assumption changes, the regex below needs to change.
+  // Verifies that the fault address error message is at the end of the
+  // maps section. To do this, the check below looks for the start of the
+  // open files section or the start of the log file section. It's possible
+  // for either of these sections to be present after the maps section right
+  // now.
+  // If the sections move around, this check might need to be modified.
   match_str = android::base::StringPrintf(
-      R"(\n--->Fault address falls at %s after any mapped regions\n\nopen files:)",
+      R"(\n--->Fault address falls at %s after any mapped regions\n(---------|\nopen files:))",
       format_pointer(crash_uptr).c_str());
   ASSERT_MATCH(result, match_str);
 }
