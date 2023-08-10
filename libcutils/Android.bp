@@ -162,7 +162,6 @@ cc_library {
         "properties.cpp",
         "record_stream.cpp",
         "strlcpy.c",
-        "threads.cpp",
     ],
 
     target: {
