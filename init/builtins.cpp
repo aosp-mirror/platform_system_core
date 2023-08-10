@@ -1307,9 +1307,9 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         }
     }
 
-    auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
-    if (!parse_configs.ok()) {
-        return parse_configs.error();
+    auto parse_result = ParseRcScriptsFromAllApexes(bootstrap);
+    if (!parse_result.ok()) {
+        return parse_result.error();
     }
 
     auto update_linker_config = do_update_linker_config(args);
