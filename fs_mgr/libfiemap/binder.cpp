@@ -77,7 +77,7 @@ class ImageManagerBinder final : public IImageManager {
 
 static FiemapStatus ToFiemapStatus(const char* func, const binder::Status& status) {
     if (!status.isOk()) {
-        LOG(ERROR) << func << " binder returned: " << status.toString8().string();
+        LOG(ERROR) << func << " binder returned: " << status.toString8().c_str();
         if (status.serviceSpecificErrorCode() != 0) {
             return FiemapStatus::FromErrorCode(status.serviceSpecificErrorCode());
         } else {
@@ -106,7 +106,7 @@ bool ImageManagerBinder::DeleteBackingImage(const std::string& name) {
     auto status = manager_->deleteBackingImage(name);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return true;
@@ -122,7 +122,7 @@ bool ImageManagerBinder::MapImageDevice(const std::string& name,
     auto status = manager_->mapImageDevice(name, timeout_ms_count, &map);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     *path = map.path;
@@ -133,7 +133,7 @@ bool ImageManagerBinder::UnmapImageDevice(const std::string& name) {
     auto status = manager_->unmapImageDevice(name);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return true;
@@ -144,7 +144,7 @@ bool ImageManagerBinder::BackingImageExists(const std::string& name) {
     auto status = manager_->backingImageExists(name, &retval);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return retval;
@@ -155,7 +155,7 @@ bool ImageManagerBinder::IsImageMapped(const std::string& name) {
     auto status = manager_->isImageMapped(name, &retval);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return retval;
@@ -175,7 +175,7 @@ std::vector<std::string> ImageManagerBinder::GetAllBackingImages() {
     auto status = manager_->getAllBackingImages(&retval);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
     }
     return retval;
 }
@@ -189,7 +189,7 @@ bool ImageManagerBinder::RemoveAllImages() {
     auto status = manager_->removeAllImages();
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return true;
@@ -199,7 +199,7 @@ bool ImageManagerBinder::DisableImage(const std::string& name) {
     auto status = manager_->disableImage(name);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return true;
@@ -209,7 +209,7 @@ bool ImageManagerBinder::RemoveDisabledImages() {
     auto status = manager_->removeDisabledImages();
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return true;
@@ -219,7 +219,7 @@ bool ImageManagerBinder::GetMappedImageDevice(const std::string& name, std::stri
     auto status = manager_->getMappedImageDevice(name, device);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return !device->empty();
@@ -230,7 +230,7 @@ bool ImageManagerBinder::IsImageDisabled(const std::string& name) {
     auto status = manager_->isImageDisabled(name, &retval);
     if (!status.isOk()) {
         LOG(ERROR) << __PRETTY_FUNCTION__
-                   << " binder returned: " << status.exceptionMessage().string();
+                   << " binder returned: " << status.exceptionMessage().c_str();
         return false;
     }
     return retval;
@@ -249,7 +249,7 @@ std::unique_ptr<IImageManager> IImageManager::Open(const std::string& dir,
 
     auto status = service->openImageService(dir, &manager);
     if (!status.isOk() || !manager) {
-        LOG(ERROR) << "Could not acquire IImageManager: " << status.exceptionMessage().string();
+        LOG(ERROR) << "Could not acquire IImageManager: " << status.exceptionMessage().c_str();
         return nullptr;
     }
     return std::make_unique<ImageManagerBinder>(std::move(service), std::move(manager));

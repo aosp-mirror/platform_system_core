@@ -330,7 +330,7 @@ public:
                      this);
             int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 0644);
             if (rc >= 0) {
-                (void)write(rc, text.string(), text.length());
+                (void)write(rc, text.c_str(), text.length());
                 close(rc);
                 ALOGI("STACK TRACE for %p saved in %s", this, name);
             }
