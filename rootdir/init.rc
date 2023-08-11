@@ -74,9 +74,7 @@ on early-init
     # become available. Note that this is executed as exec_start to ensure that
     # the libraries are available to the processes started after this statement.
     exec_start apexd-bootstrap
-
-    # Generate linker config based on apex mounted in bootstrap namespace
-    update_linker_config
+    perform_apex_config --bootstrap
 
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
