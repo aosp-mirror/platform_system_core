@@ -358,12 +358,10 @@ void BatteryMonitor::updateValues(void) {
 
     for (size_t i = 0; i < mChargerNames.size(); i++) {
         String8 path;
-        path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH,
-                          mChargerNames[i].string());
+        path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, mChargerNames[i].c_str());
         if (getIntField(path)) {
             path.clear();
-            path.appendFormat("%s/%s/type", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
+            path.appendFormat("%s/%s/type", POWER_SUPPLY_SYSFS_PATH, mChargerNames[i].c_str());
             switch(readPowerSupplyType(path)) {
             case ANDROID_POWER_SUPPLY_TYPE_AC:
                 mHealthInfo->chargerAcOnline = true;
@@ -380,26 +378,24 @@ void BatteryMonitor::updateValues(void) {
             default:
                 path.clear();
                 path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH,
-                                  mChargerNames[i].string());
-                if (access(path.string(), R_OK) == 0)
+                                  mChargerNames[i].c_str());
+                if (access(path.c_str(), R_OK) == 0)
                     mHealthInfo->chargerDockOnline = true;
                 else
                     KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
-                                 mChargerNames[i].string());
+                                 mChargerNames[i].c_str());
             }
             path.clear();
             path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
-            int ChargingCurrent =
-                    (access(path.string(), R_OK) == 0) ? getIntField(path) : 0;
+                              mChargerNames[i].c_str());
+            int ChargingCurrent = (access(path.c_str(), R_OK) == 0) ? getIntField(path) : 0;
 
             path.clear();
             path.appendFormat("%s/%s/voltage_max", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
+                              mChargerNames[i].c_str());
 
             int ChargingVoltage =
-                (access(path.string(), R_OK) == 0) ? getIntField(path) :
-                DEFAULT_VBUS_VOLTAGE;
+                    (access(path.c_str(), R_OK) == 0) ? getIntField(path) : DEFAULT_VBUS_VOLTAGE;
 
             double power = ((double)ChargingCurrent / MILLION) *
                            ((double)ChargingVoltage / MILLION);
@@ -628,8 +624,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             case ANDROID_POWER_SUPPLY_TYPE_DOCK:
                 path.clear();
                 path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
-                if (access(path.string(), R_OK) == 0)
-                    mChargerNames.add(String8(name));
+                if (access(path.c_str(), R_OK) == 0) mChargerNames.add(String8(name));
                 break;
 
             case ANDROID_POWER_SUPPLY_TYPE_BATTERY:
@@ -767,12 +762,10 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             // Look for "is_dock" file
             path.clear();
             path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH, name);
-            if (access(path.string(), R_OK) == 0) {
+            if (access(path.c_str(), R_OK) == 0) {
                 path.clear();
                 path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
-                if (access(path.string(), R_OK) == 0)
-                    mChargerNames.add(String8(name));
-
+                if (access(path.c_str(), R_OK) == 0) mChargerNames.add(String8(name));
             }
         }
     }
