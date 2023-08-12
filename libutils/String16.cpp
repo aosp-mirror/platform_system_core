@@ -26,7 +26,7 @@ namespace android {
 
 static const StaticString16 emptyString(u"");
 static inline char16_t* getEmptyString() {
-    return const_cast<char16_t*>(emptyString.string());
+    return const_cast<char16_t*>(emptyString.c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +112,7 @@ String16::String16(const char16_t* o) : mString(allocFromUTF16(o, strlen16(o))) 
 
 String16::String16(const char16_t* o, size_t len) : mString(allocFromUTF16(o, len)) {}
 
-String16::String16(const String8& o)
-    : mString(allocFromUTF8(o.string(), o.size()))
-{
-}
+String16::String16(const String8& o) : mString(allocFromUTF8(o.c_str(), o.size())) {}
 
 String16::String16(const char* o)
     : mString(allocFromUTF8(o, strlen(o)))
@@ -173,7 +170,7 @@ status_t String16::setTo(const String16& other, size_t len, size_t begin)
         LOG_ALWAYS_FATAL("Not implemented");
     }
 
-    return setTo(other.string()+begin, len);
+    return setTo(other.c_str() + begin, len);
 }
 
 status_t String16::setTo(const char16_t* other)
@@ -200,7 +197,7 @@ status_t String16::setTo(const char16_t* other, size_t len)
 }
 
 status_t String16::append(const String16& other) {
-    return append(other.string(), other.size());
+    return append(other.c_str(), other.size());
 }
 
 status_t String16::append(const char16_t* chrs, size_t otherLen) {
@@ -286,7 +283,7 @@ bool String16::startsWith(const String16& prefix) const
 {
     const size_t ps = prefix.size();
     if (ps > size()) return false;
-    return strzcmp16(mString, ps, prefix.string(), ps) == 0;
+    return strzcmp16(mString, ps, prefix.c_str(), ps) == 0;
 }
 
 bool String16::startsWith(const char16_t* prefix) const
