@@ -193,14 +193,14 @@ public:
      * replaces whatever was there before.
      */
     String8& appendPath(const char* leaf);
-    String8& appendPath(const String8& leaf)  { return appendPath(leaf.string()); }
+    String8& appendPath(const String8& leaf) { return appendPath(leaf.c_str()); }
 
     /*
      * Like appendPath(), but does not affect this string.  Returns a new one instead.
      */
     String8 appendPathCopy(const char* leaf) const
                                              { String8 p(*this); p.appendPath(leaf); return p; }
-    String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.string()); }
+    String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.c_str()); }
 
     /*
      * Converts all separators in this string to /, the default path separator.
@@ -255,7 +255,7 @@ inline const char* String8::string() const
 
 inline std::string String8::std_string(const String8& str)
 {
-    return std::string(str.string());
+    return std::string(str.c_str());
 }
 
 inline size_t String8::size() const
