@@ -174,8 +174,7 @@ void CowWriterV2::InitBatchWrites() {
         current_data_pos_ = next_data_pos_;
     }
 
-    std::string batch_write = batch_write_ ? "enabled" : "disabled";
-    LOG_INFO << "Batch writes: " << batch_write;
+    LOG_INFO << "Batch writes: " << batch_write_ ? "enabled" : "disabled";
 }
 
 void CowWriterV2::InitWorkers() {
