@@ -1269,26 +1269,15 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
 /*
  * Creates a directory under /data/misc/apexdata/ for each APEX.
  */
-static Result<void> create_apex_data_dirs() {
-    auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir("/apex"), closedir);
-    if (!dirp) {
-        return ErrnoError() << "Unable to open apex directory";
-    }
-    struct dirent* entry;
-    while ((entry = readdir(dirp.get())) != nullptr) {
-        if (entry->d_type != DT_DIR) continue;
-
-        const char* name = entry->d_name;
-        // skip any starting with "."
-        if (name[0] == '.') continue;
-
-        if (strchr(name, '@') != nullptr) continue;
-
-        auto path = "/data/misc/apexdata/" + std::string(name);
+static void create_apex_data_dirs() {
+    for (const auto& name : GetApexListFrom("/apex")) {
+        auto path = "/data/misc/apexdata/" + name;
         auto options = MkdirOptions{path, 0771, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
-        make_dir_with_options(options);
+        auto result = make_dir_with_options(options);
+        if (!result.ok()) {
+            LOG(ERROR) << result.error();
+        }
     }
-    return {};
 }
 
 static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
@@ -1301,10 +1290,7 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     }
 
     if (!bootstrap) {
-        auto create_dirs = create_apex_data_dirs();
-        if (!create_dirs.ok()) {
-            return create_dirs.error();
-        }
+        create_apex_data_dirs();
     }
 
     auto parse_result = ParseRcScriptsFromAllApexes(bootstrap);
