@@ -65,7 +65,6 @@ public:
     inline  size_t              size() const;
     inline  size_t              bytes() const;
     inline  bool                empty() const;
-    inline  bool                isEmpty() const;
 
             size_t              length() const;
 
@@ -206,6 +205,14 @@ private:
             char*               find_extension(void) const;
 
             const char* mString;
+
+// These symbols are for potential backward compatibility with prebuilts. To be removed.
+#ifdef ENABLE_STRING8_OBSOLETE_METHODS
+public:
+#else
+private:
+#endif
+    inline  bool                isEmpty() const;
 };
 
 // String8 can be trivially moved using memcpy() because moving does not
