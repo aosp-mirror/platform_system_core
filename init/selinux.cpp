@@ -735,6 +735,14 @@ void SelinuxAvcLog(char* buf) {
     TEMP_FAILURE_RETRY(send(fd.get(), &request, sizeof(request), 0));
 }
 
+int RestoreconIfExists(const char* path, unsigned int flags) {
+    if (access(path, F_OK) != 0 && errno == ENOENT) {
+        // Avoid error message for path that is expected to not always exist.
+        return 0;
+    }
+    return selinux_android_restorecon(path, flags);
+}
+
 }  // namespace
 
 void SelinuxRestoreContext() {
@@ -762,9 +770,9 @@ void SelinuxRestoreContext() {
 
     // adb remount, snapshot-based updates, and DSUs all create files during
     // first-stage init.
-    selinux_android_restorecon(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
-    selinux_android_restorecon("/metadata/gsi", SELINUX_ANDROID_RESTORECON_RECURSE |
-                                                        SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
+    RestoreconIfExists(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
+    RestoreconIfExists("/metadata/gsi",
+                       SELINUX_ANDROID_RESTORECON_RECURSE | SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
