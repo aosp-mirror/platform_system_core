@@ -60,6 +60,10 @@ private:
     static inline std::string   std_string(const String16& str);
 public:
             size_t              size() const;
+    inline  bool                empty() const;
+
+    inline  size_t              length() const;
+
             void                setTo(const String16& other);
             status_t            setTo(const char16_t* other);
             status_t            setTo(const char16_t* other, size_t len);
@@ -248,6 +252,16 @@ inline const char16_t* String16::string() const
 inline std::string String16::std_string(const String16& str)
 {
     return std::string(String8(str).c_str());
+}
+
+inline bool String16::empty() const
+{
+    return length() == 0;
+}
+
+inline size_t String16::length() const
+{
+    return size();
 }
 
 inline String16& String16::operator=(const String16& other)

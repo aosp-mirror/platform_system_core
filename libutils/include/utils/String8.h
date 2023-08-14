@@ -64,6 +64,7 @@ public:
 
     inline  size_t              size() const;
     inline  size_t              bytes() const;
+    inline  bool                empty() const;
     inline  bool                isEmpty() const;
 
             size_t              length() const;
@@ -255,6 +256,11 @@ inline std::string String8::std_string(const String8& str)
 inline size_t String8::size() const
 {
     return length();
+}
+
+inline bool String8::empty() const
+{
+    return length() == 0;
 }
 
 inline bool String8::isEmpty() const
