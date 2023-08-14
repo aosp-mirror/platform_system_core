@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,9 @@
 
 namespace android {
 namespace init {
+
+// Scans apex_dir (/apex) to get the list of active APEXes.
+std::set<std::string> GetApexListFrom(const std::string& apex_dir);
 
 // Parse all RC scripts for a given apex.
 Result<void> ParseRcScriptsFromApex(const std::string& apex_name);

@@ -82,7 +82,7 @@ static Result<std::vector<std::string>> CollectRcScriptsFromApex(
     return configs;
 }
 
-static std::set<std::string> GetApexListFrom(const std::string& apex_dir) {
+std::set<std::string> GetApexListFrom(const std::string& apex_dir) {
     std::set<std::string> apex_list;
     auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir(apex_dir.c_str()), closedir);
     if (!dirp) {
