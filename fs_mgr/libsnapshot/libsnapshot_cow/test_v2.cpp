@@ -480,7 +480,8 @@ TEST_P(CompressionTest, HorribleStream) {
     std::string expected = "The quick brown fox jumps over the lazy dog.";
     expected.resize(4096, '\0');
 
-    auto result = CompressWorker::Compress(compression, expected.data(), expected.size());
+    std::unique_ptr<ICompressor> compressor = ICompressor::Create(compression);
+    auto result = compressor->Compress(expected.data(), expected.size());
     ASSERT_FALSE(result.empty());
 
     HorribleStream<uint8_t> stream(result);
