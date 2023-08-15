@@ -25,7 +25,7 @@ std::vector<std::function<void(FuzzedDataProvider&, android::String16, android::
 
                 // Bytes and size
                 ([](FuzzedDataProvider&, android::String16 str1, android::String16) -> void {
-                    str1.string();
+                    str1.c_str();
                 }),
                 ([](FuzzedDataProvider&, android::String16 str1, android::String16) -> void {
                     str1.isStaticString();
@@ -39,7 +39,7 @@ std::vector<std::function<void(FuzzedDataProvider&, android::String16, android::
                     str1.startsWith(str2);
                 }),
                 ([](FuzzedDataProvider&, android::String16 str1, android::String16 str2) -> void {
-                    str1.contains(str2.string());
+                    str1.contains(str2.c_str());
                 }),
                 ([](FuzzedDataProvider&, android::String16 str1, android::String16 str2) -> void {
                     str1.compare(str2);
@@ -52,7 +52,7 @@ std::vector<std::function<void(FuzzedDataProvider&, android::String16, android::
                 ([](FuzzedDataProvider& dataProvider, android::String16 str1,
                     android::String16 str2) -> void {
                     int pos = dataProvider.ConsumeIntegralInRange<int>(0, str1.size());
-                    str1.insert(pos, str2.string());
+                    str1.insert(pos, str2.c_str());
                 }),
 
                 // Find and replace operations

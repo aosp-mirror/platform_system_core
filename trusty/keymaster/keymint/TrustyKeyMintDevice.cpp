@@ -258,7 +258,11 @@ ScopedAStatus TrustyKeyMintDevice::deleteAllKeys() {
 }
 
 ScopedAStatus TrustyKeyMintDevice::destroyAttestationIds() {
-    return kmError2ScopedAStatus(KM_ERROR_UNIMPLEMENTED);
+    keymaster::DestroyAttestationIdsRequest request(impl_->message_version());
+    keymaster::DestroyAttestationIdsResponse response(impl_->message_version());
+    impl_->DestroyAttestationIds(request, &response);
+
+    return kmError2ScopedAStatus(response.error);
 }
 
 ScopedAStatus TrustyKeyMintDevice::begin(KeyPurpose purpose, const vector<uint8_t>& keyBlob,

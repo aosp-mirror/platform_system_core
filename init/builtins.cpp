@@ -1269,36 +1269,33 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
 /*
  * Creates a directory under /data/misc/apexdata/ for each APEX.
  */
-static Result<void> create_apex_data_dirs() {
-    auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir("/apex"), closedir);
-    if (!dirp) {
-        return ErrnoError() << "Unable to open apex directory";
-    }
-    struct dirent* entry;
-    while ((entry = readdir(dirp.get())) != nullptr) {
-        if (entry->d_type != DT_DIR) continue;
-
-        const char* name = entry->d_name;
-        // skip any starting with "."
-        if (name[0] == '.') continue;
-
-        if (strchr(name, '@') != nullptr) continue;
-
-        auto path = "/data/misc/apexdata/" + std::string(name);
+static void create_apex_data_dirs() {
+    for (const auto& name : GetApexListFrom("/apex")) {
+        auto path = "/data/misc/apexdata/" + name;
         auto options = MkdirOptions{path, 0771, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
-        make_dir_with_options(options);
+        auto result = make_dir_with_options(options);
+        if (!result.ok()) {
+            LOG(ERROR) << result.error();
+        }
     }
-    return {};
 }
 
 static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
-    auto create_dirs = create_apex_data_dirs();
-    if (!create_dirs.ok()) {
-        return create_dirs.error();
+    bool bootstrap = false;
+    if (args.size() == 2) {
+        if (args[1] != "--bootstrap") {
+            return Error() << "Unexpected argument: " << args[1];
+        }
+        bootstrap = true;
     }
-    auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
-    if (!parse_configs.ok()) {
-        return parse_configs.error();
+
+    if (!bootstrap) {
+        create_apex_data_dirs();
+    }
+
+    auto parse_result = ParseRcScriptsFromAllApexes(bootstrap);
+    if (!parse_result.ok()) {
+        return parse_result.error();
     }
 
     auto update_linker_config = do_update_linker_config(args);
@@ -1306,8 +1303,10 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return update_linker_config.error();
     }
 
-    // Now start delayed services
-    ServiceList::GetInstance().MarkServicesUpdate();
+    if (!bootstrap) {
+        // Now start delayed services
+        ServiceList::GetInstance().MarkServicesUpdate();
+    }
     return {};
 }
 
@@ -1362,7 +1361,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {0,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
-        {"perform_apex_config",     {0,     0,    {false,  do_perform_apex_config}}},
+        {"perform_apex_config",     {0,     1,    {false,  do_perform_apex_config}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"umount_all",              {0,     1,    {false,  do_umount_all}}},
         {"update_linker_config",    {0,     0,    {false,  do_update_linker_config}}},
