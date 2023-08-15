@@ -65,6 +65,9 @@ class CowWriterV2 : public CowWriterBase {
   private:
     CowFooter footer_{};
     CowCompression compression_;
+    // in the case that we are using one thread for compression, we can store and re-use the same
+    // compressor
+    std::unique_ptr<ICompressor> compressor_;
     uint64_t current_op_pos_ = 0;
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
