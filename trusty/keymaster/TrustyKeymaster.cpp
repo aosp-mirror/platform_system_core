@@ -218,6 +218,11 @@ void TrustyKeymaster::DeleteAllKeys(const DeleteAllKeysRequest& request,
     ForwardCommand(KM_DELETE_ALL_KEYS, request, response);
 }
 
+void TrustyKeymaster::DestroyAttestationIds(const DestroyAttestationIdsRequest& request,
+                                            DestroyAttestationIdsResponse* response) {
+    ForwardCommand(KM_DESTROY_ATTESTATION_IDS, request, response);
+}
+
 void TrustyKeymaster::BeginOperation(const BeginOperationRequest& request,
                                      BeginOperationResponse* response) {
     ForwardCommand(KM_BEGIN_OPERATION, request, response);
