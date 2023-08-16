@@ -17,7 +17,7 @@ package {
 }
 
 cc_binary {
-    name: "coverage-controller",
+    name: "trusty-coverage-controller",
     vendor: true,
 
     srcs: ["controller.cpp"],
