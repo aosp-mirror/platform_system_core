@@ -126,6 +126,16 @@ void ProfileAttribute::Reset(const CgroupController& controller, const std::stri
     file_v2_name_ = file_v2_name;
 }
 
+bool ProfileAttribute::GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const {
+    if (controller()->version() == 2) {
+        // all cgroup v2 attributes use the same process group hierarchy
+        *path = StringPrintf("%s/uid_%u/pid_%d/%s", controller()->path(), uid, pid,
+                             file_name().c_str());
+        return true;
+    }
+    return GetPathForTask(pid, path);
+}
+
 bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     std::string subgroup;
     if (!controller()->GetTaskGroup(tid, &subgroup)) {
@@ -209,18 +219,7 @@ bool SetTimerSlackAction::ExecuteForTask(int) const {
 
 #endif
 
-bool SetAttributeAction::ExecuteForProcess(uid_t, pid_t pid) const {
-    return ExecuteForTask(pid);
-}
-
-bool SetAttributeAction::ExecuteForTask(int tid) const {
-    std::string path;
-
-    if (!attribute_->GetPathForTask(tid, &path)) {
-        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
-        return false;
-    }
-
+bool SetAttributeAction::WriteValueToFile(const std::string& path) const {
     if (!WriteStringToFile(value_, path)) {
         if (access(path.c_str(), F_OK) < 0) {
             if (optional_) {
@@ -238,6 +237,28 @@ bool SetAttributeAction::ExecuteForTask(int tid) const {
     }
 
     return true;
+}
+
+bool SetAttributeAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
+    std::string path;
+
+    if (!attribute_->GetPathForProcess(uid, pid, &path)) {
+        LOG(ERROR) << "Failed to find cgroup for uid " << uid << " pid " << pid;
+        return false;
+    }
+
+    return WriteValueToFile(path);
+}
+
+bool SetAttributeAction::ExecuteForTask(int tid) const {
+    std::string path;
+
+    if (!attribute_->GetPathForTask(tid, &path)) {
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        return false;
+    }
+
+    return WriteValueToFile(path);
 }
 
 bool SetAttributeAction::ExecuteForUID(uid_t uid) const {
