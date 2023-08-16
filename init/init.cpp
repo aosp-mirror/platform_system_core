@@ -487,7 +487,7 @@ static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
 }
 
 static Result<void> DoLoadApex(const std::string& apex_name) {
-    if (auto result = ParseApexConfigs(apex_name); !result.ok()) {
+    if (auto result = ParseRcScriptsFromApex(apex_name); !result.ok()) {
         return result.error();
     }
 
@@ -831,6 +831,12 @@ static void MountExtraFilesystems() {
     // /apex is used to mount APEXes
     CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
+
+    if (NeedsTwoMountNamespaces()) {
+        // /bootstrap-apex is used to mount "bootstrap" APEXes.
+        CHECKCALL(mount("tmpfs", "/bootstrap-apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                        "mode=0755,uid=0,gid=0"));
+    }
 
     // /linkerconfig is used to keep generated linker configuration
     CHECKCALL(mount("tmpfs", "/linkerconfig", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,

@@ -81,6 +81,8 @@ static void print_thread_header(CallbackType callback, const Tombstone& tombston
   if (!tombstone.command_line().empty()) {
     process_name = tombstone.command_line()[0].c_str();
     CB(should_log, "Cmdline: %s", android::base::Join(tombstone.command_line(), " ").c_str());
+  } else {
+    CB(should_log, "Cmdline: <unknown>");
   }
   CB(should_log, "pid: %d, tid: %d, name: %s  >>> %s <<<", tombstone.pid(), thread.id(),
      thread.name().c_str(), process_name);

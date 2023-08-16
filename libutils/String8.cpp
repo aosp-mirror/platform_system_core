@@ -150,10 +150,7 @@ String8::String8(const char* o, size_t len)
     }
 }
 
-String8::String8(const String16& o)
-    : mString(allocFromUTF16(o.string(), o.size()))
-{
-}
+String8::String8(const String16& o) : mString(allocFromUTF16(o.c_str(), o.size())) {}
 
 String8::String8(const char16_t* o)
     : mString(allocFromUTF16(o, strlen16(o)))
@@ -267,7 +264,7 @@ status_t String8::append(const String8& other)
         return OK;
     }
 
-    return real_append(other.string(), otherLen);
+    return real_append(other.c_str(), otherLen);
 }
 
 status_t String8::append(const char* other)
