@@ -111,6 +111,9 @@ class ProfileAttributeMock : public IProfileAttribute {
         return {};
     }
     const std::string& file_name() const override { return file_name_; }
+    bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const override {
+        return GetPathForTask(pid, path);
+    }
     bool GetPathForTask(int tid, std::string* path) const override {
 #ifdef __ANDROID__
         CHECK(CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, path));

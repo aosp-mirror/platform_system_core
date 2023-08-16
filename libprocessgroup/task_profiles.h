@@ -36,6 +36,7 @@ class IProfileAttribute {
                        const std::string& file_v2_name) = 0;
     virtual const CgroupController* controller() const = 0;
     virtual const std::string& file_name() const = 0;
+    virtual bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const = 0;
     virtual bool GetPathForTask(int tid, std::string* path) const = 0;
     virtual bool GetPathForUID(uid_t uid, std::string* path) const = 0;
 };
@@ -55,6 +56,7 @@ class ProfileAttribute : public IProfileAttribute {
     void Reset(const CgroupController& controller, const std::string& file_name,
                const std::string& file_v2_name) override;
 
+    bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const override;
     bool GetPathForTask(int tid, std::string* path) const override;
     bool GetPathForUID(uid_t uid, std::string* path) const override;
 
@@ -133,6 +135,8 @@ class SetAttributeAction : public ProfileAction {
     const IProfileAttribute* attribute_;
     std::string value_;
     bool optional_;
+
+    bool WriteValueToFile(const std::string& path) const;
 };
 
 // Set cgroup profile element
