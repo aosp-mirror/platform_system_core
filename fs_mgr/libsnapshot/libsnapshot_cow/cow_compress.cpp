@@ -55,7 +55,8 @@ std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::strin
     }
 }
 
-std::unique_ptr<ICompressor> ICompressor::Create(CowCompression compression) {
+std::unique_ptr<ICompressor> ICompressor::Create(CowCompression compression,
+                                                 const int32_t BLOCK_SZ) {
     switch (compression.algorithm) {
         case kCowCompressLz4:
             return ICompressor::Lz4(compression.compression_level);
@@ -64,7 +65,7 @@ std::unique_ptr<ICompressor> ICompressor::Create(CowCompression compression) {
         case kCowCompressGz:
             return ICompressor::Gz(compression.compression_level);
         case kCowCompressZstd:
-            return ICompressor::Zstd(compression.compression_level);
+            return ICompressor::Zstd(compression.compression_level, BLOCK_SZ);
         case kCowCompressNone:
             return nullptr;
     }
@@ -175,12 +176,10 @@ class BrotliCompressor final : public ICompressor {
 
 class ZstdCompressor final : public ICompressor {
   public:
-    ZstdCompressor(uint32_t compression_level)
+    ZstdCompressor(uint32_t compression_level, const uint32_t MAX_BLOCK_SIZE)
         : ICompressor(compression_level), zstd_context_(ZSTD_createCCtx(), ZSTD_freeCCtx) {
         ZSTD_CCtx_setParameter(zstd_context_.get(), ZSTD_c_compressionLevel, compression_level);
-        // FIXME: hardcoding a value of 12 here for 4k blocks, should change to be either set by
-        // user, or optimized depending on block size
-        ZSTD_CCtx_setParameter(zstd_context_.get(), ZSTD_c_windowLog, 12);
+        ZSTD_CCtx_setParameter(zstd_context_.get(), ZSTD_c_windowLog, log2(MAX_BLOCK_SIZE));
     };
 
     std::basic_string<uint8_t> Compress(const void* data, size_t length) const override {
@@ -326,8 +325,8 @@ std::unique_ptr<ICompressor> ICompressor::Lz4(uint32_t compression_level) {
     return std::make_unique<Lz4Compressor>(compression_level);
 }
 
-std::unique_ptr<ICompressor> ICompressor::Zstd(uint32_t compression_level) {
-    return std::make_unique<ZstdCompressor>(compression_level);
+std::unique_ptr<ICompressor> ICompressor::Zstd(uint32_t compression_level, const int32_t BLOCK_SZ) {
+    return std::make_unique<ZstdCompressor>(compression_level, BLOCK_SZ);
 }
 
 void CompressWorker::Finalize() {
