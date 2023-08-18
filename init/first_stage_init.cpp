@@ -67,7 +67,7 @@ enum class BootMode {
 void FreeRamdisk(DIR* dir, dev_t dev) {
     int dfd = dirfd(dir);
 
-    dirent* de;
+    dirent* de = nullptr;
     while ((de = readdir(dir)) != nullptr) {
         if (de->d_name == "."s || de->d_name == ".."s) {
             continue;
@@ -76,7 +76,7 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
         bool is_dir = false;
 
         if (de->d_type == DT_DIR || de->d_type == DT_UNKNOWN) {
-            struct stat info;
+            struct stat info {};
             if (fstatat(dfd, de->d_name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
                 continue;
             }
@@ -171,7 +171,7 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
     }
 
     if (module_load_file != "modules.load") {
-        struct stat fileStat;
+        struct stat fileStat {};
         std::string load_path = dir_path + "/" + module_load_file;
         // Fall back to modules.load if the other files aren't accessible
         if (stat(load_path.c_str(), &fileStat)) {
@@ -185,11 +185,11 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
 #define MODULE_BASE_DIR "/lib/modules"
 bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel,
                        int& modules_loaded) {
-    struct utsname uts;
+    struct utsname uts {};
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
     }
-    int major, minor;
+    int major = 0, minor = 0;
     if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
         LOG(FATAL) << "Failed to parse kernel version " << uts.release;
     }
@@ -199,13 +199,13 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         LOG(INFO) << "Unable to open /lib/modules, skipping module loading.";
         return true;
     }
-    dirent* entry;
+    dirent* entry = nullptr;
     std::vector<std::string> module_dirs;
     while ((entry = readdir(base_dir.get()))) {
         if (entry->d_type != DT_DIR) {
             continue;
         }
-        int dir_major, dir_minor;
+        int dir_major = 0, dir_minor = 0;
         if (sscanf(entry->d_name, "%d.%d", &dir_major, &dir_minor) != 2 || dir_major != major ||
             dir_minor != minor) {
             continue;
@@ -374,7 +374,7 @@ int FirstStageMain(int argc, char** argv) {
         PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
     }
 
-    struct stat old_root_info;
+    struct stat old_root_info {};
     if (stat("/", &old_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();
@@ -483,7 +483,7 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
-    struct stat new_root_info;
+    struct stat new_root_info {};
     if (stat("/", &new_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();
