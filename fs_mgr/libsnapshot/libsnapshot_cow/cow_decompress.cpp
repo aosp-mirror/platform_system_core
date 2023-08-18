@@ -351,7 +351,7 @@ class ZstdDecompressor final : public IDecompressor {
             return decompressed_size;
         }
         std::vector<unsigned char> ignore_buf(decompressed_size);
-        if (!Decompress(buffer, decompressed_size)) {
+        if (!Decompress(ignore_buf.data(), decompressed_size)) {
             return -1;
         }
         memcpy(buffer, ignore_buf.data() + ignore_bytes, buffer_size);
