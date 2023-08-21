@@ -182,6 +182,11 @@ bool AvbVerifier::VerifyVbmetaImages(const std::vector<VBMetaData>& vbmeta_image
 
 // class AvbHandle
 // ---------------
+AvbHandle::AvbHandle() : status_(AvbHandleStatus::kUninitialized) {
+    slot_suffix_ = fs_mgr_get_slot_suffix();
+    other_slot_suffix_ = fs_mgr_get_other_slot_suffix();
+}
+
 AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
         const std::string& partition_name, const std::string& ab_suffix,
         const std::string& ab_other_suffix, const std::string& expected_public_key_path,
@@ -193,6 +198,9 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(
         LERROR << "Failed to allocate AvbHandle";
         return nullptr;
     }
+
+    avb_handle->slot_suffix_ = ab_suffix;
+    avb_handle->other_slot_suffix_ = ab_other_suffix;
 
     std::string expected_key_blob;
     if (!expected_public_key_path.empty()) {
@@ -373,9 +381,14 @@ AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const FstabEntry& fstab_entry,
     return avb_handle;
 }
 
-AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta() {
+AvbUniquePtr AvbHandle::LoadAndVerifyVbmeta(const std::string& slot_suffix) {
     // Loads inline vbmeta images, starting from /vbmeta.
-    return LoadAndVerifyVbmeta("vbmeta", fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix(),
+    auto suffix = slot_suffix;
+    if (suffix.empty()) {
+        suffix = fs_mgr_get_slot_suffix();
+    }
+    auto other_suffix = android::fs_mgr::OtherSlotSuffix(suffix);
+    return LoadAndVerifyVbmeta("vbmeta", suffix, other_suffix,
                                {} /* expected_public_key, already checked by bootloader */,
                                HashAlgorithm::kSHA256,
                                IsAvbPermissive(), /* allow_verification_error */
@@ -399,7 +412,7 @@ AvbUniquePtr AvbHandle::Open() {
                                        ? AVB_SLOT_VERIFY_FLAGS_ALLOW_VERIFICATION_ERROR
                                        : AVB_SLOT_VERIFY_FLAGS_NONE;
     AvbSlotVerifyResult verify_result =
-            avb_ops.AvbSlotVerify(fs_mgr_get_slot_suffix(), flags, &avb_handle->vbmeta_images_);
+            avb_ops.AvbSlotVerify(avb_handle->slot_suffix_, flags, &avb_handle->vbmeta_images_);
 
     // Only allow the following verify results:
     //   - AVB_SLOT_VERIFY_RESULT_OK.
@@ -492,7 +505,7 @@ AvbHashtreeResult AvbHandle::SetUpAvbHashtree(FstabEntry* fstab_entry, bool wait
     }
 
     if (!LoadAvbHashtreeToEnableVerity(fstab_entry, wait_for_verity_dev, vbmeta_images_,
-                                       fs_mgr_get_slot_suffix(), fs_mgr_get_other_slot_suffix())) {
+                                       slot_suffix_, other_slot_suffix_)) {
         return AvbHashtreeResult::kFail;
     }
 
@@ -526,8 +539,8 @@ std::string AvbHandle::GetSecurityPatchLevel(const FstabEntry& fstab_entry) cons
     if (vbmeta_images_.size() < 1) {
         return "";
     }
-    std::string avb_partition_name = DeriveAvbPartitionName(fstab_entry, fs_mgr_get_slot_suffix(),
-                                                            fs_mgr_get_other_slot_suffix());
+    std::string avb_partition_name =
+            DeriveAvbPartitionName(fstab_entry, slot_suffix_, other_slot_suffix_);
     auto avb_prop_name = "com.android.build." + avb_partition_name + ".security_patch";
     return GetAvbPropertyDescriptor(avb_prop_name, vbmeta_images_);
 }
