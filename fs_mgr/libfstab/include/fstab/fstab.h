@@ -145,5 +145,8 @@ void ImportKernelCmdline(const std::function<void(std::string, std::string)>& fn
 // Otherwise returns false and |*out| is not modified.
 bool GetKernelCmdline(const std::string& key, std::string* out);
 
+// Return the "other" slot for the given slot suffix.
+std::string OtherSlotSuffix(const std::string& suffix);
+
 }  // namespace fs_mgr
 }  // namespace android
