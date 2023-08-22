@@ -17,12 +17,30 @@ package {
 }
 
 prebuilt_etc {
+    name: "init.boringssl.zygote64_32.rc",
+    src: "init.boringssl.zygote64_32.rc",
+    sub_dir: "init/hw",
+    symlinks: [
+        "init.boringssl.zygote32.rc",
+        "init.boringssl.no_zygote.rc",
+    ],
+}
+
+prebuilt_etc {
+    name: "init.boringssl.zygote64.rc",
+    src: "init.boringssl.zygote64.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
     name: "init.rc",
     src: "init.rc",
     sub_dir: "init/hw",
     required: [
         "fsverity_init",
         "platform-bootclasspath",
+        "init.boringssl.zygote64.rc",
+        "init.boringssl.zygote64_32.rc",
     ],
 }
 
