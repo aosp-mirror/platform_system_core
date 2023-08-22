@@ -1304,8 +1304,7 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     }
 
     if (!bootstrap) {
-        // Now start delayed services
-        ServiceList::GetInstance().MarkServicesUpdate();
+        ServiceList::GetInstance().StartDelayedServices();
     }
     return {};
 }
