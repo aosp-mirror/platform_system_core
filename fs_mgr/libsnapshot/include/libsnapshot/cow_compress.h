@@ -17,7 +17,6 @@
 #pragma once
 
 #include <memory>
-#include <string_view>
 #include "libsnapshot/cow_format.h"
 
 namespace android {
