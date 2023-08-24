@@ -83,9 +83,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     str1->getPathDir();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->convertToResPath();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     std::shared_ptr<android::String8> path_out_str =
                             std::make_shared<android::String8>();
                     str1->walkPath(path_out_str.get());
