@@ -52,8 +52,6 @@ public:
     explicit                    String8(const char32_t* o, size_t numChars);
                                 ~String8();
 
-    static inline const String8 empty();
-
     static String8              format(const char* fmt, ...) __attribute__((format (printf, 1, 2)));
     static String8              formatV(const char* fmt, va_list args);
 
@@ -238,10 +236,6 @@ inline int compare_type(const String8& lhs, const String8& rhs)
 inline int strictly_order_type(const String8& lhs, const String8& rhs)
 {
     return compare_type(lhs, rhs) < 0;
-}
-
-inline const String8 String8::empty() {
-    return String8();
 }
 
 inline const char* String8::c_str() const
