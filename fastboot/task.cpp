@@ -15,8 +15,7 @@
 //
 #include "task.h"
 
-#include <cstddef>
-#include <iostream>
+#include "fastboot_driver.h"
 
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
@@ -130,6 +129,7 @@ void OptimizedFlashSuperTask::Run() {
     // Send the data to the device.
     flash_partition_files(super_name_, files);
 }
+
 std::string OptimizedFlashSuperTask::ToString() const {
     return "optimized-flash-super";
 }
@@ -165,7 +165,7 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
         LOG(INFO) << "super optimization is disabled";
         return nullptr;
     }
-    if (!supports_AB()) {
+    if (!supports_AB(fp->fb)) {
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
     }
@@ -218,17 +218,21 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
 
     auto s = helper->GetSparseLayout();
     if (!s) return nullptr;
-    // Remove images that we already flashed, just in case we have non-dynamic OS images.
+
+    // Remove tasks that are concatenated into this optimized task
     auto remove_if_callback = [&](const auto& task) -> bool {
         if (auto flash_task = task->AsFlashTask()) {
             return helper->WillFlash(flash_task->GetPartitionAndSlot());
         } else if (auto update_super_task = task->AsUpdateSuperTask()) {
             return true;
         } else if (auto reboot_task = task->AsRebootTask()) {
-            return true;
+            if (reboot_task->GetTarget() == "fastboot") {
+                return true;
+            }
         }
         return false;
     };
+
     tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
 
     return std::make_unique<OptimizedFlashSuperTask>(super_name, std::move(helper), std::move(s),

@@ -27,7 +27,6 @@
  */
 #pragma once
 #include <cstdlib>
-#include <deque>
 #include <functional>
 #include <limits>
 #include <string>
@@ -37,10 +36,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <bootimg.h>
-#include <inttypes.h>
 #include <sparse/sparse.h>
 
-#include "constants.h"
 #include "fastboot_driver_interface.h"
 #include "transport.h"
 
