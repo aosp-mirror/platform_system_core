@@ -725,9 +725,6 @@
    "name" : "_ZN7android7String813appendFormatVEPKcSt9__va_list"
   },
   {
-   "name" : "_ZN7android7String816convertToResPathEv"
-  },
-  {
    "name" : "_ZN7android7String85clearEv"
   },
   {
@@ -6925,19 +6922,6 @@
     }
    ],
    "return_type" : "_ZTIi",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
-   "function_name" : "android::String8::convertToResPath",
-   "linker_set_key" : "_ZN7android7String816convertToResPathEv",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPN7android7String8E"
-    }
-   ],
-   "return_type" : "_ZTIRN7android7String8E",
    "source_file" : "system/core/libutils/include/utils/String8.h"
   },
   {
