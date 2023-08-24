@@ -200,15 +200,6 @@ public:
                                              { String8 p(*this); p.appendPath(leaf); return p; }
     String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.c_str()); }
 
-    /*
-     * Converts all separators in this string to /, the default path separator.
-     *
-     * If the default OS separator is backslash, this converts all
-     * backslashes to slashes, in-place. Otherwise it does nothing.
-     * Returns self.
-     */
-    String8& convertToResPath();
-
 private:
             status_t            real_append(const char* other, size_t numChars);
             char*               find_extension(void) const;
