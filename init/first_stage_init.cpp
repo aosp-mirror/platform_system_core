@@ -35,6 +35,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <modprobe/modprobe.h>
 #include <private/android_filesystem_config.h>
 
@@ -67,7 +68,7 @@ enum class BootMode {
 void FreeRamdisk(DIR* dir, dev_t dev) {
     int dfd = dirfd(dir);
 
-    dirent* de;
+    dirent* de = nullptr;
     while ((de = readdir(dir)) != nullptr) {
         if (de->d_name == "."s || de->d_name == ".."s) {
             continue;
@@ -76,7 +77,7 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
         bool is_dir = false;
 
         if (de->d_type == DT_DIR || de->d_type == DT_UNKNOWN) {
-            struct stat info;
+            struct stat info {};
             if (fstatat(dfd, de->d_name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
                 continue;
             }
@@ -153,6 +154,15 @@ void PrepareSwitchRoot() {
         Copy(snapuserd, dst);
     }
 }
+
+std::string GetPageSizeSuffix() {
+    static const size_t page_size = sysconf(_SC_PAGE_SIZE);
+    if (page_size <= 4096) {
+        return "";
+    }
+    return android::base::StringPrintf("_%zuk", page_size / 1024);
+}
+
 }  // namespace
 
 std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
@@ -171,7 +181,7 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
     }
 
     if (module_load_file != "modules.load") {
-        struct stat fileStat;
+        struct stat fileStat {};
         std::string load_path = dir_path + "/" + module_load_file;
         // Fall back to modules.load if the other files aren't accessible
         if (stat(load_path.c_str(), &fileStat)) {
@@ -185,11 +195,11 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
 #define MODULE_BASE_DIR "/lib/modules"
 bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel,
                        int& modules_loaded) {
-    struct utsname uts;
+    struct utsname uts {};
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
     }
-    int major, minor;
+    int major = 0, minor = 0;
     if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
         LOG(FATAL) << "Failed to parse kernel version " << uts.release;
     }
@@ -199,13 +209,21 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         LOG(INFO) << "Unable to open /lib/modules, skipping module loading.";
         return true;
     }
-    dirent* entry;
+    dirent* entry = nullptr;
     std::vector<std::string> module_dirs;
+    const std::string release_specific_module_dir = uts.release + GetPageSizeSuffix();
     while ((entry = readdir(base_dir.get()))) {
         if (entry->d_type != DT_DIR) {
             continue;
         }
-        int dir_major, dir_minor;
+        if (entry->d_name == release_specific_module_dir) {
+            LOG(INFO) << "Release specific kernel module dir " << release_specific_module_dir
+                      << " found, loading modules from here with no fallbacks.";
+            module_dirs.clear();
+            module_dirs.emplace_back(entry->d_name);
+            break;
+        }
+        int dir_major = 0, dir_minor = 0;
         if (sscanf(entry->d_name, "%d.%d", &dir_major, &dir_minor) != 2 || dir_major != major ||
             dir_minor != minor) {
             continue;
@@ -228,6 +246,7 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         bool retval = m.LoadListedModules(!want_console);
         modules_loaded = m.GetModuleCount();
         if (modules_loaded > 0) {
+            LOG(INFO) << "Loaded " << modules_loaded << " modules from " << dir_path;
             return retval;
         }
     }
@@ -237,6 +256,7 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
                                   : m.LoadListedModules(!want_console);
     modules_loaded = m.GetModuleCount();
     if (modules_loaded > 0) {
+        LOG(INFO) << "Loaded " << modules_loaded << " modules from " << MODULE_BASE_DIR;
         return retval;
     }
     return true;
@@ -374,7 +394,7 @@ int FirstStageMain(int argc, char** argv) {
         PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
     }
 
-    struct stat old_root_info;
+    struct stat old_root_info {};
     if (stat("/", &old_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();
@@ -483,7 +503,7 @@ int FirstStageMain(int argc, char** argv) {
         }
     }
 
-    struct stat new_root_info;
+    struct stat new_root_info {};
     if (stat("/", &new_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();

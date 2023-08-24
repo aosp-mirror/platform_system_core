@@ -39,10 +39,6 @@
 
 namespace android {
 
-// Separator used by resource paths. This is not platform dependent contrary
-// to OS_PATH_SEPARATOR.
-#define RES_PATH_SEPARATOR '/'
-
 static inline char* getEmptyString() {
     static SharedBuffer* gEmptyStringBuf = [] {
         SharedBuffer* buf = SharedBuffer::alloc(1);
@@ -580,22 +576,6 @@ String8& String8::appendPath(const char* name)
         setPathName(*this, name);
         return *this;
     }
-}
-
-String8& String8::convertToResPath()
-{
-#if OS_PATH_SEPARATOR != RES_PATH_SEPARATOR
-    size_t len = length();
-    if (len > 0) {
-        char * buf = lockBuffer(len);
-        for (char * end = buf + len; buf < end; ++buf) {
-            if (*buf == OS_PATH_SEPARATOR)
-                *buf = RES_PATH_SEPARATOR;
-        }
-        unlockBuffer(len);
-    }
-#endif
-    return *this;
 }
 
 }; // namespace android
