@@ -17,9 +17,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <limits>
 #include <optional>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -103,7 +101,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     footer_ = parser.footer();
     fd_size_ = parser.fd_size();
     last_label_ = parser.last_label();
-    ops_ = std::move(parser.ops());
+    ops_ = parser.ops();
     data_loc_ = parser.data_loc();
 
     // If we're resuming a write, we're not ready to merge

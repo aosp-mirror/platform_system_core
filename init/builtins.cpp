@@ -746,6 +746,7 @@ static Result<void> do_setrlimit(const BuiltinArguments& args) {
 static Result<void> do_start(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
+    errno = 0;
     if (auto result = svc->Start(); !result.ok()) {
         return ErrorIgnoreEnoent() << "Could not start service: " << result.error();
     }
@@ -1304,8 +1305,7 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
     }
 
     if (!bootstrap) {
-        // Now start delayed services
-        ServiceList::GetInstance().MarkServicesUpdate();
+        ServiceList::GetInstance().StartDelayedServices();
     }
     return {};
 }

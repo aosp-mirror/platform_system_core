@@ -52,8 +52,6 @@ public:
     explicit                    String8(const char32_t* o, size_t numChars);
                                 ~String8();
 
-    static inline const String8 empty();
-
     static String8              format(const char* fmt, ...) __attribute__((format (printf, 1, 2)));
     static String8              formatV(const char* fmt, va_list args);
 
@@ -66,6 +64,7 @@ public:
 
     inline  size_t              size() const;
     inline  size_t              bytes() const;
+    inline  bool                empty() const;
     inline  bool                isEmpty() const;
 
             size_t              length() const;
@@ -202,15 +201,6 @@ public:
                                              { String8 p(*this); p.appendPath(leaf); return p; }
     String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.c_str()); }
 
-    /*
-     * Converts all separators in this string to /, the default path separator.
-     *
-     * If the default OS separator is backslash, this converts all
-     * backslashes to slashes, in-place. Otherwise it does nothing.
-     * Returns self.
-     */
-    String8& convertToResPath();
-
 private:
             status_t            real_append(const char* other, size_t numChars);
             char*               find_extension(void) const;
@@ -240,10 +230,6 @@ inline int strictly_order_type(const String8& lhs, const String8& rhs)
     return compare_type(lhs, rhs) < 0;
 }
 
-inline const String8 String8::empty() {
-    return String8();
-}
-
 inline const char* String8::c_str() const
 {
     return mString;
@@ -261,6 +247,11 @@ inline std::string String8::std_string(const String8& str)
 inline size_t String8::size() const
 {
     return length();
+}
+
+inline bool String8::empty() const
+{
+    return length() == 0;
 }
 
 inline bool String8::isEmpty() const

@@ -74,3 +74,13 @@ bool fs_mgr_update_for_slotselect(Fstab* fstab) {
     }
     return true;
 }
+
+namespace android {
+namespace fs_mgr {
+
+std::string OtherSlotSuffix(const std::string& suffix) {
+    return other_suffix(suffix);
+}
+
+}  // namespace fs_mgr
+}  // namespace android
