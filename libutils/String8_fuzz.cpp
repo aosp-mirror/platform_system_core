@@ -34,7 +34,7 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     str1->bytes();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->isEmpty();
+                    str1->empty();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     str1->length();
@@ -81,9 +81,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     str1->getPathDir();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->convertToResPath();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     std::shared_ptr<android::String8> path_out_str =
