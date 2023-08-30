@@ -214,8 +214,8 @@ cc_test {
     require_root: false,
 }
 
-cc_test {
-    name: "snapuserd_test",
+cc_defaults {
+    name: "snapuserd_test_defaults",
     defaults: [
         "fs_mgr_defaults",
         "libsnapshot_cow_defaults",
@@ -256,5 +256,24 @@ cc_test {
         min_shipping_api_level: 30,
     },
     auto_gen_config: true,
-    require_root: false,
+    require_root: true,
+    compile_multilib: "first",
+}
+
+cc_test {
+    name: "snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    host_supported: true,
+    test_suites: [
+        "device-tests",
+    ],
+}
+
+// vts tests cannot be host_supported.
+cc_test {
+    name: "vts_snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    test_suites: [
+        "vts",
+    ],
 }
