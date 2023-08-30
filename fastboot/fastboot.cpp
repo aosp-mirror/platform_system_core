@@ -2565,14 +2565,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
                     std::make_unique<ResizeTask>(fp.get(), partition, size, fp->slot_override);
             resize_task->Run();
         } else if (command == "gsi") {
-            std::string arg = next_arg(&args);
-            if (arg == "wipe") {
-                fb->RawCommand("gsi:wipe", "wiping GSI");
-            } else if (arg == "disable") {
-                fb->RawCommand("gsi:disable", "disabling GSI");
-            } else {
-                syntax_error("expected 'wipe' or 'disable'");
+            if (args.empty()) syntax_error("invalid gsi command");
+            std::string cmd("gsi");
+            while (!args.empty()) {
+                cmd += ":" + next_arg(&args);
             }
+            fb->RawCommand(cmd, "");
         } else if (command == "wipe-super") {
             std::string image;
             if (args.empty()) {
