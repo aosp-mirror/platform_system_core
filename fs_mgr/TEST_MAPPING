@@ -28,6 +28,9 @@
     //{"name": "vabc_legacy_tests"},
     {
       "name": "cow_api_test"
+    },
+    {
+      "name": "snapuserd_test"
     }
   ],
   "kernel-presubmit": [
@@ -42,8 +45,11 @@
     },
     {
       "name": "vab_legacy_tests"
-    }
+    },
     // TODO: b/279009697
     //{"name": "vabc_legacy_tests"}
+    {
+      "name": "snapuserd_test"
+    }
   ]
 }
