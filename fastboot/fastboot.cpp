@@ -1678,7 +1678,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (should_flash_in_userspace(*metadata.get(), flash_task->GetPartitionAndSlot())) {
+            if (FlashTask::IsDynamicParitition(fp->source, flash_task)) {
                 if (!loc) {
                     loc = i;
                 }
@@ -1760,25 +1760,15 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         tasks.emplace_back(std::move(task));
     }
-    if (auto flash_super_task = OptimizedFlashSuperTask::InitializeFromTasks(fp, tasks)) {
-        auto it = tasks.begin();
-        for (size_t i = 0; i < tasks.size(); i++) {
-            if (auto flash_task = tasks[i]->AsFlashTask()) {
-                if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
-                    break;
-                }
-            }
-            if (auto wipe_task = tasks[i]->AsWipeTask()) {
-                break;
-            }
-            it++;
-        }
-        tasks.insert(it, std::move(flash_super_task));
+
+    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp, tasks)) {
+        tasks.emplace_back(std::move(flash_super_task));
     } else {
         if (!AddResizeTasks(fp, &tasks)) {
             LOG(WARNING) << "Failed to add resize tasks";
-        };
+        }
     }
+
     return tasks;
 }
 
@@ -1885,30 +1875,35 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
     // or in bootloader fastboot.
     std::vector<std::unique_ptr<Task>> tasks;
     AddFlashTasks(boot_images_, tasks);
-    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp_, os_images_)) {
-        tasks.emplace_back(std::move(flash_super_task));
-    } else {
-        // Sync the super partition. This will reboot to userspace fastboot if needed.
-        tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
-        // Resize any logical partition to 0, so each partition is reset to 0
-        // extents, and will achieve more optimal allocation.
-        for (const auto& [image, slot] : os_images_) {
-            // Retrofit devices have two super partitions, named super_a and super_b.
-            // On these devices, secondary slots must be flashed as physical
-            // partitions (otherwise they would not mount on first boot). To enforce
-            // this, we delete any logical partitions for the "other" slot.
-            if (is_retrofit_device(fp_->fb)) {
-                std::string partition_name = image->part_name + "_"s + slot;
-                if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
-                    fp_->fb->DeletePartition(partition_name);
-                }
-                tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
+
+    // Sync the super partition. This will reboot to userspace fastboot if needed.
+    tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
+    for (const auto& [image, slot] : os_images_) {
+        // Retrofit devices have two super partitions, named super_a and super_b.
+        // On these devices, secondary slots must be flashed as physical
+        // partitions (otherwise they would not mount on first boot). To enforce
+        // this, we delete any logical partitions for the "other" slot.
+        if (is_retrofit_device(fp_->fb)) {
+            std::string partition_name = image->part_name + "_"s + slot;
+            if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
+                fp_->fb->DeletePartition(partition_name);
             }
-            tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
+            tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
         }
     }
 
     AddFlashTasks(os_images_, tasks);
+
+    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp_, tasks)) {
+        tasks.emplace_back(std::move(flash_super_task));
+    } else {
+        // Resize any logical partition to 0, so each partition is reset to 0
+        // extents, and will achieve more optimal allocation.
+        if (!AddResizeTasks(fp_, &tasks)) {
+            LOG(WARNING) << "Failed to add resize tasks";
+        }
+    }
+
     return tasks;
 }
 
