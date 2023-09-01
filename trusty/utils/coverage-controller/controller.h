@@ -26,6 +26,8 @@
 #define TEST_SRV_PORT "com.android.trusty.sancov.test.srv"
 #define TEST_SRV_MODULE "srv.syms.elf"
 
+#define UUID_STR_SIZE (37)
+
 #define FLAG_NONE               0x0
 #define FLAG_RUN                0x1
 #define FLAG_TOGGLE_CLEAR       0x2
@@ -52,6 +54,7 @@ class Controller {
     private:
         std::vector<std::unique_ptr<line_coverage::CoverageRecord>>record_list_;
         std::set<struct uuid>uuid_set_;
+        std::vector<std::string>uuid_list_;
         std::vector<uint64_t> counters;
         int coverage_srv_fd;
 

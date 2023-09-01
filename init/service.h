@@ -60,7 +60,7 @@
 #define SVC_GENTLE_KILL 0x2000  // This service should be stopped with SIGTERM instead of SIGKILL
                                 // Will still be SIGKILLed after timeout period of 200 ms
 
-#define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
+#define NR_SVC_SUPP_GIDS 32    // thirty two supplementary groups
 
 namespace android {
 namespace init {

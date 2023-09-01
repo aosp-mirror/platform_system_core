@@ -189,35 +189,32 @@ void SnapshotHandler::InitiateMerge() {
     cv.notify_all();
 }
 
+static inline bool IsMergeBeginError(MERGE_IO_TRANSITION io_state) {
+    return io_state == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
+           io_state == MERGE_IO_TRANSITION::IO_TERMINATED;
+}
+
 // Invoked by Merge thread - Waits on RA thread to resume merging. Will
 // be waken up RA thread.
 bool SnapshotHandler::WaitForMergeBegin() {
-    {
-        std::unique_lock<std::mutex> lock(lock_);
-        while (!MergeInitiated()) {
-            cv.wait(lock);
+    std::unique_lock<std::mutex> lock(lock_);
 
-            if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-                SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
-                return false;
-            }
-        }
+    cv.wait(lock, [this]() -> bool { return MergeInitiated() || IsMergeBeginError(io_state_); });
 
-        while (!(io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN ||
-                 io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                 io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED)) {
-            cv.wait(lock);
-        }
-
-        if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-            io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-            SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
-            return false;
-        }
-
-        return true;
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
     }
+
+    cv.wait(lock, [this]() -> bool {
+        return io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN || IsMergeBeginError(io_state_);
+    });
+
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
+    }
+    return true;
 }
 
 // Invoked by RA thread - Flushes the RA block to scratch space if necessary
