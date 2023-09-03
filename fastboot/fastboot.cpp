@@ -350,23 +350,22 @@ Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& seria
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
-static Transport* open_device(const char* local_serial, bool wait_for_device = true,
-                              bool announce = true) {
+static std::unique_ptr<Transport> open_device(const char* local_serial,
+                                              bool wait_for_device = true,
+                                              bool announce = true) {
     const Result<NetworkSerial, FastbootError> network_serial = ParseNetworkSerial(local_serial);
 
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     while (true) {
         if (network_serial.ok()) {
             std::string error;
             if (network_serial->protocol == Socket::Protocol::kTcp) {
-                transport = tcp::Connect(network_serial->address, network_serial->port, &error)
-                                    .release();
+                transport = tcp::Connect(network_serial->address, network_serial->port, &error);
             } else if (network_serial->protocol == Socket::Protocol::kUdp) {
-                transport = udp::Connect(network_serial->address, network_serial->port, &error)
-                                    .release();
+                transport = udp::Connect(network_serial->address, network_serial->port, &error);
             }
 
-            if (transport == nullptr && announce) {
+            if (!transport && announce) {
                 LOG(ERROR) << "error: " << error;
             }
         } else if (network_serial.error().code() ==
@@ -378,12 +377,12 @@ static Transport* open_device(const char* local_serial, bool wait_for_device = t
             Expect(network_serial);
         }
 
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
         if (!wait_for_device) {
-            return nullptr;
+            return transport;
         }
 
         if (announce) {
@@ -394,9 +393,9 @@ static Transport* open_device(const char* local_serial, bool wait_for_device = t
     }
 }
 
-static Transport* NetworkDeviceConnected(bool print = false) {
-    Transport* transport = nullptr;
-    Transport* result = nullptr;
+static std::unique_ptr<Transport> NetworkDeviceConnected(bool print = false) {
+    std::unique_ptr<Transport> transport;
+    std::unique_ptr<Transport> result;
 
     ConnectedDevicesStorage storage;
     std::set<std::string> devices;
@@ -409,11 +408,11 @@ static Transport* NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "fastboot");
+            PrintDevice(device.c_str(), transport ? "offline" : "fastboot");
         }
 
-        if (transport != nullptr) {
-            result = transport;
+        if (transport) {
+            result = std::move(transport);
         }
     }
 
@@ -431,21 +430,21 @@ static Transport* NetworkDeviceConnected(bool print = false) {
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
-static Transport* open_device() {
+static std::unique_ptr<Transport> open_device() {
     if (serial != nullptr) {
         return open_device(serial);
     }
 
     bool announce = true;
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     while (true) {
         transport = usb_open(match_fastboot(nullptr));
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
         transport = NetworkDeviceConnected();
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
@@ -455,6 +454,8 @@ static Transport* open_device() {
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+
+    return transport;
 }
 
 static int Connect(int argc, char* argv[]) {
@@ -466,8 +467,7 @@ static int Connect(int argc, char* argv[]) {
     const char* local_serial = *argv;
     Expect(ParseNetworkSerial(local_serial));
 
-    const Transport* transport = open_device(local_serial, false);
-    if (transport == nullptr) {
+    if (!open_device(local_serial, false)) {
         return 1;
     }
 
@@ -531,6 +531,7 @@ static void list_devices() {
     usb_open(list_devices_callback);
     NetworkDeviceConnected(/* print */ true);
 }
+
 void syntax_error(const char* fmt, ...) {
     fprintf(stderr, "fastboot: usage: ");
 
@@ -1547,9 +1548,7 @@ bool is_userspace_fastboot() {
 
 void reboot_to_userspace_fastboot() {
     fb->RebootTo("fastboot");
-
-    auto* old_transport = fb->set_transport(nullptr);
-    delete old_transport;
+    fb->set_transport(nullptr);
 
     // Give the current connection time to close.
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -2377,8 +2376,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
         return show_help();
     }
 
-    Transport* transport = open_device();
-    if (transport == nullptr) {
+    std::unique_ptr<Transport> transport = open_device();
+    if (!transport) {
         return 1;
     }
     fastboot::DriverCallbacks driver_callbacks = {
@@ -2388,7 +2387,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             .text = TextMessage,
     };
 
-    fastboot::FastBootDriver fastboot_driver(transport, driver_callbacks, false);
+    fastboot::FastBootDriver fastboot_driver(std::move(transport), driver_callbacks, false);
     fb = &fastboot_driver;
     fp->fb = &fastboot_driver;
 
@@ -2632,9 +2631,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
         task->Run();
     }
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
-
-    auto* old_transport = fb->set_transport(nullptr);
-    delete old_transport;
 
     return 0;
 }

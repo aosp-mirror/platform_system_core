@@ -503,9 +503,15 @@ int LinuxUsbTransport::Reset() {
     return 0;
 }
 
-UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
+std::unique_ptr<UsbTransport> usb_open(ifc_match_func callback, uint32_t timeout_ms) {
+    std::unique_ptr<UsbTransport> result;
     std::unique_ptr<usb_handle> handle = find_usb_device("/sys/bus/usb/devices", callback);
-    return handle ? new LinuxUsbTransport(std::move(handle), timeout_ms) : nullptr;
+
+    if (handle) {
+        result = std::make_unique<LinuxUsbTransport>(std::move(handle), timeout_ms);
+    }
+
+    return result;
 }
 
 /* Wait for the system to notice the device is gone, so that a subsequent
