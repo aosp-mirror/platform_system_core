@@ -166,16 +166,15 @@ TEST(USBFunctionality, USBConnect) {
     const auto matcher = [](usb_ifc_info* info) -> int {
         return FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     for (int i = 0; i < FastBootTest::MAX_USB_TRIES && !transport; i++) {
         transport = usb_open(matcher);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    ASSERT_NE(transport, nullptr) << "Could not find the fastboot device after: "
-                                  << 10 * FastBootTest::MAX_USB_TRIES << "ms";
+    ASSERT_NE(transport.get(), nullptr) << "Could not find the fastboot device after: "
+                                        << 10 * FastBootTest::MAX_USB_TRIES << "ms";
     if (transport) {
         transport->Close();
-        delete transport;
     }
 }
 
@@ -1897,7 +1896,7 @@ int main(int argc, char** argv) {
         const auto matcher = [](usb_ifc_info* info) -> int {
             return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
         };
-        Transport* transport = nullptr;
+        std::unique_ptr<Transport> transport;
         while (!transport) {
             transport = usb_open(matcher);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
