@@ -128,7 +128,7 @@ void FastBootTest::SetUp() {
             return MatchFastboot(info, device_serial);
         };
         for (int i = 0; i < MAX_USB_TRIES && !transport; i++) {
-            std::unique_ptr<UsbTransport> usb(usb_open(matcher, USB_TIMEOUT));
+            std::unique_ptr<UsbTransport> usb = usb_open(matcher, USB_TIMEOUT);
             if (usb)
                 transport = std::unique_ptr<TransportSniffer>(
                         new TransportSniffer(std::move(usb), serial_port));
@@ -143,7 +143,7 @@ void FastBootTest::SetUp() {
     } else {
         ASSERT_EQ(device_path, cb_scratch);  // The path can not change
     }
-    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(std::move(transport), {}, true));
     // No error checking since non-A/B devices may not support the command
     fb->GetVar("current-slot", &initial_slot);
 }
@@ -200,7 +200,7 @@ void FastBootTest::ReconnectFastbootDevice() {
     if (IsFastbootOverTcp()) {
         ConnectTcpFastbootDevice();
         device_path = cb_scratch;
-        fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+        fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(std::move(transport), {}, true));
         return;
     }
 
@@ -212,7 +212,7 @@ void FastBootTest::ReconnectFastbootDevice() {
         return MatchFastboot(info, device_serial);
     };
     while (!transport) {
-        std::unique_ptr<UsbTransport> usb(usb_open(matcher, USB_TIMEOUT));
+        std::unique_ptr<UsbTransport> usb = usb_open(matcher, USB_TIMEOUT);
         if (usb) {
             transport = std::unique_ptr<TransportSniffer>(
                     new TransportSniffer(std::move(usb), serial_port));
@@ -220,7 +220,7 @@ void FastBootTest::ReconnectFastbootDevice() {
         std::this_thread::sleep_for(1s);
     }
     device_path = cb_scratch;
-    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(transport.get(), {}, true));
+    fb = std::unique_ptr<FastBootDriver>(new FastBootDriver(std::move(transport), {}, true));
 }
 
 void FastBootTest::SetLockState(bool unlock, bool assert_change) {
