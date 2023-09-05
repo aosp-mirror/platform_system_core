@@ -381,7 +381,13 @@ static std::unique_ptr<usb_handle> find_usb_device(ifc_match_func callback) {
     return handle;
 }
 
-UsbTransport* usb_open(ifc_match_func callback, uint32_t) {
+std::unique_ptr<UsbTransport> usb_open(ifc_match_func callback, uint32_t) {
+    std::unique_ptr<UsbTransport> result;
     std::unique_ptr<usb_handle> handle = find_usb_device(callback);
-    return handle ? new WindowsUsbTransport(std::move(handle)) : nullptr;
+
+    if (handle) {
+        result = std::make_unique<WindowsUsbTransport>(std::move(handle));
+    }
+
+    return result;
 }
