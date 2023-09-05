@@ -661,6 +661,17 @@ bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
         if (!android::gsi::DisableGsi()) {
             return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
         }
+    } else if (args[1] == "status") {
+        std::string active_dsu;
+        if (!android::gsi::IsGsiRunning()) {
+            device->WriteInfo("Not running");
+        } else if (!android::gsi::GetActiveDsu(&active_dsu)) {
+            return device->WriteFail(strerror(errno));
+        } else {
+            device->WriteInfo("Running active DSU: " + active_dsu);
+        }
+    } else {
+        return device->WriteFail("Invalid arguments");
     }
     return device->WriteStatus(FastbootResult::OKAY, "Success");
 }
