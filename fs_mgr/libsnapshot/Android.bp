@@ -446,6 +446,38 @@ cc_binary {
     ],
 }
 
+cc_binary {
+    name: "create_snapshot",
+    host_supported: true,
+    device_supported: false,
+
+    srcs: ["libsnapshot_cow/create_cow.cpp"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    static_libs: [
+        "liblog",
+        "libbase",
+        "libext4_utils",
+        "libsnapshot_cow",
+        "libcrypto",
+        "libbrotli",
+        "libz",
+        "liblz4",
+        "libzstd",
+        "libgflags",
+    ],
+    shared_libs: [
+    ],
+
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+}
+
 python_library_host {
     name: "snapshot_proto_python",
     srcs: [
