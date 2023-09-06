@@ -441,6 +441,7 @@ class SnapshotManager final : public ISnapshotManager {
     friend class FlashAfterUpdateTest;
     friend class LockTestConsumer;
     friend class SnapshotFuzzEnv;
+    friend class MapSnapshots;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
