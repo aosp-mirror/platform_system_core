@@ -174,7 +174,6 @@ libinit_cc_defaults {
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsigningutils",
         "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
@@ -183,7 +182,6 @@ libinit_cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libcrypto",
         "libcutils",
         "libdl",
         "libext4_utils",
@@ -199,7 +197,6 @@ libinit_cc_defaults {
         "libselinux",
         "libunwindstack",
         "libutils",
-        "libziparchive",
     ],
     header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
