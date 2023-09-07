@@ -476,14 +476,6 @@ cc_binary {
     header_libs: [
         "libstorage_literals_headers",
     ],
-
-    dist: {
-        targets: [
-            "sdk",
-            "sdk-repo-platform-tools",
-            "sdk_repo",
-        ],
-    },
 }
 
 python_library_host {
