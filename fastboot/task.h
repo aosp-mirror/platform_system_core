@@ -15,10 +15,8 @@
 //
 #pragma once
 
-#include <sstream>
 #include <string>
 
-#include "fastboot_driver.h"
 #include "super_flash_helper.h"
 #include "util.h"
 
@@ -29,6 +27,7 @@ using ImageEntry = std::pair<const Image*, std::string>;
 class FlashTask;
 class RebootTask;
 class UpdateSuperTask;
+class OptimizedFlashSuperTask;
 class WipeTask;
 class ResizeTask;
 class Task {
@@ -40,6 +39,7 @@ class Task {
     virtual FlashTask* AsFlashTask() { return nullptr; }
     virtual RebootTask* AsRebootTask() { return nullptr; }
     virtual UpdateSuperTask* AsUpdateSuperTask() { return nullptr; }
+    virtual OptimizedFlashSuperTask* AsOptimizedFlashSuperTask() { return nullptr; }
     virtual WipeTask* AsWipeTask() { return nullptr; }
     virtual ResizeTask* AsResizeTask() { return nullptr; }
 
@@ -86,13 +86,13 @@ class OptimizedFlashSuperTask : public Task {
   public:
     OptimizedFlashSuperTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
                             SparsePtr sparse_layout, uint64_t super_size, const FlashingPlan* fp);
+    virtual OptimizedFlashSuperTask* AsOptimizedFlashSuperTask() override { return this; }
 
     static std::unique_ptr<OptimizedFlashSuperTask> Initialize(
             const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
     static bool CanOptimize(const ImageSource* source,
                             const std::vector<std::unique_ptr<Task>>& tasks);
 
-    using ImageEntry = std::pair<const Image*, std::string>;
     void Run() override;
     std::string ToString() const override;
 

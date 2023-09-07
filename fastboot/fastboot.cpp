@@ -1286,7 +1286,7 @@ std::string get_current_slot() {
     return current_slot;
 }
 
-static int get_slot_count() {
+static int get_slot_count(fastboot::IFastBootDriver* fb) {
     std::string var;
     int count = 0;
     if (fb->GetVar("slot-count", &var) != fastboot::SUCCESS ||
@@ -1296,8 +1296,8 @@ static int get_slot_count() {
     return count;
 }
 
-bool supports_AB() {
-    return get_slot_count() >= 2;
+bool supports_AB(fastboot::IFastBootDriver* fb) {
+    return get_slot_count(fb) >= 2;
 }
 
 // Given a current slot, this returns what the 'other' slot is.
@@ -1309,7 +1309,7 @@ static std::string get_other_slot(const std::string& current_slot, int count) {
 }
 
 static std::string get_other_slot(const std::string& current_slot) {
-    return get_other_slot(current_slot, get_slot_count());
+    return get_other_slot(current_slot, get_slot_count(fb));
 }
 
 static std::string get_other_slot(int count) {
@@ -1317,7 +1317,7 @@ static std::string get_other_slot(int count) {
 }
 
 static std::string get_other_slot() {
-    return get_other_slot(get_current_slot(), get_slot_count());
+    return get_other_slot(get_current_slot(), get_slot_count(fb));
 }
 
 static std::string verify_slot(const std::string& slot_name, bool allow_all) {
@@ -1326,7 +1326,7 @@ static std::string verify_slot(const std::string& slot_name, bool allow_all) {
         if (allow_all) {
             return "all";
         } else {
-            int count = get_slot_count();
+            int count = get_slot_count(fb);
             if (count > 0) {
                 return "a";
             } else {
@@ -1335,7 +1335,7 @@ static std::string verify_slot(const std::string& slot_name, bool allow_all) {
         }
     }
 
-    int count = get_slot_count();
+    int count = get_slot_count(fb);
     if (count == 0) die("Device does not support slots");
 
     if (slot == "other") {
@@ -1408,7 +1408,7 @@ void do_for_partitions(const std::string& part, const std::string& slot,
                 slot.c_str());
         }
         if (has_slot == "yes") {
-            for (int i = 0; i < get_slot_count(); i++) {
+            for (int i = 0; i < get_slot_count(fb); i++) {
                 do_for_partition(part, std::string(1, (char)(i + 'a')), func, force_slot);
             }
         } else {
@@ -1529,7 +1529,7 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(const std::string& slot_override) {
-    if (!supports_AB()) return;
+    if (!supports_AB(fb)) return;
 
     if (slot_override != "") {
         fb->SetActive(slot_override);
@@ -1844,7 +1844,7 @@ void FlashAllTool::DetermineSlot() {
         fp_->secondary_slot = get_other_slot();
     }
     if (fp_->secondary_slot == "") {
-        if (supports_AB()) {
+        if (supports_AB(fb)) {
             fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
         }
         fp_->skip_secondary = true;
