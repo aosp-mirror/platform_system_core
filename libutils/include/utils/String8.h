@@ -126,80 +126,11 @@ public:
 
             void                toLower();
 
-
-    /*
-     * These methods operate on the string as if it were a path name.
-     */
-
-    /*
-     * Get just the filename component.
-     *
-     * "/tmp/foo/bar.c" --> "bar.c"
-     */
-    String8 getPathLeaf(void) const;
-
-    /*
-     * Remove the last (file name) component, leaving just the directory
-     * name.
-     *
-     * "/tmp/foo/bar.c" --> "/tmp/foo"
-     * "/tmp" --> "" // ????? shouldn't this be "/" ???? XXX
-     * "bar.c" --> ""
-     */
-    String8 getPathDir(void) const;
-
-    /*
-     * Retrieve the front (root dir) component.  Optionally also return the
-     * remaining components.
-     *
-     * "/tmp/foo/bar.c" --> "tmp" (remain = "foo/bar.c")
-     * "/tmp" --> "tmp" (remain = "")
-     * "bar.c" --> "bar.c" (remain = "")
-     */
-    String8 walkPath(String8* outRemains = nullptr) const;
-
-    /*
-     * Return the filename extension.  This is the last '.' and any number
-     * of characters that follow it.  The '.' is included in case we
-     * decide to expand our definition of what constitutes an extension.
-     *
-     * "/tmp/foo/bar.c" --> ".c"
-     * "/tmp" --> ""
-     * "/tmp/foo.bar/baz" --> ""
-     * "foo.jpeg" --> ".jpeg"
-     * "foo." --> ""
-     */
-    String8 getPathExtension(void) const;
-
-    /*
-     * Return the path without the extension.  Rules for what constitutes
-     * an extension are described in the comment for getPathExtension().
-     *
-     * "/tmp/foo/bar.c" --> "/tmp/foo/bar"
-     */
-    String8 getBasePath(void) const;
-
-    /*
-     * Add a component to the pathname.  We guarantee that there is
-     * exactly one path separator between the old path and the new.
-     * If there is no existing name, we just copy the new name in.
-     *
-     * If leaf is a fully qualified path (i.e. starts with '/', it
-     * replaces whatever was there before.
-     */
-    String8& appendPath(const char* leaf);
-    String8& appendPath(const String8& leaf) { return appendPath(leaf.c_str()); }
-
-    /*
-     * Like appendPath(), but does not affect this string.  Returns a new one instead.
-     */
-    String8 appendPathCopy(const char* leaf) const
-                                             { String8 p(*this); p.appendPath(leaf); return p; }
-    String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.c_str()); }
-
 private:
+            String8 getPathDir(void) const;
+            String8 getPathExtension(void) const;
+
             status_t            real_append(const char* other, size_t numChars);
-            char*               find_extension(void) const;
 
             const char* mString;
 };
