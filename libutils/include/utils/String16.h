@@ -56,9 +56,6 @@ public:
     inline  const char16_t*     c_str() const;
     inline  const char16_t*     string() const;
 
-private:
-    static inline std::string   std_string(const String16& str);
-public:
             size_t              size() const;
     inline  bool                empty() const;
 
@@ -247,11 +244,6 @@ inline const char16_t* String16::c_str() const
 inline const char16_t* String16::string() const
 {
     return mString;
-}
-
-inline std::string String16::std_string(const String16& str)
-{
-    return std::string(String8(str).c_str());
 }
 
 inline bool String16::empty() const
