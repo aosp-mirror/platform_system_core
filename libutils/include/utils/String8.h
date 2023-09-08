@@ -58,10 +58,6 @@ public:
     inline  const char*         c_str() const;
     inline  const char*         string() const;
 
-private:
-    static inline std::string   std_string(const String8& str);
-public:
-
     inline  size_t              size() const;
     inline  size_t              bytes() const;
     inline  bool                empty() const;
@@ -167,11 +163,6 @@ inline const char* String8::c_str() const
 inline const char* String8::string() const
 {
     return mString;
-}
-
-inline std::string String8::std_string(const String8& str)
-{
-    return std::string(str.c_str());
 }
 
 inline size_t String8::size() const
