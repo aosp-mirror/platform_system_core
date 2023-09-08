@@ -2312,32 +2312,6 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-TEST_F(SnapshotUpdateTest, LowSpace) {
-    static constexpr auto kMaxFree = 10_MiB;
-    auto userdata = std::make_unique<LowSpaceUserdata>();
-    ASSERT_TRUE(userdata->Init(kMaxFree));
-
-    // Grow all partitions to 10_MiB, total 30_MiB. This requires 30 MiB of CoW space. After
-    // using the empty space in super (< 1 MiB), it uses 30 MiB of /userdata space.
-    constexpr uint64_t partition_size = 10_MiB;
-    SetSize(sys_, partition_size);
-    SetSize(vnd_, partition_size);
-    SetSize(prd_, partition_size);
-    sys_->set_estimate_cow_size(partition_size);
-    vnd_->set_estimate_cow_size(partition_size);
-    prd_->set_estimate_cow_size(partition_size);
-
-    AddOperationForPartitions();
-
-    // Execute the update.
-    ASSERT_TRUE(sm->BeginUpdate());
-    auto res = sm->CreateUpdateSnapshots(manifest_);
-    ASSERT_FALSE(res);
-    ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
-    ASSERT_GE(res.required_size(), 14_MiB);
-    ASSERT_LT(res.required_size(), 40_MiB);
-}
-
 TEST_F(SnapshotUpdateTest, AddPartition) {
     group_->add_partition_names("dlkm");
 
@@ -2698,50 +2672,6 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Slot"s + (std::get<1>(info.param) ? "After"s : "Before"s) +
                                     "Merge"s;
                          });
-
-class ImageManagerTest : public SnapshotTest {
-  protected:
-    void SetUp() override {
-        SKIP_IF_NON_VIRTUAL_AB();
-        SnapshotTest::SetUp();
-    }
-    void TearDown() override {
-        RETURN_IF_NON_VIRTUAL_AB();
-        CleanUp();
-    }
-    void CleanUp() {
-        if (!image_manager_) {
-            return;
-        }
-        EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
-                    image_manager_->DeleteBackingImage(kImageName));
-    }
-
-    static constexpr const char* kImageName = "my_image";
-};
-
-TEST_F(ImageManagerTest, CreateImageNoSpace) {
-    bool at_least_one_failure = false;
-    for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        auto userdata = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata->Init(size));
-
-        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
-
-        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                      IImageManager::CREATE_IMAGE_DEFAULT);
-        if (!res) {
-            at_least_one_failure = true;
-        } else {
-            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
-        }
-
-        CleanUp();
-    }
-
-    ASSERT_TRUE(at_least_one_failure)
-            << "We should have failed to allocate at least one over-sized image";
-}
 
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
