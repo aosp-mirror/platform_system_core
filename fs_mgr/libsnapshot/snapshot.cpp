@@ -83,6 +83,8 @@ using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 
+static constexpr char kBootSnapshotsWithoutSlotSwitch[] =
+        "/metadata/ota/snapshot-boot-without-slot-switch";
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
 static constexpr auto kUpdateStateCheckInterval = 2s;
@@ -217,6 +219,12 @@ bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
     auto file = LockExclusive();
     if (!file) return false;
 
+    if (IsSnapshotWithoutSlotSwitch()) {
+        LOG(ERROR) << "Cannot cancel the snapshots as partitions are mounted off the snapshots on "
+                      "current slot.";
+        return false;
+    }
+
     UpdateState state = ReadUpdateState(file.get());
     if (state == UpdateState::None) {
         RemoveInvalidSnapshots(file.get());
@@ -299,10 +307,9 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     // - For ForwardMerge, FinishedSnapshotWrites asserts that the existence of the indicator
     // matches the incoming update.
     std::vector<std::string> files = {
-            GetSnapshotBootIndicatorPath(),
-            GetRollbackIndicatorPath(),
-            GetForwardMergeIndicatorPath(),
-            GetOldPartitionMetadataPath(),
+            GetSnapshotBootIndicatorPath(),          GetRollbackIndicatorPath(),
+            GetForwardMergeIndicatorPath(),          GetOldPartitionMetadataPath(),
+            GetBootSnapshotsWithoutSlotSwitchPath(),
     };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
@@ -483,6 +490,32 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
             LOG(ERROR) << "Failed to retrieve base_sectors from Snapuserd";
             return false;
         }
+    } else if (IsSnapshotWithoutSlotSwitch()) {
+        // When snapshots are on current slot, we determine the size
+        // of block device based on the number of COW operations. We cannot
+        // use base device as it will be from older image.
+        size_t num_ops = 0;
+        uint64_t dev_sz = 0;
+        unique_fd fd(open(cow_file.c_str(), O_RDONLY | O_CLOEXEC));
+        if (fd < 0) {
+            PLOG(ERROR) << "Failed to open " << cow_file;
+            return false;
+        }
+
+        CowReader reader;
+        if (!reader.Parse(std::move(fd))) {
+            LOG(ERROR) << "Failed to parse cow " << cow_file;
+            return false;
+        }
+
+        const auto& header = reader.GetHeader();
+        if (header.prefix.major_version > 2) {
+            LOG(ERROR) << "COW format not supported";
+            return false;
+        }
+        num_ops = reader.get_num_total_data_ops();
+        dev_sz = (num_ops * header.block_size);
+        base_sectors = dev_sz >> 9;
     } else {
         // For userspace snapshots, the size of the base device is taken as the
         // size of the dm-user block device. Since there is no pseudo mapping
@@ -1479,6 +1512,10 @@ MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
     return result;
 }
 
+std::string SnapshotManager::GetBootSnapshotsWithoutSlotSwitchPath() {
+    return metadata_dir_ + "/" + android::base::Basename(kBootSnapshotsWithoutSlotSwitch);
+}
+
 std::string SnapshotManager::GetSnapshotBootIndicatorPath() {
     return metadata_dir_ + "/" + android::base::Basename(kBootIndicatorPath);
 }
@@ -2120,6 +2157,10 @@ UpdateState SnapshotManager::GetUpdateState(double* progress) {
     return state;
 }
 
+bool SnapshotManager::IsSnapshotWithoutSlotSwitch() {
+    return (access(GetBootSnapshotsWithoutSlotSwitchPath().c_str(), F_OK) == 0);
+}
+
 bool SnapshotManager::UpdateUsesCompression() {
     auto lock = LockShared();
     if (!lock) return false;
@@ -2212,6 +2253,13 @@ std::string SnapshotManager::GetGlobalRollbackIndicatorPath() {
 }
 
 bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
+    if (IsSnapshotWithoutSlotSwitch()) {
+        if (GetCurrentSlot() != Slot::Source) {
+            LOG(ERROR) << "Snapshots marked to boot without slot switch; but slot is wrong";
+            return false;
+        }
+        return true;
+    }
     // If we fail to read, we'll wind up using CreateLogicalPartitions, which
     // will create devices that look like the old slot, except with extra
     // content at the end of each device. This will confuse dm-verity, and
@@ -2347,7 +2395,8 @@ bool SnapshotManager::MapPartitionWithSnapshot(LockedFile* lock,
     // completed, live_snapshot_status is set to nullopt.
     std::optional<SnapshotStatus> live_snapshot_status;
     do {
-        if (!(params.partition->attributes & LP_PARTITION_ATTR_UPDATED)) {
+        if (!IsSnapshotWithoutSlotSwitch() &&
+            !(params.partition->attributes & LP_PARTITION_ATTR_UPDATED)) {
             LOG(INFO) << "Detected re-flashing of partition, will skip snapshot: "
                       << params.GetPartitionName();
             break;
@@ -2703,7 +2752,7 @@ bool SnapshotManager::UnmapUserspaceSnapshotDevice(LockedFile* lock,
     // to unmap; hence, we can't be deleting the device
     // as the table would be mounted off partitions and will fail.
     if (snapshot_status.state() != SnapshotState::MERGE_COMPLETED) {
-        if (!DeleteDeviceIfExists(dm_user_name)) {
+        if (!DeleteDeviceIfExists(dm_user_name, 4000ms)) {
             LOG(ERROR) << "Cannot unmap " << dm_user_name;
             return false;
         }
@@ -3098,7 +3147,7 @@ bool SnapshotManager::EnsureImageManager() {
     return true;
 }
 
-bool SnapshotManager::EnsureSnapuserdConnected() {
+bool SnapshotManager::EnsureSnapuserdConnected(std::chrono::milliseconds timeout_ms) {
     if (snapuserd_client_) {
         return true;
     }
@@ -3107,7 +3156,7 @@ bool SnapshotManager::EnsureSnapuserdConnected() {
         return false;
     }
 
-    snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, 10s);
+    snapuserd_client_ = SnapuserdClient::Connect(kSnapuserdSocket, timeout_ms);
     if (!snapuserd_client_) {
         LOG(ERROR) << "Unable to connect to snapuserd";
         return false;
@@ -4372,12 +4421,69 @@ std::string SnapshotManager::ReadSourceBuildFingerprint() {
 bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
     auto slot = GetCurrentSlot();
     if (slot == Slot::Target) {
+        // Merge in-progress
         if (IsSnapuserdRequired()) {
             return true;
         }
     }
 
+    // Let's check more deeper to see if snapshots are mounted
+    auto lock = LockExclusive();
+    if (!lock) {
+        return false;
+    }
+
+    std::vector<std::string> snapshots;
+    if (!ListSnapshots(lock.get(), &snapshots)) {
+        return false;
+    }
+
+    for (const auto& snapshot : snapshots) {
+        // Active snapshot and daemon is alive
+        if (IsSnapshotDevice(snapshot) && EnsureSnapuserdConnected(2s)) {
+            return true;
+        }
+    }
+
     return false;
+}
+
+bool SnapshotManager::BootFromSnapshotsWithoutSlotSwitch() {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    auto contents = device_->GetSlotSuffix();
+    // This is the indicator which tells first-stage init
+    // to boot from snapshots even though there was no slot-switch
+    auto boot_file = GetBootSnapshotsWithoutSlotSwitchPath();
+    if (!WriteStringToFileAtomic(contents, boot_file)) {
+        PLOG(ERROR) << "write failed: " << boot_file;
+        return false;
+    }
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    update_status.set_state(UpdateState::Initiated);
+    update_status.set_userspace_snapshots(true);
+    update_status.set_using_snapuserd(true);
+    if (!WriteSnapshotUpdateStatus(lock.get(), update_status)) {
+        return false;
+    }
+    return true;
+}
+
+bool SnapshotManager::PrepareDeviceToBootWithoutSnapshot() {
+    auto lock = LockExclusive();
+    if (!lock) return false;
+
+    android::base::RemoveFileIfExists(GetSnapshotBootIndicatorPath());
+    android::base::RemoveFileIfExists(GetBootSnapshotsWithoutSlotSwitchPath());
+
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock.get());
+    update_status.set_state(UpdateState::Cancelled);
+    if (!WriteSnapshotUpdateStatus(lock.get(), update_status)) {
+        return false;
+    }
+    return true;
 }
 
 }  // namespace snapshot
