@@ -704,9 +704,6 @@
    "name" : "_ZN7android7RefBaseD2Ev"
   },
   {
-   "name" : "_ZN7android7String810appendPathEPKc"
-  },
-  {
    "name" : "_ZN7android7String810lockBufferEm"
   },
   {
@@ -1145,15 +1142,6 @@
    "name" : "_ZNK7android7String810getPathDirEv"
   },
   {
-   "name" : "_ZNK7android7String811getBasePathEv"
-  },
-  {
-   "name" : "_ZNK7android7String811getPathLeafEv"
-  },
-  {
-   "name" : "_ZNK7android7String814find_extensionEv"
-  },
-  {
    "name" : "_ZNK7android7String816getPathExtensionEv"
   },
   {
@@ -1161,9 +1149,6 @@
   },
   {
    "name" : "_ZNK7android7String86lengthEv"
-  },
-  {
-   "name" : "_ZNK7android7String88walkPathEPS0_"
   },
   {
    "name" : "_ZNK7android8String1610startsWithEPKDs"
@@ -6809,22 +6794,6 @@
    "source_file" : "system/core/libutils/include/utils/RefBase.h"
   },
   {
-   "function_name" : "android::String8::appendPath",
-   "linker_set_key" : "_ZN7android7String810appendPathEPKc",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPN7android7String8E"
-    },
-    {
-     "referenced_type" : "_ZTIPKc"
-    }
-   ],
-   "return_type" : "_ZTIRN7android7String8E",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
    "function_name" : "android::String8::lockBuffer",
    "linker_set_key" : "_ZN7android7String810lockBufferEm",
    "parameters" :
@@ -9104,6 +9073,7 @@
    "source_file" : "system/core/libutils/include/utils/RefBase.h"
   },
   {
+   "access" : "private",
    "function_name" : "android::String8::getPathDir",
    "linker_set_key" : "_ZNK7android7String810getPathDirEv",
    "parameters" :
@@ -9117,46 +9087,7 @@
    "source_file" : "system/core/libutils/include/utils/String8.h"
   },
   {
-   "function_name" : "android::String8::getBasePath",
-   "linker_set_key" : "_ZNK7android7String811getBasePathEv",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPKN7android7String8E"
-    }
-   ],
-   "return_type" : "_ZTIN7android7String8E",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
-   "function_name" : "android::String8::getPathLeaf",
-   "linker_set_key" : "_ZNK7android7String811getPathLeafEv",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPKN7android7String8E"
-    }
-   ],
-   "return_type" : "_ZTIN7android7String8E",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
    "access" : "private",
-   "function_name" : "android::String8::find_extension",
-   "linker_set_key" : "_ZNK7android7String814find_extensionEv",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPKN7android7String8E"
-    }
-   ],
-   "return_type" : "_ZTIPc",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
    "function_name" : "android::String8::getPathExtension",
    "linker_set_key" : "_ZNK7android7String816getPathExtensionEv",
    "parameters" :
@@ -9200,23 +9131,6 @@
     }
    ],
    "return_type" : "_ZTIm",
-   "source_file" : "system/core/libutils/include/utils/String8.h"
-  },
-  {
-   "function_name" : "android::String8::walkPath",
-   "linker_set_key" : "_ZNK7android7String88walkPathEPS0_",
-   "parameters" :
-   [
-    {
-     "is_this_ptr" : true,
-     "referenced_type" : "_ZTIPKN7android7String8E"
-    },
-    {
-     "default_arg" : true,
-     "referenced_type" : "_ZTIPN7android7String8E"
-    }
-   ],
-   "return_type" : "_ZTIN7android7String8E",
    "source_file" : "system/core/libutils/include/utils/String8.h"
   },
   {
