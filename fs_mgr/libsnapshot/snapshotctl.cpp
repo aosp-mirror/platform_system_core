@@ -75,7 +75,11 @@ int Usage() {
                  "  unmap-snapshots\n"
                  "    Unmap all pre-created snapshots\n"
                  "  delete-snapshots\n"
-                 "    Delete all pre-created snapshots\n";
+                 "    Delete all pre-created snapshots\n"
+                 "  revert-snapshots\n"
+                 "    Prepares devices to boot without snapshots on next boot.\n"
+                 "    This does not delete the snapshot. It only removes the indicators\n"
+                 "    so that first stage init will not mount from snapshots.\n";
     return EX_USAGE;
 }
 
@@ -87,9 +91,11 @@ class MapSnapshots {
     MapSnapshots(std::string path = "");
     bool CreateSnapshotDevice(std::string& partition_name, std::string& patch);
     bool InitiateThreadedSnapshotWrite(std::string& pname, std::string& snapshot_patch);
-    bool WaitForSnapshotWritesToComplete();
+    bool FinishSnapshotWrites();
     bool UnmapCowImagePath(std::string& name);
-    bool DeleteCowImage(std::string& name);
+    bool DeleteSnapshots();
+    bool CleanupSnapshot() { return sm_->PrepareDeviceToBootWithoutSnapshot(); }
+    bool BeginUpdate();
 
   private:
     std::optional<std::string> GetCowImagePath(std::string& name);
@@ -107,7 +113,24 @@ MapSnapshots::MapSnapshots(std::string path) {
         exit(1);
     }
     snapshot_dir_path_ = path + "/";
+}
+
+bool MapSnapshots::BeginUpdate() {
     lock_ = sm_->LockExclusive();
+    std::vector<std::string> snapshots;
+    sm_->ListSnapshots(lock_.get(), &snapshots);
+    if (!snapshots.empty()) {
+        // Snapshots are already present.
+        return true;
+    }
+
+    lock_ = nullptr;
+    if (!sm_->BeginUpdate()) {
+        LOG(ERROR) << "BeginUpdate failed";
+        return false;
+    }
+    lock_ = sm_->LockExclusive();
+    return true;
 }
 
 bool MapSnapshots::CreateSnapshotDevice(std::string& partition_name, std::string& patchfile) {
@@ -130,6 +153,9 @@ bool MapSnapshots::CreateSnapshotDevice(std::string& partition_name, std::string
     dev_sz &= ~(block_sz - 1);
 
     SnapshotStatus status;
+    status.set_state(SnapshotState::CREATED);
+    status.set_using_snapuserd(true);
+    status.set_old_partition_size(0);
     status.set_name(partition_name);
     status.set_cow_file_size(dev_sz);
     status.set_cow_partition_size(0);
@@ -216,27 +242,33 @@ bool MapSnapshots::InitiateThreadedSnapshotWrite(std::string& pname, std::string
     return true;
 }
 
-bool MapSnapshots::WaitForSnapshotWritesToComplete() {
+bool MapSnapshots::FinishSnapshotWrites() {
     bool ret = true;
     for (auto& t : threads_) {
         ret = t.get() && ret;
     }
 
+    lock_ = nullptr;
     if (ret) {
         LOG(INFO) << "Pre-created snapshots successfully copied";
-    } else {
-        LOG(ERROR) << "Snapshot copy failed";
+        if (!sm_->FinishedSnapshotWrites(false)) {
+            return false;
+        }
+        return sm_->BootFromSnapshotsWithoutSlotSwitch();
     }
-    return ret;
+
+    LOG(ERROR) << "Snapshot copy failed";
+    return false;
 }
 
 bool MapSnapshots::UnmapCowImagePath(std::string& name) {
     return sm_->UnmapCowImage(name);
 }
 
-bool MapSnapshots::DeleteCowImage(std::string& name) {
-    if (!sm_->DeleteSnapshot(lock_.get(), name)) {
-        LOG(ERROR) << "Delete snapshot failed";
+bool MapSnapshots::DeleteSnapshots() {
+    lock_ = sm_->LockExclusive();
+    if (!sm_->RemoveAllUpdateState(lock_.get())) {
+        LOG(ERROR) << "Remove All Update State failed";
         return false;
     }
     return true;
@@ -281,7 +313,8 @@ bool GetVerityPartitions(std::vector<std::string>& partitions) {
     return true;
 }
 
-bool UnMapPrecreatedSnapshots(int, char**) {
+bool UnMapPrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
     // Make sure we are root.
     if (::getuid() != 0) {
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
@@ -302,29 +335,36 @@ bool UnMapPrecreatedSnapshots(int, char**) {
     return true;
 }
 
-bool DeletePrecreatedSnapshots(int, char**) {
+bool RemovePrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return false;
+    }
+
+    MapSnapshots snapshot;
+    if (!snapshot.CleanupSnapshot()) {
+        LOG(ERROR) << "CleanupSnapshot failed";
+        return false;
+    }
+    return true;
+}
+
+bool DeletePrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
     // Make sure we are root.
     if (::getuid() != 0) {
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
         return EXIT_FAILURE;
     }
 
-    std::vector<std::string> partitions;
-    if (!GetVerityPartitions(partitions)) {
-        return false;
-    }
-
     MapSnapshots snapshot;
-    for (auto partition : partitions) {
-        if (!snapshot.DeleteCowImage(partition)) {
-            LOG(ERROR) << "DeleteCowImage failed: " << partition;
-        }
-    }
-    return true;
+    return snapshot.DeleteSnapshots();
 }
 
 bool MapPrecreatedSnapshots(int argc, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, &android::base::KernelLogger);
 
     // Make sure we are root.
     if (::getuid() != 0) {
@@ -365,6 +405,11 @@ bool MapPrecreatedSnapshots(int argc, char** argv) {
     }
 
     MapSnapshots cow(path);
+    if (!cow.BeginUpdate()) {
+        LOG(ERROR) << "BeginUpdate failed";
+        return false;
+    }
+
     for (auto& pair : partitions) {
         if (!cow.CreateSnapshotDevice(pair.first, pair.second)) {
             LOG(ERROR) << "CreateSnapshotDevice failed for: " << pair.first;
@@ -376,7 +421,7 @@ bool MapPrecreatedSnapshots(int argc, char** argv) {
         }
     }
 
-    return cow.WaitForSnapshotWritesToComplete();
+    return cow.FinishSnapshotWrites();
 }
 
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
@@ -508,6 +553,7 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"map-snapshots", MapPrecreatedSnapshots},
         {"unmap-snapshots", UnMapPrecreatedSnapshots},
         {"delete-snapshots", DeletePrecreatedSnapshots},
+        {"revert-snapshots", RemovePrecreatedSnapshots},
         // clang-format on
 };
 
