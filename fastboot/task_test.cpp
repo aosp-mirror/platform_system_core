@@ -234,6 +234,35 @@ TEST_F(ParseTest, CorrectTaskLists) {
             << "size of fastboot-info task list: " << fastboot_info_tasks.size()
             << " size of hardcoded task list: " << hardcoded_tasks.size();
 }
+TEST_F(ParseTest, IsDynamicParitiontest) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = true;
+    fp->should_use_fastboot_info = true;
+
+    std::vector<std::pair<std::string, bool>> test_cases = {
+            {"flash boot", false},
+            {"flash init_boot", false},
+            {"flash --apply-vbmeta vbmeta", false},
+            {"flash product", true},
+            {"flash system", true},
+            {"flash --slot-other system system_other.img", true},
+    };
+    for (auto& test : test_cases) {
+        std::unique_ptr<Task> task =
+                ParseFastbootInfoLine(fp.get(), android::base::Tokenize(test.first, " "));
+        auto flash_task = task->AsFlashTask();
+        ASSERT_FALSE(flash_task == nullptr);
+        ASSERT_EQ(FlashTask::IsDynamicParitition(fp->source, flash_task), test.second);
+    }
+}
 
 TEST_F(ParseTest, CanOptimizeTest) {
     if (!get_android_product_out()) {
@@ -275,6 +304,7 @@ TEST_F(ParseTest, CanOptimizeTest) {
         ASSERT_EQ(OptimizedFlashSuperTask::CanOptimize(fp->source, tasks), test.second);
     }
 }
+
 // Note: this test is exclusively testing that optimized flash super pattern matches a given task
 // list and is able to optimized based on a correct sequence of tasks
 TEST_F(ParseTest, OptimizedFlashSuperPatternMatchTest) {
