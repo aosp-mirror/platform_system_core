@@ -188,6 +188,21 @@ The currently defined commands are:
     erase %s           Erase a given partition (can only be used in conjunction)
                        with if-wipe -> eg. if-wipe erase cache
 
+Flashing Optimization:
+
+    After generating the list of tasks to execute, Fastboot will try and
+    optimize the flashing of the dynamic partitions by constructing an
+    optimized flash super task. Fastboot will explicitly pattern match the
+    following commands and try and concatenate it into this task. (doing so
+    will allow us to avoid the reboot into userspace fastbootd which takes
+    significant time)
+
+    //Optimizable Block
+    reboot fastboot
+    update-super                        ---> generate optimized flash super task
+    $FOR EACH {dynamic partition}
+        flash {dynamic partition}
+
 ## Client Variables
 
 The "getvar:%s" command is used to read client variables which
