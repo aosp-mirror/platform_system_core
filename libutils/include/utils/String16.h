@@ -24,6 +24,11 @@
 #include <utils/String8.h>
 #include <utils/TypeHelpers.h>
 
+#if __has_include(<string_view>)
+#include <string_view>
+#define HAS_STRING_VIEW
+#endif
+
 // ---------------------------------------------------------------------------
 
 namespace android {
@@ -91,6 +96,7 @@ public:
             bool                startsWith(const char16_t* prefix) const;
 
             bool                contains(const char16_t* chrs) const;
+    inline  bool                contains(const String16& other) const;
 
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
@@ -112,6 +118,12 @@ public:
     inline  bool                operator>(const char16_t* other) const;
 
     inline                      operator const char16_t*() const;
+
+#ifdef HAS_STRING_VIEW
+    // Implicit cast to std::u16string is not implemented on purpose - u16string_view is much
+    // lighter and if one needs, they can still create u16string from u16string_view.
+    inline                      operator std::u16string_view() const;
+#endif
 
     // Static and non-static String16 behave the same for the users, so
     // this method isn't of much use for the users. It is public for testing.
@@ -264,6 +276,11 @@ inline size_t String16::length() const
     return size();
 }
 
+inline bool String16::contains(const String16& other) const
+{
+    return contains(other.c_str());
+}
+
 inline String16& String16::operator=(const String16& other)
 {
     setTo(other);
@@ -353,8 +370,15 @@ inline String16::operator const char16_t*() const
     return mString;
 }
 
+inline String16::operator std::u16string_view() const
+{
+    return {mString, length()};
+}
+
 }  // namespace android
 
 // ---------------------------------------------------------------------------
+
+#undef HAS_STRING_VIEW
 
 #endif // ANDROID_STRING16_H
