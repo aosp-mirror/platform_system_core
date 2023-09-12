@@ -430,31 +430,6 @@ void String8::toLower()
 // ---------------------------------------------------------------------------
 // Path functions
 
-static void setPathName(String8& s, const char* name) {
-    size_t len = strlen(name);
-    char* buf = s.lockBuffer(len);
-
-    memcpy(buf, name, len);
-
-    // remove trailing path separator, if present
-    if (len > 0 && buf[len - 1] == OS_PATH_SEPARATOR) len--;
-    buf[len] = '\0';
-
-    s.unlockBuffer(len);
-}
-
-String8 String8::getPathLeaf(void) const
-{
-    const char* cp;
-    const char*const buf = mString;
-
-    cp = strrchr(buf, OS_PATH_SEPARATOR);
-    if (cp == nullptr)
-        return String8(*this);
-    else
-        return String8(cp+1);
-}
-
 String8 String8::getPathDir(void) const
 {
     const char* cp;
@@ -467,40 +442,14 @@ String8 String8::getPathDir(void) const
         return String8(str, cp - str);
 }
 
-String8 String8::walkPath(String8* outRemains) const
-{
-    const char* cp;
-    const char*const str = mString;
-    const char* buf = str;
-
-    cp = strchr(buf, OS_PATH_SEPARATOR);
-    if (cp == buf) {
-        // don't include a leading '/'.
-        buf = buf+1;
-        cp = strchr(buf, OS_PATH_SEPARATOR);
-    }
-
-    if (cp == nullptr) {
-        String8 res = buf != str ? String8(buf) : *this;
-        if (outRemains) *outRemains = String8("");
-        return res;
-    }
-
-    String8 res(buf, cp-buf);
-    if (outRemains) *outRemains = String8(cp+1);
-    return res;
-}
-
 /*
  * Helper function for finding the start of an extension in a pathname.
  *
  * Returns a pointer inside mString, or NULL if no extension was found.
  */
-char* String8::find_extension(void) const
-{
+static const char* find_extension(const char* str) {
     const char* lastSlash;
     const char* lastDot;
-    const char* const str = mString;
 
     // only look at the filename
     lastSlash = strrchr(str, OS_PATH_SEPARATOR);
@@ -515,67 +464,16 @@ char* String8::find_extension(void) const
         return nullptr;
 
     // looks good, ship it
-    return const_cast<char*>(lastDot);
+    return lastDot;
 }
 
 String8 String8::getPathExtension(void) const
 {
-    char* ext;
-
-    ext = find_extension();
+    auto ext = find_extension(mString);
     if (ext != nullptr)
         return String8(ext);
     else
         return String8("");
-}
-
-String8 String8::getBasePath(void) const
-{
-    char* ext;
-    const char* const str = mString;
-
-    ext = find_extension();
-    if (ext == nullptr)
-        return String8(*this);
-    else
-        return String8(str, ext - str);
-}
-
-String8& String8::appendPath(const char* name)
-{
-    // TODO: The test below will fail for Win32 paths. Fix later or ignore.
-    if (name[0] != OS_PATH_SEPARATOR) {
-        if (*name == '\0') {
-            // nothing to do
-            return *this;
-        }
-
-        size_t len = length();
-        if (len == 0) {
-            // no existing filename, just use the new one
-            setPathName(*this, name);
-            return *this;
-        }
-
-        // make room for oldPath + '/' + newPath
-        int newlen = strlen(name);
-
-        char* buf = lockBuffer(len+1+newlen);
-
-        // insert a '/' if needed
-        if (buf[len-1] != OS_PATH_SEPARATOR)
-            buf[len++] = OS_PATH_SEPARATOR;
-
-        memcpy(buf+len, name, newlen+1);
-        len += newlen;
-
-        unlockBuffer(len);
-
-        return *this;
-    } else {
-        setPathName(*this, name);
-        return *this;
-    }
 }
 
 }; // namespace android
