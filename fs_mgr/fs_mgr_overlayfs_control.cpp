@@ -688,7 +688,7 @@ bool fs_mgr_overlayfs_setup(const Fstab& fstab, const char* mount_point, bool* w
                 continue;
             }
         } else {
-            if (GetEntryForMountPoint(&fstab, overlay_mount_point) == nullptr) {
+            if (!fs_mgr_overlayfs_already_mounted(overlay_mount_point, false /* overlay */)) {
                 continue;
             }
         }
