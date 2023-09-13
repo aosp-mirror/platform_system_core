@@ -733,15 +733,18 @@ bool fs_mgr_overlayfs_is_setup() {
 
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only) {
     Fstab fstab;
-    if (!ReadFstabFromFile("/proc/mounts", &fstab)) {
+    if (!ReadFstabFromProcMounts(&fstab)) {
         return false;
     }
     const auto lowerdir = kLowerdirOption + mount_point;
-    for (const auto& entry : fstab) {
-        if (overlay_only && "overlay" != entry.fs_type && "overlayfs" != entry.fs_type) continue;
-        if (mount_point != entry.mount_point) continue;
-        if (!overlay_only) return true;
-        const auto options = android::base::Split(entry.fs_options, ",");
+    for (const auto& entry : GetEntriesForMountPoint(&fstab, mount_point)) {
+        if (!overlay_only) {
+            return true;
+        }
+        if (entry->fs_type != "overlay" && entry->fs_type != "overlayfs") {
+            continue;
+        }
+        const auto options = android::base::Split(entry->fs_options, ",");
         for (const auto& opt : options) {
             if (opt == lowerdir) {
                 return true;
