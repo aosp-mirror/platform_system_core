@@ -68,30 +68,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     int start_index = dataProvider->ConsumeIntegralInRange<int>(0, str1->size());
                     str1->find(str2->c_str(), start_index);
                 },
-
-                // Path handling
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getBasePath();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathExtension();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathLeaf();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathDir();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    std::shared_ptr<android::String8> path_out_str =
-                            std::make_shared<android::String8>();
-                    str1->walkPath(path_out_str.get());
-                    path_out_str->clear();
-                },
-                [](FuzzedDataProvider* dataProvider, android::String8* str1,
-                   android::String8*) -> void {
-                    str1->appendPath(dataProvider->ConsumeBytesWithTerminator<char>(5).data());
-                },
 };
 
 void fuzzFormat(FuzzedDataProvider* dataProvider, android::String8* str1, bool shouldAppend) {
