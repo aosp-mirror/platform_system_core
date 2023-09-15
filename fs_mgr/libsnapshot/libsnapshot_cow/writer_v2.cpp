@@ -636,10 +636,8 @@ bool CowWriterV2::FlushCluster() {
 }
 
 bool CowWriterV2::WriteOperation(const CowOperation& op, const void* data, size_t size) {
-    if (!EnsureSpaceAvailable(next_op_pos_ + sizeof(op))) {
-        return false;
-    }
-    if (!EnsureSpaceAvailable(next_data_pos_ + size)) {
+    if (!EnsureSpaceAvailable(next_op_pos_ + sizeof(op)) ||
+        !EnsureSpaceAvailable(next_data_pos_ + size)) {
         return false;
     }
 
