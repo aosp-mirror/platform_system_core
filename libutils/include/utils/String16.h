@@ -59,6 +59,7 @@ public:
                                 ~String16();
 
     inline  const char16_t*     c_str() const;
+    inline  const char16_t*     string() const;
 
             size_t              size() const;
     inline  bool                empty() const;
@@ -187,14 +188,6 @@ protected:
 
     template <size_t N>
     explicit constexpr String16(const StaticData<N>& s) : mString(s.data) {}
-
-// These symbols are for potential backward compatibility with prebuilts. To be removed.
-#ifdef ENABLE_STRING8_OBSOLETE_METHODS
-public:
-#else
-private:
-#endif
-    inline  const char16_t*     string() const;
 };
 
 // String16 can be trivially moved using memcpy() because moving does not
