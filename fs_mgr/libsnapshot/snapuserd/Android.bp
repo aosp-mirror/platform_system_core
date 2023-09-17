@@ -96,6 +96,10 @@ cc_defaults {
         "user-space-merge/snapuserd_server.cpp",
     ],
 
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
+
     static_libs: [
         "libbase",
         "libbrotli",
