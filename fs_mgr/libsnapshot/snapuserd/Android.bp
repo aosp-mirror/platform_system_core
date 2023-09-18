@@ -74,6 +74,11 @@ cc_library_static {
         "user-space-merge/worker.cpp",
         "utility.cpp",
     ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
     static_libs: [
         "libbase",
         "libdm",
@@ -106,6 +111,8 @@ cc_defaults {
 
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
 
     static_libs: [
@@ -229,6 +236,11 @@ cc_defaults {
         "testing/harness.cpp",
         "testing/host_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
     shared_libs: [
         "libbase",
