@@ -249,6 +249,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 };
 
 std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value);
+static_assert(sizeof(off_t) == sizeof(uint64_t));
 
 }  // namespace snapshot
 }  // namespace android
