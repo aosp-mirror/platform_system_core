@@ -350,8 +350,7 @@ Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& seria
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
-static std::unique_ptr<Transport> open_device(const char* local_serial,
-                                              bool wait_for_device = true,
+static std::unique_ptr<Transport> open_device(const char* local_serial, bool wait_for_device = true,
                                               bool announce = true) {
     const Result<NetworkSerial, FastbootError> network_serial = ParseNetworkSerial(local_serial);
 
@@ -1885,9 +1884,8 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
         if (is_retrofit_device(fp_->fb)) {
             std::string partition_name = image->part_name + "_"s + slot;
             if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
-                fp_->fb->DeletePartition(partition_name);
+                tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
-            tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
         }
     }
 
