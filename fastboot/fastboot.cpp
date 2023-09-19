@@ -28,7 +28,6 @@
 
 #include "fastboot.h"
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -44,12 +43,10 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <regex>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -79,7 +76,6 @@
 #include "fastboot_driver_interface.h"
 #include "fs.h"
 #include "storage.h"
-#include "super_flash_helper.h"
 #include "task.h"
 #include "tcp.h"
 #include "transport.h"
@@ -93,7 +89,6 @@ using android::base::ReadFully;
 using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
-using namespace std::string_literals;
 using namespace std::placeholders;
 
 #define FASTBOOT_INFO_VERSION 1
@@ -1882,7 +1877,7 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
         // partitions (otherwise they would not mount on first boot). To enforce
         // this, we delete any logical partitions for the "other" slot.
         if (is_retrofit_device(fp_->fb)) {
-            std::string partition_name = image->part_name + "_"s + slot;
+            std::string partition_name = image->part_name + "_" + slot;
             if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
                 tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
@@ -2134,7 +2129,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
     if (metadata.block_devices.size() > 1) {
         ok = WriteSplitImageFiles(temp_dir.path, metadata, block_size, {}, true);
     } else {
-        auto image_path = temp_dir.path + "/"s + super_bdev_name + ".img";
+        auto image_path = std::string(temp_dir.path) + "/" + std::string(super_bdev_name) + ".img";
         ok = WriteToImageFile(image_path, metadata, block_size, {}, true);
     }
     if (!ok) {
@@ -2153,7 +2148,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
             image_name = partition + ".img";
         }
 
-        auto image_path = temp_dir.path + "/"s + image_name;
+        auto image_path = std::string(temp_dir.path) + "/" + image_name;
         auto flash = [&](const std::string& partition_name) {
             do_flash(partition_name.c_str(), image_path.c_str(), false, fp);
         };
