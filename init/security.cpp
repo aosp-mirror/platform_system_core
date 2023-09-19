@@ -117,10 +117,10 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
         return {};
     }
 #elif defined(__riscv)
-    // TODO: sv48 and sv57 were both added to the kernel this year, so we
-    // probably just need some kernel fixes to enable higher ASLR randomization,
-    // but for now 24 is the maximum that the kernel supports.
-    if (SetMmapRndBitsMin(24, 18, false)) {
+    // TODO: sv48 and sv57 have both been added to the kernel, but the kernel
+    // still doesn't support more than 24 bits.
+    // https://github.com/google/android-riscv64/issues/1
+    if (SetMmapRndBitsMin(24, 24, false)) {
         return {};
     }
 #elif defined(__x86_64__)
