@@ -7,16 +7,14 @@
         "name": "VtsHalRemotelyProvisionedComponentTargetTest"
       },
       {
-        "name": "RkpdAppUnitTests",
-        "keywords": ["internal"]
+        "name": "RkpdAppUnitTests"
       },
       {
         "name": "RkpdAppGoogleUnitTests",
         "keywords": ["internal"]
       },
       {
-        "name": "RkpdAppIntegrationTests",
-        "keywords": ["internal"]
+        "name": "RkpdAppIntegrationTests"
       },
       {
         "name": "RkpdAppGoogleIntegrationTests",
