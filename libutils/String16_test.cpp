@@ -33,50 +33,50 @@ using namespace android;
 
 TEST(String16Test, FromChar16_t) {
     String16 tmp(u"Verify me");
-    EXPECT_STR16EQ(u"Verify me", tmp);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
 }
 
 TEST(String16Test, FromChar16_tSized) {
     String16 tmp(u"Verify me", 7);
-    EXPECT_STR16EQ(u"Verify ", tmp);
+    EXPECT_STR16EQ(u"Verify ", tmp.c_str());
 }
 
 TEST(String16Test, FromChar) {
     String16 tmp("Verify me");
-    EXPECT_STR16EQ(u"Verify me", tmp);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
 }
 
 TEST(String16Test, FromCharSized) {
     String16 tmp("Verify me", 7);
-    EXPECT_STR16EQ(u"Verify ", tmp);
+    EXPECT_STR16EQ(u"Verify ", tmp.c_str());
 }
 
 TEST(String16Test, Copy) {
     String16 tmp("Verify me");
     String16 another = tmp;
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
 }
 
 TEST(String16Test, CopyAssign) {
     String16 tmp("Verify me");
     String16 another;
     another = tmp;
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
 }
 
 TEST(String16Test, Move) {
     String16 tmp("Verify me");
     String16 another(std::move(tmp));
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
 }
 
 TEST(String16Test, MoveAssign) {
     String16 tmp("Verify me");
     String16 another;
     another = std::move(tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
 }
 
 TEST(String16Test, Size) {
@@ -88,27 +88,27 @@ TEST(String16Test, setTo) {
     String16 tmp("Verify me");
     tmp.setTo(u"New content");
     EXPECT_EQ(11U, tmp.size());
-    EXPECT_STR16EQ(u"New content", tmp);
+    EXPECT_STR16EQ(u"New content", tmp.c_str());
 }
 
 TEST(String16Test, Append) {
     String16 tmp("Verify me");
     tmp.append(String16("Hello"));
     EXPECT_EQ(14U, tmp.size());
-    EXPECT_STR16EQ(u"Verify meHello", tmp);
+    EXPECT_STR16EQ(u"Verify meHello", tmp.c_str());
 }
 
 TEST(String16Test, Insert) {
     String16 tmp("Verify me");
     tmp.insert(6, u"Insert");
     EXPECT_EQ(15U, tmp.size());
-    EXPECT_STR16EQ(u"VerifyInsert me", tmp);
+    EXPECT_STR16EQ(u"VerifyInsert me", tmp.c_str());
 }
 
 TEST(String16Test, ReplaceAll) {
     String16 tmp("Verify verify Verify");
     tmp.replaceAll(u'r', u'!');
-    EXPECT_STR16EQ(u"Ve!ify ve!ify Ve!ify", tmp);
+    EXPECT_STR16EQ(u"Ve!ify ve!ify Ve!ify", tmp.c_str());
 }
 
 TEST(String16Test, Compare) {
@@ -127,8 +127,8 @@ TEST(String16Test, StaticString) {
 TEST(String16Test, StaticStringCopy) {
     StaticString16 tmp(u"Verify me");
     String16 another = tmp;
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
     EXPECT_TRUE(tmp.isStaticString());
     EXPECT_TRUE(another.isStaticString());
 }
@@ -136,7 +136,7 @@ TEST(String16Test, StaticStringCopy) {
 TEST(String16Test, StaticStringMove) {
     StaticString16 tmp(u"Verify me");
     String16 another(std::move(tmp));
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
     EXPECT_TRUE(another.isStaticString());
 }
 
@@ -157,7 +157,7 @@ TEST(String16Test, StaticStringAppend) {
     StaticString16 tmp(u"Verify me");
     tmp.append(String16("Hello"));
     EXPECT_EQ(14U, tmp.size());
-    EXPECT_STR16EQ(u"Verify meHello", tmp);
+    EXPECT_STR16EQ(u"Verify meHello", tmp.c_str());
     EXPECT_FALSE(tmp.isStaticString());
 }
 
@@ -165,14 +165,14 @@ TEST(String16Test, StaticStringInsert) {
     StaticString16 tmp(u"Verify me");
     tmp.insert(6, u"Insert");
     EXPECT_EQ(15U, tmp.size());
-    EXPECT_STR16EQ(u"VerifyInsert me", tmp);
+    EXPECT_STR16EQ(u"VerifyInsert me", tmp.c_str());
     EXPECT_FALSE(tmp.isStaticString());
 }
 
 TEST(String16Test, StaticStringReplaceAll) {
     StaticString16 tmp(u"Verify verify Verify");
     tmp.replaceAll(u'r', u'!');
-    EXPECT_STR16EQ(u"Ve!ify ve!ify Ve!ify", tmp);
+    EXPECT_STR16EQ(u"Ve!ify ve!ify Ve!ify", tmp.c_str());
     EXPECT_FALSE(tmp.isStaticString());
 }
 
@@ -185,17 +185,17 @@ TEST(String16Test, StringSetToStaticString) {
     StaticString16 tmp(u"Verify me");
     String16 another(u"nonstatic");
     another = tmp;
-    EXPECT_STR16EQ(u"Verify me", tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
 }
 
 TEST(String16Test, StringCopyAssignFromStaticString) {
     StaticString16 tmp(u"Verify me");
     String16 another(u"nonstatic");
     another = tmp;
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
     EXPECT_TRUE(another.isStaticString());
-    EXPECT_STR16EQ(u"Verify me", tmp);
+    EXPECT_STR16EQ(u"Verify me", tmp.c_str());
     EXPECT_TRUE(tmp.isStaticString());
 }
 
@@ -203,7 +203,7 @@ TEST(String16Test, StringMoveAssignFromStaticString) {
     StaticString16 tmp(u"Verify me");
     String16 another(u"nonstatic");
     another = std::move(tmp);
-    EXPECT_STR16EQ(u"Verify me", another);
+    EXPECT_STR16EQ(u"Verify me", another.c_str());
     EXPECT_TRUE(another.isStaticString());
 }
 
@@ -221,19 +221,19 @@ TEST(String16Test, OverreadUtf8Conversion) {
 TEST(String16Test, ValidUtf8Conversion) {
     String16 another("abcdef");
     EXPECT_EQ(6U, another.size());
-    EXPECT_STR16EQ(another, u"abcdef");
+    EXPECT_STR16EQ(another.c_str(), u"abcdef");
 }
 
 TEST(String16Test, append) {
     String16 s;
     EXPECT_EQ(OK, s.append(String16(u"foo")));
-    EXPECT_STR16EQ(u"foo", s);
+    EXPECT_STR16EQ(u"foo", s.c_str());
     EXPECT_EQ(OK, s.append(String16(u"bar")));
-    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_STR16EQ(u"foobar", s.c_str());
     EXPECT_EQ(OK, s.append(u"baz", 0));
-    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_STR16EQ(u"foobar", s.c_str());
     EXPECT_EQ(NO_MEMORY, s.append(u"baz", SIZE_MAX));
-    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_STR16EQ(u"foobar", s.c_str());
 }
 
 TEST(String16Test, insert) {
@@ -241,19 +241,19 @@ TEST(String16Test, insert) {
 
     // Inserting into the empty string inserts at the start.
     EXPECT_EQ(OK, s.insert(123, u"foo"));
-    EXPECT_STR16EQ(u"foo", s);
+    EXPECT_STR16EQ(u"foo", s.c_str());
 
     // Inserting zero characters at any position is okay, but won't expand the string.
     EXPECT_EQ(OK, s.insert(123, u"foo", 0));
-    EXPECT_STR16EQ(u"foo", s);
+    EXPECT_STR16EQ(u"foo", s.c_str());
 
     // Inserting past the end of a non-empty string appends.
     EXPECT_EQ(OK, s.insert(123, u"bar"));
-    EXPECT_STR16EQ(u"foobar", s);
+    EXPECT_STR16EQ(u"foobar", s.c_str());
 
     EXPECT_EQ(OK, s.insert(3, u"!"));
-    EXPECT_STR16EQ(u"foo!bar", s);
+    EXPECT_STR16EQ(u"foo!bar", s.c_str());
 
     EXPECT_EQ(NO_MEMORY, s.insert(3, u"", SIZE_MAX));
-    EXPECT_STR16EQ(u"foo!bar", s);
+    EXPECT_STR16EQ(u"foo!bar", s.c_str());
 }
