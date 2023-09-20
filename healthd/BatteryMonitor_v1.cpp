@@ -352,7 +352,7 @@ void BatteryMonitor::updateValues(void) {
         mHealthInfo->batteryHealth = getBatteryHealth(buf.c_str());
 
     if (readFromFile(mHealthdConfig->batteryTechnologyPath, &buf) > 0)
-        mHealthInfo->batteryTechnology = String8(buf.c_str());
+        mHealthInfo->batteryTechnology = buf;
 
     double MaxPower = 0;
 
@@ -639,39 +639,35 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/status", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryStatusPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryStatusPath = path;
                 }
 
                 if (mHealthdConfig->batteryHealthPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/health", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryHealthPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryHealthPath = path;
                 }
 
                 if (mHealthdConfig->batteryPresentPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/present", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryPresentPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryPresentPath = path;
                 }
 
                 if (mHealthdConfig->batteryCapacityPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/capacity", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryCapacityPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryCapacityPath = path;
                 }
 
                 if (mHealthdConfig->batteryVoltagePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/voltage_now",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) {
+                    if (access(path.c_str(), R_OK) == 0) {
                         mHealthdConfig->batteryVoltagePath = path;
                     }
                 }
@@ -680,7 +676,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_full",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryFullChargePath = path;
                 }
 
@@ -688,7 +684,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/current_now",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCurrentNowPath = path;
                 }
 
@@ -696,27 +692,29 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/cycle_count",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCycleCountPath = path;
                 }
 
                 if (mHealthdConfig->batteryCapacityLevelPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/capacity_level", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->batteryCapacityLevelPath = path;
+                    if (access(path.c_str(), R_OK) == 0) {
+                        mHealthdConfig->batteryCapacityLevelPath = path;
+                    }
                 }
 
                 if (mHealthdConfig->batteryChargeTimeToFullNowPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/time_to_full_now", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryChargeTimeToFullNowPath = path;
                 }
 
                 if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_full_design", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryFullChargeDesignCapacityUahPath = path;
                 }
 
@@ -724,7 +722,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/current_avg",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCurrentAvgPath = path;
                 }
 
@@ -732,7 +730,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_counter",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryChargeCounterPath = path;
                 }
 
@@ -740,7 +738,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/temp", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0) {
+                    if (access(path.c_str(), R_OK) == 0) {
                         mHealthdConfig->batteryTemperaturePath = path;
                     }
                 }
@@ -749,7 +747,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                     path.clear();
                     path.appendFormat("%s/%s/technology",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryTechnologyPath = path;
                 }
 
