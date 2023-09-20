@@ -28,7 +28,6 @@
 
 #include "fastboot.h"
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -44,12 +43,10 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <regex>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -79,7 +76,6 @@
 #include "fastboot_driver_interface.h"
 #include "fs.h"
 #include "storage.h"
-#include "super_flash_helper.h"
 #include "task.h"
 #include "tcp.h"
 #include "transport.h"
