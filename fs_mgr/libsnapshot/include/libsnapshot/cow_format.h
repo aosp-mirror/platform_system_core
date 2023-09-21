@@ -49,7 +49,9 @@ static constexpr uint32_t kDefaultCowVersion = 2;
 //      |    Footer (fixed)     |
 //      +-----------------------+
 //
-// The operations begin immediately after the header, and the "raw data"
+// After the header is a 2mb scratch space that is used to read ahead data during merge operations
+//
+// The operations begin immediately after the scratch space, and the "raw data"
 // immediately follows the operation which refers to it. While streaming
 // an OTA, we can immediately write the op and data, syncing after each pair,
 // while storing operation metadata in memory. At the end, we compute data and
