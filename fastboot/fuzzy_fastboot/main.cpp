@@ -50,6 +50,7 @@
 #include <gtest/gtest.h>
 #include <sparse/sparse.h>
 
+#include "constants.h"
 #include "fastboot_driver.h"
 #include "usb.h"
 
@@ -166,16 +167,15 @@ TEST(USBFunctionality, USBConnect) {
     const auto matcher = [](usb_ifc_info* info) -> int {
         return FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
     };
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     for (int i = 0; i < FastBootTest::MAX_USB_TRIES && !transport; i++) {
         transport = usb_open(matcher);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    ASSERT_NE(transport, nullptr) << "Could not find the fastboot device after: "
-                                  << 10 * FastBootTest::MAX_USB_TRIES << "ms";
+    ASSERT_NE(transport.get(), nullptr) << "Could not find the fastboot device after: "
+                                        << 10 * FastBootTest::MAX_USB_TRIES << "ms";
     if (transport) {
         transport->Close();
-        delete transport;
     }
 }
 
@@ -929,8 +929,7 @@ TEST_F(Fuzz, BadCommandTooLarge) {
 
     ASSERT_TRUE(UsbStillAvailible()) << USB_PORT_GONE;
     std::string resp;
-    EXPECT_EQ(fb->GetVar("product", &resp), SUCCESS)
-                << "Device is unresponsive to getvar command";
+    EXPECT_EQ(fb->GetVar("product", &resp), SUCCESS) << "Device is unresponsive to getvar command";
 }
 
 TEST_F(Fuzz, CommandTooLarge) {
@@ -986,11 +985,10 @@ TEST_F(Fuzz, SparseZeroLength) {
 TEST_F(Fuzz, SparseZeroBlkSize) {
     // handcrafted malform sparse file with zero as block size
     const std::vector<char> buf = {
-        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
-        '\x00', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x00', '\x00', '\x00', '\x00', '\xc2', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
-    };
+            '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00', '\x01', '\x00',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\xc2', '\xca', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'};
 
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
@@ -1005,13 +1003,10 @@ TEST_F(Fuzz, SparseZeroBlkSize) {
 TEST_F(Fuzz, SparseVeryLargeBlkSize) {
     // handcrafted sparse file with block size of ~4GB and divisible 4
     const std::vector<char> buf = {
-        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00',
-        '\x1c', '\x00', '\x0c', '\x00', '\xF0', '\xFF', '\xFF', '\xFF',
-        '\x01', '\x00', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x00', '\x00', '\x00', '\x00', '\xc3', '\xca', '\x00', '\x00',
-        '\x01', '\x00', '\x00', '\x00', '\x0c', '\x00', '\x00', '\x00',
-        '\x11', '\x22', '\x33', '\x44'
-    };
+            '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c',
+            '\x00', '\xF0', '\xFF', '\xFF', '\xFF', '\x01', '\x00', '\x00', '\x00', '\x01', '\x00',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\xc3', '\xca', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x0c', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'};
 
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
@@ -1022,11 +1017,10 @@ TEST_F(Fuzz, SparseVeryLargeBlkSize) {
 TEST_F(Fuzz, SparseTrimmed) {
     // handcrafted malform sparse file which is trimmed
     const std::vector<char> buf = {
-        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
-        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x00', '\x00', '\x00', '\x80', '\x11', '\x22', '\x33', '\x44'
-    };
+            '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c',
+            '\x00', '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x80', '\x11', '\x22', '\x33', '\x44'};
 
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
@@ -1041,11 +1035,10 @@ TEST_F(Fuzz, SparseTrimmed) {
 TEST_F(Fuzz, SparseInvalidChurk) {
     // handcrafted malform sparse file with invalid churk
     const std::vector<char> buf = {
-        '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c', '\x00',
-        '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01', '\x00', '\x00', '\x00',
-        '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'
-    };
+            '\x3a', '\xff', '\x26', '\xed', '\x01', '\x00', '\x00', '\x00', '\x1c', '\x00', '\x0c',
+            '\x00', '\x00', '\x10', '\x00', '\x00', '\x00', '\x00', '\x08', '\x00', '\x01', '\x00',
+            '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\xc1', '\xca', '\x00', '\x00', '\x01',
+            '\x00', '\x00', '\x00', '\x10', '\x00', '\x00', '\x00', '\x11', '\x22', '\x33', '\x44'};
 
     ASSERT_EQ(DownloadCommand(buf.size()), SUCCESS) << "Device rejected download command";
     ASSERT_EQ(SendBuffer(buf), SUCCESS) << "Downloading payload failed";
@@ -1895,9 +1888,10 @@ int main(int argc, char** argv) {
     if (!fastboot::FastBootTest::IsFastbootOverTcp()) {
         printf("<Waiting for Device>\n");
         const auto matcher = [](usb_ifc_info* info) -> int {
-            return fastboot::FastBootTest::MatchFastboot(info, fastboot::FastBootTest::device_serial);
+            return fastboot::FastBootTest::MatchFastboot(info,
+                                                         fastboot::FastBootTest::device_serial);
         };
-        Transport* transport = nullptr;
+        std::unique_ptr<Transport> transport;
         while (!transport) {
             transport = usb_open(matcher);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

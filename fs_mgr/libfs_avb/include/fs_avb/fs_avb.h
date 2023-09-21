@@ -83,8 +83,8 @@ class AvbHandle {
     //     is verified and can be trusted.
     //
     // TODO(bowgotsai): remove Open() and switch to LoadAndVerifyVbmeta().
-    static AvbUniquePtr Open();                 // loads inline vbmeta, via libavb.
-    static AvbUniquePtr LoadAndVerifyVbmeta();  // loads inline vbmeta.
+    static AvbUniquePtr Open();  // loads inline vbmeta, via libavb.
+    static AvbUniquePtr LoadAndVerifyVbmeta(const std::string& slot_suffix = {});
 
     // The caller can specify optional preload_avb_key_blobs for public key matching.
     // This is mostly for init to preload AVB keys before chroot into /system.
@@ -137,12 +137,14 @@ class AvbHandle {
     AvbHandle& operator=(AvbHandle&&) noexcept = delete;  // no move assignment
 
   private:
-    AvbHandle() : status_(AvbHandleStatus::kUninitialized) {}
+    AvbHandle();
 
     std::vector<VBMetaData> vbmeta_images_;
     VBMetaInfo vbmeta_info_;  // A summary info for vbmeta_images_.
     AvbHandleStatus status_;
     std::string avb_version_;
+    std::string slot_suffix_;
+    std::string other_slot_suffix_;
 };
 
 }  // namespace fs_mgr
