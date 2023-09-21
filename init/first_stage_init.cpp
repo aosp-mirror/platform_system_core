@@ -239,8 +239,12 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
             module_dirs.emplace_back(entry->d_name);
             break;
         }
-        // Ignore _16k/_64k module dirs on 4K kernels
-        if (GetPageSizeSuffix(entry->d_name) != page_size_suffix) {
+        // Is a directory does not have page size suffix, it does not mean this directory is for 4K
+        // kernels. Certain 16K kernel builds put all modules in /lib/modules/`uname -r` without any
+        // suffix. Therefore, only ignore a directory if it has _16k/_64k suffix and the suffix does
+        // not match system page size.
+        const auto dir_page_size_suffix = GetPageSizeSuffix(entry->d_name);
+        if (!dir_page_size_suffix.empty() && dir_page_size_suffix != page_size_suffix) {
             continue;
         }
         int dir_major = 0, dir_minor = 0;
