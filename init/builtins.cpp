@@ -475,8 +475,6 @@ static struct {
     { 0,            0 },
 };
 
-#define DATA_MNT_POINT "/data"
-
 /* mount <type> <device> <path> <flags ...> <options> */
 static Result<void> do_mount(const BuiltinArguments& args) {
     const char* options = nullptr;
