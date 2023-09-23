@@ -714,10 +714,12 @@ TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
     }
     ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // Issue I/O before merge begins
-    std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
+    auto read_future =
+            std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     // Start the merge
     ASSERT_TRUE(Merge());
     ValidateMerge();
+    read_future.wait();
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
@@ -728,9 +730,11 @@ TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
     // Start the merge
     ASSERT_TRUE(StartMerge());
     // Issue I/O in parallel when merge is in-progress
-    std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
+    auto read_future =
+            std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     CheckMergeCompletion();
     ValidateMerge();
+    read_future.wait();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Resume) {
