@@ -44,9 +44,6 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
-/* Will be added to UAPI once upstream change is merged */
-#define F_SEAL_FUTURE_WRITE 0x0010
-
 /*
  * The minimum vendor API level at and after which it is safe to use memfd.
  * This is to facilitate deprecation of ashmem.
