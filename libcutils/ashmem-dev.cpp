@@ -44,13 +44,6 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
-/*
- * The minimum vendor API level at and after which it is safe to use memfd.
- * This is to facilitate deprecation of ashmem.
- */
-#define MIN_MEMFD_VENDOR_API_LEVEL 29
-#define MIN_MEMFD_VENDOR_API_LEVEL_CHAR 'Q'
-
 /* ashmem identity */
 static dev_t __ashmem_rdev;
 /*
@@ -88,54 +81,16 @@ static bool pin_deprecation_warn = true; /* Log the pin deprecation warning only
 
 /* Determine if vendor processes would be ok with memfd in the system:
  *
- * If VNDK is using older libcutils, don't use memfd. This is so that the
- * same shared memory mechanism is used across binder transactions between
- * vendor partition processes and system partition processes.
+ * Previously this function checked if memfd is supported by checking if
+ * vendor VNDK version is greater than Q. As we can assume all treblelized
+ * device using this code is up to date enough to use memfd, memfd is allowed
+ * if the device is treblelized.
  */
 static bool check_vendor_memfd_allowed() {
-    std::string vndk_version = android::base::GetProperty("ro.vndk.version", "");
+    static bool is_treblelized = android::base::GetBoolProperty("ro.treble.enabled", false);
 
-    if (vndk_version == "") {
-        ALOGE("memfd: ro.vndk.version not defined or invalid (%s), this is mandated since P.\n",
-              vndk_version.c_str());
-        return false;
-    }
-
-    /* No issues if vendor is targetting current Dessert */
-    if (vndk_version == "current") {
-        return false;
-    }
-
-    /* Check if VNDK version is a number and act on it */
-    char* p;
-    long int vers = strtol(vndk_version.c_str(), &p, 10);
-    if (*p == 0) {
-        if (vers < MIN_MEMFD_VENDOR_API_LEVEL) {
-            ALOGI("memfd: device VNDK version (%s) is < Q so using ashmem.\n",
-                  vndk_version.c_str());
-            return false;
-        }
-
-        return true;
-    }
-
-    // Non-numeric should be a single ASCII character. Characters after the
-    // first are ignored.
-    if (tolower(vndk_version[0]) < 'a' || tolower(vndk_version[0]) > 'z') {
-        ALOGE("memfd: ro.vndk.version not defined or invalid (%s), this is mandated since P.\n",
-              vndk_version.c_str());
-        return false;
-    }
-
-    if (tolower(vndk_version[0]) < tolower(MIN_MEMFD_VENDOR_API_LEVEL_CHAR)) {
-        ALOGI("memfd: device is using VNDK version (%s) which is less than Q. Use ashmem only.\n",
-              vndk_version.c_str());
-        return false;
-    }
-
-    return true;
+    return is_treblelized;
 }
-
 
 /* Determine if memfd can be supported. This is just one-time hardwork
  * which will be cached by the caller.
