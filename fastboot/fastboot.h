@@ -148,7 +148,7 @@ class LocalImageSource final : public ImageSource {
 };
 
 char* get_android_product_out();
-bool should_flash_in_userspace(const std::string& partition_name);
+bool should_flash_in_userspace(const ImageSource* source, const std::string& partition_name);
 bool is_userspace_fastboot();
 void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
               const FlashingPlan* fp);
