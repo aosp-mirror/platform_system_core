@@ -20,3 +20,26 @@ cc_binary {
 
     cflags: ["-Werror"],
 }
+
+
+cc_binary {
+    name: "basic_v2_cow_writer",
+    host_supported: true,
+    defaults: [
+        "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
+    ],
+
+    srcs: ["basic_v2_cow_writer.cpp"],
+
+    static_libs: [
+        "libsnapshot_cow",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+
+    cflags: ["-Werror"],
+}
