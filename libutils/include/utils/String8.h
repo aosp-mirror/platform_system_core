@@ -65,7 +65,6 @@ public:
     static String8              formatV(const char* fmt, va_list args);
 
     inline  const char*         c_str() const;
-    inline  const char*         string() const;
 
     inline  size_t              size() const;
     inline  size_t              bytes() const;
@@ -155,6 +154,7 @@ public:
 #else
 private:
 #endif
+    inline  const char*         string() const;
     inline  bool                isEmpty() const;
 };
 
