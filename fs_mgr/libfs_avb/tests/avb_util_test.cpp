@@ -655,10 +655,12 @@ TEST_F(AvbUtilTest, VerifyVBMetaDataWithoutFooter) {
             "      Partition Name:          boot\n"
             "      Rollback Index Location: 1\n"
             "      Public key (sha1):       cdbb77177f731920bbe0a0f94f84d9038ae0617d\n"
+            "      Flags:                   0\n"
             "    Chain Partition descriptor:\n"
             "      Partition Name:          system\n"
             "      Rollback Index Location: 2\n"
-            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n",
+            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n"
+            "      Flags:                   0\n",
             InfoImage("vbmeta.img"));
 
     android::base::unique_fd fd(open(vbmeta_path.value().c_str(), O_RDONLY | O_CLOEXEC));
@@ -876,10 +878,12 @@ TEST_F(AvbUtilTest, GetChainPartitionInfo) {
             "      Partition Name:          boot\n"
             "      Rollback Index Location: 1\n"
             "      Public key (sha1):       cdbb77177f731920bbe0a0f94f84d9038ae0617d\n"
+            "      Flags:                   0\n"
             "    Chain Partition descriptor:\n"
             "      Partition Name:          vbmeta_system\n"
             "      Rollback Index Location: 2\n"
-            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n",
+            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n"
+            "      Flags:                   0\n",
             InfoImage("vbmeta.img"));
 
     bool fatal_error = false;
@@ -909,7 +913,8 @@ TEST_F(AvbUtilTest, GetChainPartitionInfo) {
             "    Chain Partition descriptor:\n"
             "      Partition Name:          system\n"
             "      Rollback Index Location: 3\n"
-            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n",
+            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n"
+            "      Flags:                   0\n",
             InfoImage("vbmeta_system.img"));
 
     chained_descriptors = GetChainPartitionInfo(LoadVBMetaData("vbmeta_system.img"), &fatal_error);
