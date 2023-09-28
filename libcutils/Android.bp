@@ -171,11 +171,15 @@ cc_library {
                 "libasync_safe",
             ],
         },
+        linux: {
+            srcs: [
+                "canned_fs_config.cpp",
+                "fs_config.cpp",
+            ],
+        },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
                 "ashmem-host.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "trace-host.cpp",
             ],
         },
@@ -201,8 +205,6 @@ cc_library {
             srcs: libcutils_nonwindows_sources + [
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "klog.cpp",
                 "partition_utils.cpp",
                 "qtaguid.cpp",
