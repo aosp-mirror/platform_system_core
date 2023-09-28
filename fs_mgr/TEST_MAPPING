@@ -16,7 +16,8 @@
       "name": "fiemap_writer_test"
     },
     {
-      "name": "fs_mgr_vendor_overlay_test"
+      "name": "fs_mgr_vendor_overlay_test",
+      "keywords": ["internal"]
     },
     {
       "name": "vts_libsnapshot_test"
