@@ -1076,6 +1076,9 @@ on boot && property:ro.config.low_ram=true
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
 
+on boot && property:suspend.disable_sync_on_suspend=true
+    write /sys/power/sync_on_suspend 0
+
 on boot
     # basic network init
     ifup lo
