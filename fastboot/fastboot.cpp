@@ -1185,9 +1185,10 @@ static uint64_t get_partition_size(const std::string& partition) {
     return partition_size;
 }
 
-static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
+static void copy_avb_footer(const ImageSource* source, const std::string& partition,
+                            struct fastboot_buffer* buf) {
     if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition) ||
-        should_flash_in_userspace(partition)) {
+        should_flash_in_userspace(source, partition)) {
         return;
     }
     // If overflows and negative, it should be < buf->sz.
@@ -1244,9 +1245,9 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
     }
 }
 
-static void flash_buf(const std::string& partition, struct fastboot_buffer* buf,
-                      const bool apply_vbmeta) {
-    copy_avb_footer(partition, buf);
+static void flash_buf(const ImageSource* source, const std::string& partition,
+                      struct fastboot_buffer* buf, const bool apply_vbmeta) {
+    copy_avb_footer(source, partition, buf);
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
@@ -1524,7 +1525,7 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     std::string flash_pname = repack_ramdisk(pname, &buf, fp->fb);
-    flash_buf(flash_pname, &buf, apply_vbmeta);
+    flash_buf(fp->source, flash_pname, &buf, apply_vbmeta);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
@@ -1807,9 +1808,9 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasks() {
         tasks = CollectTasksFromImageList();
     }
     if (fp_->exclude_dynamic_partitions) {
-        auto is_non_static_flash_task = [](const auto& task) -> bool {
+        auto is_non_static_flash_task = [&](const auto& task) -> bool {
             if (auto flash_task = task->AsFlashTask()) {
-                if (!should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
+                if (!should_flash_in_userspace(fp_->source, flash_task->GetPartitionAndSlot())) {
                     return false;
                 }
             }
@@ -1885,7 +1886,7 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
         // this, we delete any logical partitions for the "other" slot.
         if (is_retrofit_device(fp_->source)) {
             std::string partition_name = image->part_name + "_" + slot;
-            if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
+            if (image->IsSecondary() && should_flash_in_userspace(fp_->source, partition_name)) {
                 tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
         }
@@ -2087,7 +2088,8 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (!load_buf_fd(std::move(fd), &buf, fp)) {
         die("Cannot read image: %s", strerror(errno));
     }
-    flash_buf(partition, &buf, is_vbmeta_partition(partition));
+
+    flash_buf(fp->source, partition, &buf, is_vbmeta_partition(partition));
     return;
 
 failed:
@@ -2101,18 +2103,26 @@ failed:
     }
 }
 
-bool should_flash_in_userspace(const std::string& partition_name) {
-    if (!get_android_product_out()) {
+bool should_flash_in_userspace(const ImageSource* source, const std::string& partition_name) {
+    if (!source) {
+        if (!get_android_product_out()) {
+            return false;
+        }
+        auto path = find_item_given_name("super_empty.img");
+        if (path.empty() || access(path.c_str(), R_OK)) {
+            return false;
+        }
+        auto metadata = android::fs_mgr::ReadFromImageFile(path);
+        if (!metadata) {
+            return false;
+        }
+        return should_flash_in_userspace(*metadata.get(), partition_name);
+    }
+    std::vector<char> contents;
+    if (!source->ReadFile("super_empty.img", &contents)) {
         return false;
     }
-    auto path = find_item_given_name("super_empty.img");
-    if (path.empty() || access(path.c_str(), R_OK)) {
-        return false;
-    }
-    auto metadata = android::fs_mgr::ReadFromImageFile(path);
-    if (!metadata) {
-        return false;
-    }
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
     return should_flash_in_userspace(*metadata.get(), partition_name);
 }
 
