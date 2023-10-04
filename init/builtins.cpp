@@ -475,8 +475,6 @@ static struct {
     { 0,            0 },
 };
 
-#define DATA_MNT_POINT "/data"
-
 /* mount <type> <device> <path> <flags ...> <options> */
 static Result<void> do_mount(const BuiltinArguments& args) {
     const char* options = nullptr;
@@ -577,7 +575,7 @@ static void import_late(const std::vector<std::string>& rc_paths) {
  *
  * return code is processed based on input code
  */
-static Result<void> queue_fs_event(int code, bool userdata_remount) {
+static Result<void> queue_fs_event(int code) {
     if (code == FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE) {
         SetProperty("ro.crypto.state", "unsupported");
         ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
@@ -591,27 +589,9 @@ static Result<void> queue_fs_event(int code, bool userdata_remount) {
         const std::vector<std::string> options = {"--wipe_data", "--reason=fs_mgr_mount_all" };
         return reboot_into_recovery(options);
         /* If reboot worked, there is no return. */
-    } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
-            return Error() << "FscryptInstallKeyring() failed";
-        }
-        SetProperty("ro.crypto.state", "encrypted");
-
-        // Although encrypted, we have device key, so we do not need to
-        // do anything different from the nonencrypted case.
-        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED) {
-        if (!FscryptInstallKeyring()) {
-            return Error() << "FscryptInstallKeyring() failed";
-        }
-        SetProperty("ro.crypto.state", "encrypted");
-
-        // Although encrypted, vold has already set the device up, so we do not need to
-        // do anything different from the nonencrypted case.
-        ActionManager::GetInstance().QueueEventTrigger("nonencrypted");
-        return {};
-    } else if (code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+    } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED ||
+               code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED ||
+               code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
         if (!FscryptInstallKeyring()) {
             return Error() << "FscryptInstallKeyring() failed";
         }
@@ -683,7 +663,7 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(mount_fstab_result.code, false);
+        auto queue_fs_result = queue_fs_event(mount_fstab_result.code);
         if (!queue_fs_result.ok()) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -764,6 +744,7 @@ static Result<void> do_setrlimit(const BuiltinArguments& args) {
 static Result<void> do_start(const BuiltinArguments& args) {
     Service* svc = ServiceList::GetInstance().FindService(args[1]);
     if (!svc) return Error() << "service " << args[1] << " not found";
+    errno = 0;
     if (auto result = svc->Start(); !result.ok()) {
         return ErrorIgnoreEnoent() << "Could not start service: " << result.error();
     }
@@ -1217,7 +1198,7 @@ static Result<void> do_remount_userdata(const BuiltinArguments& args) {
                                          "/metadata/userspacereboot/mount_info.txt");
         trigger_shutdown("reboot,mount_userdata_failed");
     }
-    if (auto result = queue_fs_event(initial_mount_fstab_return_code, true); !result.ok()) {
+    if (auto result = queue_fs_event(initial_mount_fstab_return_code); !result.ok()) {
         return Error() << "queue_fs_event() failed: " << result.error();
     }
     return {};
@@ -1287,37 +1268,33 @@ static Result<void> do_update_linker_config(const BuiltinArguments&) {
 /*
  * Creates a directory under /data/misc/apexdata/ for each APEX.
  */
-static Result<void> create_apex_data_dirs() {
-    auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir("/apex"), closedir);
-    if (!dirp) {
-        return ErrnoError() << "Unable to open apex directory";
-    }
-    struct dirent* entry;
-    while ((entry = readdir(dirp.get())) != nullptr) {
-        if (entry->d_type != DT_DIR) continue;
-
-        const char* name = entry->d_name;
-        // skip any starting with "."
-        if (name[0] == '.') continue;
-
-        if (strchr(name, '@') != nullptr) continue;
-
-        auto path = "/data/misc/apexdata/" + std::string(name);
+static void create_apex_data_dirs() {
+    for (const auto& name : GetApexListFrom("/apex")) {
+        auto path = "/data/misc/apexdata/" + name;
         auto options = MkdirOptions{path, 0771, AID_ROOT, AID_SYSTEM, FscryptAction::kNone, "ref"};
-        make_dir_with_options(options);
+        auto result = make_dir_with_options(options);
+        if (!result.ok()) {
+            LOG(ERROR) << result.error();
+        }
     }
-    return {};
 }
 
 static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
-    auto create_dirs = create_apex_data_dirs();
-    if (!create_dirs.ok()) {
-        return create_dirs.error();
+    bool bootstrap = false;
+    if (args.size() == 2) {
+        if (args[1] != "--bootstrap") {
+            return Error() << "Unexpected argument: " << args[1];
+        }
+        bootstrap = true;
     }
-    auto parse_configs = ParseApexConfigs(/*apex_name=*/"");
-    ServiceList::GetInstance().MarkServicesUpdate();
-    if (!parse_configs.ok()) {
-        return parse_configs.error();
+
+    if (!bootstrap) {
+        create_apex_data_dirs();
+    }
+
+    auto parse_result = ParseRcScriptsFromAllApexes(bootstrap);
+    if (!parse_result.ok()) {
+        return parse_result.error();
     }
 
     auto update_linker_config = do_update_linker_config(args);
@@ -1325,6 +1302,9 @@ static Result<void> do_perform_apex_config(const BuiltinArguments& args) {
         return update_linker_config.error();
     }
 
+    if (!bootstrap) {
+        ServiceList::GetInstance().StartDelayedServices();
+    }
     return {};
 }
 
@@ -1379,7 +1359,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         // mount and umount are run in the same context as mount_all for symmetry.
         {"mount_all",               {0,     kMax, {false,  do_mount_all}}},
         {"mount",                   {3,     kMax, {false,  do_mount}}},
-        {"perform_apex_config",     {0,     0,    {false,  do_perform_apex_config}}},
+        {"perform_apex_config",     {0,     1,    {false,  do_perform_apex_config}}},
         {"umount",                  {1,     1,    {false,  do_umount}}},
         {"umount_all",              {0,     1,    {false,  do_umount_all}}},
         {"update_linker_config",    {0,     0,    {false,  do_update_linker_config}}},

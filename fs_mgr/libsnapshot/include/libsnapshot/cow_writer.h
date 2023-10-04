@@ -14,18 +14,17 @@
 
 #pragma once
 
+#include <libsnapshot/cow_compress.h>
+
 #include <stdint.h>
 
 #include <condition_variable>
 #include <cstdint>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
 #include <android-base/unique_fd.h>
@@ -110,16 +109,15 @@ class ICowWriter {
 
 class CompressWorker {
   public:
-    CompressWorker(CowCompressionAlgorithm compression, uint32_t block_size);
+    CompressWorker(std::unique_ptr<ICompressor>&& compressor, uint32_t block_size);
     bool RunThread();
     void EnqueueCompressBlocks(const void* buffer, size_t num_blocks);
     bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
     void Finalize();
-    static std::basic_string<uint8_t> Compress(CowCompressionAlgorithm compression,
-                                               const void* data, size_t length);
+    static uint32_t GetDefaultCompressionLevel(CowCompressionAlgorithm compression);
 
-    static bool CompressBlocks(CowCompressionAlgorithm compression, size_t block_size,
-                               const void* buffer, size_t num_blocks,
+    static bool CompressBlocks(ICompressor* compressor, size_t block_size, const void* buffer,
+                               size_t num_blocks,
                                std::vector<std::basic_string<uint8_t>>* compressed_data);
 
   private:
@@ -130,7 +128,7 @@ class CompressWorker {
         std::vector<std::basic_string<uint8_t>> compressed_data;
     };
 
-    CowCompressionAlgorithm compression_;
+    std::unique_ptr<ICompressor> compressor_;
     uint32_t block_size_;
 
     std::queue<CompressWork> work_queue_;
@@ -139,7 +137,6 @@ class CompressWorker {
     std::condition_variable cv_;
     bool stopped_ = false;
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length);
     bool CompressBlocks(const void* buffer, size_t num_blocks,
                         std::vector<std::basic_string<uint8_t>>* compressed_data);
 };

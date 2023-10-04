@@ -165,6 +165,43 @@ The various currently defined commands are:
                        using the new bootloader.
 
 
+## Flashing Logic
+
+Fastboot binary will follow directions listed out fastboot-info.txt
+build artifact for fastboot flashall && fastboot update comamnds.
+This build artifact will live inside of ANDROID_PRODUCT_OUT &&
+target_files_package && updatepackage.
+
+
+The currently defined commands are:
+
+    flash %s           Flash a given partition. Optional arguments include
+                       --slot-other, {filename_path}, --apply-vbmeta
+
+    reboot %s          Reboot to either bootloader or fastbootd
+
+    update-super       Updates the super partition
+
+    if-wipe            Conditionally run some other functionality if
+                       wipe is specified
+
+    erase %s           Erase a given partition (can only be used in conjunction)
+                       with if-wipe -> eg. if-wipe erase cache
+
+Flashing Optimization:
+
+    After generating the list of tasks to execute, Fastboot will try and
+    optimize the flashing of the dynamic partitions by constructing an
+    optimized flash super task. Fastboot will explicitly pattern match the
+    following commands and try and concatenate it into this task. (doing so
+    will allow us to avoid the reboot into userspace fastbootd which takes
+    significant time)
+
+    //Optimizable Block
+    reboot fastboot
+    update-super                        ---> generate optimized flash super task
+    $FOR EACH {dynamic partition}
+        flash {dynamic partition}
 
 ## Client Variables
 

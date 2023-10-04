@@ -361,7 +361,7 @@ static bool isScopedPowerSupply(const char* name) {
 void BatteryMonitor::updateValues(void) {
     initHealthInfo(mHealthInfo.get());
 
-    if (!mHealthdConfig->batteryPresentPath.isEmpty())
+    if (!mHealthdConfig->batteryPresentPath.empty())
         mHealthInfo->batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
     else
         mHealthInfo->batteryPresent = mBatteryDevicePresent;
@@ -371,43 +371,43 @@ void BatteryMonitor::updateValues(void) {
                                         : getIntField(mHealthdConfig->batteryCapacityPath);
     mHealthInfo->batteryVoltageMillivolts = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
 
-    if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
+    if (!mHealthdConfig->batteryCurrentNowPath.empty())
         mHealthInfo->batteryCurrentMicroamps = getIntField(mHealthdConfig->batteryCurrentNowPath);
 
-    if (!mHealthdConfig->batteryFullChargePath.isEmpty())
+    if (!mHealthdConfig->batteryFullChargePath.empty())
         mHealthInfo->batteryFullChargeUah = getIntField(mHealthdConfig->batteryFullChargePath);
 
-    if (!mHealthdConfig->batteryCycleCountPath.isEmpty())
+    if (!mHealthdConfig->batteryCycleCountPath.empty())
         mHealthInfo->batteryCycleCount = getIntField(mHealthdConfig->batteryCycleCountPath);
 
-    if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
+    if (!mHealthdConfig->batteryChargeCounterPath.empty())
         mHealthInfo->batteryChargeCounterUah =
                 getIntField(mHealthdConfig->batteryChargeCounterPath);
 
-    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty())
+    if (!mHealthdConfig->batteryCurrentAvgPath.empty())
         mHealthInfo->batteryCurrentAverageMicroamps =
                 getIntField(mHealthdConfig->batteryCurrentAvgPath);
 
-    if (!mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
+    if (!mHealthdConfig->batteryChargeTimeToFullNowPath.empty())
         mHealthInfo->batteryChargeTimeToFullNowSeconds =
                 getIntField(mHealthdConfig->batteryChargeTimeToFullNowPath);
 
-    if (!mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+    if (!mHealthdConfig->batteryFullChargeDesignCapacityUahPath.empty())
         mHealthInfo->batteryFullChargeDesignCapacityUah =
                 getIntField(mHealthdConfig->batteryFullChargeDesignCapacityUahPath);
 
-    if (!mHealthdConfig->batteryHealthStatusPath.isEmpty())
+    if (!mHealthdConfig->batteryHealthStatusPath.empty())
         mBatteryHealthStatus = getIntField(mHealthdConfig->batteryHealthStatusPath);
 
-    if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
+    if (!mHealthdConfig->batteryStateOfHealthPath.empty())
         mHealthInfo->batteryHealthData->batteryStateOfHealth =
                 getIntField(mHealthdConfig->batteryStateOfHealthPath);
 
-    if (!mHealthdConfig->batteryManufacturingDatePath.isEmpty())
+    if (!mHealthdConfig->batteryManufacturingDatePath.empty())
         mHealthInfo->batteryHealthData->batteryManufacturingDateSeconds =
                 getIntField(mHealthdConfig->batteryManufacturingDatePath);
 
-    if (!mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
+    if (!mHealthdConfig->batteryFirstUsageDatePath.empty())
         mHealthInfo->batteryHealthData->batteryFirstUsageSeconds =
                 getIntField(mHealthdConfig->batteryFirstUsageDatePath);
 
@@ -432,7 +432,7 @@ void BatteryMonitor::updateValues(void) {
     }
 
     if (readFromFile(mHealthdConfig->batteryTechnologyPath, &buf) > 0)
-        mHealthInfo->batteryTechnology = String8(buf.c_str());
+        mHealthInfo->batteryTechnology = buf;
 
     if (readFromFile(mHealthdConfig->chargingPolicyPath, &buf) > 0)
         mHealthInfo->chargingPolicy = getBatteryChargingPolicy(buf.c_str());
@@ -444,12 +444,10 @@ void BatteryMonitor::updateValues(void) {
 
     for (size_t i = 0; i < mChargerNames.size(); i++) {
         String8 path;
-        path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH,
-                          mChargerNames[i].string());
+        path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, mChargerNames[i].c_str());
         if (getIntField(path)) {
             path.clear();
-            path.appendFormat("%s/%s/type", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
+            path.appendFormat("%s/%s/type", POWER_SUPPLY_SYSFS_PATH, mChargerNames[i].c_str());
             switch(readPowerSupplyType(path)) {
             case ANDROID_POWER_SUPPLY_TYPE_AC:
                 mHealthInfo->chargerAcOnline = true;
@@ -466,26 +464,24 @@ void BatteryMonitor::updateValues(void) {
             default:
                 path.clear();
                 path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH,
-                                  mChargerNames[i].string());
-                if (access(path.string(), R_OK) == 0)
+                                  mChargerNames[i].c_str());
+                if (access(path.c_str(), R_OK) == 0)
                     mHealthInfo->chargerDockOnline = true;
                 else
                     KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
-                                 mChargerNames[i].string());
+                                 mChargerNames[i].c_str());
             }
             path.clear();
             path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
-            int ChargingCurrent =
-                    (access(path.string(), R_OK) == 0) ? getIntField(path) : 0;
+                              mChargerNames[i].c_str());
+            int ChargingCurrent = (access(path.c_str(), R_OK) == 0) ? getIntField(path) : 0;
 
             path.clear();
             path.appendFormat("%s/%s/voltage_max", POWER_SUPPLY_SYSFS_PATH,
-                              mChargerNames[i].string());
+                              mChargerNames[i].c_str());
 
             int ChargingVoltage =
-                (access(path.string(), R_OK) == 0) ? getIntField(path) :
-                DEFAULT_VBUS_VOLTAGE;
+                    (access(path.c_str(), R_OK) == 0) ? getIntField(path) : DEFAULT_VBUS_VOLTAGE;
 
             double power = ((double)ChargingCurrent / MILLION) *
                            ((double)ChargingVoltage / MILLION);
@@ -510,17 +506,17 @@ static void doLogValues(const HealthInfo& props, const struct healthd_config& he
                  props.batteryStatus);
 
         len = strlen(dmesgline);
-        if (!healthd_config.batteryCurrentNowPath.isEmpty()) {
+        if (!healthd_config.batteryCurrentNowPath.empty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " c=%d",
                             props.batteryCurrentMicroamps);
         }
 
-        if (!healthd_config.batteryFullChargePath.isEmpty()) {
+        if (!healthd_config.batteryFullChargePath.empty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " fc=%d",
                             props.batteryFullChargeUah);
         }
 
-        if (!healthd_config.batteryCycleCountPath.isEmpty()) {
+        if (!healthd_config.batteryCycleCountPath.empty()) {
             len += snprintf(dmesgline + len, sizeof(dmesgline) - len, " cc=%d",
                             props.batteryCycleCount);
         }
@@ -554,7 +550,7 @@ bool BatteryMonitor::isChargerOnline() {
 
 int BatteryMonitor::getChargeStatus() {
     BatteryStatus result = BatteryStatus::UNKNOWN;
-    if (!mHealthdConfig->batteryStatusPath.isEmpty()) {
+    if (!mHealthdConfig->batteryStatusPath.empty()) {
         std::string buf;
         if (readFromFile(mHealthdConfig->batteryStatusPath, &buf) > 0)
             result = getBatteryStatus(buf.c_str());
@@ -565,7 +561,7 @@ int BatteryMonitor::getChargeStatus() {
 status_t BatteryMonitor::setChargingPolicy(int value) {
     status_t ret = NAME_NOT_FOUND;
     bool result;
-    if (!mHealthdConfig->chargingPolicyPath.isEmpty()) {
+    if (!mHealthdConfig->chargingPolicyPath.empty()) {
         result = writeToFile(mHealthdConfig->chargingPolicyPath, value);
         if (!result) {
             KLOG_WARNING(LOG_TAG, "setChargingPolicy fail\n");
@@ -579,7 +575,7 @@ status_t BatteryMonitor::setChargingPolicy(int value) {
 
 int BatteryMonitor::getChargingPolicy() {
     BatteryChargingPolicy result = BatteryChargingPolicy::DEFAULT;
-    if (!mHealthdConfig->chargingPolicyPath.isEmpty()) {
+    if (!mHealthdConfig->chargingPolicyPath.empty()) {
         std::string buf;
         if (readFromFile(mHealthdConfig->chargingPolicyPath, &buf) > 0)
             result = getBatteryChargingPolicy(buf.c_str());
@@ -589,15 +585,15 @@ int BatteryMonitor::getChargingPolicy() {
 
 int BatteryMonitor::getBatteryHealthData(int id) {
     if (id == BATTERY_PROP_MANUFACTURING_DATE) {
-        if (!mHealthdConfig->batteryManufacturingDatePath.isEmpty())
+        if (!mHealthdConfig->batteryManufacturingDatePath.empty())
             return getIntField(mHealthdConfig->batteryManufacturingDatePath);
     }
     if (id == BATTERY_PROP_FIRST_USAGE_DATE) {
-        if (!mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
+        if (!mHealthdConfig->batteryFirstUsageDatePath.empty())
             return getIntField(mHealthdConfig->batteryFirstUsageDatePath);
     }
     if (id == BATTERY_PROP_STATE_OF_HEALTH) {
-        if (!mHealthdConfig->batteryStateOfHealthPath.isEmpty())
+        if (!mHealthdConfig->batteryStateOfHealthPath.empty())
             return getIntField(mHealthdConfig->batteryStateOfHealthPath);
     }
     return 0;
@@ -611,7 +607,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     switch(id) {
     case BATTERY_PROP_CHARGE_COUNTER:
-        if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
+        if (!mHealthdConfig->batteryChargeCounterPath.empty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryChargeCounterPath);
             ret = OK;
@@ -621,7 +617,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         break;
 
     case BATTERY_PROP_CURRENT_NOW:
-        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+        if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentNowPath);
             ret = OK;
@@ -631,7 +627,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         break;
 
     case BATTERY_PROP_CURRENT_AVG:
-        if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+        if (!mHealthdConfig->batteryCurrentAvgPath.empty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentAvgPath);
             ret = OK;
@@ -641,7 +637,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         break;
 
     case BATTERY_PROP_CAPACITY:
-        if (!mHealthdConfig->batteryCapacityPath.isEmpty()) {
+        if (!mHealthdConfig->batteryCapacityPath.empty()) {
             val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCapacityPath);
             ret = OK;
@@ -708,35 +704,35 @@ void BatteryMonitor::dumpState(int fd) {
              props.batteryVoltageMillivolts, props.batteryTemperatureTenthsCelsius);
     write(fd, vs, strlen(vs));
 
-    if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+    if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
         v = getIntField(mHealthdConfig->batteryCurrentNowPath);
         snprintf(vs, sizeof(vs), "current now: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 
-    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+    if (!mHealthdConfig->batteryCurrentAvgPath.empty()) {
         v = getIntField(mHealthdConfig->batteryCurrentAvgPath);
         snprintf(vs, sizeof(vs), "current avg: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 
-    if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
+    if (!mHealthdConfig->batteryChargeCounterPath.empty()) {
         v = getIntField(mHealthdConfig->batteryChargeCounterPath);
         snprintf(vs, sizeof(vs), "charge counter: %d\n", v);
         write(fd, vs, strlen(vs));
     }
 
-    if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+    if (!mHealthdConfig->batteryCurrentNowPath.empty()) {
         snprintf(vs, sizeof(vs), "current now: %d\n", props.batteryCurrentMicroamps);
         write(fd, vs, strlen(vs));
     }
 
-    if (!mHealthdConfig->batteryCycleCountPath.isEmpty()) {
+    if (!mHealthdConfig->batteryCycleCountPath.empty()) {
         snprintf(vs, sizeof(vs), "cycle count: %d\n", props.batteryCycleCount);
         write(fd, vs, strlen(vs));
     }
 
-    if (!mHealthdConfig->batteryFullChargePath.isEmpty()) {
+    if (!mHealthdConfig->batteryFullChargePath.empty()) {
         snprintf(vs, sizeof(vs), "Full charge: %d\n", props.batteryFullChargeUah);
         write(fd, vs, strlen(vs));
     }
@@ -775,8 +771,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             case ANDROID_POWER_SUPPLY_TYPE_DOCK:
                 path.clear();
                 path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
-                if (access(path.string(), R_OK) == 0)
-                    mChargerNames.add(String8(name));
+                if (access(path.c_str(), R_OK) == 0) mChargerNames.add(String8(name));
                 break;
 
             case ANDROID_POWER_SUPPLY_TYPE_BATTERY:
@@ -787,166 +782,168 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                 if (isScopedPowerSupply(name)) continue;
                 mBatteryDevicePresent = true;
 
-                if (mHealthdConfig->batteryStatusPath.isEmpty()) {
+                if (mHealthdConfig->batteryStatusPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/status", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryStatusPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryStatusPath = path;
                 }
 
-                if (mHealthdConfig->batteryHealthPath.isEmpty()) {
+                if (mHealthdConfig->batteryHealthPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/health", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryHealthPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryHealthPath = path;
                 }
 
-                if (mHealthdConfig->batteryPresentPath.isEmpty()) {
+                if (mHealthdConfig->batteryPresentPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/present", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryPresentPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryPresentPath = path;
                 }
 
-                if (mHealthdConfig->batteryCapacityPath.isEmpty()) {
+                if (mHealthdConfig->batteryCapacityPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/capacity", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0)
-                        mHealthdConfig->batteryCapacityPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->batteryCapacityPath = path;
                 }
 
-                if (mHealthdConfig->batteryVoltagePath.isEmpty()) {
+                if (mHealthdConfig->batteryVoltagePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/voltage_now",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) {
+                    if (access(path.c_str(), R_OK) == 0) {
                         mHealthdConfig->batteryVoltagePath = path;
                     }
                 }
 
-                if (mHealthdConfig->batteryFullChargePath.isEmpty()) {
+                if (mHealthdConfig->batteryFullChargePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_full",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryFullChargePath = path;
                 }
 
-                if (mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+                if (mHealthdConfig->batteryCurrentNowPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/current_now",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCurrentNowPath = path;
                 }
 
-                if (mHealthdConfig->batteryCycleCountPath.isEmpty()) {
+                if (mHealthdConfig->batteryCycleCountPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/cycle_count",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCycleCountPath = path;
                 }
 
-                if (mHealthdConfig->batteryCapacityLevelPath.isEmpty()) {
+                if (mHealthdConfig->batteryCapacityLevelPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/capacity_level", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->batteryCapacityLevelPath = path;
+                    if (access(path.c_str(), R_OK) == 0) {
+                        mHealthdConfig->batteryCapacityLevelPath = path;
+                    }
                 }
 
-                if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty()) {
+                if (mHealthdConfig->batteryChargeTimeToFullNowPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/time_to_full_now", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryChargeTimeToFullNowPath = path;
                 }
 
-                if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty()) {
+                if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_full_design", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryFullChargeDesignCapacityUahPath = path;
                 }
 
-                if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+                if (mHealthdConfig->batteryCurrentAvgPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/current_avg",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryCurrentAvgPath = path;
                 }
 
-                if (mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
+                if (mHealthdConfig->batteryChargeCounterPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charge_counter",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryChargeCounterPath = path;
                 }
 
-                if (mHealthdConfig->batteryTemperaturePath.isEmpty()) {
+                if (mHealthdConfig->batteryTemperaturePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/temp", POWER_SUPPLY_SYSFS_PATH,
                                       name);
-                    if (access(path, R_OK) == 0) {
+                    if (access(path.c_str(), R_OK) == 0) {
                         mHealthdConfig->batteryTemperaturePath = path;
                     }
                 }
 
-                if (mHealthdConfig->batteryTechnologyPath.isEmpty()) {
+                if (mHealthdConfig->batteryTechnologyPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/technology",
                                       POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryTechnologyPath = path;
                 }
 
-                if (mHealthdConfig->batteryStateOfHealthPath.isEmpty()) {
+                if (mHealthdConfig->batteryStateOfHealthPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/state_of_health", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) {
+                    if (access(path.c_str(), R_OK) == 0) {
                         mHealthdConfig->batteryStateOfHealthPath = path;
                     } else {
                         path.clear();
                         path.appendFormat("%s/%s/health_index", POWER_SUPPLY_SYSFS_PATH, name);
-                        if (access(path, R_OK) == 0)
+                        if (access(path.c_str(), R_OK) == 0)
                             mHealthdConfig->batteryStateOfHealthPath = path;
                     }
                 }
 
-                if (mHealthdConfig->batteryHealthStatusPath.isEmpty()) {
+                if (mHealthdConfig->batteryHealthStatusPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/health_status", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->batteryHealthStatusPath = path;
+                    if (access(path.c_str(), R_OK) == 0) {
+                        mHealthdConfig->batteryHealthStatusPath = path;
+                    }
                 }
 
-                if (mHealthdConfig->batteryManufacturingDatePath.isEmpty()) {
+                if (mHealthdConfig->batteryManufacturingDatePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/manufacturing_date", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0)
+                    if (access(path.c_str(), R_OK) == 0)
                         mHealthdConfig->batteryManufacturingDatePath = path;
                 }
 
-                if (mHealthdConfig->batteryFirstUsageDatePath.isEmpty()) {
+                if (mHealthdConfig->batteryFirstUsageDatePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/first_usage_date", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->batteryFirstUsageDatePath = path;
+                    if (access(path.c_str(), R_OK) == 0) {
+                        mHealthdConfig->batteryFirstUsageDatePath = path;
+                    }
                 }
 
-                if (mHealthdConfig->chargingStatePath.isEmpty()) {
+                if (mHealthdConfig->chargingStatePath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charging_state", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->chargingStatePath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->chargingStatePath = path;
                 }
 
-                if (mHealthdConfig->chargingPolicyPath.isEmpty()) {
+                if (mHealthdConfig->chargingPolicyPath.empty()) {
                     path.clear();
                     path.appendFormat("%s/%s/charging_policy", POWER_SUPPLY_SYSFS_PATH, name);
-                    if (access(path, R_OK) == 0) mHealthdConfig->chargingPolicyPath = path;
+                    if (access(path.c_str(), R_OK) == 0) mHealthdConfig->chargingPolicyPath = path;
                 }
 
                 break;
@@ -958,12 +955,10 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             // Look for "is_dock" file
             path.clear();
             path.appendFormat("%s/%s/is_dock", POWER_SUPPLY_SYSFS_PATH, name);
-            if (access(path.string(), R_OK) == 0) {
+            if (access(path.c_str(), R_OK) == 0) {
                 path.clear();
                 path.appendFormat("%s/%s/online", POWER_SUPPLY_SYSFS_PATH, name);
-                if (access(path.string(), R_OK) == 0)
-                    mChargerNames.add(String8(name));
-
+                if (access(path.c_str(), R_OK) == 0) mChargerNames.add(String8(name));
             }
         }
     }
@@ -975,43 +970,43 @@ void BatteryMonitor::init(struct healthd_config *hc) {
         hc->periodic_chores_interval_fast = -1;
         hc->periodic_chores_interval_slow = -1;
     } else {
-        if (mHealthdConfig->batteryStatusPath.isEmpty())
+        if (mHealthdConfig->batteryStatusPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryStatusPath not found\n");
-        if (mHealthdConfig->batteryHealthPath.isEmpty())
+        if (mHealthdConfig->batteryHealthPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryHealthPath not found\n");
-        if (mHealthdConfig->batteryPresentPath.isEmpty())
+        if (mHealthdConfig->batteryPresentPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryPresentPath not found\n");
-        if (mHealthdConfig->batteryCapacityPath.isEmpty())
+        if (mHealthdConfig->batteryCapacityPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryCapacityPath not found\n");
-        if (mHealthdConfig->batteryVoltagePath.isEmpty())
+        if (mHealthdConfig->batteryVoltagePath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryVoltagePath not found\n");
-        if (mHealthdConfig->batteryTemperaturePath.isEmpty())
+        if (mHealthdConfig->batteryTemperaturePath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryTemperaturePath not found\n");
-        if (mHealthdConfig->batteryTechnologyPath.isEmpty())
+        if (mHealthdConfig->batteryTechnologyPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
-        if (mHealthdConfig->batteryCurrentNowPath.isEmpty())
+        if (mHealthdConfig->batteryCurrentNowPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryCurrentNowPath not found\n");
-        if (mHealthdConfig->batteryFullChargePath.isEmpty())
+        if (mHealthdConfig->batteryFullChargePath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryFullChargePath not found\n");
-        if (mHealthdConfig->batteryCycleCountPath.isEmpty())
+        if (mHealthdConfig->batteryCycleCountPath.empty())
             KLOG_WARNING(LOG_TAG, "BatteryCycleCountPath not found\n");
-        if (mHealthdConfig->batteryCapacityLevelPath.isEmpty())
+        if (mHealthdConfig->batteryCapacityLevelPath.empty())
             KLOG_WARNING(LOG_TAG, "batteryCapacityLevelPath not found\n");
-        if (mHealthdConfig->batteryChargeTimeToFullNowPath.isEmpty())
+        if (mHealthdConfig->batteryChargeTimeToFullNowPath.empty())
             KLOG_WARNING(LOG_TAG, "batteryChargeTimeToFullNowPath. not found\n");
-        if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.isEmpty())
+        if (mHealthdConfig->batteryFullChargeDesignCapacityUahPath.empty())
             KLOG_WARNING(LOG_TAG, "batteryFullChargeDesignCapacityUahPath. not found\n");
-        if (mHealthdConfig->batteryStateOfHealthPath.isEmpty())
+        if (mHealthdConfig->batteryStateOfHealthPath.empty())
             KLOG_WARNING(LOG_TAG, "batteryStateOfHealthPath not found\n");
-        if (mHealthdConfig->batteryHealthStatusPath.isEmpty())
+        if (mHealthdConfig->batteryHealthStatusPath.empty())
             KLOG_WARNING(LOG_TAG, "batteryHealthStatusPath not found\n");
-        if (mHealthdConfig->batteryManufacturingDatePath.isEmpty())
+        if (mHealthdConfig->batteryManufacturingDatePath.empty())
             KLOG_WARNING(LOG_TAG, "batteryManufacturingDatePath not found\n");
-        if (mHealthdConfig->batteryFirstUsageDatePath.isEmpty())
+        if (mHealthdConfig->batteryFirstUsageDatePath.empty())
             KLOG_WARNING(LOG_TAG, "batteryFirstUsageDatePath not found\n");
-        if (mHealthdConfig->chargingStatePath.isEmpty())
+        if (mHealthdConfig->chargingStatePath.empty())
             KLOG_WARNING(LOG_TAG, "chargingStatePath not found\n");
-        if (mHealthdConfig->chargingPolicyPath.isEmpty())
+        if (mHealthdConfig->chargingPolicyPath.empty())
             KLOG_WARNING(LOG_TAG, "chargingPolicyPath not found\n");
     }
 

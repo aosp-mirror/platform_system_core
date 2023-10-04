@@ -44,7 +44,7 @@ cc_defaults {
         "libext2_uuid",
         "libext4_utils",
         "libfstab",
-        "libsnapshot_snapuserd",
+        "libsnapuserd_client",
         "libz",
     ],
     header_libs: [
@@ -101,7 +101,7 @@ cc_library_headers {
 }
 
 cc_library_static {
-    name: "libsnapshot",
+    name: "libsnapshot_static",
     defaults: [
         "libsnapshot_defaults",
         "libsnapshot_hal_deps",
@@ -110,6 +110,25 @@ cc_library_static {
     static_libs: [
         "libfs_mgr_binder"
     ],
+}
+
+cc_library {
+    name: "libsnapshot",
+    defaults: [
+        "libsnapshot_defaults",
+        "libsnapshot_cow_defaults",
+        "libsnapshot_hal_deps",
+    ],
+    srcs: [":libsnapshot_sources"],
+    shared_libs: [
+        "libfs_mgr_binder",
+        "liblp",
+        "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "libc++fs",
+        "libsnapshot_cow",
+    ]
 }
 
 cc_library_static {
@@ -166,7 +185,6 @@ cc_defaults {
     header_libs: [
         "libupdate_engine_headers",
     ],
-    export_include_dirs: ["include"],
 }
 
 cc_library_static {
@@ -184,6 +202,7 @@ cc_library_static {
         "libsnapshot_cow/writer_base.cpp",
         "libsnapshot_cow/writer_v2.cpp",
     ],
+    export_include_dirs: ["include"],
     host_supported: true,
     recovery_available: true,
     ramdisk_available: true,
@@ -247,7 +266,7 @@ cc_defaults {
         "libgsi",
         "libgmock",
         "liblp",
-        "libsnapshot",
+        "libsnapshot_static",
         "libsnapshot_cow",
         "libsnapshot_test_helpers",
         "libsparse",
@@ -330,8 +349,6 @@ cc_binary {
         "libbrotli",
         "libc++fs",
         "libfstab",
-        "libsnapshot",
-        "libsnapshot_cow",
         "libz",
         "update_metadata-protos",
     ],
@@ -344,6 +361,7 @@ cc_binary {
         "liblog",
         "liblp",
         "libprotobuf-cpp-lite",
+        "libsnapshot",
         "libstatslog",
         "libutils",
     ],
@@ -426,6 +444,54 @@ cc_binary {
     srcs: [
         "libsnapshot_cow/inspect_cow.cpp",
     ],
+}
+
+cc_binary {
+    name: "create_snapshot",
+    host_supported: true,
+    device_supported: false,
+
+    srcs: ["libsnapshot_cow/create_cow.cpp"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    static_libs: [
+        "liblog",
+        "libbase",
+        "libext4_utils",
+        "libsnapshot_cow",
+        "libcrypto",
+        "libbrotli",
+        "libz",
+        "liblz4",
+        "libzstd",
+        "libgflags",
+    ],
+    shared_libs: [
+    ],
+
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+
+    dist: {
+        targets: [
+            "sdk",
+            "sdk-repo-platform-tools",
+            "sdk_repo",
+        ],
+    },
+    target: {
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
+        },
+    },
 }
 
 python_library_host {

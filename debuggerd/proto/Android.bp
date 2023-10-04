@@ -35,6 +35,7 @@ cc_library_static {
         "com.android.runtime",
     ],
 
+    ramdisk_available: true,
     recovery_available: true,
     vendor_ramdisk_available: true,
 }

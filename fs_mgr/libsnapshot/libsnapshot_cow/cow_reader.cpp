@@ -17,9 +17,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <limits>
 #include <optional>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -103,7 +101,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     footer_ = parser.footer();
     fd_size_ = parser.fd_size();
     last_label_ = parser.last_label();
-    ops_ = std::move(parser.ops());
+    ops_ = parser.ops();
     data_loc_ = parser.data_loc();
 
     // If we're resuming a write, we're not ready to merge
@@ -310,9 +308,34 @@ bool CowReader::PrepMergeOps() {
 bool CowReader::VerifyMergeOps() {
     auto itr = GetMergeOpIter(true);
     std::unordered_map<uint64_t, const CowOperation*> overwritten_blocks;
+    bool non_ordered_op_found = false;
+
     while (!itr->AtEnd()) {
         const auto& op = itr->Get();
         uint64_t offset;
+
+        // Op should not be a metadata
+        if (IsMetadataOp(*op)) {
+            LOG(ERROR) << "Metadata op: " << op << " found during merge sequence";
+            return false;
+        }
+
+        // Sequence ops should contain all the ordered ops followed
+        // by Replace and Zero ops. If we find the first op which
+        // is not ordered, that means all ordered ops processing
+        // has been completed.
+        if (!IsOrderedOp(*op)) {
+            non_ordered_op_found = true;
+        }
+
+        // Since, all ordered ops processing has been completed,
+        // check that the subsequent ops are not ordered.
+        if (non_ordered_op_found && IsOrderedOp(*op)) {
+            LOG(ERROR) << "Invalid sequence - non-ordered and ordered ops"
+                       << " cannot be mixed during sequence generation";
+            return false;
+        }
+
         if (!GetSourceOffset(op, &offset)) {
             itr->Next();
             continue;

@@ -28,6 +28,7 @@
 #include <iostream>
 #include <limits>
 #include <mutex>
+#include <ostream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -43,6 +44,7 @@
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
 #include <liburing.h>
+#include <snapuserd/block_server.h>
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
@@ -67,15 +69,17 @@ static constexpr int kNiceValueForMergeThreads = -5;
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
 
 enum class MERGE_IO_TRANSITION {
+    INVALID,
     MERGE_READY,
     MERGE_BEGIN,
     MERGE_FAILED,
     MERGE_COMPLETE,
     IO_TERMINATED,
-    READ_AHEAD_FAILURE,
+    READ_AHEAD_FAILURE
 };
 
-class SnapshotHandler;
+class MergeWorker;
+class ReadWorker;
 
 enum class MERGE_GROUP_STATE {
     GROUP_MERGE_PENDING,
@@ -98,113 +102,17 @@ struct MergeGroupState {
         : merge_state_(state), num_ios_in_progress(n_ios) {}
 };
 
-class Worker {
-  public:
-    Worker(const std::string& cow_device, const std::string& backing_device,
-           const std::string& control_device, const std::string& misc_name,
-           const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
-    bool RunThread();
-    bool RunMergeThread();
-    bool Init();
-
-  private:
-    // Initialization
-    void InitializeBufsink();
-    bool InitializeFds();
-    bool InitReader();
-    void CloseFds() {
-        ctrl_fd_ = {};
-        backing_store_fd_ = {};
-        base_path_merge_fd_ = {};
-    }
-
-    // Functions interacting with dm-user
-    bool ReadDmUserHeader();
-    bool WriteDmUserPayload(size_t size, bool header_response);
-    bool DmuserReadRequest();
-
-    // IO Path
-    bool ProcessIORequest();
-    bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
-
-    bool ReadDataFromBaseDevice(sector_t sector, size_t read_size);
-    bool ReadFromSourceDevice(const CowOperation* cow_op);
-
-    bool ReadAlignedSector(sector_t sector, size_t sz, bool header_response);
-    bool ReadUnalignedSector(sector_t sector, size_t size);
-    int ReadUnalignedSector(sector_t sector, size_t size,
-                            std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it);
-    bool RespondIOError(bool header_response);
-
-    // Processing COW operations
-    bool ProcessCowOp(const CowOperation* cow_op);
-    bool ProcessReplaceOp(const CowOperation* cow_op);
-    bool ProcessZeroOp();
-
-    // Handles Copy and Xor
-    bool ProcessCopyOp(const CowOperation* cow_op);
-    bool ProcessXorOp(const CowOperation* cow_op);
-    bool ProcessOrderedOp(const CowOperation* cow_op);
-
-    // Merge related ops
-    bool Merge();
-    bool AsyncMerge();
-    bool SyncMerge();
-    bool MergeOrderedOps();
-    bool MergeOrderedOpsAsync();
-    bool MergeReplaceZeroOps();
-    int PrepareMerge(uint64_t* source_offset, int* pending_ops,
-                     std::vector<const CowOperation*>* replace_zero_vec = nullptr);
-
-    sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
-    chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
-
-    bool InitializeIouring();
-    void FinalizeIouring();
-
-    std::unique_ptr<CowReader> reader_;
-    BufferSink bufsink_;
-    XorSink xorsink_;
-
-    std::string cow_device_;
-    std::string backing_store_device_;
-    std::string control_device_;
-    std::string misc_name_;
-    std::string base_path_merge_;
-
-    unique_fd cow_fd_;
-    unique_fd backing_store_fd_;
-    unique_fd base_path_merge_fd_;
-    unique_fd ctrl_fd_;
-
-    std::unique_ptr<ICowOpIter> cowop_iter_;
-    size_t ra_block_index_ = 0;
-    uint64_t blocks_merged_in_group_ = 0;
-    bool merge_async_ = false;
-    // Queue depth of 8 seems optimal. We don't want
-    // to have a huge depth as it may put more memory pressure
-    // on the kernel worker threads given that we use
-    // IOSQE_ASYNC flag - ASYNC flags can potentially
-    // result in EINTR; Since we don't restart
-    // syscalls and fallback to synchronous I/O, we
-    // don't want huge queue depth
-    int queue_depth_ = 8;
-    std::unique_ptr<struct io_uring> ring_;
-
-    std::shared_ptr<SnapshotHandler> snapuserd_;
-};
-
 class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
   public:
     SnapshotHandler(std::string misc_name, std::string cow_device, std::string backing_device,
-                    std::string base_path_merge, int num_workers, bool use_iouring,
-                    bool perform_verification);
+                    std::string base_path_merge, std::shared_ptr<IBlockServerOpener> opener,
+                    int num_workers, bool use_iouring, bool perform_verification);
     bool InitCowDevice();
     bool Start();
 
     const std::string& GetControlDevicePath() { return control_device_; }
     const std::string& GetMiscName() { return misc_name_; }
-    const uint64_t& GetNumSectors() { return num_sectors_; }
+    uint64_t GetNumSectors() const;
     const bool& IsAttached() const { return attached_; }
     void AttachControlDevice() { attached_ = true; }
 
@@ -212,11 +120,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool CommitMerge(int num_merge_ops);
 
     void CloseFds() { cow_fd_ = {}; }
-    void FreeResources() {
-        worker_threads_.clear();
-        read_ahead_thread_ = nullptr;
-        merge_thread_ = nullptr;
-    }
+    void FreeResources();
 
     bool InitializeWorkers();
     std::unique_ptr<CowReader> CloneReaderForWorker();
@@ -301,8 +205,6 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     unique_fd cow_fd_;
 
-    uint64_t num_sectors_;
-
     std::unique_ptr<CowReader> reader_;
 
     // chunk_vec stores the pseudo mapping of sector
@@ -315,12 +217,12 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     void* mapped_addr_;
     size_t total_mapped_addr_length_;
 
-    std::vector<std::unique_ptr<Worker>> worker_threads_;
+    std::vector<std::unique_ptr<ReadWorker>> worker_threads_;
     // Read-ahead related
     bool populate_data_from_cow_ = false;
     bool ra_thread_ = false;
     int total_ra_blocks_merged_ = 0;
-    MERGE_IO_TRANSITION io_state_;
+    MERGE_IO_TRANSITION io_state_ = MERGE_IO_TRANSITION::INVALID;
     std::unique_ptr<ReadAhead> read_ahead_thread_;
     std::unordered_map<uint64_t, void*> read_ahead_buffer_map_;
 
@@ -330,7 +232,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     // Merge Block state
     std::vector<std::unique_ptr<MergeGroupState>> merge_blk_state_;
 
-    std::unique_ptr<Worker> merge_thread_;
+    std::unique_ptr<MergeWorker> merge_thread_;
     double merge_completion_percentage_;
 
     bool merge_initiated_ = false;
@@ -343,7 +245,11 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     std::unique_ptr<struct io_uring> ring_;
     std::unique_ptr<UpdateVerify> update_verify_;
+    std::shared_ptr<IBlockServerOpener> block_server_opener_;
 };
+
+std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value);
+static_assert(sizeof(off_t) == sizeof(uint64_t));
 
 }  // namespace snapshot
 }  // namespace android

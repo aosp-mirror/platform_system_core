@@ -66,15 +66,6 @@ static std::string GetMountNamespaceId() {
     return ret;
 }
 
-// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
-// namespaces.
-static bool NeedsTwoMountNamespaces() {
-    if (IsRecoveryMode()) return false;
-    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
-    if (IsMicrodroid()) return false;
-    return true;
-}
-
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -82,6 +73,15 @@ static std::string bootstrap_ns_id;
 static std::string default_ns_id;
 
 }  // namespace
+
+// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
+// namespaces.
+bool NeedsTwoMountNamespaces() {
+    if (IsRecoveryMode()) return false;
+    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
+    if (IsMicrodroid()) return false;
+    return true;
+}
 
 bool SetupMountNamespaces() {
     // Set the propagation type of / as shared so that any mounting event (e.g.
@@ -163,6 +163,23 @@ bool SetupMountNamespaces() {
             PLOG(ERROR) << "Cannot switch back to bootstrap mount namespace";
             return false;
         }
+
+        // Some components (e.g. servicemanager) need to access bootstrap
+        // APEXes from the default mount namespace. To achieve that, we bind-mount
+        // /apex to /bootstrap-apex in the bootstrap mount namespace. Since /bootstrap-apex
+        // is "shared", the mounts are visible in the default mount namespace as well.
+        //
+        // The end result will look like:
+        //   in the bootstrap mount namespace:
+        //     /apex  (== /bootstrap-apex)
+        //       {bootstrap APEXes from the read-only partition}
+        //
+        //   in the default mount namespace:
+        //     /bootstrap-apex
+        //       {bootstrap APEXes from the read-only partition}
+        //     /apex
+        //       {APEXes, can be from /data partition}
+        if (!(BindMount("/bootstrap-apex", "/apex"))) return false;
     } else {
         // Otherwise, default == bootstrap
         default_ns_fd.reset(OpenMountNamespace());

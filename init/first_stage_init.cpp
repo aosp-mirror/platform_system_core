@@ -35,6 +35,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
 #include <modprobe/modprobe.h>
 #include <private/android_filesystem_config.h>
 
@@ -67,7 +68,7 @@ enum class BootMode {
 void FreeRamdisk(DIR* dir, dev_t dev) {
     int dfd = dirfd(dir);
 
-    dirent* de;
+    dirent* de = nullptr;
     while ((de = readdir(dir)) != nullptr) {
         if (de->d_name == "."s || de->d_name == ".."s) {
             continue;
@@ -76,7 +77,7 @@ void FreeRamdisk(DIR* dir, dev_t dev) {
         bool is_dir = false;
 
         if (de->d_type == DT_DIR || de->d_type == DT_UNKNOWN) {
-            struct stat info;
+            struct stat info {};
             if (fstatat(dfd, de->d_name, &info, AT_SYMLINK_NOFOLLOW) != 0) {
                 continue;
             }
@@ -153,6 +154,30 @@ void PrepareSwitchRoot() {
         Copy(snapuserd, dst);
     }
 }
+
+std::string GetPageSizeSuffix() {
+    static const size_t page_size = sysconf(_SC_PAGE_SIZE);
+    if (page_size <= 4096) {
+        return "";
+    }
+    return android::base::StringPrintf("_%zuk", page_size / 1024);
+}
+
+constexpr bool EndsWith(const std::string_view str, const std::string_view suffix) {
+    return str.size() >= suffix.size() &&
+           0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
+constexpr std::string_view GetPageSizeSuffix(std::string_view dirname) {
+    if (EndsWith(dirname, "_16k")) {
+        return "_16k";
+    }
+    if (EndsWith(dirname, "_64k")) {
+        return "_64k";
+    }
+    return "";
+}
+
 }  // namespace
 
 std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
@@ -171,7 +196,7 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
     }
 
     if (module_load_file != "modules.load") {
-        struct stat fileStat;
+        struct stat fileStat {};
         std::string load_path = dir_path + "/" + module_load_file;
         // Fall back to modules.load if the other files aren't accessible
         if (stat(load_path.c_str(), &fileStat)) {
@@ -185,11 +210,11 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
 #define MODULE_BASE_DIR "/lib/modules"
 bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel,
                        int& modules_loaded) {
-    struct utsname uts;
+    struct utsname uts {};
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
     }
-    int major, minor;
+    int major = 0, minor = 0;
     if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
         LOG(FATAL) << "Failed to parse kernel version " << uts.release;
     }
@@ -199,13 +224,30 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         LOG(INFO) << "Unable to open /lib/modules, skipping module loading.";
         return true;
     }
-    dirent* entry;
+    dirent* entry = nullptr;
     std::vector<std::string> module_dirs;
+    const auto page_size_suffix = GetPageSizeSuffix();
+    const std::string release_specific_module_dir = uts.release + page_size_suffix;
     while ((entry = readdir(base_dir.get()))) {
         if (entry->d_type != DT_DIR) {
             continue;
         }
-        int dir_major, dir_minor;
+        if (entry->d_name == release_specific_module_dir) {
+            LOG(INFO) << "Release specific kernel module dir " << release_specific_module_dir
+                      << " found, loading modules from here with no fallbacks.";
+            module_dirs.clear();
+            module_dirs.emplace_back(entry->d_name);
+            break;
+        }
+        // Is a directory does not have page size suffix, it does not mean this directory is for 4K
+        // kernels. Certain 16K kernel builds put all modules in /lib/modules/`uname -r` without any
+        // suffix. Therefore, only ignore a directory if it has _16k/_64k suffix and the suffix does
+        // not match system page size.
+        const auto dir_page_size_suffix = GetPageSizeSuffix(entry->d_name);
+        if (!dir_page_size_suffix.empty() && dir_page_size_suffix != page_size_suffix) {
+            continue;
+        }
+        int dir_major = 0, dir_minor = 0;
         if (sscanf(entry->d_name, "%d.%d", &dir_major, &dir_minor) != 2 || dir_major != major ||
             dir_minor != minor) {
             continue;
@@ -228,6 +270,7 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         bool retval = m.LoadListedModules(!want_console);
         modules_loaded = m.GetModuleCount();
         if (modules_loaded > 0) {
+            LOG(INFO) << "Loaded " << modules_loaded << " modules from " << dir_path;
             return retval;
         }
     }
@@ -237,6 +280,7 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
                                   : m.LoadListedModules(!want_console);
     modules_loaded = m.GetModuleCount();
     if (modules_loaded > 0) {
+        LOG(INFO) << "Loaded " << modules_loaded << " modules from " << MODULE_BASE_DIR;
         return retval;
     }
     return true;
@@ -255,6 +299,16 @@ static BootMode GetBootMode(const std::string& cmdline, const std::string& bootc
         return BootMode::RECOVERY_MODE;
 
     return BootMode::NORMAL_MODE;
+}
+
+static std::unique_ptr<FirstStageMount> CreateFirstStageMount(const std::string& cmdline) {
+    auto ret = FirstStageMount::Create(cmdline);
+    if (ret.ok()) {
+        return std::move(*ret);
+    } else {
+        LOG(ERROR) << "Failed to create FirstStageMount : " << ret.error();
+        return nullptr;
+    }
 }
 
 int FirstStageMain(int argc, char** argv) {
@@ -347,12 +401,24 @@ int FirstStageMain(int argc, char** argv) {
 
     LOG(INFO) << "init first stage started!";
 
+    // We only allow /vendor partition in debuggable Microdrod until it is verified during boot.
+    // TODO(b/285855436): remove this check.
+    if (IsMicrodroid()) {
+        bool mount_vendor =
+                cmdline.find("androidboot.microdroid.mount_vendor=1") != std::string::npos;
+        bool debuggable =
+                bootconfig.find("androidboot.microdroid.debuggable = \"1\"") != std::string::npos;
+        if (mount_vendor && !debuggable) {
+            LOG(FATAL) << "Attempted to mount /vendor partition for non-debuggable Microdroid VM";
+        }
+    }
+
     auto old_root_dir = std::unique_ptr<DIR, decltype(&closedir)>{opendir("/"), closedir};
     if (!old_root_dir) {
         PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
     }
 
-    struct stat old_root_info;
+    struct stat old_root_info {};
     if (stat("/", &old_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();
@@ -381,12 +447,17 @@ int FirstStageMain(int argc, char** argv) {
                   << module_elapse_time.count() << " ms";
     }
 
+    std::unique_ptr<FirstStageMount> fsm;
+
     bool created_devices = false;
     if (want_console == FirstStageConsoleParam::CONSOLE_ON_FAILURE) {
         if (!IsRecoveryMode()) {
-            created_devices = DoCreateDevices();
-            if (!created_devices) {
-                LOG(ERROR) << "Failed to create device nodes early";
+            fsm = CreateFirstStageMount(cmdline);
+            if (fsm) {
+                created_devices = fsm->DoCreateDevices();
+                if (!created_devices) {
+                    LOG(ERROR) << "Failed to create device nodes early";
+                }
             }
         }
         StartConsole(cmdline);
@@ -437,11 +508,26 @@ int FirstStageMain(int argc, char** argv) {
         SwitchRoot("/first_stage_ramdisk");
     }
 
-    if (!DoFirstStageMount(!created_devices)) {
-        LOG(FATAL) << "Failed to mount required partitions early ...";
+    if (IsRecoveryMode()) {
+        LOG(INFO) << "First stage mount skipped (recovery mode)";
+    } else {
+        if (!fsm) {
+            fsm = CreateFirstStageMount(cmdline);
+        }
+        if (!fsm) {
+            LOG(FATAL) << "FirstStageMount not available";
+        }
+
+        if (!created_devices && !fsm->DoCreateDevices()) {
+            LOG(FATAL) << "Failed to create devices required for first stage mount";
+        }
+
+        if (!fsm->DoFirstStageMount()) {
+            LOG(FATAL) << "Failed to mount required partitions early ...";
+        }
     }
 
-    struct stat new_root_info;
+    struct stat new_root_info {};
     if (stat("/", &new_root_info) != 0) {
         PLOG(ERROR) << "Could not stat(\"/\"), not freeing ramdisk";
         old_root_dir.reset();

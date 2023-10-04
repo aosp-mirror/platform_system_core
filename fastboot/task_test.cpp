@@ -19,11 +19,11 @@
 #include "fastboot_driver_mock.h"
 
 #include <gtest/gtest.h>
-#include <fstream>
 #include <iostream>
 #include <memory>
-#include <unordered_map>
 #include "android-base/strings.h"
+#include "gmock/gmock.h"
+
 using android::base::Split;
 using testing::_;
 
@@ -58,6 +58,33 @@ static std::vector<std::unique_ptr<Task>> collectTasks(FlashingPlan* fp,
 std::unique_ptr<Task> ParseCommand(FlashingPlan* fp, std::string command) {
     std::vector<std::string> vec_command = android::base::Split(command, " ");
     return ParseFastbootInfoLine(fp, vec_command);
+}
+
+// tests if tasks_a is a superset of tasks_b. Used for checking to ensure all partitions flashed
+// from hardcoded image list is also flashed in new fastboot-info.txt
+static bool compareTaskList(std::vector<std::unique_ptr<Task>>& tasks_a,
+                            std::vector<std::unique_ptr<Task>>& tasks_b) {
+    std::set<std::string> list;
+    for (auto& task : tasks_a) {
+        list.insert(task->ToString());
+    }
+    for (auto& task : tasks_b) {
+        if (list.find(task->ToString()) == list.end()) {
+            std::cout << "ERROR: " << task->ToString()
+                      << " not found in task list created by fastboot-info.txt";
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::string tasksToString(std::vector<std::unique_ptr<Task>>& tasks) {
+    std::string output;
+    for (auto& task : tasks) {
+        output.append(task->ToString());
+        output.append("\n");
+    }
+    return output;
 }
 
 TEST_F(ParseTest, CorrectFlashTaskFormed) {
@@ -157,5 +184,191 @@ TEST_F(ParseTest, CorrectDriverCalls) {
 
     for (auto& task : tasks) {
         task->Run();
+    }
+}
+
+TEST_F(ParseTest, CorrectTaskLists) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+    fp->sparse_limit = std::numeric_limits<int64_t>::max();
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = false;
+
+    ON_CALL(fb, GetVar("super-partition-name", _, _))
+            .WillByDefault(testing::Return(fastboot::BAD_ARG));
+
+    FlashAllTool tool(fp.get());
+
+    fp->should_use_fastboot_info = false;
+    auto hardcoded_tasks = tool.CollectTasks();
+    fp->should_use_fastboot_info = true;
+    auto fastboot_info_tasks = tool.CollectTasks();
+
+    auto is_non_flash_task = [](const auto& task) -> bool {
+        return task->AsFlashTask() == nullptr;
+    };
+
+    // remove non flash tasks for testing purposes
+    hardcoded_tasks.erase(
+            std::remove_if(hardcoded_tasks.begin(), hardcoded_tasks.end(), is_non_flash_task),
+            hardcoded_tasks.end());
+    fastboot_info_tasks.erase(std::remove_if(fastboot_info_tasks.begin(), fastboot_info_tasks.end(),
+                                             is_non_flash_task),
+                              fastboot_info_tasks.end());
+
+    if (!compareTaskList(fastboot_info_tasks, hardcoded_tasks)) {
+        std::cout << "\n\n---Hardcoded Task List---\n"
+                  << tasksToString(hardcoded_tasks) << "\n---Fastboot-Info Task List---\n"
+                  << tasksToString(fastboot_info_tasks);
+    }
+
+    ASSERT_TRUE(compareTaskList(fastboot_info_tasks, hardcoded_tasks));
+
+    ASSERT_TRUE(fastboot_info_tasks.size() >= hardcoded_tasks.size())
+            << "size of fastboot-info task list: " << fastboot_info_tasks.size()
+            << " size of hardcoded task list: " << hardcoded_tasks.size();
+}
+TEST_F(ParseTest, IsDynamicParitiontest) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = true;
+    fp->should_use_fastboot_info = true;
+
+    std::vector<std::pair<std::string, bool>> test_cases = {
+            {"flash boot", false},
+            {"flash init_boot", false},
+            {"flash --apply-vbmeta vbmeta", false},
+            {"flash product", true},
+            {"flash system", true},
+            {"flash --slot-other system system_other.img", true},
+    };
+    for (auto& test : test_cases) {
+        std::unique_ptr<Task> task =
+                ParseFastbootInfoLine(fp.get(), android::base::Tokenize(test.first, " "));
+        auto flash_task = task->AsFlashTask();
+        ASSERT_FALSE(flash_task == nullptr);
+        ASSERT_EQ(FlashTask::IsDynamicParitition(fp->source, flash_task), test.second);
+    }
+}
+
+TEST_F(ParseTest, CanOptimizeTest) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+    fp->sparse_limit = std::numeric_limits<int64_t>::max();
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = false;
+    fp->should_use_fastboot_info = true;
+
+    std::vector<std::pair<std::vector<std::string>, bool>> patternmatchtest = {
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "update-super", "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             true},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "update-super", "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             true},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             false},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "update-super", "flash product",
+              "flash system", "flash system_ext", "flash odm", "if-wipe erase userdata"},
+             false},
+    };
+
+    auto remove_if_callback = [&](const auto& task) -> bool { return !!task->AsResizeTask(); };
+
+    for (auto& test : patternmatchtest) {
+        std::vector<std::unique_ptr<Task>> tasks = ParseFastbootInfo(fp.get(), test.first);
+        tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
+        ASSERT_EQ(OptimizedFlashSuperTask::CanOptimize(fp->source, tasks), test.second);
+    }
+}
+
+// Note: this test is exclusively testing that optimized flash super pattern matches a given task
+// list and is able to optimized based on a correct sequence of tasks
+TEST_F(ParseTest, OptimizedFlashSuperPatternMatchTest) {
+    if (!get_android_product_out()) {
+        GTEST_SKIP();
+    }
+
+    LocalImageSource s;
+    fp->source = &s;
+    fp->sparse_limit = std::numeric_limits<int64_t>::max();
+
+    fastboot::MockFastbootDriver fb;
+    fp->fb = &fb;
+    fp->should_optimize_flash_super = true;
+    fp->should_use_fastboot_info = true;
+
+    ON_CALL(fb, GetVar("super-partition-name", _, _))
+            .WillByDefault(testing::Return(fastboot::BAD_ARG));
+
+    ON_CALL(fb, GetVar("slot-count", _, _))
+            .WillByDefault(testing::DoAll(testing::SetArgPointee<1>("2"),
+                                          testing::Return(fastboot::SUCCESS)));
+
+    ON_CALL(fb, GetVar("partition-size:super", _, _))
+            .WillByDefault(testing::DoAll(testing::SetArgPointee<1>("1000"),
+                                          testing::Return(fastboot::SUCCESS)));
+
+    std::vector<std::pair<std::vector<std::string>, bool>> patternmatchtest = {
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "update-super", "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             true},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "update-super", "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             true},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "reboot fastboot",
+              "flash product", "flash system", "flash system_ext", "flash odm",
+              "if-wipe erase userdata"},
+             false},
+            {{"flash boot", "flash init_boot", "flash vendor_boot", "update-super", "flash product",
+              "flash system", "flash system_ext", "flash odm", "if-wipe erase userdata"},
+             false},
+    };
+
+    for (auto& test : patternmatchtest) {
+        std::vector<std::unique_ptr<Task>> tasks = ParseFastbootInfo(fp.get(), test.first);
+        // Check to make sure we have an optimized flash super task && no more dynamic partition
+        // flashing tasks
+        auto&& IsOptimized = [](const FlashingPlan* fp,
+                                const std::vector<std::unique_ptr<Task>>& tasks) {
+            bool contains_optimized_task = false;
+            for (auto& task : tasks) {
+                if (auto optimized_task = task->AsOptimizedFlashSuperTask()) {
+                    contains_optimized_task = true;
+                }
+                if (auto flash_task = task->AsFlashTask()) {
+                    if (FlashTask::IsDynamicParitition(fp->source, flash_task)) {
+                        return false;
+                    }
+                }
+            }
+            return contains_optimized_task;
+        };
+        ASSERT_EQ(IsOptimized(fp.get(), tasks), test.second);
     }
 }

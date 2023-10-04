@@ -28,7 +28,6 @@
 
 #include "fastboot.h"
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -44,12 +43,10 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <regex>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -76,9 +73,9 @@
 #include "constants.h"
 #include "diagnose_usb.h"
 #include "fastboot_driver.h"
+#include "fastboot_driver_interface.h"
 #include "fs.h"
 #include "storage.h"
-#include "super_flash_helper.h"
 #include "task.h"
 #include "tcp.h"
 #include "transport.h"
@@ -92,7 +89,6 @@ using android::base::ReadFully;
 using android::base::Split;
 using android::base::Trim;
 using android::base::unique_fd;
-using namespace std::string_literals;
 using namespace std::placeholders;
 
 #define FASTBOOT_INFO_VERSION 1
@@ -119,6 +115,9 @@ fastboot::FastBootDriver* fb = nullptr;
 static std::vector<Image> images = {
         // clang-format off
     { "boot",     "boot.img",         "boot.sig",     "boot",     false, ImageType::BootCritical },
+    { "bootloader",
+                  "bootloader.img",   "",             "bootloader",
+                                                                  true,  ImageType::Extra },
     { "init_boot",
                   "init_boot.img",    "init_boot.sig",
                                                       "init_boot",
@@ -131,6 +130,7 @@ static std::vector<Image> images = {
     { "odm_dlkm", "odm_dlkm.img",     "odm_dlkm.sig", "odm_dlkm", true,  ImageType::Normal },
     { "product",  "product.img",      "product.sig",  "product",  true,  ImageType::Normal },
     { "pvmfw",    "pvmfw.img",        "pvmfw.sig",    "pvmfw",    true,  ImageType::BootCritical },
+    { "radio",    "radio.img",        "",             "radio",    true,  ImageType::Extra },
     { "recovery", "recovery.img",     "recovery.sig", "recovery", true,  ImageType::BootCritical },
     { "super",    "super.img",        "super.sig",    "super",    true,  ImageType::Extra },
     { "system",   "system.img",       "system.sig",   "system",   false, ImageType::Normal },
@@ -345,23 +345,21 @@ Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& seria
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
-static Transport* open_device(const char* local_serial, bool wait_for_device = true,
-                              bool announce = true) {
+static std::unique_ptr<Transport> open_device(const char* local_serial, bool wait_for_device = true,
+                                              bool announce = true) {
     const Result<NetworkSerial, FastbootError> network_serial = ParseNetworkSerial(local_serial);
 
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     while (true) {
         if (network_serial.ok()) {
             std::string error;
             if (network_serial->protocol == Socket::Protocol::kTcp) {
-                transport = tcp::Connect(network_serial->address, network_serial->port, &error)
-                                    .release();
+                transport = tcp::Connect(network_serial->address, network_serial->port, &error);
             } else if (network_serial->protocol == Socket::Protocol::kUdp) {
-                transport = udp::Connect(network_serial->address, network_serial->port, &error)
-                                    .release();
+                transport = udp::Connect(network_serial->address, network_serial->port, &error);
             }
 
-            if (transport == nullptr && announce) {
+            if (!transport && announce) {
                 LOG(ERROR) << "error: " << error;
             }
         } else if (network_serial.error().code() ==
@@ -373,12 +371,12 @@ static Transport* open_device(const char* local_serial, bool wait_for_device = t
             Expect(network_serial);
         }
 
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
         if (!wait_for_device) {
-            return nullptr;
+            return transport;
         }
 
         if (announce) {
@@ -389,9 +387,9 @@ static Transport* open_device(const char* local_serial, bool wait_for_device = t
     }
 }
 
-static Transport* NetworkDeviceConnected(bool print = false) {
-    Transport* transport = nullptr;
-    Transport* result = nullptr;
+static std::unique_ptr<Transport> NetworkDeviceConnected(bool print = false) {
+    std::unique_ptr<Transport> transport;
+    std::unique_ptr<Transport> result;
 
     ConnectedDevicesStorage storage;
     std::set<std::string> devices;
@@ -404,11 +402,11 @@ static Transport* NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport == nullptr ? "offline" : "fastboot");
+            PrintDevice(device.c_str(), transport ? "offline" : "fastboot");
         }
 
-        if (transport != nullptr) {
-            result = transport;
+        if (transport) {
+            result = std::move(transport);
         }
     }
 
@@ -426,21 +424,21 @@ static Transport* NetworkDeviceConnected(bool print = false) {
 //
 // The returned Transport is a singleton, so multiple calls to this function will return the same
 // object, and the caller should not attempt to delete the returned Transport.
-static Transport* open_device() {
+static std::unique_ptr<Transport> open_device() {
     if (serial != nullptr) {
         return open_device(serial);
     }
 
     bool announce = true;
-    Transport* transport = nullptr;
+    std::unique_ptr<Transport> transport;
     while (true) {
         transport = usb_open(match_fastboot(nullptr));
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
         transport = NetworkDeviceConnected();
-        if (transport != nullptr) {
+        if (transport) {
             return transport;
         }
 
@@ -450,6 +448,8 @@ static Transport* open_device() {
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+
+    return transport;
 }
 
 static int Connect(int argc, char* argv[]) {
@@ -461,8 +461,7 @@ static int Connect(int argc, char* argv[]) {
     const char* local_serial = *argv;
     Expect(ParseNetworkSerial(local_serial));
 
-    const Transport* transport = open_device(local_serial, false);
-    if (transport == nullptr) {
+    if (!open_device(local_serial, false)) {
         return 1;
     }
 
@@ -526,6 +525,7 @@ static void list_devices() {
     usb_open(list_devices_callback);
     NetworkDeviceConnected(/* print */ true);
 }
+
 void syntax_error(const char* fmt, ...) {
     fprintf(stderr, "fastboot: usage: ");
 
@@ -629,6 +629,9 @@ static int show_help() {
             " --skip-reboot              Don't reboot device after flashing.\n"
             " --disable-verity           Sets disable-verity when flashing vbmeta.\n"
             " --disable-verification     Sets disable-verification when flashing vbmeta.\n"
+            " --disable-super-optimization\n"
+            "                            Disables optimizations on flashing super partition.\n"
+            " --disable-fastboot-info    Will collects tasks from image list rather than $OUT/fastboot-info.txt.\n"
             " --fs-options=OPTION[,OPTION]\n"
             "                            Enable filesystem features. OPTION supports casefold, projid, compress\n"
             // TODO: remove --unbuffered?
@@ -996,7 +999,7 @@ static std::vector<SparsePtr> load_sparse_files(int fd, int64_t max_size) {
     return resparse_file(s.get(), max_size);
 }
 
-static uint64_t get_uint_var(const char* var_name) {
+static uint64_t get_uint_var(const char* var_name, fastboot::IFastBootDriver* fb) {
     std::string value_str;
     if (fb->GetVar(var_name, &value_str) != fastboot::SUCCESS || value_str.empty()) {
         verbose("target didn't report %s", var_name);
@@ -1021,7 +1024,7 @@ int64_t get_sparse_limit(int64_t size, const FlashingPlan* fp) {
         // Unlimited, so see what the target device's limit is.
         // TODO: shouldn't we apply this limit even if you've used -S?
         if (target_sparse_limit == -1) {
-            target_sparse_limit = static_cast<int64_t>(get_uint_var("max-download-size"));
+            target_sparse_limit = static_cast<int64_t>(get_uint_var("max-download-size", fp->fb));
         }
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
@@ -1182,9 +1185,10 @@ static uint64_t get_partition_size(const std::string& partition) {
     return partition_size;
 }
 
-static void copy_avb_footer(const std::string& partition, struct fastboot_buffer* buf) {
+static void copy_avb_footer(const ImageSource* source, const std::string& partition,
+                            struct fastboot_buffer* buf) {
     if (buf->sz < AVB_FOOTER_SIZE || is_logical(partition) ||
-        should_flash_in_userspace(partition)) {
+        should_flash_in_userspace(source, partition)) {
         return;
     }
     // If overflows and negative, it should be < buf->sz.
@@ -1241,9 +1245,9 @@ void flash_partition_files(const std::string& partition, const std::vector<Spars
     }
 }
 
-static void flash_buf(const std::string& partition, struct fastboot_buffer* buf,
-                      const bool apply_vbmeta) {
-    copy_avb_footer(partition, buf);
+static void flash_buf(const ImageSource* source, const std::string& partition,
+                      struct fastboot_buffer* buf, const bool apply_vbmeta) {
+    copy_avb_footer(source, partition, buf);
 
     // Rewrite vbmeta if that's what we're flashing and modification has been requested.
     if (g_disable_verity || g_disable_verification) {
@@ -1277,7 +1281,7 @@ std::string get_current_slot() {
     return current_slot;
 }
 
-static int get_slot_count() {
+static int get_slot_count(fastboot::IFastBootDriver* fb) {
     std::string var;
     int count = 0;
     if (fb->GetVar("slot-count", &var) != fastboot::SUCCESS ||
@@ -1287,8 +1291,8 @@ static int get_slot_count() {
     return count;
 }
 
-bool supports_AB() {
-    return get_slot_count() >= 2;
+bool supports_AB(fastboot::IFastBootDriver* fb) {
+    return get_slot_count(fb) >= 2;
 }
 
 // Given a current slot, this returns what the 'other' slot is.
@@ -1300,7 +1304,7 @@ static std::string get_other_slot(const std::string& current_slot, int count) {
 }
 
 static std::string get_other_slot(const std::string& current_slot) {
-    return get_other_slot(current_slot, get_slot_count());
+    return get_other_slot(current_slot, get_slot_count(fb));
 }
 
 static std::string get_other_slot(int count) {
@@ -1308,7 +1312,7 @@ static std::string get_other_slot(int count) {
 }
 
 static std::string get_other_slot() {
-    return get_other_slot(get_current_slot(), get_slot_count());
+    return get_other_slot(get_current_slot(), get_slot_count(fb));
 }
 
 static std::string verify_slot(const std::string& slot_name, bool allow_all) {
@@ -1317,7 +1321,7 @@ static std::string verify_slot(const std::string& slot_name, bool allow_all) {
         if (allow_all) {
             return "all";
         } else {
-            int count = get_slot_count();
+            int count = get_slot_count(fb);
             if (count > 0) {
                 return "a";
             } else {
@@ -1326,7 +1330,7 @@ static std::string verify_slot(const std::string& slot_name, bool allow_all) {
         }
     }
 
-    int count = get_slot_count();
+    int count = get_slot_count(fb);
     if (count == 0) die("Device does not support slots");
 
     if (slot == "other") {
@@ -1399,7 +1403,7 @@ void do_for_partitions(const std::string& part, const std::string& slot,
                 slot.c_str());
         }
         if (has_slot == "yes") {
-            for (int i = 0; i < get_slot_count(); i++) {
+            for (int i = 0; i < get_slot_count(fb); i++) {
                 do_for_partition(part, std::string(1, (char)(i + 'a')), func, force_slot);
             }
         } else {
@@ -1410,18 +1414,26 @@ void do_for_partitions(const std::string& part, const std::string& slot,
     }
 }
 
-bool is_retrofit_device() {
-    std::string value;
-    if (fb->GetVar("super-partition-name", &value) != fastboot::SUCCESS) {
+bool is_retrofit_device(const ImageSource* source) {
+    // Does this device use dynamic partitions at all?
+    std::vector<char> contents;
+    if (!source->ReadFile("super_empty.img", &contents)) {
         return false;
     }
-    return android::base::StartsWith(value, "system_");
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
+    for (const auto& partition : metadata->partitions) {
+        if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Fetch a partition from the device to a given fd. This is a wrapper over FetchToFd to fetch
 // the full image.
-static uint64_t fetch_partition(const std::string& partition, borrowed_fd fd) {
-    uint64_t fetch_size = get_uint_var(FB_VAR_MAX_FETCH_SIZE);
+static uint64_t fetch_partition(const std::string& partition, borrowed_fd fd,
+                                fastboot::IFastBootDriver* fb) {
+    uint64_t fetch_size = get_uint_var(FB_VAR_MAX_FETCH_SIZE, fb);
     if (fetch_size == 0) {
         die("Unable to get %s. Device does not support fetch command.", FB_VAR_MAX_FETCH_SIZE);
     }
@@ -1443,17 +1455,18 @@ static uint64_t fetch_partition(const std::string& partition, borrowed_fd fd) {
 }
 
 static void do_fetch(const std::string& partition, const std::string& slot_override,
-                     const std::string& outfile) {
+                     const std::string& outfile, fastboot::IFastBootDriver* fb) {
     unique_fd fd(TEMP_FAILURE_RETRY(
             open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_BINARY, 0644)));
-    auto fetch = std::bind(fetch_partition, _1, borrowed_fd(fd));
+    auto fetch = std::bind(fetch_partition, _1, borrowed_fd(fd), fb);
     do_for_partitions(partition, slot_override, fetch, false /* force slot */);
 }
 
 // Return immediately if not flashing a vendor boot image. If flashing a vendor boot image,
 // repack vendor_boot image with an updated ramdisk. After execution, buf is set
 // to the new image to flash, and return value is the real partition name to flash.
-static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf) {
+static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf,
+                                  fastboot::IFastBootDriver* fb) {
     std::string_view pname_sv{pname};
 
     if (!android::base::StartsWith(pname_sv, "vendor_boot:") &&
@@ -1471,7 +1484,7 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
     std::string ramdisk(pname_sv.substr(pname_sv.find(':') + 1));
 
     unique_fd vendor_boot(make_temporary_fd("vendor boot repack"));
-    uint64_t vendor_boot_size = fetch_partition(partition, vendor_boot);
+    uint64_t vendor_boot_size = fetch_partition(partition, vendor_boot, fb);
     auto repack_res = replace_vendor_ramdisk(vendor_boot, vendor_boot_size, ramdisk, buf->fd,
                                              static_cast<uint64_t>(buf->sz));
     if (!repack_res.ok()) {
@@ -1486,10 +1499,13 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
 
 void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
               const FlashingPlan* fp) {
+    if (!fp) {
+        die("do flash was called without a valid flashing plan");
+    }
     verbose("Do flash %s %s", pname, fname);
     struct fastboot_buffer buf;
 
-    if (fp && fp->source) {
+    if (fp->source) {
         unique_fd fd = fp->source->OpenFile(fname);
         if (fd < 0 || !load_buf_fd(std::move(fd), &buf, fp)) {
             die("could not load '%s': %s", fname, strerror(errno));
@@ -1508,14 +1524,14 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
     if (is_logical(pname)) {
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
-    std::string flash_pname = repack_ramdisk(pname, &buf);
-    flash_buf(flash_pname, &buf, apply_vbmeta);
+    std::string flash_pname = repack_ramdisk(pname, &buf, fp->fb);
+    flash_buf(fp->source, flash_pname, &buf, apply_vbmeta);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
 // set current slot as active instead. This clears slot-unbootable.
 static void set_active(const std::string& slot_override) {
-    if (!supports_AB()) return;
+    if (!supports_AB(fb)) return;
 
     if (slot_override != "") {
         fb->SetActive(slot_override);
@@ -1534,9 +1550,7 @@ bool is_userspace_fastboot() {
 
 void reboot_to_userspace_fastboot() {
     fb->RebootTo("fastboot");
-
-    auto* old_transport = fb->set_transport(nullptr);
-    delete old_transport;
+    fb->set_transport(nullptr);
 
     // Give the current connection time to close.
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1665,7 +1679,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (should_flash_in_userspace(*metadata.get(), flash_task->GetPartitionAndSlot())) {
+            if (FlashTask::IsDynamicParitition(fp->source, flash_task)) {
                 if (!loc) {
                     loc = i;
                 }
@@ -1747,25 +1761,15 @@ std::vector<std::unique_ptr<Task>> ParseFastbootInfo(const FlashingPlan* fp,
         }
         tasks.emplace_back(std::move(task));
     }
-    if (auto flash_super_task = OptimizedFlashSuperTask::InitializeFromTasks(fp, tasks)) {
-        auto it = tasks.begin();
-        for (size_t i = 0; i < tasks.size(); i++) {
-            if (auto flash_task = tasks[i]->AsFlashTask()) {
-                if (should_flash_in_userspace(flash_task->GetPartitionAndSlot())) {
-                    break;
-                }
-            }
-            if (auto wipe_task = tasks[i]->AsWipeTask()) {
-                break;
-            }
-            it++;
-        }
-        tasks.insert(it, std::move(flash_super_task));
+
+    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp, tasks)) {
+        tasks.emplace_back(std::move(flash_super_task));
     } else {
         if (!AddResizeTasks(fp, &tasks)) {
             LOG(WARNING) << "Failed to add resize tasks";
-        };
+        }
     }
+
     return tasks;
 }
 
@@ -1788,6 +1792,7 @@ void FlashAllTool::Flash() {
     CancelSnapshotIfNeeded();
 
     tasks_ = CollectTasks();
+
     for (auto& task : tasks_) {
         task->Run();
     }
@@ -1802,7 +1807,18 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasks() {
     } else {
         tasks = CollectTasksFromImageList();
     }
-
+    if (fp_->exclude_dynamic_partitions) {
+        auto is_non_static_flash_task = [&](const auto& task) -> bool {
+            if (auto flash_task = task->AsFlashTask()) {
+                if (!should_flash_in_userspace(fp_->source, flash_task->GetPartitionAndSlot())) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        tasks.erase(std::remove_if(tasks.begin(), tasks.end(), is_non_static_flash_task),
+                    tasks.end());
+    }
     return tasks;
 }
 
@@ -1830,7 +1846,7 @@ void FlashAllTool::DetermineSlot() {
         fp_->secondary_slot = get_other_slot();
     }
     if (fp_->secondary_slot == "") {
-        if (supports_AB()) {
+        if (supports_AB(fb)) {
             fprintf(stderr, "Warning: Could not determine slot for secondary images. Ignoring.\n");
         }
         fp_->skip_secondary = true;
@@ -1860,30 +1876,34 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
     // or in bootloader fastboot.
     std::vector<std::unique_ptr<Task>> tasks;
     AddFlashTasks(boot_images_, tasks);
-    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp_, os_images_)) {
-        tasks.emplace_back(std::move(flash_super_task));
-    } else {
-        // Sync the super partition. This will reboot to userspace fastboot if needed.
-        tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
-        // Resize any logical partition to 0, so each partition is reset to 0
-        // extents, and will achieve more optimal allocation.
-        for (const auto& [image, slot] : os_images_) {
-            // Retrofit devices have two super partitions, named super_a and super_b.
-            // On these devices, secondary slots must be flashed as physical
-            // partitions (otherwise they would not mount on first boot). To enforce
-            // this, we delete any logical partitions for the "other" slot.
-            if (is_retrofit_device()) {
-                std::string partition_name = image->part_name + "_"s + slot;
-                if (image->IsSecondary() && should_flash_in_userspace(partition_name)) {
-                    fp_->fb->DeletePartition(partition_name);
-                }
+
+    // Sync the super partition. This will reboot to userspace fastboot if needed.
+    tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
+    for (const auto& [image, slot] : os_images_) {
+        // Retrofit devices have two super partitions, named super_a and super_b.
+        // On these devices, secondary slots must be flashed as physical
+        // partitions (otherwise they would not mount on first boot). To enforce
+        // this, we delete any logical partitions for the "other" slot.
+        if (is_retrofit_device(fp_->source)) {
+            std::string partition_name = image->part_name + "_" + slot;
+            if (image->IsSecondary() && should_flash_in_userspace(fp_->source, partition_name)) {
                 tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
-            tasks.emplace_back(std::make_unique<ResizeTask>(fp_, image->part_name, "0", slot));
         }
     }
 
     AddFlashTasks(os_images_, tasks);
+
+    if (auto flash_super_task = OptimizedFlashSuperTask::Initialize(fp_, tasks)) {
+        tasks.emplace_back(std::move(flash_super_task));
+    } else {
+        // Resize any logical partition to 0, so each partition is reset to 0
+        // extents, and will achieve more optimal allocation.
+        if (!AddResizeTasks(fp_, &tasks)) {
+            LOG(WARNING) << "Failed to add resize tasks";
+        }
+    }
+
     return tasks;
 }
 
@@ -1931,7 +1951,6 @@ static void do_update(const char* filename, FlashingPlan* fp) {
     }
     ZipImageSource zp = ZipImageSource(zip);
     fp->source = &zp;
-    fp->wants_wipe = false;
     FlashAllTool tool(fp);
     tool.Flash();
 
@@ -2069,7 +2088,8 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
     if (!load_buf_fd(std::move(fd), &buf, fp)) {
         die("Cannot read image: %s", strerror(errno));
     }
-    flash_buf(partition, &buf, is_vbmeta_partition(partition));
+
+    flash_buf(fp->source, partition, &buf, is_vbmeta_partition(partition));
     return;
 
 failed:
@@ -2083,18 +2103,26 @@ failed:
     }
 }
 
-bool should_flash_in_userspace(const std::string& partition_name) {
-    if (!get_android_product_out()) {
+bool should_flash_in_userspace(const ImageSource* source, const std::string& partition_name) {
+    if (!source) {
+        if (!get_android_product_out()) {
+            return false;
+        }
+        auto path = find_item_given_name("super_empty.img");
+        if (path.empty() || access(path.c_str(), R_OK)) {
+            return false;
+        }
+        auto metadata = android::fs_mgr::ReadFromImageFile(path);
+        if (!metadata) {
+            return false;
+        }
+        return should_flash_in_userspace(*metadata.get(), partition_name);
+    }
+    std::vector<char> contents;
+    if (!source->ReadFile("super_empty.img", &contents)) {
         return false;
     }
-    auto path = find_item_given_name("super_empty.img");
-    if (path.empty() || access(path.c_str(), R_OK)) {
-        return false;
-    }
-    auto metadata = android::fs_mgr::ReadFromImageFile(path);
-    if (!metadata) {
-        return false;
-    }
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
     return should_flash_in_userspace(*metadata.get(), partition_name);
 }
 
@@ -2118,7 +2146,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
     if (metadata.block_devices.size() > 1) {
         ok = WriteSplitImageFiles(temp_dir.path, metadata, block_size, {}, true);
     } else {
-        auto image_path = temp_dir.path + "/"s + super_bdev_name + ".img";
+        auto image_path = std::string(temp_dir.path) + "/" + std::string(super_bdev_name) + ".img";
         ok = WriteToImageFile(image_path, metadata, block_size, {}, true);
     }
     if (!ok) {
@@ -2137,7 +2165,7 @@ static bool wipe_super(const android::fs_mgr::LpMetadata& metadata, const std::s
             image_name = partition + ".img";
         }
 
-        auto image_path = temp_dir.path + "/"s + image_name;
+        auto image_path = std::string(temp_dir.path) + "/" + image_name;
         auto flash = [&](const std::string& partition_name) {
             do_flash(partition_name.c_str(), image_path.c_str(), false, fp);
         };
@@ -2207,6 +2235,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
                                       {"disable-verification", no_argument, 0, 0},
                                       {"disable-verity", no_argument, 0, 0},
                                       {"disable-super-optimization", no_argument, 0, 0},
+                                      {"exclude-dynamic-partitions", no_argument, 0, 0},
+                                      {"disable-fastboot-info", no_argument, 0, 0},
                                       {"force", no_argument, 0, 0},
                                       {"fs-options", required_argument, 0, 0},
                                       {"header-version", required_argument, 0, 0},
@@ -2247,6 +2277,11 @@ int FastBootTool::Main(int argc, char* argv[]) {
                 g_disable_verity = true;
             } else if (name == "disable-super-optimization") {
                 fp->should_optimize_flash_super = false;
+            } else if (name == "exclude-dynamic-partitions") {
+                fp->exclude_dynamic_partitions = true;
+                fp->should_optimize_flash_super = false;
+            } else if (name == "disable-fastboot-info") {
+                fp->should_use_fastboot_info = false;
             } else if (name == "force") {
                 fp->force_flash = true;
             } else if (name == "fs-options") {
@@ -2346,8 +2381,8 @@ int FastBootTool::Main(int argc, char* argv[]) {
         return show_help();
     }
 
-    Transport* transport = open_device();
-    if (transport == nullptr) {
+    std::unique_ptr<Transport> transport = open_device();
+    if (!transport) {
         return 1;
     }
     fastboot::DriverCallbacks driver_callbacks = {
@@ -2357,7 +2392,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
             .text = TextMessage,
     };
 
-    fastboot::FastBootDriver fastboot_driver(transport, driver_callbacks, false);
+    fastboot::FastBootDriver fastboot_driver(std::move(transport), driver_callbacks, false);
     fb = &fastboot_driver;
     fp->fb = &fastboot_driver;
 
@@ -2548,14 +2583,12 @@ int FastBootTool::Main(int argc, char* argv[]) {
                     std::make_unique<ResizeTask>(fp.get(), partition, size, fp->slot_override);
             resize_task->Run();
         } else if (command == "gsi") {
-            std::string arg = next_arg(&args);
-            if (arg == "wipe") {
-                fb->RawCommand("gsi:wipe", "wiping GSI");
-            } else if (arg == "disable") {
-                fb->RawCommand("gsi:disable", "disabling GSI");
-            } else {
-                syntax_error("expected 'wipe' or 'disable'");
+            if (args.empty()) syntax_error("invalid gsi command");
+            std::string cmd("gsi");
+            while (!args.empty()) {
+                cmd += ":" + next_arg(&args);
             }
+            fb->RawCommand(cmd, "");
         } else if (command == "wipe-super") {
             std::string image;
             if (args.empty()) {
@@ -2576,7 +2609,7 @@ int FastBootTool::Main(int argc, char* argv[]) {
         } else if (command == FB_CMD_FETCH) {
             std::string partition = next_arg(&args);
             std::string outfile = next_arg(&args);
-            do_fetch(partition, fp->slot_override, outfile);
+            do_fetch(partition, fp->slot_override, outfile, fp->fb);
         } else {
             syntax_error("unknown command %s", command.c_str());
         }
@@ -2601,9 +2634,6 @@ int FastBootTool::Main(int argc, char* argv[]) {
         task->Run();
     }
     fprintf(stderr, "Finished. Total time: %.3fs\n", (now() - start));
-
-    auto* old_transport = fb->set_transport(nullptr);
-    delete old_transport;
 
     return 0;
 }

@@ -50,15 +50,15 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
     *outTokenizer = nullptr;
 
     int result = OK;
-    int fd = ::open(filename.string(), O_RDONLY);
+    int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
         result = -errno;
-        ALOGE("Error opening file '%s': %s", filename.string(), strerror(errno));
+        ALOGE("Error opening file '%s': %s", filename.c_str(), strerror(errno));
     } else {
         struct stat stat;
         if (fstat(fd, &stat)) {
             result = -errno;
-            ALOGE("Error getting size of file '%s': %s", filename.string(), strerror(errno));
+            ALOGE("Error getting size of file '%s': %s", filename.c_str(), strerror(errno));
         } else {
             size_t length = size_t(stat.st_size);
 
@@ -80,7 +80,7 @@ status_t Tokenizer::open(const String8& filename, Tokenizer** outTokenizer) {
                 ssize_t nrd = read(fd, buffer, length);
                 if (nrd < 0) {
                     result = -errno;
-                    ALOGE("Error reading file '%s': %s", filename.string(), strerror(errno));
+                    ALOGE("Error reading file '%s': %s", filename.c_str(), strerror(errno));
                     delete[] buffer;
                     buffer = nullptr;
                 } else {
@@ -106,7 +106,7 @@ status_t Tokenizer::fromContents(const String8& filename,
 
 String8 Tokenizer::getLocation() const {
     String8 result;
-    result.appendFormat("%s:%d", mFilename.string(), mLineNumber);
+    result.appendFormat("%s:%d", mFilename.c_str(), mLineNumber);
     return result;
 }
 

@@ -685,6 +685,17 @@ TEST_F(SnapshotTest, Merge) {
     }
     ASSERT_TRUE(sm->InitiateMerge());
 
+    // Create stale files in snapshot directory. Merge should skip these files
+    // as the suffix doesn't match the current slot.
+    auto tmp_path = test_device->GetMetadataDir() + "/snapshots/test_partition_b.tmp";
+    auto other_slot = test_device->GetMetadataDir() + "/snapshots/test_partition_a";
+
+    unique_fd fd(open(tmp_path.c_str(), O_RDWR | O_CLOEXEC | O_CREAT, 0644));
+    ASSERT_GE(fd, 0);
+
+    fd.reset(open(other_slot.c_str(), O_RDWR | O_CLOEXEC | O_CREAT, 0644));
+    ASSERT_GE(fd, 0);
+
     // The device should have been switched to a snapshot-merge target.
     DeviceMapper::TargetInfo target;
     ASSERT_TRUE(sm->IsSnapshotDevice("test_partition_b", &target));
@@ -700,13 +711,23 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 
+    // Make sure that snapshot states are cleared and all stale files
+    // are deleted
+    {
+        ASSERT_TRUE(AcquireLock());
+        auto local_lock = std::move(lock_);
+        std::vector<std::string> snapshots;
+        ASSERT_TRUE(sm->ListSnapshots(local_lock.get(), &snapshots));
+        ASSERT_TRUE(snapshots.empty());
+    }
+
     // The device should no longer be a snapshot or snapshot-merge.
     ASSERT_FALSE(sm->IsSnapshotDevice("test_partition_b"));
 
     // Test that we can read back the string we wrote to the snapshot. Note
     // that the base device is gone now. |snap_device| contains the correct
     // partition.
-    unique_fd fd(open("/dev/block/mapper/test_partition_b", O_RDONLY | O_CLOEXEC));
+    fd.reset(open("/dev/block/mapper/test_partition_b", O_RDONLY | O_CLOEXEC));
     ASSERT_GE(fd, 0);
 
     std::string buffer(test_string.size(), '\0');
@@ -2536,6 +2557,56 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
         ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
         ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
     }
+}
+
+TEST_F(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch) {
+    MountMetadata();
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    if (!sm->UpdateUsesUserSnapshots()) {
+        GTEST_SKIP() << "Test does not apply as UserSnapshots aren't enabled.";
+    }
+
+    ASSERT_TRUE(WriteSnapshots());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge test";
+    }
+    // Mark the indicator
+    ASSERT_TRUE(sm->BootFromSnapshotsWithoutSlotSwitch());
+
+    ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+    sm->set_use_first_stage_snapuserd(true);
+
+    ASSERT_TRUE(sm->NeedSnapshotsInFirstStageMount());
+
+    // Map snapshots
+    ASSERT_TRUE(sm->MapAllSnapshots(10s));
+
+    // New updates should fail
+    ASSERT_FALSE(sm->BeginUpdate());
+
+    // Snapshots cannot be cancelled
+    ASSERT_FALSE(sm->CancelUpdate());
+
+    // Merge cannot start
+    ASSERT_FALSE(sm->InitiateMerge());
+
+    // Read bytes back and verify they match the cache.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+
+    // Remove the indicators
+    ASSERT_TRUE(sm->PrepareDeviceToBootWithoutSnapshot());
+
+    // Ensure snapshots are still mounted
+    ASSERT_TRUE(sm->IsUserspaceSnapshotUpdateInProgress());
+
+    // Cleanup snapshots
+    ASSERT_TRUE(sm->UnmapAllSnapshots());
 }
 
 TEST_F(SnapshotUpdateTest, MapAllSnapshots) {

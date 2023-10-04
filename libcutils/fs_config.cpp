@@ -41,10 +41,6 @@
 
 #include "fs_config.h"
 
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
 using android::base::EndsWith;
 using android::base::StartsWith;
 
@@ -214,6 +210,7 @@ static const struct fs_path_config android_files[] = {
 #endif
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd_ramdisk" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/fsck.f2fs" },
     // generic defaults
@@ -256,12 +253,12 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
         len = strip(target_out_path, len, "/");
         len = strip(target_out_path, len, "/system");
         if (asprintf(&name, "%.*s%s", (int)len, target_out_path, conf[which][dir]) != -1) {
-            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
+            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY));
             free(name);
         }
     }
     if (fd < 0) {
-        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY | O_BINARY));
+        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY));
     }
     return fd;
 }

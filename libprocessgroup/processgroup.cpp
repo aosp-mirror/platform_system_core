@@ -206,11 +206,11 @@ bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
 }
 
 static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
-    return StringPrintf("%s/uid_%d", cgroup, uid);
+    return StringPrintf("%s/uid_%u", cgroup, uid);
 }
 
 static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
-    return StringPrintf("%s/uid_%d/pid_%d", cgroup, uid, pid);
+    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
 }
 
 static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
@@ -221,6 +221,13 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
         ret = rmdir(uid_pid_path.c_str());
         if (!ret || errno != EBUSY) break;
         std::this_thread::sleep_for(5ms);
+    }
+
+    if (!ret && uid >= AID_ISOLATED_START && uid <= AID_ISOLATED_END) {
+        // Isolated UIDs are unlikely to be reused soon after removal,
+        // so free up the kernel resources for the UID level cgroup.
+        const auto uid_path = ConvertUidToPath(cgroup, uid);
+        ret = rmdir(uid_path.c_str());
     }
 
     return ret;

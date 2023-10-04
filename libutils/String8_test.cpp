@@ -36,7 +36,7 @@ protected:
 TEST_F(String8Test, Cstr) {
     String8 tmp("Hello, world!");
 
-    EXPECT_STREQ(tmp.string(), "Hello, world!");
+    EXPECT_STREQ(tmp.c_str(), "Hello, world!");
 }
 
 TEST_F(String8Test, OperatorPlus) {
@@ -45,16 +45,16 @@ TEST_F(String8Test, OperatorPlus) {
     // Test adding String8 + const char*
     const char* ccsrc2 = "world!";
     String8 dst1 = src1 + ccsrc2;
-    EXPECT_STREQ(dst1.string(), "Hello, world!");
-    EXPECT_STREQ(src1.string(), "Hello, ");
+    EXPECT_STREQ(dst1.c_str(), "Hello, world!");
+    EXPECT_STREQ(src1.c_str(), "Hello, ");
     EXPECT_STREQ(ccsrc2, "world!");
 
     // Test adding String8 + String8
     String8 ssrc2("world!");
     String8 dst2 = src1 + ssrc2;
-    EXPECT_STREQ(dst2.string(), "Hello, world!");
-    EXPECT_STREQ(src1.string(), "Hello, ");
-    EXPECT_STREQ(ssrc2.string(), "world!");
+    EXPECT_STREQ(dst2.c_str(), "Hello, world!");
+    EXPECT_STREQ(src1.c_str(), "Hello, ");
+    EXPECT_STREQ(ssrc2.c_str(), "world!");
 }
 
 TEST_F(String8Test, OperatorPlusEquals) {
@@ -63,14 +63,14 @@ TEST_F(String8Test, OperatorPlusEquals) {
     // Testing String8 += String8
     String8 src2(" is my passport.");
     src1 += src2;
-    EXPECT_STREQ(src1.string(), "My voice is my passport.");
-    EXPECT_STREQ(src2.string(), " is my passport.");
+    EXPECT_STREQ(src1.c_str(), "My voice is my passport.");
+    EXPECT_STREQ(src2.c_str(), " is my passport.");
 
     // Adding const char* to the previous string.
     const char* src3 = " Verify me.";
     src1 += src3;
-    EXPECT_STREQ(src1.string(), "My voice is my passport. Verify me.");
-    EXPECT_STREQ(src2.string(), " is my passport.");
+    EXPECT_STREQ(src1.c_str(), "My voice is my passport. Verify me.");
+    EXPECT_STREQ(src2.c_str(), " is my passport.");
     EXPECT_STREQ(src3, " Verify me.");
 }
 
@@ -100,17 +100,35 @@ TEST_F(String8Test, CheckUtf32Conversion) {
 TEST_F(String8Test, ValidUtf16Conversion) {
     char16_t tmp[] = u"abcdef";
     String8 valid = String8(String16(tmp));
-    EXPECT_STREQ(valid, "abcdef");
+    EXPECT_STREQ(valid.c_str(), "abcdef");
 }
 
 TEST_F(String8Test, append) {
     String8 s;
     EXPECT_EQ(OK, s.append("foo"));
-    EXPECT_STREQ("foo", s);
+    EXPECT_STREQ("foo", s.c_str());
     EXPECT_EQ(OK, s.append("bar"));
-    EXPECT_STREQ("foobar", s);
+    EXPECT_STREQ("foobar", s.c_str());
     EXPECT_EQ(OK, s.append("baz", 0));
-    EXPECT_STREQ("foobar", s);
+    EXPECT_STREQ("foobar", s.c_str());
     EXPECT_EQ(NO_MEMORY, s.append("baz", SIZE_MAX));
-    EXPECT_STREQ("foobar", s);
+    EXPECT_STREQ("foobar", s.c_str());
+}
+
+TEST_F(String8Test, removeAll) {
+    String8 s("Hello, world!");
+
+    // NULL input should cause an assertion failure and error message in logcat
+    EXPECT_DEATH(s.removeAll(NULL), "");
+
+    // expect to return true and string content should remain unchanged
+    EXPECT_TRUE(s.removeAll(""));
+    EXPECT_STREQ("Hello, world!", s.c_str());
+
+    // expect to return false
+    EXPECT_FALSE(s.removeAll("x"));
+    EXPECT_STREQ("Hello, world!", s.c_str());
+
+    EXPECT_TRUE(s.removeAll("o"));
+    EXPECT_STREQ("Hell, wrld!", s.c_str());
 }

@@ -16,7 +16,10 @@
 
 #include "snapuserd_readahead.h"
 
+#include <pthread.h>
+
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -427,7 +430,7 @@ bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
         // will fallback to synchronous I/O.
         int ret = io_uring_wait_cqe(ring_.get(), &cqe);
         if (ret) {
-            SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << ret;
+            SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << strerror(-ret);
             status = false;
             break;
         }
@@ -492,7 +495,7 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
         if (xor_op_index < xor_op_vec.size()) {
             const CowOperation* xor_op = xor_op_vec[xor_op_index];
             if (xor_op->new_block == new_block) {
-                void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+                void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ);
                 if (!buffer) {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer for block: "
                                     << xor_op->new_block;
@@ -506,7 +509,6 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
                 }
 
                 xor_op_index += 1;
-                bufsink_.UpdateBufferOffset(BLOCK_SZ);
             }
         }
         block_index += 1;
@@ -593,7 +595,7 @@ bool ReadAhead::ReadAheadSyncIO() {
             // Check if this block is an XOR op
             if (xor_op->new_block == new_block) {
                 // Read the xor'ed data from COW
-                void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+                void* buffer = bufsink.GetPayloadBuffer(BLOCK_SZ);
                 if (!buffer) {
                     SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer";
                     return false;
@@ -691,6 +693,7 @@ bool ReadAhead::ReadAheadIOStart() {
     // window. If there is a crash during this time frame, merge should resume
     // based on the contents of the scratch space.
     if (!snapuserd_->WaitForMergeReady()) {
+        SNAP_LOG(ERROR) << "ReadAhead failed to wait for merge ready";
         return false;
     }
 
@@ -752,6 +755,10 @@ void ReadAhead::FinalizeIouring() {
 }
 
 bool ReadAhead::RunThread() {
+    SNAP_LOG(INFO) << "ReadAhead thread started.";
+
+    pthread_setname_np(pthread_self(), "ReadAhead");
+
     if (!InitializeFds()) {
         return false;
     }
@@ -766,10 +773,11 @@ bool ReadAhead::RunThread() {
 
     InitializeIouring();
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
+    SNAP_LOG(INFO) << "ReadAhead processing.";
     while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
             break;
@@ -780,7 +788,7 @@ bool ReadAhead::RunThread() {
     CloseFds();
     reader_->CloseCowFd();
 
-    SNAP_LOG(INFO) << " ReadAhead thread terminating....";
+    SNAP_LOG(INFO) << " ReadAhead thread terminating.";
     return true;
 }
 

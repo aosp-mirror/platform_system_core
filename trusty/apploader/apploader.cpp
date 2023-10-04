@@ -19,6 +19,7 @@
 #include <BufferAllocator/BufferAllocator.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <stdbool.h>

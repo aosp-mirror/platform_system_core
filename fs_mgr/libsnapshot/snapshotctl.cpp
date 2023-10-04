@@ -17,13 +17,24 @@
 #include <sysexits.h>
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <future>
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <thread>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+
+#include <android-base/chrono_utils.h>
+#include <android-base/parseint.h>
+#include <android-base/properties.h>
+#include <android-base/scopeguard.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
@@ -32,6 +43,8 @@
 #include <libsnapshot/cow_format.h>
 #include <libsnapshot/snapshot.h>
 #include <storage_literals/storage_literals.h>
+
+#include "partition_cow_creator.h"
 
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 #include <BootControlClient.h>
@@ -56,12 +69,210 @@ int Usage() {
                  "  merge\n"
                  "    Deprecated.\n"
                  "  map\n"
-                 "    Map all partitions at /dev/block/mapper\n";
+                 "    Map all partitions at /dev/block/mapper\n"
+                 "  map-snapshots <directory where snapshot patches are present>\n"
+                 "    Map all snapshots based on patches present in the directory\n"
+                 "  unmap-snapshots\n"
+                 "    Unmap all pre-created snapshots\n"
+                 "  delete-snapshots\n"
+                 "    Delete all pre-created snapshots\n"
+                 "  revert-snapshots\n"
+                 "    Prepares devices to boot without snapshots on next boot.\n"
+                 "    This does not delete the snapshot. It only removes the indicators\n"
+                 "    so that first stage init will not mount from snapshots.\n";
     return EX_USAGE;
 }
 
 namespace android {
 namespace snapshot {
+
+class MapSnapshots {
+  public:
+    MapSnapshots(std::string path = "");
+    bool CreateSnapshotDevice(std::string& partition_name, std::string& patch);
+    bool InitiateThreadedSnapshotWrite(std::string& pname, std::string& snapshot_patch);
+    bool FinishSnapshotWrites();
+    bool UnmapCowImagePath(std::string& name);
+    bool DeleteSnapshots();
+    bool CleanupSnapshot() { return sm_->PrepareDeviceToBootWithoutSnapshot(); }
+    bool BeginUpdate();
+
+  private:
+    std::optional<std::string> GetCowImagePath(std::string& name);
+    bool WriteSnapshotPatch(std::string cow_device, std::string patch);
+    std::unique_ptr<SnapshotManager::LockedFile> lock_;
+    std::unique_ptr<SnapshotManager> sm_;
+    std::vector<std::future<bool>> threads_;
+    std::string snapshot_dir_path_;
+};
+
+MapSnapshots::MapSnapshots(std::string path) {
+    sm_ = SnapshotManager::New();
+    if (!sm_) {
+        std::cout << "Failed to create snapshotmanager";
+        exit(1);
+    }
+    snapshot_dir_path_ = path + "/";
+}
+
+bool MapSnapshots::BeginUpdate() {
+    lock_ = sm_->LockExclusive();
+    std::vector<std::string> snapshots;
+    sm_->ListSnapshots(lock_.get(), &snapshots);
+    if (!snapshots.empty()) {
+        // Snapshots are already present.
+        return true;
+    }
+
+    lock_ = nullptr;
+    if (!sm_->BeginUpdate()) {
+        LOG(ERROR) << "BeginUpdate failed";
+        return false;
+    }
+    lock_ = sm_->LockExclusive();
+    return true;
+}
+
+bool MapSnapshots::CreateSnapshotDevice(std::string& partition_name, std::string& patchfile) {
+    std::string parsing_file = snapshot_dir_path_ + patchfile;
+
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(parsing_file.c_str(), O_RDONLY)));
+    if (fd < 0) {
+        LOG(ERROR) << "Failed to open file: " << parsing_file;
+        return false;
+    }
+
+    uint64_t dev_sz = lseek(fd.get(), 0, SEEK_END);
+    if (!dev_sz) {
+        LOG(ERROR) << "Could not determine block device size: " << parsing_file;
+        return false;
+    }
+
+    const int block_sz = 4_KiB;
+    dev_sz += block_sz - 1;
+    dev_sz &= ~(block_sz - 1);
+
+    SnapshotStatus status;
+    status.set_state(SnapshotState::CREATED);
+    status.set_using_snapuserd(true);
+    status.set_old_partition_size(0);
+    status.set_name(partition_name);
+    status.set_cow_file_size(dev_sz);
+    status.set_cow_partition_size(0);
+
+    PartitionCowCreator cow_creator;
+    cow_creator.using_snapuserd = true;
+
+    if (!sm_->CreateSnapshot(lock_.get(), &cow_creator, &status)) {
+        LOG(ERROR) << "CreateSnapshot failed";
+        return false;
+    }
+
+    if (!sm_->CreateCowImage(lock_.get(), partition_name)) {
+        LOG(ERROR) << "CreateCowImage failed";
+        return false;
+    }
+
+    return true;
+}
+
+std::optional<std::string> MapSnapshots::GetCowImagePath(std::string& name) {
+    auto cow_dev = sm_->MapCowImage(name, 5s);
+    if (!cow_dev.has_value()) {
+        LOG(ERROR) << "Failed to get COW device path";
+        return std::nullopt;
+    }
+
+    LOG(INFO) << "COW Device path: " << cow_dev.value();
+    return cow_dev;
+}
+
+bool MapSnapshots::WriteSnapshotPatch(std::string cow_device, std::string patch) {
+    std::string patch_file = snapshot_dir_path_ + patch;
+
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(patch_file.c_str(), O_RDONLY)));
+    if (fd < 0) {
+        LOG(ERROR) << "Failed to open file: " << patch_file;
+        return false;
+    }
+
+    uint64_t dev_sz = lseek(fd.get(), 0, SEEK_END);
+    if (!dev_sz) {
+        std::cout << "Could not determine block device size: " << patch_file;
+        return false;
+    }
+
+    android::base::unique_fd cfd(TEMP_FAILURE_RETRY(open(cow_device.c_str(), O_RDWR)));
+    if (cfd < 0) {
+        LOG(ERROR) << "Failed to open file: " << cow_device;
+        return false;
+    }
+
+    const uint64_t read_sz = 1_MiB;
+    std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(read_sz);
+    off_t file_offset = 0;
+
+    while (true) {
+        size_t to_read = std::min((dev_sz - file_offset), read_sz);
+        if (!android::base::ReadFullyAtOffset(fd.get(), buffer.get(), to_read, file_offset)) {
+            PLOG(ERROR) << "ReadFullyAtOffset failed";
+            return false;
+        }
+
+        if (!android::base::WriteFullyAtOffset(cfd, buffer.get(), to_read, file_offset)) {
+            PLOG(ERROR) << "WriteFullyAtOffset failed";
+            return false;
+        }
+        file_offset += to_read;
+        if (file_offset >= dev_sz) {
+            break;
+        }
+    }
+    fsync(cfd.get());
+    return true;
+}
+
+bool MapSnapshots::InitiateThreadedSnapshotWrite(std::string& pname, std::string& snapshot_patch) {
+    auto path = GetCowImagePath(pname);
+    if (!path.has_value()) {
+        return false;
+    }
+    threads_.emplace_back(std::async(std::launch::async, &MapSnapshots::WriteSnapshotPatch, this,
+                                     path.value(), snapshot_patch));
+    return true;
+}
+
+bool MapSnapshots::FinishSnapshotWrites() {
+    bool ret = true;
+    for (auto& t : threads_) {
+        ret = t.get() && ret;
+    }
+
+    lock_ = nullptr;
+    if (ret) {
+        LOG(INFO) << "Pre-created snapshots successfully copied";
+        if (!sm_->FinishedSnapshotWrites(false)) {
+            return false;
+        }
+        return sm_->BootFromSnapshotsWithoutSlotSwitch();
+    }
+
+    LOG(ERROR) << "Snapshot copy failed";
+    return false;
+}
+
+bool MapSnapshots::UnmapCowImagePath(std::string& name) {
+    return sm_->UnmapCowImage(name);
+}
+
+bool MapSnapshots::DeleteSnapshots() {
+    lock_ = sm_->LockExclusive();
+    if (!sm_->RemoveAllUpdateState(lock_.get())) {
+        LOG(ERROR) << "Remove All Update State failed";
+        return false;
+    }
+    return true;
+}
 
 bool DumpCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
@@ -83,6 +294,134 @@ bool MergeCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
     LOG(WARNING) << "Deprecated. Call update_engine_client --merge instead.";
     return false;
+}
+
+bool GetVerityPartitions(std::vector<std::string>& partitions) {
+    auto& dm = android::dm::DeviceMapper::Instance();
+    auto dm_block_devices = dm.FindDmPartitions();
+    if (dm_block_devices.empty()) {
+        LOG(ERROR) << "No dm-enabled block device is found.";
+        return false;
+    }
+
+    for (auto& block_device : dm_block_devices) {
+        std::string dm_block_name = block_device.first;
+        std::string slot_suffix = fs_mgr_get_slot_suffix();
+        std::string partition = dm_block_name + slot_suffix;
+        partitions.push_back(partition);
+    }
+    return true;
+}
+
+bool UnMapPrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return EXIT_FAILURE;
+    }
+
+    std::vector<std::string> partitions;
+    if (!GetVerityPartitions(partitions)) {
+        return false;
+    }
+
+    MapSnapshots snapshot;
+    for (auto partition : partitions) {
+        if (!snapshot.UnmapCowImagePath(partition)) {
+            LOG(ERROR) << "UnmapCowImagePath failed: " << partition;
+        }
+    }
+    return true;
+}
+
+bool RemovePrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return false;
+    }
+
+    MapSnapshots snapshot;
+    if (!snapshot.CleanupSnapshot()) {
+        LOG(ERROR) << "CleanupSnapshot failed";
+        return false;
+    }
+    return true;
+}
+
+bool DeletePrecreatedSnapshots(int, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return EXIT_FAILURE;
+    }
+
+    MapSnapshots snapshot;
+    return snapshot.DeleteSnapshots();
+}
+
+bool MapPrecreatedSnapshots(int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return EXIT_FAILURE;
+    }
+
+    if (argc < 3) {
+        std::cerr << " map-snapshots <directory location where snapshot patches are present>"
+                     "    Map all snapshots based on patches present in the directory\n";
+        return false;
+    }
+
+    std::string path = std::string(argv[2]);
+    std::vector<std::string> patchfiles;
+
+    for (const auto& entry : std::filesystem::directory_iterator(path)) {
+        if (android::base::EndsWith(entry.path().generic_string(), ".patch")) {
+            patchfiles.push_back(android::base::Basename(entry.path().generic_string()));
+        }
+    }
+    auto& dm = android::dm::DeviceMapper::Instance();
+    auto dm_block_devices = dm.FindDmPartitions();
+    if (dm_block_devices.empty()) {
+        LOG(ERROR) << "No dm-enabled block device is found.";
+        return false;
+    }
+
+    std::vector<std::pair<std::string, std::string>> partitions;
+    for (auto& patchfile : patchfiles) {
+        auto npos = patchfile.rfind(".patch");
+        auto dm_block_name = patchfile.substr(0, npos);
+        if (dm_block_devices.find(dm_block_name) != dm_block_devices.end()) {
+            std::string slot_suffix = fs_mgr_get_slot_suffix();
+            std::string partition = dm_block_name + slot_suffix;
+            partitions.push_back(std::make_pair(partition, patchfile));
+        }
+    }
+
+    MapSnapshots cow(path);
+    if (!cow.BeginUpdate()) {
+        LOG(ERROR) << "BeginUpdate failed";
+        return false;
+    }
+
+    for (auto& pair : partitions) {
+        if (!cow.CreateSnapshotDevice(pair.first, pair.second)) {
+            LOG(ERROR) << "CreateSnapshotDevice failed for: " << pair.first;
+            return false;
+        }
+        if (!cow.InitiateThreadedSnapshotWrite(pair.first, pair.second)) {
+            LOG(ERROR) << "InitiateThreadedSnapshotWrite failed for: " << pair.first;
+            return false;
+        }
+    }
+
+    return cow.FinishSnapshotWrites();
 }
 
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
@@ -137,8 +476,8 @@ bool CreateTestUpdate(SnapshotManager* sm) {
             .block_device = fs_mgr_get_super_partition_name(target_slot_number),
             .metadata_slot = {target_slot_number},
             .partition_name = system_target_name,
-            .partition_opener = &opener,
             .timeout_ms = 10s,
+            .partition_opener = &opener,
     };
     auto writer = sm->OpenSnapshotWriter(clpp, std::nullopt);
     if (!writer) {
@@ -211,6 +550,10 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"test-blank-ota", TestOtaHandler},
 #endif
         {"unmap", UnmapCmdHandler},
+        {"map-snapshots", MapPrecreatedSnapshots},
+        {"unmap-snapshots", UnMapPrecreatedSnapshots},
+        {"delete-snapshots", DeletePrecreatedSnapshots},
+        {"revert-snapshots", RemovePrecreatedSnapshots},
         // clang-format on
 };
 

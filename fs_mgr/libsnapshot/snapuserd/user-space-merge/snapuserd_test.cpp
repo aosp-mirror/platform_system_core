@@ -17,7 +17,6 @@
 
 #include <fcntl.h>
 #include <linux/fs.h>
-#include <linux/memfd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -37,10 +36,16 @@
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
 #include <libsnapshot/cow_writer.h>
+#include <snapuserd/dm_user_block_server.h>
 #include <storage_literals/storage_literals.h>
-
 #include "handler_manager.h"
+#include "merge_worker.h"
+#include "read_worker.h"
 #include "snapuserd_core.h"
+#include "testing/dm_user_harness.h"
+#include "testing/host_harness.h"
+#include "testing/temp_device.h"
+#include "utility.h"
 
 DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
 
@@ -53,186 +58,54 @@ using LoopDevice = android::dm::LoopDevice;
 using namespace std::chrono_literals;
 using namespace android::dm;
 using namespace std;
+using testing::AssertionFailure;
+using testing::AssertionResult;
+using testing::AssertionSuccess;
 
-class Tempdevice {
-  public:
-    Tempdevice(const std::string& name, const DmTable& table)
-        : dm_(DeviceMapper::Instance()), name_(name), valid_(false) {
-        valid_ = dm_.CreateDevice(name, table, &path_, std::chrono::seconds(5));
-    }
-    Tempdevice(Tempdevice&& other) noexcept
-        : dm_(other.dm_), name_(other.name_), path_(other.path_), valid_(other.valid_) {
-        other.valid_ = false;
-    }
-    ~Tempdevice() {
-        if (valid_) {
-            dm_.DeleteDeviceIfExists(name_);
-        }
-    }
-    bool Destroy() {
-        if (!valid_) {
-            return true;
-        }
-        valid_ = false;
-        return dm_.DeleteDeviceIfExists(name_);
-    }
-    const std::string& path() const { return path_; }
-    const std::string& name() const { return name_; }
-    bool valid() const { return valid_; }
-
-    Tempdevice(const Tempdevice&) = delete;
-    Tempdevice& operator=(const Tempdevice&) = delete;
-
-    Tempdevice& operator=(Tempdevice&& other) noexcept {
-        name_ = other.name_;
-        valid_ = other.valid_;
-        other.valid_ = false;
-        return *this;
-    }
-
-  private:
-    DeviceMapper& dm_;
-    std::string name_;
-    std::string path_;
-    bool valid_;
-};
-
-class SnapuserdTest : public ::testing::Test {
-  public:
-    bool SetupDefault();
-    bool SetupOrderedOps();
-    bool SetupOrderedOpsInverted();
-    bool SetupCopyOverlap_1();
-    bool SetupCopyOverlap_2();
-    bool Merge();
-    void ValidateMerge();
-    void ReadSnapshotDeviceAndValidate();
-    void Shutdown();
-    void MergeInterrupt();
-    void MergeInterruptFixed(int duration);
-    void MergeInterruptRandomly(int max_duration);
-    void StartMerge();
-    void CheckMergeCompletion();
-
-    static const uint64_t kSectorSize = 512;
-
+class SnapuserdTestBase : public ::testing::Test {
   protected:
-    void SetUp() override {}
-    void TearDown() override { Shutdown(); }
-
-  private:
-    void SetupImpl();
-
-    void SimulateDaemonRestart();
-
-    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
-    void CreateCowDevice();
-    void CreateCowDeviceOrderedOps();
-    void CreateCowDeviceOrderedOpsInverted();
-    void CreateCowDeviceWithCopyOverlap_1();
-    void CreateCowDeviceWithCopyOverlap_2();
-    bool SetupDaemon();
+    void SetUp() override;
+    void TearDown() override;
     void CreateBaseDevice();
-    void InitCowDevice();
+    void CreateCowDevice();
     void SetDeviceControlName();
-    void InitDaemon();
-    void CreateDmUserDevice();
+    std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
 
-    unique_ptr<LoopDevice> base_loop_;
-    unique_ptr<Tempdevice> dmuser_dev_;
-
+    std::unique_ptr<ITestHarness> harness_;
+    size_t size_ = 10_MiB;
+    int total_base_size_ = 0;
     std::string system_device_ctrl_name_;
     std::string system_device_name_;
 
+    unique_ptr<IBackingDevice> base_dev_;
     unique_fd base_fd_;
+
     std::unique_ptr<TemporaryFile> cow_system_;
+
     std::unique_ptr<uint8_t[]> orig_buffer_;
-    std::unique_ptr<uint8_t[]> merged_buffer_;
-    SnapshotHandlerManager handlers_;
-    bool setup_ok_ = false;
-    bool merge_ok_ = false;
-    size_t size_ = 100_MiB;
-    int cow_num_sectors_;
-    int total_base_size_;
 };
 
-static unique_fd CreateTempFile(const std::string& name, size_t size) {
-    unique_fd fd(syscall(__NR_memfd_create, name.c_str(), MFD_ALLOW_SEALING));
-    if (fd < 0) {
-        return {};
-    }
-    if (size) {
-        if (ftruncate(fd, size) < 0) {
-            perror("ftruncate");
-            return {};
-        }
-        if (fcntl(fd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK) < 0) {
-            perror("fcntl");
-            return {};
-        }
-    }
-    return fd;
+void SnapuserdTestBase::SetUp() {
+#if __ANDROID__
+    harness_ = std::make_unique<DmUserTestHarness>();
+#else
+    harness_ = std::make_unique<HostTestHarness>();
+#endif
 }
 
-void SnapuserdTest::Shutdown() {
-    ASSERT_TRUE(dmuser_dev_->Destroy());
+void SnapuserdTestBase::TearDown() {}
 
-    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
-    ASSERT_TRUE(handlers_.DeleteHandler(system_device_ctrl_name_));
-    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
-    handlers_.TerminateMergeThreads();
-}
-
-bool SnapuserdTest::SetupDefault() {
-    SetupImpl();
-    return setup_ok_;
-}
-
-bool SnapuserdTest::SetupOrderedOps() {
-    CreateBaseDevice();
-    CreateCowDeviceOrderedOps();
-    return SetupDaemon();
-}
-
-bool SnapuserdTest::SetupOrderedOpsInverted() {
-    CreateBaseDevice();
-    CreateCowDeviceOrderedOpsInverted();
-    return SetupDaemon();
-}
-
-bool SnapuserdTest::SetupCopyOverlap_1() {
-    CreateBaseDevice();
-    CreateCowDeviceWithCopyOverlap_1();
-    return SetupDaemon();
-}
-
-bool SnapuserdTest::SetupCopyOverlap_2() {
-    CreateBaseDevice();
-    CreateCowDeviceWithCopyOverlap_2();
-    return SetupDaemon();
-}
-
-bool SnapuserdTest::SetupDaemon() {
-    SetDeviceControlName();
-
-    CreateDmUserDevice();
-    InitCowDevice();
-    InitDaemon();
-
-    setup_ok_ = true;
-
-    return setup_ok_;
-}
-
-void SnapuserdTest::CreateBaseDevice() {
-    unique_fd rnd_fd;
-
+void SnapuserdTestBase::CreateBaseDevice() {
     total_base_size_ = (size_ * 5);
-    base_fd_ = CreateTempFile("base_device", total_base_size_);
+
+    base_dev_ = harness_->CreateBackingDevice(total_base_size_);
+    ASSERT_NE(base_dev_, nullptr);
+
+    base_fd_.reset(open(base_dev_->GetPath().c_str(), O_RDWR | O_CLOEXEC));
     ASSERT_GE(base_fd_, 0);
 
-    rnd_fd.reset(open("/dev/random", O_RDONLY));
-    ASSERT_TRUE(rnd_fd > 0);
+    unique_fd rnd_fd(open("/dev/random", O_RDONLY));
+    ASSERT_GE(rnd_fd, 0);
 
     std::unique_ptr<uint8_t[]> random_buffer = std::make_unique<uint8_t[]>(1_MiB);
 
@@ -242,13 +115,220 @@ void SnapuserdTest::CreateBaseDevice() {
     }
 
     ASSERT_EQ(lseek(base_fd_, 0, SEEK_SET), 0);
+}
 
-    base_loop_ = std::make_unique<LoopDevice>(base_fd_, 10s);
-    ASSERT_TRUE(base_loop_->valid());
+std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
+    cow_system_ = std::make_unique<TemporaryFile>();
+
+    CowOptions options;
+    options.compression = "gz";
+
+    unique_fd fd(cow_system_->fd);
+    cow_system_->fd = -1;
+
+    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+}
+
+void SnapuserdTestBase::CreateCowDevice() {
+    unique_fd rnd_fd;
+    loff_t offset = 0;
+
+    auto writer = CreateCowDeviceInternal();
+    ASSERT_NE(writer, nullptr);
+
+    rnd_fd.reset(open("/dev/random", O_RDONLY));
+    ASSERT_TRUE(rnd_fd > 0);
+
+    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
+
+    // Fill random data
+    for (size_t j = 0; j < (size_ / 1_MiB); j++) {
+        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
+                  true);
+
+        offset += 1_MiB;
+    }
+
+    size_t num_blocks = size_ / writer->GetBlockSize();
+    size_t blk_end_copy = num_blocks * 2;
+    size_t source_blk = num_blocks - 1;
+    size_t blk_src_copy = blk_end_copy - 1;
+
+    uint32_t sequence[num_blocks * 2];
+    // Sequence for Copy ops
+    for (int i = 0; i < num_blocks; i++) {
+        sequence[i] = num_blocks - 1 - i;
+    }
+    // Sequence for Xor ops
+    for (int i = 0; i < num_blocks; i++) {
+        sequence[num_blocks + i] = 5 * num_blocks - 1 - i;
+    }
+    ASSERT_TRUE(writer->AddSequenceData(2 * num_blocks, sequence));
+
+    size_t x = num_blocks;
+    while (1) {
+        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
+        x -= 1;
+        if (x == 0) {
+            break;
+        }
+        source_blk -= 1;
+        blk_src_copy -= 1;
+    }
+
+    source_blk = num_blocks;
+    blk_src_copy = blk_end_copy;
+
+    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
+
+    size_t blk_zero_copy_start = source_blk + num_blocks;
+    size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
+
+    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
+
+    size_t blk_random2_replace_start = blk_zero_copy_end;
+
+    ASSERT_TRUE(writer->AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
+
+    size_t blk_xor_start = blk_random2_replace_start + num_blocks;
+    size_t xor_offset = BLOCK_SZ / 2;
+    ASSERT_TRUE(writer->AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
+                                     xor_offset));
+
+    // Flush operations
+    ASSERT_TRUE(writer->Finalize());
+    // Construct the buffer required for validation
+    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
+    std::string zero_buffer(size_, 0);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
+    memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
+    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
+    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, &orig_buffer_.get()[size_ * 4], size_,
+                                               size_ + xor_offset),
+              true);
+    for (int i = 0; i < size_; i++) {
+        orig_buffer_.get()[(size_ * 4) + i] =
+                (uint8_t)(orig_buffer_.get()[(size_ * 4) + i] ^ random_buffer_1_.get()[i]);
+    }
+}
+
+void SnapuserdTestBase::SetDeviceControlName() {
+    system_device_name_.clear();
+    system_device_ctrl_name_.clear();
+
+    std::string str(cow_system_->path);
+    std::size_t found = str.find_last_of("/\\");
+    ASSERT_NE(found, std::string::npos);
+    system_device_name_ = str.substr(found + 1);
+
+    system_device_ctrl_name_ = system_device_name_ + "-ctrl";
+}
+
+class SnapuserdTest : public SnapuserdTestBase {
+  public:
+    void SetupDefault();
+    void SetupOrderedOps();
+    void SetupOrderedOpsInverted();
+    void SetupCopyOverlap_1();
+    void SetupCopyOverlap_2();
+    bool Merge();
+    void ValidateMerge();
+    void ReadSnapshotDeviceAndValidate();
+    void Shutdown();
+    void MergeInterrupt();
+    void MergeInterruptFixed(int duration);
+    void MergeInterruptRandomly(int max_duration);
+    bool StartMerge();
+    void CheckMergeCompletion();
+
+    static const uint64_t kSectorSize = 512;
+
+  protected:
+    void SetUp() override;
+    void TearDown() override;
+
+    void SetupImpl();
+
+    void SimulateDaemonRestart();
+
+    void CreateCowDeviceOrderedOps();
+    void CreateCowDeviceOrderedOpsInverted();
+    void CreateCowDeviceWithCopyOverlap_1();
+    void CreateCowDeviceWithCopyOverlap_2();
+    void SetupDaemon();
+    void InitCowDevice();
+    void InitDaemon();
+    void CreateUserDevice();
+
+    unique_ptr<IUserDevice> dmuser_dev_;
+
+    std::unique_ptr<uint8_t[]> merged_buffer_;
+    std::unique_ptr<SnapshotHandlerManager> handlers_;
+    int cow_num_sectors_;
+};
+
+void SnapuserdTest::SetUp() {
+    ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
+    handlers_ = std::make_unique<SnapshotHandlerManager>();
+}
+
+void SnapuserdTest::TearDown() {
+    SnapuserdTestBase::TearDown();
+    Shutdown();
+}
+
+void SnapuserdTest::Shutdown() {
+    if (dmuser_dev_) {
+        ASSERT_TRUE(dmuser_dev_->Destroy());
+    }
+
+    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
+    ASSERT_TRUE(handlers_->DeleteHandler(system_device_ctrl_name_));
+    ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted(misc_device, 10s));
+    handlers_->TerminateMergeThreads();
+    handlers_->JoinAllThreads();
+    handlers_ = std::make_unique<SnapshotHandlerManager>();
+}
+
+void SnapuserdTest::SetupDefault() {
+    ASSERT_NO_FATAL_FAILURE(SetupImpl());
+}
+
+void SnapuserdTest::SetupOrderedOps() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
+}
+
+void SnapuserdTest::SetupOrderedOpsInverted() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
+}
+
+void SnapuserdTest::SetupCopyOverlap_1() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceWithCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
+}
+
+void SnapuserdTest::SetupCopyOverlap_2() {
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDeviceWithCopyOverlap_2());
+    ASSERT_NO_FATAL_FAILURE(SetupDaemon());
+}
+
+void SnapuserdTest::SetupDaemon() {
+    SetDeviceControlName();
+
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
-    unique_fd fd(open(dmuser_dev_->path().c_str(), O_RDONLY));
+    unique_fd fd(open(dmuser_dev_->GetPath().c_str(), O_RDONLY));
     ASSERT_GE(fd, 0);
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
 
@@ -276,19 +356,6 @@ void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
     offset += size_;
     ASSERT_EQ(ReadFullyAtOffset(fd, snapuserd_buffer.get(), size_, offset), true);
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
-}
-
-std::unique_ptr<ICowWriter> SnapuserdTest::CreateCowDeviceInternal() {
-    std::string path = android::base::GetExecutableDirectory();
-    cow_system_ = std::make_unique<TemporaryFile>(path);
-
-    CowOptions options;
-    options.compression = "gz";
-
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
 }
 
 void SnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
@@ -487,145 +554,42 @@ void SnapuserdTest::CreateCowDeviceOrderedOps() {
     }
 }
 
-void SnapuserdTest::CreateCowDevice() {
-    unique_fd rnd_fd;
-    loff_t offset = 0;
-
-    auto writer = CreateCowDeviceInternal();
-    ASSERT_NE(writer, nullptr);
-
-    rnd_fd.reset(open("/dev/random", O_RDONLY));
-    ASSERT_TRUE(rnd_fd > 0);
-
-    std::unique_ptr<uint8_t[]> random_buffer_1_ = std::make_unique<uint8_t[]>(size_);
-
-    // Fill random data
-    for (size_t j = 0; j < (size_ / 1_MiB); j++) {
-        ASSERT_EQ(ReadFullyAtOffset(rnd_fd, (char*)random_buffer_1_.get() + offset, 1_MiB, 0),
-                  true);
-
-        offset += 1_MiB;
-    }
-
-    size_t num_blocks = size_ / writer->GetBlockSize();
-    size_t blk_end_copy = num_blocks * 2;
-    size_t source_blk = num_blocks - 1;
-    size_t blk_src_copy = blk_end_copy - 1;
-
-    uint32_t sequence[num_blocks * 2];
-    // Sequence for Copy ops
-    for (int i = 0; i < num_blocks; i++) {
-        sequence[i] = num_blocks - 1 - i;
-    }
-    // Sequence for Xor ops
-    for (int i = 0; i < num_blocks; i++) {
-        sequence[num_blocks + i] = 5 * num_blocks - 1 - i;
-    }
-    ASSERT_TRUE(writer->AddSequenceData(2 * num_blocks, sequence));
-
-    size_t x = num_blocks;
-    while (1) {
-        ASSERT_TRUE(writer->AddCopy(source_blk, blk_src_copy));
-        x -= 1;
-        if (x == 0) {
-            break;
-        }
-        source_blk -= 1;
-        blk_src_copy -= 1;
-    }
-
-    source_blk = num_blocks;
-    blk_src_copy = blk_end_copy;
-
-    ASSERT_TRUE(writer->AddRawBlocks(source_blk, random_buffer_1_.get(), size_));
-
-    size_t blk_zero_copy_start = source_blk + num_blocks;
-    size_t blk_zero_copy_end = blk_zero_copy_start + num_blocks;
-
-    ASSERT_TRUE(writer->AddZeroBlocks(blk_zero_copy_start, num_blocks));
-
-    size_t blk_random2_replace_start = blk_zero_copy_end;
-
-    ASSERT_TRUE(writer->AddRawBlocks(blk_random2_replace_start, random_buffer_1_.get(), size_));
-
-    size_t blk_xor_start = blk_random2_replace_start + num_blocks;
-    size_t xor_offset = BLOCK_SZ / 2;
-    ASSERT_TRUE(writer->AddXorBlocks(blk_xor_start, random_buffer_1_.get(), size_, num_blocks,
-                                     xor_offset));
-
-    // Flush operations
-    ASSERT_TRUE(writer->Finalize());
-    // Construct the buffer required for validation
-    orig_buffer_ = std::make_unique<uint8_t[]>(total_base_size_);
-    std::string zero_buffer(size_, 0);
-    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, orig_buffer_.get(), size_, size_), true);
-    memcpy((char*)orig_buffer_.get() + size_, random_buffer_1_.get(), size_);
-    memcpy((char*)orig_buffer_.get() + (size_ * 2), (void*)zero_buffer.c_str(), size_);
-    memcpy((char*)orig_buffer_.get() + (size_ * 3), random_buffer_1_.get(), size_);
-    ASSERT_EQ(android::base::ReadFullyAtOffset(base_fd_, &orig_buffer_.get()[size_ * 4], size_,
-                                               size_ + xor_offset),
-              true);
-    for (int i = 0; i < size_; i++) {
-        orig_buffer_.get()[(size_ * 4) + i] =
-                (uint8_t)(orig_buffer_.get()[(size_ * 4) + i] ^ random_buffer_1_.get()[i]);
-    }
-}
-
 void SnapuserdTest::InitCowDevice() {
     bool use_iouring = true;
     if (FLAGS_force_config == "iouring_disabled") {
         use_iouring = false;
     }
 
+    auto factory = harness_->GetBlockServerFactory();
+    auto opener = factory->CreateOpener(system_device_ctrl_name_);
     auto handler =
-            handlers_.AddHandler(system_device_ctrl_name_, cow_system_->path, base_loop_->device(),
-                                 base_loop_->device(), 1, use_iouring, false);
+            handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
+                                  base_dev_->GetPath(), opener, 1, use_iouring, false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
+#ifdef __ANDROID__
     ASSERT_NE(handler->snapuserd()->GetNumSectors(), 0);
+#endif
 }
 
-void SnapuserdTest::SetDeviceControlName() {
-    system_device_name_.clear();
-    system_device_ctrl_name_.clear();
-
-    std::string str(cow_system_->path);
-    std::size_t found = str.find_last_of("/\\");
-    ASSERT_NE(found, std::string::npos);
-    system_device_name_ = str.substr(found + 1);
-
-    system_device_ctrl_name_ = system_device_name_ + "-ctrl";
-}
-
-void SnapuserdTest::CreateDmUserDevice() {
-    unique_fd fd(TEMP_FAILURE_RETRY(open(base_loop_->device().c_str(), O_RDONLY | O_CLOEXEC)));
-    ASSERT_TRUE(fd > 0);
-
-    uint64_t dev_sz = get_block_device_size(fd.get());
-    ASSERT_TRUE(dev_sz > 0);
+void SnapuserdTest::CreateUserDevice() {
+    auto dev_sz = base_dev_->GetSize();
+    ASSERT_NE(dev_sz, 0);
 
     cow_num_sectors_ = dev_sz >> 9;
 
-    DmTable dmuser_table;
-    ASSERT_TRUE(dmuser_table.AddTarget(
-            std::make_unique<DmTargetUser>(0, cow_num_sectors_, system_device_ctrl_name_)));
-    ASSERT_TRUE(dmuser_table.valid());
-
-    dmuser_dev_ = std::make_unique<Tempdevice>(system_device_name_, dmuser_table);
-    ASSERT_TRUE(dmuser_dev_->valid());
-    ASSERT_FALSE(dmuser_dev_->path().empty());
-
-    auto misc_device = "/dev/dm-user/" + system_device_ctrl_name_;
-    ASSERT_TRUE(android::fs_mgr::WaitForFile(misc_device, 10s));
+    dmuser_dev_ = harness_->CreateUserDevice(system_device_name_, system_device_ctrl_name_,
+                                             cow_num_sectors_);
+    ASSERT_NE(dmuser_dev_, nullptr);
 }
 
 void SnapuserdTest::InitDaemon() {
-    ASSERT_TRUE(handlers_.StartHandler(system_device_ctrl_name_));
+    ASSERT_TRUE(handlers_->StartHandler(system_device_ctrl_name_));
 }
 
 void SnapuserdTest::CheckMergeCompletion() {
     while (true) {
-        double percentage = handlers_.GetMergePercentage();
+        double percentage = handlers_->GetMergePercentage();
         if ((int)percentage == 100) {
             break;
         }
@@ -635,27 +599,26 @@ void SnapuserdTest::CheckMergeCompletion() {
 }
 
 void SnapuserdTest::SetupImpl() {
-    CreateBaseDevice();
-    CreateCowDevice();
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDevice());
 
     SetDeviceControlName();
 
-    CreateDmUserDevice();
-    InitCowDevice();
-    InitDaemon();
-
-    setup_ok_ = true;
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 bool SnapuserdTest::Merge() {
-    StartMerge();
+    if (!StartMerge()) {
+        return false;
+    }
     CheckMergeCompletion();
-    merge_ok_ = true;
-    return merge_ok_;
+    return true;
 }
 
-void SnapuserdTest::StartMerge() {
-    ASSERT_TRUE(handlers_.InitiateMerge(system_device_ctrl_name_));
+bool SnapuserdTest::StartMerge() {
+    return handlers_->InitiateMerge(system_device_ctrl_name_);
 }
 
 void SnapuserdTest::ValidateMerge() {
@@ -666,158 +629,264 @@ void SnapuserdTest::ValidateMerge() {
 }
 
 void SnapuserdTest::SimulateDaemonRestart() {
-    Shutdown();
+    ASSERT_NO_FATAL_FAILURE(Shutdown());
     std::this_thread::sleep_for(500ms);
     SetDeviceControlName();
-    CreateDmUserDevice();
-    InitCowDevice();
-    InitDaemon();
+    ASSERT_NO_FATAL_FAILURE(CreateUserDevice());
+    ASSERT_NO_FATAL_FAILURE(InitCowDevice());
+    ASSERT_NO_FATAL_FAILURE(InitDaemon());
 }
 
 void SnapuserdTest::MergeInterruptRandomly(int max_duration) {
     std::srand(std::time(nullptr));
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
 
     for (int i = 0; i < 20; i++) {
         int duration = std::rand() % max_duration;
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
-        SimulateDaemonRestart();
-        StartMerge();
+        ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+        ASSERT_TRUE(StartMerge());
     }
 
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
     ASSERT_TRUE(Merge());
 }
 
 void SnapuserdTest::MergeInterruptFixed(int duration) {
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
 
     for (int i = 0; i < 25; i++) {
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
-        SimulateDaemonRestart();
-        StartMerge();
+        ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+        ASSERT_TRUE(StartMerge());
     }
 
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
     ASSERT_TRUE(Merge());
 }
 
 void SnapuserdTest::MergeInterrupt() {
     // Interrupt merge at various intervals
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(250ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(250ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(150ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(100ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(800ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     std::this_thread::sleep_for(600ms);
-    SimulateDaemonRestart();
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
 
     ASSERT_TRUE(Merge());
 }
 
 TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
-    ASSERT_TRUE(SetupDefault());
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // I/O before merge
-    ReadSnapshotDeviceAndValidate();
+    ASSERT_NO_FATAL_FAILURE(ReadSnapshotDeviceAndValidate());
     ASSERT_TRUE(Merge());
     ValidateMerge();
     // I/O after merge - daemon should read directly
     // from base device
-    ReadSnapshotDeviceAndValidate();
-    Shutdown();
+    ASSERT_NO_FATAL_FAILURE(ReadSnapshotDeviceAndValidate());
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
-    ASSERT_TRUE(SetupDefault());
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // Issue I/O before merge begins
-    std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
+    auto read_future =
+            std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     // Start the merge
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
+    read_future.wait();
 }
 
 TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
-    ASSERT_TRUE(SetupDefault());
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
     // Start the merge
-    StartMerge();
+    ASSERT_TRUE(StartMerge());
     // Issue I/O in parallel when merge is in-progress
-    std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
+    auto read_future =
+            std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
     CheckMergeCompletion();
     ValidateMerge();
-    Shutdown();
+    read_future.wait();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Resume) {
-    ASSERT_TRUE(SetupDefault());
-    MergeInterrupt();
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
+    ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_1) {
-    ASSERT_TRUE(SetupCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_2) {
-    ASSERT_TRUE(SetupCopyOverlap_2());
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_2());
     ASSERT_TRUE(Merge());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
-    ASSERT_TRUE(SetupCopyOverlap_1());
-    MergeInterrupt();
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
+    ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Ordered) {
-    ASSERT_TRUE(SetupOrderedOps());
-    MergeInterruptFixed(300);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(300));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Ordered) {
-    ASSERT_TRUE(SetupOrderedOps());
-    MergeInterruptRandomly(500);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(500));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Inverted) {
-    ASSERT_TRUE(SetupOrderedOpsInverted());
-    MergeInterruptFixed(50);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(50));
     ValidateMerge();
-    Shutdown();
 }
 
 TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Inverted) {
-    ASSERT_TRUE(SetupOrderedOpsInverted());
-    MergeInterruptRandomly(50);
+    ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(50));
     ValidateMerge();
-    Shutdown();
+}
+
+class HandlerTest : public SnapuserdTestBase {
+  protected:
+    void SetUp() override;
+    void TearDown() override;
+
+    AssertionResult ReadSectors(sector_t sector, uint64_t size, void* buffer);
+
+    TestBlockServerFactory factory_;
+    std::shared_ptr<TestBlockServerOpener> opener_;
+    std::shared_ptr<SnapshotHandler> handler_;
+    std::unique_ptr<ReadWorker> read_worker_;
+    TestBlockServer* block_server_;
+    std::future<bool> handler_thread_;
+};
+
+void HandlerTest::SetUp() {
+    ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
+    ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
+    ASSERT_NO_FATAL_FAILURE(CreateCowDevice());
+    ASSERT_NO_FATAL_FAILURE(SetDeviceControlName());
+
+    opener_ = factory_.CreateTestOpener(system_device_ctrl_name_);
+    ASSERT_NE(opener_, nullptr);
+
+    handler_ = std::make_shared<SnapshotHandler>(system_device_ctrl_name_, cow_system_->path,
+                                                 base_dev_->GetPath(), base_dev_->GetPath(),
+                                                 opener_, 1, false, false);
+    ASSERT_TRUE(handler_->InitCowDevice());
+    ASSERT_TRUE(handler_->InitializeWorkers());
+
+    read_worker_ = std::make_unique<ReadWorker>(cow_system_->path, base_dev_->GetPath(),
+                                                system_device_ctrl_name_, base_dev_->GetPath(),
+                                                handler_->GetSharedPtr(), opener_);
+    ASSERT_TRUE(read_worker_->Init());
+    block_server_ = static_cast<TestBlockServer*>(read_worker_->block_server());
+
+    handler_thread_ = std::async(std::launch::async, &SnapshotHandler::Start, handler_.get());
+}
+
+void HandlerTest::TearDown() {
+    ASSERT_TRUE(factory_.DeleteQueue(system_device_ctrl_name_));
+    ASSERT_TRUE(handler_thread_.get());
+    SnapuserdTestBase::TearDown();
+}
+
+AssertionResult HandlerTest::ReadSectors(sector_t sector, uint64_t size, void* buffer) {
+    if (!read_worker_->RequestSectors(sector, size)) {
+        return AssertionFailure() << "request sectors failed";
+    }
+
+    std::string result = std::move(block_server_->sent_io());
+    if (result.size() != size) {
+        return AssertionFailure() << "size mismatch in result, got " << result.size()
+                                  << ", expected " << size;
+    }
+
+    memcpy(buffer, result.data(), size);
+    return AssertionSuccess();
+}
+
+// This test mirrors ReadSnapshotDeviceAndValidate.
+TEST_F(HandlerTest, Read) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
+
+    // COPY
+    loff_t offset = 0;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + size_, size_), 0);
+
+    // ZERO
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 2), size_), 0);
+
+    // REPLACE
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 3), size_), 0);
+
+    // XOR
+    offset += size_;
+    ASSERT_TRUE(ReadSectors(offset / SECTOR_SIZE, size_, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
+}
+
+TEST_F(HandlerTest, ReadUnalignedSector) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(BLOCK_SZ);
+
+    ASSERT_TRUE(ReadSectors(1, BLOCK_SZ, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get() + SECTOR_SIZE, BLOCK_SZ), 0);
+}
+
+TEST_F(HandlerTest, ReadUnalignedSize) {
+    std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(SECTOR_SIZE);
+
+    ASSERT_TRUE(ReadSectors(0, SECTOR_SIZE, snapuserd_buffer.get()));
+    ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), SECTOR_SIZE), 0);
 }
 
 }  // namespace snapshot
