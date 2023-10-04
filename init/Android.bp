@@ -166,17 +166,14 @@ libinit_cc_defaults {
         "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
-        "libfsverity_init",
         "liblmkd_utils",
         "liblz4",
         "libzstd",
-        "libmini_keyctl_static",
         "libmodprobe",
         "libprocinfo",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsigningutils",
         "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
@@ -185,7 +182,6 @@ libinit_cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libcrypto",
         "libcutils",
         "libdl",
         "libext4_utils",
@@ -201,7 +197,6 @@ libinit_cc_defaults {
         "libselinux",
         "libunwindstack",
         "libutils",
-        "libziparchive",
     ],
     header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
@@ -394,6 +389,10 @@ init_first_stage_cc_defaults {
     ],
 
     static_executable: true,
+    lto: {
+        // b/169004486 ThinLTO breaks x86 static executables.
+        never: true,
+    },
     system_shared_libs: [],
 
     cflags: [
@@ -537,6 +536,7 @@ cc_defaults {
         "libprotobuf-cpp-lite",
     ],
     static_libs: [
+        "libfs_mgr",
         "libhidl-gen-utils",
     ],
 }

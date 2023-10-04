@@ -18,7 +18,6 @@
 #define ANDROID_STRING8_H
 
 #include <iostream>
-#include <string>
 
 #include <utils/Errors.h>
 #include <utils/Unicode.h>
@@ -26,6 +25,16 @@
 
 #include <string.h> // for strcmp
 #include <stdarg.h>
+
+#if __has_include(<string>)
+#include <string>
+#define HAS_STRING
+#endif
+
+#if __has_include(<string_view>)
+#include <string_view>
+#define HAS_STRING_VIEW
+#endif
 
 // ---------------------------------------------------------------------------
 
@@ -52,21 +61,14 @@ public:
     explicit                    String8(const char32_t* o, size_t numChars);
                                 ~String8();
 
-    static inline const String8 empty();
-
     static String8              format(const char* fmt, ...) __attribute__((format (printf, 1, 2)));
     static String8              formatV(const char* fmt, va_list args);
 
     inline  const char*         c_str() const;
-    inline  const char*         string() const;
-
-private:
-    static inline std::string   std_string(const String8& str);
-public:
 
     inline  size_t              size() const;
     inline  size_t              bytes() const;
-    inline  bool                isEmpty() const;
+    inline  bool                empty() const;
 
             size_t              length() const;
 
@@ -114,6 +116,10 @@ public:
 
     inline                      operator const char*() const;
 
+#ifdef HAS_STRING_VIEW
+    inline explicit             operator std::string_view() const;
+#endif
+
             char*               lockBuffer(size_t size);
             void                unlockBuffer();
             status_t            unlockBuffer(size_t size);
@@ -121,101 +127,35 @@ public:
             // return the index of the first byte of other in this at or after
             // start, or -1 if not found
             ssize_t             find(const char* other, size_t start = 0) const;
+    inline  ssize_t             find(const String8& other, size_t start = 0) const;
 
             // return true if this string contains the specified substring
     inline  bool                contains(const char* other) const;
+    inline  bool                contains(const String8& other) const;
 
             // removes all occurrence of the specified substring
             // returns true if any were found and removed
             bool                removeAll(const char* other);
+    inline  bool                removeAll(const String8& other);
 
             void                toLower();
 
-
-    /*
-     * These methods operate on the string as if it were a path name.
-     */
-
-    /*
-     * Get just the filename component.
-     *
-     * "/tmp/foo/bar.c" --> "bar.c"
-     */
-    String8 getPathLeaf(void) const;
-
-    /*
-     * Remove the last (file name) component, leaving just the directory
-     * name.
-     *
-     * "/tmp/foo/bar.c" --> "/tmp/foo"
-     * "/tmp" --> "" // ????? shouldn't this be "/" ???? XXX
-     * "bar.c" --> ""
-     */
-    String8 getPathDir(void) const;
-
-    /*
-     * Retrieve the front (root dir) component.  Optionally also return the
-     * remaining components.
-     *
-     * "/tmp/foo/bar.c" --> "tmp" (remain = "foo/bar.c")
-     * "/tmp" --> "tmp" (remain = "")
-     * "bar.c" --> "bar.c" (remain = "")
-     */
-    String8 walkPath(String8* outRemains = nullptr) const;
-
-    /*
-     * Return the filename extension.  This is the last '.' and any number
-     * of characters that follow it.  The '.' is included in case we
-     * decide to expand our definition of what constitutes an extension.
-     *
-     * "/tmp/foo/bar.c" --> ".c"
-     * "/tmp" --> ""
-     * "/tmp/foo.bar/baz" --> ""
-     * "foo.jpeg" --> ".jpeg"
-     * "foo." --> ""
-     */
-    String8 getPathExtension(void) const;
-
-    /*
-     * Return the path without the extension.  Rules for what constitutes
-     * an extension are described in the comment for getPathExtension().
-     *
-     * "/tmp/foo/bar.c" --> "/tmp/foo/bar"
-     */
-    String8 getBasePath(void) const;
-
-    /*
-     * Add a component to the pathname.  We guarantee that there is
-     * exactly one path separator between the old path and the new.
-     * If there is no existing name, we just copy the new name in.
-     *
-     * If leaf is a fully qualified path (i.e. starts with '/', it
-     * replaces whatever was there before.
-     */
-    String8& appendPath(const char* leaf);
-    String8& appendPath(const String8& leaf)  { return appendPath(leaf.string()); }
-
-    /*
-     * Like appendPath(), but does not affect this string.  Returns a new one instead.
-     */
-    String8 appendPathCopy(const char* leaf) const
-                                             { String8 p(*this); p.appendPath(leaf); return p; }
-    String8 appendPathCopy(const String8& leaf) const { return appendPathCopy(leaf.string()); }
-
-    /*
-     * Converts all separators in this string to /, the default path separator.
-     *
-     * If the default OS separator is backslash, this converts all
-     * backslashes to slashes, in-place. Otherwise it does nothing.
-     * Returns self.
-     */
-    String8& convertToResPath();
-
 private:
+            String8 getPathDir(void) const;
+            String8 getPathExtension(void) const;
+
             status_t            real_append(const char* other, size_t numChars);
-            char*               find_extension(void) const;
 
             const char* mString;
+
+// These symbols are for potential backward compatibility with prebuilts. To be removed.
+#ifdef ENABLE_STRING8_OBSOLETE_METHODS
+public:
+#else
+private:
+#endif
+    inline  const char*         string() const;
+    inline  bool                isEmpty() const;
 };
 
 // String8 can be trivially moved using memcpy() because moving does not
@@ -240,10 +180,6 @@ inline int strictly_order_type(const String8& lhs, const String8& rhs)
     return compare_type(lhs, rhs) < 0;
 }
 
-inline const String8 String8::empty() {
-    return String8();
-}
-
 inline const char* String8::c_str() const
 {
     return mString;
@@ -253,14 +189,14 @@ inline const char* String8::string() const
     return mString;
 }
 
-inline std::string String8::std_string(const String8& str)
-{
-    return std::string(str.string());
-}
-
 inline size_t String8::size() const
 {
     return length();
+}
+
+inline bool String8::empty() const
+{
+    return length() == 0;
 }
 
 inline bool String8::isEmpty() const
@@ -273,9 +209,24 @@ inline size_t String8::bytes() const
     return length();
 }
 
+inline ssize_t String8::find(const String8& other, size_t start) const
+{
+    return find(other.c_str(), start);
+}
+
 inline bool String8::contains(const char* other) const
 {
     return find(other) >= 0;
+}
+
+inline bool String8::contains(const String8& other) const
+{
+    return contains(other.c_str());
+}
+
+inline bool String8::removeAll(const String8& other)
+{
+    return removeAll(other.c_str());
 }
 
 inline String8& String8::operator=(const String8& other)
@@ -386,8 +337,18 @@ inline String8::operator const char*() const
     return mString;
 }
 
+#ifdef HAS_STRING_VIEW
+inline String8::operator std::string_view() const
+{
+    return {mString, length()};
+}
+#endif
+
 }  // namespace android
 
 // ---------------------------------------------------------------------------
+
+#undef HAS_STRING
+#undef HAS_STRING_VIEW
 
 #endif // ANDROID_STRING8_H

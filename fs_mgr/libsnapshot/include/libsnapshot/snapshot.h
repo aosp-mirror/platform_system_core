@@ -73,6 +73,9 @@ class ISnapshotMergeStats;
 class SnapshotMergeStats;
 class SnapshotStatus;
 
+using std::chrono::duration_cast;
+using namespace std::chrono_literals;
+
 static constexpr const std::string_view kCowGroupName = "cow";
 static constexpr char kVirtualAbCompressionProp[] = "ro.virtual_ab.compression.enabled";
 
@@ -424,6 +427,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, MergeFailureCode);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
     FRIEND_TEST(SnapshotTest, UpdateBootControlHal);
+    FRIEND_TEST(SnapshotTest, BootSnapshotWithoutSlotSwitch);
     FRIEND_TEST(SnapshotUpdateTest, AddPartition);
     FRIEND_TEST(SnapshotUpdateTest, ConsistencyCheckResume);
     FRIEND_TEST(SnapshotUpdateTest, DaemonTransition);
@@ -436,11 +440,13 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, QueryStatusError);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     FRIEND_TEST(SnapshotUpdateTest, SpaceSwapUpdate);
+    FRIEND_TEST(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
     friend class FlashAfterUpdateTest;
     friend class LockTestConsumer;
     friend class SnapshotFuzzEnv;
+    friend class MapSnapshots;
     friend struct AutoDeleteCowImage;
     friend struct AutoDeleteSnapshot;
     friend struct PartitionCowCreator;
@@ -455,7 +461,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool EnsureImageManager();
 
     // Ensure we're connected to snapuserd.
-    bool EnsureSnapuserdConnected();
+    bool EnsureSnapuserdConnected(std::chrono::milliseconds timeout_ms = 10s);
 
     // Helpers for first-stage init.
     const std::unique_ptr<IDeviceInfo>& device() const { return device_; }
@@ -548,6 +554,16 @@ class SnapshotManager final : public ISnapshotManager {
     // Unmap and remove all known snapshots.
     bool RemoveAllSnapshots(LockedFile* lock);
 
+    // Boot device off snapshots without slot switch
+    bool BootFromSnapshotsWithoutSlotSwitch();
+
+    // Remove kBootSnapshotsWithoutSlotSwitch so that device can boot
+    // without snapshots on the current slot
+    bool PrepareDeviceToBootWithoutSnapshot();
+
+    // Is the kBootSnapshotsWithoutSlotSwitch present
+    bool IsSnapshotWithoutSlotSwitch();
+
     // List the known snapshot names.
     bool ListSnapshots(LockedFile* lock, std::vector<std::string>* snapshots,
                        const std::string& suffix = "");
@@ -624,7 +640,7 @@ class SnapshotManager final : public ISnapshotManager {
     bool CollapseSnapshotDevice(LockedFile* lock, const std::string& name,
                                 const SnapshotStatus& status);
 
-    struct MergeResult {
+    struct [[nodiscard]] MergeResult {
         explicit MergeResult(UpdateState state,
                              MergeFailureCode failure_code = MergeFailureCode::Ok)
             : state(state), failure_code(failure_code) {}
@@ -662,6 +678,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetRollbackIndicatorPath();
     std::string GetForwardMergeIndicatorPath();
     std::string GetOldPartitionMetadataPath();
+    std::string GetBootSnapshotsWithoutSlotSwitchPath();
 
     const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
 

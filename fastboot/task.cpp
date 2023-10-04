@@ -15,7 +15,7 @@
 //
 #include "task.h"
 
-#include <iostream>
+#include "fastboot_driver.h"
 
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
@@ -30,9 +30,19 @@ FlashTask::FlashTask(const std::string& slot, const std::string& pname, const st
                      const bool apply_vbmeta, const FlashingPlan* fp)
     : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta), fp_(fp) {}
 
+bool FlashTask::IsDynamicParitition(const ImageSource* source, const FlashTask* task) {
+    std::vector<char> contents;
+    if (!source->ReadFile("super_empty.img", &contents)) {
+        return false;
+    }
+    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
+    return should_flash_in_userspace(*metadata.get(), task->GetPartitionAndSlot());
+}
+
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
-        if (should_flash_in_userspace(partition) && !is_userspace_fastboot()) {
+        if (should_flash_in_userspace(fp_->source, partition) && !is_userspace_fastboot() &&
+            !fp_->force_flash) {
             die("The partition you are trying to flash is dynamic, and "
                 "should be flashed via fastbootd. Please run:\n"
                 "\n"
@@ -46,7 +56,7 @@ void FlashTask::Run() {
     do_for_partitions(pname_, slot_, flash, true);
 }
 
-std::string FlashTask::ToString() {
+std::string FlashTask::ToString() const {
     std::string apply_vbmeta_string = "";
     if (apply_vbmeta_) {
         apply_vbmeta_string = " --apply_vbmeta";
@@ -54,7 +64,7 @@ std::string FlashTask::ToString() {
     return "flash" + apply_vbmeta_string + " " + pname_ + " " + fname_;
 }
 
-std::string FlashTask::GetPartitionAndSlot() {
+std::string FlashTask::GetPartitionAndSlot() const {
     auto slot = slot_;
     if (slot.empty()) {
         slot = get_current_slot();
@@ -92,7 +102,7 @@ void RebootTask::Run() {
     }
 }
 
-std::string RebootTask::ToString() {
+std::string RebootTask::ToString() const {
     return "reboot " + reboot_target_;
 }
 
@@ -120,90 +130,51 @@ void OptimizedFlashSuperTask::Run() {
     // Send the data to the device.
     flash_partition_files(super_name_, files);
 }
-std::string OptimizedFlashSuperTask::ToString() {
+
+std::string OptimizedFlashSuperTask::ToString() const {
     return "optimized-flash-super";
 }
 
-std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
-        const FlashingPlan* fp, std::vector<ImageEntry>& os_images) {
-    if (!fp->should_optimize_flash_super) {
-        LOG(INFO) << "super optimization is disabled";
-        return nullptr;
-    }
-    if (!supports_AB()) {
-        LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
-        return nullptr;
-    }
-    if (fp->slot_override == "all") {
-        LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
-        return nullptr;
-    }
-
-    // Does this device use dynamic partitions at all?
-    unique_fd fd = fp->source->OpenFile("super_empty.img");
-
-    if (fd < 0) {
-        LOG(VERBOSE) << "could not open super_empty.img";
-        return nullptr;
-    }
-
-    std::string super_name;
-    // Try to find whether there is a super partition.
-    if (fp->fb->GetVar("super-partition-name", &super_name) != fastboot::SUCCESS) {
-        super_name = "super";
-    }
-
-    uint64_t partition_size;
-    std::string partition_size_str;
-    if (fp->fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
-        LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
-        return nullptr;
-    }
-    partition_size_str = fb_fix_numeric_var(partition_size_str);
-    if (!android::base::ParseUint(partition_size_str, &partition_size)) {
-        LOG(VERBOSE) << "Could not parse " << super_name << " size: " << partition_size_str;
-        return nullptr;
-    }
-
-    std::unique_ptr<SuperFlashHelper> helper = std::make_unique<SuperFlashHelper>(*fp->source);
-    if (!helper->Open(fd)) {
-        return nullptr;
-    }
-
-    for (const auto& entry : os_images) {
-        auto partition = GetPartitionName(entry, fp->current_slot);
-        auto image = entry.first;
-
-        if (!helper->AddPartition(partition, image->img_name, image->optional_if_no_image)) {
-            return nullptr;
+// This looks for a block within tasks that has the following pattern [reboot fastboot,
+// update-super, $LIST_OF_DYNAMIC_FLASH_TASKS] and returns true if this is found.Theoretically
+// this check is just a pattern match and could break if fastboot-info has a bunch of junk commands
+// but all devices should pretty much follow this pattern
+bool OptimizedFlashSuperTask::CanOptimize(const ImageSource* source,
+                                          const std::vector<std::unique_ptr<Task>>& tasks) {
+    for (size_t i = 0; i < tasks.size(); i++) {
+        auto reboot_task = tasks[i]->AsRebootTask();
+        if (!reboot_task || reboot_task->GetTarget() != "fastboot") {
+            continue;
         }
+        // The check for i >= tasks.size() - 2 is because we are peeking two tasks ahead. We need to
+        // check for an update-super && flash {dynamic_partition}
+        if (i >= tasks.size() - 2 || !tasks[i + 1]->AsUpdateSuperTask()) {
+            continue;
+        }
+        auto flash_task = tasks[i + 2]->AsFlashTask();
+        if (!FlashTask::IsDynamicParitition(source, flash_task)) {
+            continue;
+        }
+        return true;
     }
-
-    auto s = helper->GetSparseLayout();
-    if (!s) return nullptr;
-
-    // Remove images that we already flashed, just in case we have non-dynamic OS images.
-    auto remove_if_callback = [&](const ImageEntry& entry) -> bool {
-        return helper->WillFlash(GetPartitionName(entry, fp->current_slot));
-    };
-    os_images.erase(std::remove_if(os_images.begin(), os_images.end(), remove_if_callback),
-                    os_images.end());
-    return std::make_unique<OptimizedFlashSuperTask>(super_name, std::move(helper), std::move(s),
-                                                     partition_size, fp);
+    return false;
 }
 
-std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::InitializeFromTasks(
+std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
         const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks) {
     if (!fp->should_optimize_flash_super) {
         LOG(INFO) << "super optimization is disabled";
         return nullptr;
     }
-    if (!supports_AB()) {
+    if (!supports_AB(fp->fb)) {
         LOG(VERBOSE) << "Cannot optimize flashing super on non-AB device";
         return nullptr;
     }
     if (fp->slot_override == "all") {
         LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
+        return nullptr;
+    }
+    if (!CanOptimize(fp->source, tasks)) {
         return nullptr;
     }
 
@@ -248,17 +219,21 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::InitializeFrom
 
     auto s = helper->GetSparseLayout();
     if (!s) return nullptr;
-    // Remove images that we already flashed, just in case we have non-dynamic OS images.
+
+    // Remove tasks that are concatenated into this optimized task
     auto remove_if_callback = [&](const auto& task) -> bool {
         if (auto flash_task = task->AsFlashTask()) {
             return helper->WillFlash(flash_task->GetPartitionAndSlot());
         } else if (auto update_super_task = task->AsUpdateSuperTask()) {
             return true;
         } else if (auto reboot_task = task->AsRebootTask()) {
-            return true;
+            if (reboot_task->GetTarget() == "fastboot") {
+                return true;
+            }
         }
         return false;
     };
+
     tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
 
     return std::make_unique<OptimizedFlashSuperTask>(super_name, std::move(helper), std::move(s),
@@ -288,7 +263,7 @@ void UpdateSuperTask::Run() {
     }
     fp_->fb->RawCommand(command, "Updating super partition");
 }
-std::string UpdateSuperTask::ToString() {
+std::string UpdateSuperTask::ToString() const {
     return "update-super";
 }
 
@@ -305,7 +280,7 @@ void ResizeTask::Run() {
     do_for_partitions(pname_, slot_, resize_partition, false);
 }
 
-std::string ResizeTask::ToString() {
+std::string ResizeTask::ToString() const {
     return "resize " + pname_;
 }
 
@@ -315,7 +290,7 @@ void DeleteTask::Run() {
     fp_->fb->DeletePartition(pname_);
 }
 
-std::string DeleteTask::ToString() {
+std::string DeleteTask::ToString() const {
     return "delete " + pname_;
 }
 
@@ -335,6 +310,6 @@ void WipeTask::Run() {
     fb_perform_format(pname_, 1, partition_type, "", fp_->fs_options, fp_);
 }
 
-std::string WipeTask::ToString() {
+std::string WipeTask::ToString() const {
     return "erase " + pname_;
 }

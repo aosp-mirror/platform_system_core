@@ -34,7 +34,7 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     str1->bytes();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->isEmpty();
+                    str1->empty();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
                     str1->length();
@@ -45,6 +45,8 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     str1->toLower();
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8* str2) -> void {
+                    if (str2->size() == 0) return;
+
                     str1->removeAll(str2->c_str());
                 },
                 [](FuzzedDataProvider*, android::String8* str1, android::String8* str2) -> void {
@@ -65,33 +67,6 @@ std::vector<std::function<void(FuzzedDataProvider*, android::String8*, android::
                     // We need to get a value from our fuzzer here.
                     int start_index = dataProvider->ConsumeIntegralInRange<int>(0, str1->size());
                     str1->find(str2->c_str(), start_index);
-                },
-
-                // Path handling
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getBasePath();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathExtension();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathLeaf();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->getPathDir();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    str1->convertToResPath();
-                },
-                [](FuzzedDataProvider*, android::String8* str1, android::String8*) -> void {
-                    std::shared_ptr<android::String8> path_out_str =
-                            std::make_shared<android::String8>();
-                    str1->walkPath(path_out_str.get());
-                    path_out_str->clear();
-                },
-                [](FuzzedDataProvider* dataProvider, android::String8* str1,
-                   android::String8*) -> void {
-                    str1->appendPath(dataProvider->ConsumeBytesWithTerminator<char>(5).data());
                 },
 };
 

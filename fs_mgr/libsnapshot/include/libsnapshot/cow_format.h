@@ -49,7 +49,9 @@ static constexpr uint32_t kDefaultCowVersion = 2;
 //      |    Footer (fixed)     |
 //      +-----------------------+
 //
-// The operations begin immediately after the header, and the "raw data"
+// After the header is a 2mb scratch space that is used to read ahead data during merge operations
+//
+// The operations begin immediately after the scratch space, and the "raw data"
 // immediately follows the operation which refers to it. While streaming
 // an OTA, we can immediately write the op and data, syncing after each pair,
 // while storing operation metadata in memory. At the end, we compute data and
@@ -143,6 +145,42 @@ struct CowOperation {
     uint64_t source;
 } __attribute__((packed));
 
+// The on disk format of cow (currently ==  CowOperation)
+struct CowOperationV2 {
+    // The operation code (see the constants and structures below).
+    uint8_t type;
+
+    // If this operation reads from the data section of the COW, this contains
+    // the compression type of that data (see constants below).
+    uint8_t compression;
+
+    // If this operation reads from the data section of the COW, this contains
+    // the length.
+    uint16_t data_length;
+
+    // The block of data in the new image that this operation modifies.
+    uint64_t new_block;
+
+    // The value of |source| depends on the operation code.
+    //
+    // For copy operations, this is a block location in the source image.
+    //
+    // For replace operations, this is a byte offset within the COW's data
+    // sections (eg, not landing within the header or metadata). It is an
+    // absolute position within the image.
+    //
+    // For zero operations (replace with all zeroes), this is unused and must
+    // be zero.
+    //
+    // For Label operations, this is the value of the applied label.
+    //
+    // For Cluster operations, this is the length of the following data region
+    //
+    // For Xor operations, this is the byte location in the source image.
+    uint64_t source;
+} __attribute__((packed));
+
+static_assert(sizeof(CowOperationV2) == sizeof(CowOperation));
 static_assert(sizeof(CowOperation) == sizeof(CowFooterOperation));
 
 static constexpr uint8_t kCowCopyOp = 1;
@@ -160,6 +198,10 @@ enum CowCompressionAlgorithm : uint8_t {
     kCowCompressBrotli = 2,
     kCowCompressLz4 = 3,
     kCowCompressZstd = 4,
+};
+struct CowCompression {
+    CowCompressionAlgorithm algorithm = kCowCompressNone;
+    uint32_t compression_level = 0;
 };
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;

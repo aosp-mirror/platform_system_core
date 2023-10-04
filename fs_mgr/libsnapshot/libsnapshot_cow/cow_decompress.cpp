@@ -18,6 +18,7 @@
 
 #include <array>
 #include <cstring>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -62,6 +63,8 @@ std::unique_ptr<IDecompressor> IDecompressor::FromString(std::string_view compre
         return IDecompressor::Brotli();
     } else if (compressor == "gz") {
         return IDecompressor::Gz();
+    } else if (compressor == "zstd") {
+        return IDecompressor::Zstd();
     } else {
         return nullptr;
     }
@@ -211,10 +214,6 @@ bool GzDecompressor::PartialDecompress(const uint8_t* data, size_t length) {
     return true;
 }
 
-std::unique_ptr<IDecompressor> IDecompressor::Gz() {
-    return std::unique_ptr<IDecompressor>(new GzDecompressor());
-}
-
 class BrotliDecompressor final : public StreamDecompressor {
   public:
     ~BrotliDecompressor();
@@ -273,10 +272,6 @@ bool BrotliDecompressor::PartialDecompress(const uint8_t* data, size_t length) {
 
     decompressor_ended_ = BrotliDecoderIsFinished(decoder_);
     return true;
-}
-
-std::unique_ptr<IDecompressor> IDecompressor::Brotli() {
-    return std::unique_ptr<IDecompressor>(new BrotliDecompressor());
 }
 
 class Lz4Decompressor final : public IDecompressor {
@@ -356,7 +351,7 @@ class ZstdDecompressor final : public IDecompressor {
             return decompressed_size;
         }
         std::vector<unsigned char> ignore_buf(decompressed_size);
-        if (!Decompress(buffer, decompressed_size)) {
+        if (!Decompress(ignore_buf.data(), decompressed_size)) {
             return -1;
         }
         memcpy(buffer, ignore_buf.data() + ignore_bytes, buffer_size);
@@ -381,6 +376,14 @@ class ZstdDecompressor final : public IDecompressor {
         return true;
     }
 };
+
+std::unique_ptr<IDecompressor> IDecompressor::Brotli() {
+    return std::make_unique<BrotliDecompressor>();
+}
+
+std::unique_ptr<IDecompressor> IDecompressor::Gz() {
+    return std::make_unique<GzDecompressor>();
+}
 
 std::unique_ptr<IDecompressor> IDecompressor::Lz4() {
     return std::make_unique<Lz4Decompressor>();

@@ -43,7 +43,8 @@
 #include <libavb_user/libavb_user.h>
 #include <libgsi/libgsid.h>
 
-#include "fs_mgr_priv_overlayfs.h"
+#include "fs_mgr_overlayfs_control.h"
+#include "fs_mgr_overlayfs_mount.h"
 
 using namespace std::literals;
 using android::fs_mgr::Fstab;
@@ -127,12 +128,11 @@ class MyLogger {
 }
 
 static android::sp<android::os::IVold> GetVold() {
+    auto sm = android::defaultServiceManager();
     while (true) {
-        if (auto sm = android::defaultServiceManager()) {
-            if (auto binder = sm->getService(android::String16("vold"))) {
-                if (auto vold = android::interface_cast<android::os::IVold>(binder)) {
-                    return vold;
-                }
+        if (auto binder = sm->checkService(android::String16("vold"))) {
+            if (auto vold = android::interface_cast<android::os::IVold>(binder)) {
+                return vold;
             }
         }
         std::this_thread::sleep_for(2s);

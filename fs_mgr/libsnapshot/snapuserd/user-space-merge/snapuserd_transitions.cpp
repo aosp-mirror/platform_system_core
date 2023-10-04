@@ -189,33 +189,32 @@ void SnapshotHandler::InitiateMerge() {
     cv.notify_all();
 }
 
+static inline bool IsMergeBeginError(MERGE_IO_TRANSITION io_state) {
+    return io_state == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
+           io_state == MERGE_IO_TRANSITION::IO_TERMINATED;
+}
+
 // Invoked by Merge thread - Waits on RA thread to resume merging. Will
 // be waken up RA thread.
 bool SnapshotHandler::WaitForMergeBegin() {
-    {
-        std::unique_lock<std::mutex> lock(lock_);
-        while (!MergeInitiated()) {
-            cv.wait(lock);
+    std::unique_lock<std::mutex> lock(lock_);
 
-            if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-                return false;
-            }
-        }
+    cv.wait(lock, [this]() -> bool { return MergeInitiated() || IsMergeBeginError(io_state_); });
 
-        while (!(io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN ||
-                 io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                 io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED)) {
-            cv.wait(lock);
-        }
-
-        if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-            io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-            return false;
-        }
-
-        return true;
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
     }
+
+    cv.wait(lock, [this]() -> bool {
+        return io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN || IsMergeBeginError(io_state_);
+    });
+
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
+    }
+    return true;
 }
 
 // Invoked by RA thread - Flushes the RA block to scratch space if necessary
@@ -277,6 +276,7 @@ bool SnapshotHandler::WaitForMergeReady() {
         if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED ||
             io_state_ == MERGE_IO_TRANSITION::MERGE_COMPLETE ||
             io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
+            SNAP_LOG(ERROR) << "Wait for merge ready failed: " << io_state_;
             return false;
         }
         return true;
@@ -665,6 +665,27 @@ MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void*
                 return MERGE_GROUP_STATE::GROUP_INVALID;
             }
         }
+    }
+}
+
+std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value) {
+    switch (value) {
+        case MERGE_IO_TRANSITION::INVALID:
+            return os << "INVALID";
+        case MERGE_IO_TRANSITION::MERGE_READY:
+            return os << "MERGE_READY";
+        case MERGE_IO_TRANSITION::MERGE_BEGIN:
+            return os << "MERGE_BEGIN";
+        case MERGE_IO_TRANSITION::MERGE_FAILED:
+            return os << "MERGE_FAILED";
+        case MERGE_IO_TRANSITION::MERGE_COMPLETE:
+            return os << "MERGE_COMPLETE";
+        case MERGE_IO_TRANSITION::IO_TERMINATED:
+            return os << "IO_TERMINATED";
+        case MERGE_IO_TRANSITION::READ_AHEAD_FAILURE:
+            return os << "READ_AHEAD_FAILURE";
+        default:
+            return os << "unknown";
     }
 }
 

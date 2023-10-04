@@ -27,6 +27,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <cutils/android_reboot.h>
+#include <fs_mgr.h>
 #include <unwindstack/AndroidUnwinder.h>
 
 #include "capabilities.h"
@@ -48,13 +49,9 @@ void SetFatalRebootTarget(const std::optional<std::string>& reboot_target) {
 
     const std::string kInitFatalPanicParamString = "androidboot.init_fatal_panic";
     if (cmdline.find(kInitFatalPanicParamString) == std::string::npos) {
-        init_fatal_panic = false;
-        ImportBootconfig(
-                [kInitFatalPanicParamString](const std::string& key, const std::string& value) {
-                    if (key == kInitFatalPanicParamString && value == "true") {
-                        init_fatal_panic = true;
-                    }
-                });
+        std::string value;
+        init_fatal_panic = (android::fs_mgr::GetBootconfig(kInitFatalPanicParamString, &value) &&
+                            value == "true");
     } else {
         const std::string kInitFatalPanicString = kInitFatalPanicParamString + "=true";
         init_fatal_panic = cmdline.find(kInitFatalPanicString) != std::string::npos;
@@ -68,11 +65,7 @@ void SetFatalRebootTarget(const std::optional<std::string>& reboot_target) {
     const std::string kRebootTargetString = "androidboot.init_fatal_reboot_target";
     auto start_pos = cmdline.find(kRebootTargetString);
     if (start_pos == std::string::npos) {
-        ImportBootconfig([kRebootTargetString](const std::string& key, const std::string& value) {
-            if (key == kRebootTargetString) {
-                init_fatal_reboot_target = value;
-            }
-        });
+        android::fs_mgr::GetBootconfig(kRebootTargetString, &init_fatal_reboot_target);
         // We already default to bootloader if no setting is provided.
     } else {
         const std::string kRebootTargetStringPattern = kRebootTargetString + "=";

@@ -19,7 +19,7 @@ package {
 }
 
 cc_defaults {
-    name: "libsnapshot_snapuserd_defaults",
+    name: "libsnapuserd_client_defaults",
     defaults: [
         "fs_mgr_defaults",
     ],
@@ -33,15 +33,15 @@ cc_defaults {
 }
 
 cc_library_static {
-    name: "libsnapshot_snapuserd",
+    name: "libsnapuserd_client",
     defaults: [
         "fs_mgr_defaults",
-        "libsnapshot_snapuserd_defaults",
+        "libsnapuserd_client_defaults",
     ],
     recovery_available: true,
     static_libs: [
         "libcutils_sockets",
-        "libfs_mgr",
+        "libfs_mgr_file_wait",
     ],
     shared_libs: [
         "libbase",
@@ -57,33 +57,45 @@ cc_library_static {
     defaults: [
         "fs_mgr_defaults",
     ],
+    local_include_dirs: ["include/"],
     srcs: [
         "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm-snapshot-merge/snapuserd_readahead.cpp",
+        "dm-snapshot-merge/snapuserd_worker.cpp",
+        "dm_user_block_server.cpp",
         "snapuserd_buffer.cpp",
         "user-space-merge/handler_manager.cpp",
+        "user-space-merge/merge_worker.cpp",
+        "user-space-merge/read_worker.cpp",
         "user-space-merge/snapuserd_core.cpp",
-        "user-space-merge/snapuserd_dm_user.cpp",
-        "user-space-merge/snapuserd_merge.cpp",
         "user-space-merge/snapuserd_readahead.cpp",
         "user-space-merge/snapuserd_transitions.cpp",
         "user-space-merge/snapuserd_verify.cpp",
+        "user-space-merge/worker.cpp",
+        "utility.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
     static_libs: [
         "libbase",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
         "libsnapshot_cow",
         "liburing",
     ],
     include_dirs: ["bionic/libc/kernel"],
+    export_include_dirs: ["include"],
     header_libs: [
         "libstorage_literals_headers",
     ],
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
+    host_supported: true,
 }
 
 cc_defaults {
@@ -97,17 +109,24 @@ cc_defaults {
         "user-space-merge/snapuserd_server.cpp",
     ],
 
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+
     static_libs: [
         "libbase",
         "libbrotli",
         "libcutils_sockets",
         "libdm",
-        "libfs_mgr",
+        "libext2_uuid",
+        "libfs_mgr_file_wait",
         "libgflags",
         "liblog",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
         "libsnapuserd",
+        "libsnapuserd_client",
         "libz",
         "liblz4",
         "libext4_utils",
@@ -141,6 +160,9 @@ cc_binary {
     defaults: ["snapuserd_defaults"],
     init_rc: [
         "snapuserd.rc",
+    ],
+    static_libs: [
+        "libsnapuserd_client",
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
@@ -184,12 +206,13 @@ cc_test {
         "libbrotli",
         "libgtest",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
+        "libsnapuserd_client",
         "libcutils_sockets",
         "libz",
-        "libfs_mgr",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
+        "libfs_mgr_file_wait",
     ],
     header_libs: [
         "libstorage_literals_headers",
@@ -202,14 +225,22 @@ cc_test {
     require_root: false,
 }
 
-cc_test {
-    name: "snapuserd_test",
+cc_defaults {
+    name: "snapuserd_test_defaults",
     defaults: [
         "fs_mgr_defaults",
         "libsnapshot_cow_defaults",
     ],
     srcs: [
+        "testing/dm_user_harness.cpp",
+        "testing/harness.cpp",
+        "testing/host_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
     shared_libs: [
         "libbase",
@@ -219,17 +250,20 @@ cc_test {
         "libbrotli",
         "libcutils_sockets",
         "libdm",
+        "libext2_uuid",
         "libext4_utils",
-        "libfs_mgr",
+        "libfs_mgr_file_wait",
         "libgflags",
         "libgtest",
         "libsnapshot_cow",
-        "libsnapshot_snapuserd",
         "libsnapuserd",
         "liburing",
         "libz",
     ],
-    include_dirs: ["bionic/libc/kernel"],
+    include_dirs: [
+        "bionic/libc/kernel",
+        ".",
+    ],
     header_libs: [
         "libstorage_literals_headers",
         "libfiemap_headers",
@@ -238,5 +272,24 @@ cc_test {
         min_shipping_api_level: 30,
     },
     auto_gen_config: true,
-    require_root: false,
+    require_root: true,
+    compile_multilib: "first",
+}
+
+cc_test {
+    name: "snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    host_supported: true,
+    test_suites: [
+        "device-tests",
+    ],
+}
+
+// vts tests cannot be host_supported.
+cc_test {
+    name: "vts_snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    test_suites: [
+        "vts",
+    ],
 }

@@ -24,6 +24,11 @@
 #include <utils/String8.h>
 #include <utils/TypeHelpers.h>
 
+#if __has_include(<string_view>)
+#include <string_view>
+#define HAS_STRING_VIEW
+#endif
+
 // ---------------------------------------------------------------------------
 
 namespace android {
@@ -53,12 +58,13 @@ public:
 
                                 ~String16();
 
-    inline  const char16_t*     string() const;
+    inline  const char16_t*     c_str() const;
 
-private:
-    static inline std::string   std_string(const String16& str);
-public:
             size_t              size() const;
+    inline  bool                empty() const;
+
+    inline  size_t              length() const;
+
             void                setTo(const String16& other);
             status_t            setTo(const char16_t* other);
             status_t            setTo(const char16_t* other, size_t len);
@@ -86,6 +92,7 @@ public:
             bool                startsWith(const char16_t* prefix) const;
 
             bool                contains(const char16_t* chrs) const;
+    inline  bool                contains(const String16& other) const;
 
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
@@ -107,6 +114,12 @@ public:
     inline  bool                operator>(const char16_t* other) const;
 
     inline                      operator const char16_t*() const;
+
+#ifdef HAS_STRING_VIEW
+    // Implicit cast to std::u16string is not implemented on purpose - u16string_view is much
+    // lighter and if one needs, they can still create u16string from u16string_view.
+    inline                      operator std::u16string_view() const;
+#endif
 
     // Static and non-static String16 behave the same for the users, so
     // this method isn't of much use for the users. It is public for testing.
@@ -174,6 +187,14 @@ protected:
 
     template <size_t N>
     explicit constexpr String16(const StaticData<N>& s) : mString(s.data) {}
+
+// These symbols are for potential backward compatibility with prebuilts. To be removed.
+#ifdef ENABLE_STRING16_OBSOLETE_METHODS
+public:
+#else
+private:
+#endif
+    inline  const char16_t*     string() const;
 };
 
 // String16 can be trivially moved using memcpy() because moving does not
@@ -234,14 +255,29 @@ inline int strictly_order_type(const String16& lhs, const String16& rhs)
     return compare_type(lhs, rhs) < 0;
 }
 
+inline const char16_t* String16::c_str() const
+{
+    return mString;
+}
+
 inline const char16_t* String16::string() const
 {
     return mString;
 }
 
-inline std::string String16::std_string(const String16& str)
+inline bool String16::empty() const
 {
-    return std::string(String8(str).string());
+    return length() == 0;
+}
+
+inline size_t String16::length() const
+{
+    return size();
+}
+
+inline bool String16::contains(const String16& other) const
+{
+    return contains(other.c_str());
 }
 
 inline String16& String16::operator=(const String16& other)
@@ -333,8 +369,15 @@ inline String16::operator const char16_t*() const
     return mString;
 }
 
+inline String16::operator std::u16string_view() const
+{
+    return {mString, length()};
+}
+
 }  // namespace android
 
 // ---------------------------------------------------------------------------
+
+#undef HAS_STRING_VIEW
 
 #endif // ANDROID_STRING16_H

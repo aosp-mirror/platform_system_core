@@ -472,14 +472,16 @@ TEST_P(CompressionTest, HorribleStream) {
     if (strcmp(GetParam(), "none") == 0) {
         GTEST_SKIP();
     }
-
+    CowCompression compression;
     auto algorithm = CompressionAlgorithmFromString(GetParam());
     ASSERT_TRUE(algorithm.has_value());
+    compression.algorithm = algorithm.value();
 
     std::string expected = "The quick brown fox jumps over the lazy dog.";
     expected.resize(4096, '\0');
 
-    auto result = CompressWorker::Compress(*algorithm, expected.data(), expected.size());
+    std::unique_ptr<ICompressor> compressor = ICompressor::Create(compression, 4096);
+    auto result = compressor->Compress(expected.data(), expected.size());
     ASSERT_FALSE(result.empty());
 
     HorribleStream<uint8_t> stream(result);
@@ -1406,6 +1408,18 @@ TEST_F(CowTest, RevMergeOpItrTest) {
     }
     ASSERT_EQ(expected_new_block, revMergeOpSequence.end());
     ASSERT_TRUE(iter->AtEnd());
+}
+
+TEST_F(CowTest, ParseOptionsTest) {
+    CowOptions options;
+    std::vector<std::pair<std::string, bool>> testcases = {
+            {"gz,4", true},   {"gz,4,4", false}, {"lz4,4", true}, {"brotli,4", true},
+            {"zstd,4", true}, {"zstd,x", false}, {"zs,4", false}, {"zstd.4", false}};
+    for (size_t i = 0; i < testcases.size(); i++) {
+        options.compression = testcases[i].first;
+        CowWriterV2 writer(options, GetCowFd());
+        ASSERT_EQ(writer.Initialize(), testcases[i].second);
+    }
 }
 
 TEST_F(CowTest, LegacyRevMergeOpItrTest) {

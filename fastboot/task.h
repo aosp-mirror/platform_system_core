@@ -15,10 +15,8 @@
 //
 #pragma once
 
-#include <sstream>
 #include <string>
 
-#include "fastboot_driver.h"
 #include "super_flash_helper.h"
 #include "util.h"
 
@@ -29,18 +27,21 @@ using ImageEntry = std::pair<const Image*, std::string>;
 class FlashTask;
 class RebootTask;
 class UpdateSuperTask;
+class OptimizedFlashSuperTask;
 class WipeTask;
-
+class ResizeTask;
 class Task {
   public:
     Task() = default;
     virtual void Run() = 0;
-    virtual std::string ToString() = 0;
+    virtual std::string ToString() const = 0;
 
     virtual FlashTask* AsFlashTask() { return nullptr; }
     virtual RebootTask* AsRebootTask() { return nullptr; }
     virtual UpdateSuperTask* AsUpdateSuperTask() { return nullptr; }
+    virtual OptimizedFlashSuperTask* AsOptimizedFlashSuperTask() { return nullptr; }
     virtual WipeTask* AsWipeTask() { return nullptr; }
+    virtual ResizeTask* AsResizeTask() { return nullptr; }
 
     virtual ~Task() = default;
 };
@@ -51,12 +52,13 @@ class FlashTask : public Task {
               const bool apply_vbmeta, const FlashingPlan* fp);
     virtual FlashTask* AsFlashTask() override { return this; }
 
+    static bool IsDynamicParitition(const ImageSource* source, const FlashTask* task);
     void Run() override;
-    std::string ToString() override;
-    std::string GetPartition() { return pname_; }
-    std::string GetImageName() { return fname_; }
-    std::string GetSlot() { return slot_; }
-    std::string GetPartitionAndSlot();
+    std::string ToString() const override;
+    std::string GetPartition() const { return pname_; }
+    std::string GetImageName() const { return fname_; }
+    std::string GetSlot() const { return slot_; }
+    std::string GetPartitionAndSlot() const;
 
   private:
     const std::string pname_;
@@ -72,7 +74,8 @@ class RebootTask : public Task {
     RebootTask(const FlashingPlan* fp, const std::string& reboot_target);
     virtual RebootTask* AsRebootTask() override { return this; }
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
+    std::string GetTarget() const { return reboot_target_; };
 
   private:
     const std::string reboot_target_ = "";
@@ -83,13 +86,15 @@ class OptimizedFlashSuperTask : public Task {
   public:
     OptimizedFlashSuperTask(const std::string& super_name, std::unique_ptr<SuperFlashHelper> helper,
                             SparsePtr sparse_layout, uint64_t super_size, const FlashingPlan* fp);
-    static std::unique_ptr<OptimizedFlashSuperTask> Initialize(const FlashingPlan* fp,
-                                                               std::vector<ImageEntry>& os_images);
-    static std::unique_ptr<OptimizedFlashSuperTask> InitializeFromTasks(
+    virtual OptimizedFlashSuperTask* AsOptimizedFlashSuperTask() override { return this; }
+
+    static std::unique_ptr<OptimizedFlashSuperTask> Initialize(
             const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>& tasks);
-    using ImageEntry = std::pair<const Image*, std::string>;
+    static bool CanOptimize(const ImageSource* source,
+                            const std::vector<std::unique_ptr<Task>>& tasks);
+
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
 
   private:
     const std::string super_name_;
@@ -105,7 +110,7 @@ class UpdateSuperTask : public Task {
     virtual UpdateSuperTask* AsUpdateSuperTask() override { return this; }
 
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
 
   private:
     const FlashingPlan* fp_;
@@ -116,7 +121,8 @@ class ResizeTask : public Task {
     ResizeTask(const FlashingPlan* fp, const std::string& pname, const std::string& size,
                const std::string& slot);
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
+    virtual ResizeTask* AsResizeTask() override { return this; }
 
   private:
     const FlashingPlan* fp_;
@@ -129,7 +135,7 @@ class DeleteTask : public Task {
   public:
     DeleteTask(const FlashingPlan* fp, const std::string& pname);
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
 
   private:
     const FlashingPlan* fp_;
@@ -141,7 +147,7 @@ class WipeTask : public Task {
     WipeTask(const FlashingPlan* fp, const std::string& pname);
     virtual WipeTask* AsWipeTask() override { return this; }
     void Run() override;
-    std::string ToString() override;
+    std::string ToString() const override;
 
   private:
     const FlashingPlan* fp_;

@@ -14,10 +14,13 @@
 
 #include "handler_manager.h"
 
+#include <pthread.h>
 #include <sys/eventfd.h>
 
 #include <android-base/logging.h>
 
+#include "merge_worker.h"
+#include "read_worker.h"
 #include "snapuserd_core.h"
 
 namespace android {
@@ -48,9 +51,10 @@ SnapshotHandlerManager::SnapshotHandlerManager() {
 std::shared_ptr<HandlerThread> SnapshotHandlerManager::AddHandler(
         const std::string& misc_name, const std::string& cow_device_path,
         const std::string& backing_device, const std::string& base_path_merge,
-        int num_worker_threads, bool use_iouring, bool perform_verification) {
+        std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads, bool use_iouring,
+        bool perform_verification) {
     auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge, num_worker_threads,
+                                                       base_path_merge, opener, num_worker_threads,
                                                        use_iouring, perform_verification);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
@@ -129,6 +133,8 @@ bool SnapshotHandlerManager::DeleteHandler(const std::string& misc_name) {
 void SnapshotHandlerManager::RunThread(std::shared_ptr<HandlerThread> handler) {
     LOG(INFO) << "Entering thread for handler: " << handler->misc_name();
 
+    pthread_setname_np(pthread_self(), "Handler");
+
     if (!handler->snapuserd()->Start()) {
         LOG(ERROR) << " Failed to launch all worker threads";
     }
@@ -198,9 +204,8 @@ bool SnapshotHandlerManager::StartMerge(std::lock_guard<std::mutex>* proof_of_lo
 
     handler->snapuserd()->MonitorMerge();
 
-    if (!is_merge_monitor_started_) {
-        std::thread(&SnapshotHandlerManager::MonitorMerge, this).detach();
-        is_merge_monitor_started_ = true;
+    if (!merge_monitor_.joinable()) {
+        merge_monitor_ = std::thread(&SnapshotHandlerManager::MonitorMerge, this);
     }
 
     merge_handlers_.push(handler);
@@ -217,6 +222,7 @@ void SnapshotHandlerManager::WakeupMonitorMergeThread() {
 }
 
 void SnapshotHandlerManager::MonitorMerge() {
+    pthread_setname_np(pthread_self(), "Merge Monitor");
     while (!stop_monitor_merge_thread_) {
         uint64_t testVal;
         ssize_t ret =
@@ -354,8 +360,12 @@ void SnapshotHandlerManager::JoinAllThreads() {
         if (th.joinable()) th.join();
     }
 
-    stop_monitor_merge_thread_ = true;
-    WakeupMonitorMergeThread();
+    if (merge_monitor_.joinable()) {
+        stop_monitor_merge_thread_ = true;
+        WakeupMonitorMergeThread();
+
+        merge_monitor_.join();
+    }
 }
 
 auto SnapshotHandlerManager::FindHandler(std::lock_guard<std::mutex>* proof_of_lock,

@@ -91,27 +91,38 @@ endif
 #
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    dev proc sys system data data_mirror odm oem acct config storage mnt apex debug_ramdisk \
+    dev proc sys system data data_mirror odm oem acct config storage mnt apex bootstrap-apex debug_ramdisk \
     linkerconfig second_stage_resources postinstall $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
     ln -sfn /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
     ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
+
+ALL_ROOTDIR_SYMLINKS := \
+  $(TARGET_ROOT_OUT)/bin \
+  $(TARGET_ROOT_OUT)/etc \
+  $(TARGET_ROOT_OUT)/bugreports \
+  $(TARGET_ROOT_OUT)/d \
+  $(TARGET_ROOT_OUT)/sdcard
+
 ifdef BOARD_USES_VENDORIMAGE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/vendor $(TARGET_ROOT_OUT)/vendor
+  ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/vendor
 endif
 ifdef BOARD_USES_PRODUCTIMAGE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/product
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/product $(TARGET_ROOT_OUT)/product
+  ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/product
 endif
 ifdef BOARD_USES_SYSTEM_EXTIMAGE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_ext
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /system/system_ext $(TARGET_ROOT_OUT)/system_ext
+  ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/system_ext
 endif
 ifdef BOARD_USES_METADATA_PARTITION
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/metadata
@@ -134,6 +145,18 @@ LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/overlay $(TARGET_ROOT_OUT)/odm/ov
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/priv-app $(TARGET_ROOT_OUT)/odm/priv-app
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/odm/usr $(TARGET_ROOT_OUT)/odm/usr
 
+ALL_ROOTDIR_SYMLINKS += \
+  $(TARGET_ROOT_OUT)/odm/app \
+  $(TARGET_ROOT_OUT)/odm/bin \
+  $(TARGET_ROOT_OUT)/odm/etc \
+  $(TARGET_ROOT_OUT)/odm/firmware \
+  $(TARGET_ROOT_OUT)/odm/framework \
+  $(TARGET_ROOT_OUT)/odm/lib \
+  $(TARGET_ROOT_OUT)/odm/lib64 \
+  $(TARGET_ROOT_OUT)/odm/overlay \
+  $(TARGET_ROOT_OUT)/odm/priv-app \
+  $(TARGET_ROOT_OUT)/odm/usr
+
 
 # For /vendor_dlkm partition.
 LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor_dlkm
@@ -144,6 +167,7 @@ LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor_dlkm
 # Note that /vendor_dlkm/lib is omitted because vendor DLKMs should be accessed
 # via /vendor/lib/modules directly.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /vendor/vendor_dlkm/etc $(TARGET_ROOT_OUT)/vendor_dlkm/etc
+ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/vendor_dlkm/etc
 
 # For /odm_dlkm partition.
 LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm_dlkm
@@ -154,6 +178,7 @@ LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/odm_dlkm
 # Note that /odm_dlkm/lib is omitted because odm DLKMs should be accessed
 # via /odm/lib/modules directly.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /odm/odm_dlkm/etc $(TARGET_ROOT_OUT)/odm_dlkm/etc
+ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/odm_dlkm/etc
 
 # For /system_dlkm partition
 LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/system_dlkm
@@ -162,6 +187,7 @@ ifdef BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/cache
 else
   LOCAL_POST_INSTALL_CMD += ; ln -sf /data/cache $(TARGET_ROOT_OUT)/cache
+  ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/cache
 endif
 ifdef BOARD_ROOT_EXTRA_SYMLINKS
 # BOARD_ROOT_EXTRA_SYMLINKS is a list of <target>:<link_name>.
@@ -169,14 +195,19 @@ ifdef BOARD_ROOT_EXTRA_SYMLINKS
     $(eval p := $(subst :,$(space),$(s)))\
     ; mkdir -p $(dir $(TARGET_ROOT_OUT)/$(word 2,$(p))) \
     ; ln -sf $(word 1,$(p)) $(TARGET_ROOT_OUT)/$(word 2,$(p)))
+  ALL_ROOTDIR_SYMLINKS += $(foreach s,$(BOARD_ROOT_EXTRA_SYMLINKS),$(TARGET_ROOT_OUT)/$(call word-colon,2,$s))
 endif
 
 # The init symlink must be a post install command of a file that is to TARGET_ROOT_OUT.
 # Since init.environ.rc is required for init and satisfies that requirement, we hijack it to create the symlink.
 LOCAL_POST_INSTALL_CMD += ; ln -sf /system/bin/init $(TARGET_ROOT_OUT)/init
+ALL_ROOTDIR_SYMLINKS += $(TARGET_ROOT_OUT)/init
+
+ALL_DEFAULT_INSTALLED_MODULES += $(ALL_ROOTDIR_SYMLINKS)
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
+$(ALL_ROOTDIR_SYMLINKS): $(LOCAL_BUILT_MODULE)
 $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
