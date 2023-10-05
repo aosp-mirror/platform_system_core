@@ -293,3 +293,48 @@ cc_test {
         "vts",
     ],
 }
+
+cc_binary_host {
+    name: "snapuserd_extractor",
+    defaults: [
+        "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
+    ],
+    srcs: [
+        "testing/dm_user_harness.cpp",
+        "testing/harness.cpp",
+        "testing/host_harness.cpp",
+        "user-space-merge/extractor.cpp",
+        "snapuserd_extractor.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libcutils_sockets",
+        "libdm",
+        "libext2_uuid",
+        "libext4_utils",
+        "libfs_mgr_file_wait",
+        "libgflags",
+        "libsnapshot_cow",
+        "libsnapuserd",
+        "liburing",
+        "libz",
+    ],
+    include_dirs: [
+        "bionic/libc/kernel",
+        ".",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+        "libfiemap_headers",
+    ],
+}
