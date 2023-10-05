@@ -28,6 +28,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
 #include "fastboot_driver_interface.h"
 #include "filesystem.h"
@@ -89,7 +90,7 @@ struct FlashingPlan {
     // If the image uses the default slot, or the user specified "all", then
     // the paired string will be empty. If the image requests a specific slot
     // (for example, system_other) it is specified instead.
-    ImageSource* source;
+    std::unique_ptr<ImageSource> source;
     bool wants_wipe = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
