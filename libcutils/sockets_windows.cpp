@@ -35,7 +35,7 @@
 // can be extremely tricky and cause deadlock when using threads or atexit().
 //
 // Both adb (1) and Chrome (2) purposefully avoid WSACleanup() with no issues.
-// (1) https://android.googlesource.com/platform/system/core.git/+/master/adb/sysdeps_win32.cpp
+// (1) https://android.googlesource.com/platform/packages/modules/adb.git/+/main/sysdeps_win32.cpp
 // (2) https://code.google.com/p/chromium/codesearch#chromium/src/net/base/winsock_init.cc
 bool initialize_windows_sockets() {
     // There's no harm in calling WSAStartup() multiple times but no benefit
