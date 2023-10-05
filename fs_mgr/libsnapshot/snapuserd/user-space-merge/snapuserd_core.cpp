@@ -173,6 +173,10 @@ bool SnapshotHandler::ReadMetadata() {
     }
 
     SNAP_LOG(INFO) << "Merge-ops: " << header.num_merge_ops;
+    if (header.num_merge_ops) {
+        resume_merge_ = true;
+        SNAP_LOG(INFO) << "Resume Snapshot-merge";
+    }
 
     if (!MmapMetadata()) {
         SNAP_LOG(ERROR) << "mmap failed";
@@ -295,6 +299,11 @@ bool SnapshotHandler::Start() {
     if (ra_thread_) {
         ra_thread_status =
                 std::async(std::launch::async, &ReadAhead::RunThread, read_ahead_thread_.get());
+        // If this is a merge-resume path, wait until RA thread is fully up as
+        // the data has to be re-constructed from the scratch space.
+        if (resume_merge_ && ShouldReconstructDataFromCow()) {
+            WaitForRaThreadToStart();
+        }
     }
 
     // Launch worker threads
@@ -307,7 +316,9 @@ bool SnapshotHandler::Start() {
             std::async(std::launch::async, &MergeWorker::Run, merge_thread_.get());
 
     // Now that the worker threads are up, scan the partitions.
-    if (perform_verification_) {
+    // If the snapshot-merge is being resumed, there is no need to scan as the
+    // current slot is already marked as boot complete.
+    if (perform_verification_ && !resume_merge_) {
         update_verify_->VerifyUpdatePartition();
     }
 
