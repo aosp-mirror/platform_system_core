@@ -1525,7 +1525,7 @@ void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
         fb->ResizePartition(pname, std::to_string(buf.image_size));
     }
     std::string flash_pname = repack_ramdisk(pname, &buf, fp->fb);
-    flash_buf(fp->source, flash_pname, &buf, apply_vbmeta);
+    flash_buf(fp->source.get(), flash_pname, &buf, apply_vbmeta);
 }
 
 // Sets slot_override as the active slot. If slot_override is blank,
@@ -1679,7 +1679,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (FlashTask::IsDynamicParitition(fp->source, flash_task)) {
+            if (FlashTask::IsDynamicParitition(fp->source.get(), flash_task)) {
                 if (!loc) {
                     loc = i;
                 }
@@ -1810,7 +1810,8 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasks() {
     if (fp_->exclude_dynamic_partitions) {
         auto is_non_static_flash_task = [&](const auto& task) -> bool {
             if (auto flash_task = task->AsFlashTask()) {
-                if (!should_flash_in_userspace(fp_->source, flash_task->GetPartitionAndSlot())) {
+                if (!should_flash_in_userspace(fp_->source.get(),
+                                               flash_task->GetPartitionAndSlot())) {
                     return false;
                 }
             }
@@ -1884,9 +1885,10 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
         // On these devices, secondary slots must be flashed as physical
         // partitions (otherwise they would not mount on first boot). To enforce
         // this, we delete any logical partitions for the "other" slot.
-        if (is_retrofit_device(fp_->source)) {
+        if (is_retrofit_device(fp_->source.get())) {
             std::string partition_name = image->part_name + "_" + slot;
-            if (image->IsSecondary() && should_flash_in_userspace(fp_->source, partition_name)) {
+            if (image->IsSecondary() &&
+                should_flash_in_userspace(fp_->source.get(), partition_name)) {
                 tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
             }
         }
@@ -1949,8 +1951,7 @@ static void do_update(const char* filename, FlashingPlan* fp) {
     if (error != 0) {
         die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
-    ZipImageSource zp = ZipImageSource(zip);
-    fp->source = &zp;
+    fp->source.reset(new ZipImageSource(zip));
     FlashAllTool tool(fp);
     tool.Flash();
 
@@ -1971,8 +1972,7 @@ unique_fd LocalImageSource::OpenFile(const std::string& name) const {
 }
 
 static void do_flashall(FlashingPlan* fp) {
-    LocalImageSource s = LocalImageSource();
-    fp->source = &s;
+    fp->source.reset(new LocalImageSource());
     FlashAllTool tool(fp);
     tool.Flash();
 }
@@ -2089,7 +2089,7 @@ void fb_perform_format(const std::string& partition, int skip_if_not_supported,
         die("Cannot read image: %s", strerror(errno));
     }
 
-    flash_buf(fp->source, partition, &buf, is_vbmeta_partition(partition));
+    flash_buf(fp->source.get(), partition, &buf, is_vbmeta_partition(partition));
     return;
 
 failed:
