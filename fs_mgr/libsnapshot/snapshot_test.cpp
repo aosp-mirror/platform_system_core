@@ -2559,6 +2559,56 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
     }
 }
 
+TEST_F(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch) {
+    MountMetadata();
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    if (!sm->UpdateUsesUserSnapshots()) {
+        GTEST_SKIP() << "Test does not apply as UserSnapshots aren't enabled.";
+    }
+
+    ASSERT_TRUE(WriteSnapshots());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge test";
+    }
+    // Mark the indicator
+    ASSERT_TRUE(sm->BootFromSnapshotsWithoutSlotSwitch());
+
+    ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+    sm->set_use_first_stage_snapuserd(true);
+
+    ASSERT_TRUE(sm->NeedSnapshotsInFirstStageMount());
+
+    // Map snapshots
+    ASSERT_TRUE(sm->MapAllSnapshots(10s));
+
+    // New updates should fail
+    ASSERT_FALSE(sm->BeginUpdate());
+
+    // Snapshots cannot be cancelled
+    ASSERT_FALSE(sm->CancelUpdate());
+
+    // Merge cannot start
+    ASSERT_FALSE(sm->InitiateMerge());
+
+    // Read bytes back and verify they match the cache.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+
+    // Remove the indicators
+    ASSERT_TRUE(sm->PrepareDeviceToBootWithoutSnapshot());
+
+    // Ensure snapshots are still mounted
+    ASSERT_TRUE(sm->IsUserspaceSnapshotUpdateInProgress());
+
+    // Cleanup snapshots
+    ASSERT_TRUE(sm->UnmapAllSnapshots());
+}
+
 TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
     AddOperationForPartitions();
     // Execute the update.

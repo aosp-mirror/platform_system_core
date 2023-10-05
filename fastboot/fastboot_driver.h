@@ -27,9 +27,9 @@
  */
 #pragma once
 #include <cstdlib>
-#include <deque>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,10 +37,8 @@
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <bootimg.h>
-#include <inttypes.h>
 #include <sparse/sparse.h>
 
-#include "constants.h"
 #include "fastboot_driver_interface.h"
 #include "transport.h"
 
@@ -63,7 +61,7 @@ class FastBootDriver : public IFastBootDriver {
     static constexpr uint32_t MAX_DOWNLOAD_SIZE = std::numeric_limits<uint32_t>::max();
     static constexpr size_t TRANSPORT_CHUNK_SIZE = 1024;
 
-    FastBootDriver(Transport* transport, DriverCallbacks driver_callbacks = {},
+    FastBootDriver(std::unique_ptr<Transport> transport, DriverCallbacks driver_callbacks = {},
                    bool no_checks = false);
     ~FastBootDriver();
 
@@ -124,9 +122,7 @@ class FastBootDriver : public IFastBootDriver {
     std::string Error();
     RetCode WaitForDisconnect() override;
 
-    // Note: set_transport will return the previous transport.
-    Transport* set_transport(Transport* transport);
-    Transport* transport() const { return transport_; }
+    void set_transport(std::unique_ptr<Transport> transport);
 
     RetCode RawCommand(const std::string& cmd, const std::string& message,
                        std::string* response = nullptr, std::vector<std::string>* info = nullptr,
@@ -143,7 +139,7 @@ class FastBootDriver : public IFastBootDriver {
 
     std::string ErrnoStr(const std::string& msg);
 
-    Transport* transport_;
+    std::unique_ptr<Transport> transport_;
 
   private:
     RetCode SendBuffer(android::base::borrowed_fd fd, size_t size);

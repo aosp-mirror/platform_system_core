@@ -163,6 +163,21 @@ std::string GetPageSizeSuffix() {
     return android::base::StringPrintf("_%zuk", page_size / 1024);
 }
 
+constexpr bool EndsWith(const std::string_view str, const std::string_view suffix) {
+    return str.size() >= suffix.size() &&
+           0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
+constexpr std::string_view GetPageSizeSuffix(std::string_view dirname) {
+    if (EndsWith(dirname, "_16k")) {
+        return "_16k";
+    }
+    if (EndsWith(dirname, "_64k")) {
+        return "_64k";
+    }
+    return "";
+}
+
 }  // namespace
 
 std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
@@ -211,7 +226,8 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
     }
     dirent* entry = nullptr;
     std::vector<std::string> module_dirs;
-    const std::string release_specific_module_dir = uts.release + GetPageSizeSuffix();
+    const auto page_size_suffix = GetPageSizeSuffix();
+    const std::string release_specific_module_dir = uts.release + page_size_suffix;
     while ((entry = readdir(base_dir.get()))) {
         if (entry->d_type != DT_DIR) {
             continue;
@@ -222,6 +238,14 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
             module_dirs.clear();
             module_dirs.emplace_back(entry->d_name);
             break;
+        }
+        // Is a directory does not have page size suffix, it does not mean this directory is for 4K
+        // kernels. Certain 16K kernel builds put all modules in /lib/modules/`uname -r` without any
+        // suffix. Therefore, only ignore a directory if it has _16k/_64k suffix and the suffix does
+        // not match system page size.
+        const auto dir_page_size_suffix = GetPageSizeSuffix(entry->d_name);
+        if (!dir_page_size_suffix.empty() && dir_page_size_suffix != page_size_suffix) {
+            continue;
         }
         int dir_major = 0, dir_minor = 0;
         if (sscanf(entry->d_name, "%d.%d", &dir_major, &dir_minor) != 2 || dir_major != major ||

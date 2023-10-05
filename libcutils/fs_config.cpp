@@ -41,10 +41,6 @@
 
 #include "fs_config.h"
 
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
 using android::base::EndsWith;
 using android::base::StartsWith;
 
@@ -257,12 +253,12 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
         len = strip(target_out_path, len, "/");
         len = strip(target_out_path, len, "/system");
         if (asprintf(&name, "%.*s%s", (int)len, target_out_path, conf[which][dir]) != -1) {
-            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
+            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY));
             free(name);
         }
     }
     if (fd < 0) {
-        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY | O_BINARY));
+        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY));
     }
     return fd;
 }
