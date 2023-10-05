@@ -41,7 +41,7 @@ bool FlashTask::IsDynamicParitition(const ImageSource* source, const FlashTask* 
 
 void FlashTask::Run() {
     auto flash = [&](const std::string& partition) {
-        if (should_flash_in_userspace(fp_->source, partition) && !is_userspace_fastboot() &&
+        if (should_flash_in_userspace(fp_->source.get(), partition) && !is_userspace_fastboot() &&
             !fp_->force_flash) {
             die("The partition you are trying to flash is dynamic, and "
                 "should be flashed via fastbootd. Please run:\n"
@@ -174,7 +174,7 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
         LOG(VERBOSE) << "Cannot optimize flashing super for all slots";
         return nullptr;
     }
-    if (!CanOptimize(fp->source, tasks)) {
+    if (!CanOptimize(fp->source.get(), tasks)) {
         return nullptr;
     }
 
