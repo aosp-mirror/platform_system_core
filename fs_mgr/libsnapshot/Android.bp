@@ -415,6 +415,9 @@ cc_test {
     test_options: {
         min_shipping_api_level: 30,
     },
+    data: [
+        "tools/testdata/cow_v2",
+    ],
     auto_gen_config: true,
     require_root: false,
     host_supported: true,
@@ -444,6 +447,54 @@ cc_binary {
     srcs: [
         "libsnapshot_cow/inspect_cow.cpp",
     ],
+}
+
+cc_binary {
+    name: "create_snapshot",
+    host_supported: true,
+    device_supported: false,
+
+    srcs: ["libsnapshot_cow/create_cow.cpp"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    static_libs: [
+        "liblog",
+        "libbase",
+        "libext4_utils",
+        "libsnapshot_cow",
+        "libcrypto",
+        "libbrotli",
+        "libz",
+        "liblz4",
+        "libzstd",
+        "libgflags",
+    ],
+    shared_libs: [
+    ],
+
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+
+    dist: {
+        targets: [
+            "sdk",
+            "sdk-repo-platform-tools",
+            "sdk_repo",
+        ],
+    },
+    target: {
+        darwin: {
+            enabled: false,
+        },
+        windows: {
+            enabled: false,
+        },
+    },
 }
 
 python_library_host {

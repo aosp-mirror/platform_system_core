@@ -103,7 +103,7 @@ bool WorkerThread::ProcessReplaceOp(const CowOperation* cow_op) {
     ssize_t rv = reader_->ReadData(cow_op, buffer, BLOCK_SZ);
     if (rv != BLOCK_SZ) {
         SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block
-                        << ", return = " << rv;
+                        << ", return = " << rv << ", COW operation = " << *cow_op;
         return false;
     }
     return true;

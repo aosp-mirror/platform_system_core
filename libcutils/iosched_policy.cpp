@@ -24,8 +24,7 @@
 #include <unistd.h>
 
 #if defined(__ANDROID__)
-#define IOPRIO_WHO_PROCESS (1)
-#define IOPRIO_CLASS_SHIFT (13)
+#include <linux/ioprio.h>
 #include <sys/syscall.h>
 #define __android_unused
 #else
