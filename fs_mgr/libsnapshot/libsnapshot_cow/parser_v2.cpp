@@ -66,18 +66,18 @@ bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<u
                    << sizeof(CowFooter);
         return false;
     }
-    if (header_.op_size != sizeof(CowOperation)) {
+    if (header_.op_size != sizeof(CowOperationV2)) {
         LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
-                   << sizeof(CowOperation);
+                   << sizeof(CowOperationV2);
         return false;
     }
     if (header_.cluster_ops == 1) {
         LOG(ERROR) << "Clusters must contain at least two operations to function.";
         return false;
     }
-    if (header_.op_size != sizeof(CowOperation)) {
+    if (header_.op_size != sizeof(CowOperationV2)) {
         LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
-                   << sizeof(CowOperation);
+                   << sizeof(CowOperationV2);
         return false;
     }
     if (header_.cluster_ops == 1) {
@@ -123,23 +123,23 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
     uint64_t data_pos = 0;
 
     if (header_.cluster_ops) {
-        data_pos = pos + header_.cluster_ops * sizeof(CowOperation);
+        data_pos = pos + header_.cluster_ops * sizeof(CowOperationV2);
     } else {
-        data_pos = pos + sizeof(CowOperation);
+        data_pos = pos + sizeof(CowOperationV2);
     }
 
-    auto ops_buffer = std::make_shared<std::vector<CowOperation>>();
+    auto ops_buffer = std::make_shared<std::vector<CowOperationV2>>();
     uint64_t current_op_num = 0;
     uint64_t cluster_ops = header_.cluster_ops ?: 1;
     bool done = false;
 
     // Alternating op clusters and data
     while (!done) {
-        uint64_t to_add = std::min(cluster_ops, (fd_size_ - pos) / sizeof(CowOperation));
+        uint64_t to_add = std::min(cluster_ops, (fd_size_ - pos) / sizeof(CowOperationV2));
         if (to_add == 0) break;
         ops_buffer->resize(current_op_num + to_add);
         if (!android::base::ReadFully(fd, &ops_buffer->data()[current_op_num],
-                                      to_add * sizeof(CowOperation))) {
+                                      to_add * sizeof(CowOperationV2))) {
             PLOG(ERROR) << "read op failed";
             return false;
         }
@@ -150,7 +150,7 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
             if (current_op.type == kCowXorOp) {
                 data_loc->insert({current_op.new_block, data_pos});
             }
-            pos += sizeof(CowOperation) + GetNextOpOffset(current_op, header_.cluster_ops);
+            pos += sizeof(CowOperationV2) + GetNextOpOffset(current_op, header_.cluster_ops);
             data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
 
             if (current_op.type == kCowClusterOp) {
@@ -222,7 +222,7 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
                        << ops_buffer->size();
             return false;
         }
-        if (ops_buffer->size() * sizeof(CowOperation) != footer_->op.ops_size) {
+        if (ops_buffer->size() * sizeof(CowOperationV2) != footer_->op.ops_size) {
             LOG(ERROR) << "ops size does not match ";
             return false;
         }
