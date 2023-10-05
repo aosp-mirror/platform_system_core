@@ -18,6 +18,7 @@
 
 #include <pthread.h>
 
+#include "libsnapshot/cow_format.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -63,7 +64,7 @@ bool ReadWorker::ReadFromSourceDevice(const CowOperation* cow_op, void* buffer) 
                     << " Op: " << *cow_op;
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
         std::string op;
-        if (cow_op->type == kCowCopyOp)
+        if (GetCowOpSourceInfoType(*cow_op) == kCowCopyOp)
             op = "Copy-op";
         else {
             op = "Xor-op";
@@ -133,7 +134,7 @@ bool ReadWorker::ProcessOrderedOp(const CowOperation* cow_op, void* buffer) {
         }
         case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
             bool ret;
-            if (cow_op->type == kCowCopyOp) {
+            if (GetCowOpSourceInfoType(*cow_op) == kCowCopyOp) {
                 ret = ProcessCopyOp(cow_op, buffer);
             } else {
                 ret = ProcessXorOp(cow_op, buffer);
@@ -167,7 +168,7 @@ bool ReadWorker::ProcessCowOp(const CowOperation* cow_op, void* buffer) {
         return false;
     }
 
-    switch (cow_op->type) {
+    switch (GetCowOpSourceInfoType(*cow_op)) {
         case kCowReplaceOp: {
             return ProcessReplaceOp(cow_op, buffer);
         }
@@ -183,7 +184,7 @@ bool ReadWorker::ProcessCowOp(const CowOperation* cow_op, void* buffer) {
         }
 
         default: {
-            SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
+            SNAP_LOG(ERROR) << "Unknown operation-type found: " << GetCowOpSourceInfoType(*cow_op);
         }
     }
     return false;
