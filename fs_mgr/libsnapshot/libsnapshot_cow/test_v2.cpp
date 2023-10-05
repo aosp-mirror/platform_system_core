@@ -1504,6 +1504,37 @@ TEST_F(CowTest, InvalidMergeOrderTest) {
     ASSERT_FALSE(reader.VerifyMergeOps());
 }
 
+unique_fd OpenTestFile(const std::string& file, int flags) {
+    std::string path = "tools/testdata/" + file;
+
+    unique_fd fd(open(path.c_str(), flags));
+    if (fd >= 0) {
+        return fd;
+    }
+
+    path = android::base::GetExecutableDirectory() + "/" + path;
+    return unique_fd{open(path.c_str(), flags)};
+}
+
+TEST_F(CowTest, CompatibilityTest) {
+    std::string filename = "cow_v2";
+    auto fd = OpenTestFile(filename, O_RDONLY);
+    if (fd.get() == -1) {
+        LOG(ERROR) << filename << " not found";
+        GTEST_SKIP();
+    }
+    CowReader reader;
+    reader.Parse(fd);
+
+    const auto& header = reader.GetHeader();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
+}
+
 }  // namespace snapshot
 }  // namespace android
 
