@@ -50,8 +50,8 @@ class CowWriterV2 : public CowWriterBase {
     bool OpenForAppend(uint64_t label);
     bool GetDataPos(uint64_t* pos);
     bool WriteRawData(const void* data, size_t size);
-    bool WriteOperation(const CowOperation& op, const void* data = nullptr, size_t size = 0);
-    void AddOperation(const CowOperation& op);
+    bool WriteOperation(const CowOperationV2& op, const void* data = nullptr, size_t size = 0);
+    void AddOperation(const CowOperationV2& op);
     void InitPos();
     void InitBatchWrites();
     void InitWorkers();
@@ -84,7 +84,7 @@ class CowWriterV2 : public CowWriterBase {
     std::vector<std::basic_string<uint8_t>> compressed_buf_;
     std::vector<std::basic_string<uint8_t>>::iterator buf_iter_;
 
-    std::vector<std::unique_ptr<CowOperation>> opbuffer_vec_;
+    std::vector<std::unique_ptr<CowOperationV2>> opbuffer_vec_;
     std::vector<std::unique_ptr<uint8_t[]>> databuffer_vec_;
     std::unique_ptr<struct iovec[]> cowop_vec_;
     int op_vec_index_ = 0;

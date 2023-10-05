@@ -33,7 +33,7 @@ class CowParserV2 {
 
     const CowHeader& header() const { return header_; }
     const std::optional<CowFooter>& footer() const { return footer_; }
-    std::shared_ptr<std::vector<CowOperation>> ops() { return ops_; }
+    std::shared_ptr<std::vector<CowOperationV2>> ops() { return ops_; }
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc() const { return data_loc_; }
     uint64_t fd_size() const { return fd_size_; }
     const std::optional<uint64_t>& last_label() const { return last_label_; }
@@ -43,7 +43,7 @@ class CowParserV2 {
 
     CowHeader header_ = {};
     std::optional<CowFooter> footer_;
-    std::shared_ptr<std::vector<CowOperation>> ops_;
+    std::shared_ptr<std::vector<CowOperationV2>> ops_;
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
