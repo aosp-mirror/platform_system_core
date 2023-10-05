@@ -366,6 +366,26 @@ void SnapshotHandler::WaitForMergeComplete() {
     }
 }
 
+void SnapshotHandler::RaThreadStarted() {
+    std::unique_lock<std::mutex> lock(lock_);
+    ra_thread_started_ = true;
+}
+
+void SnapshotHandler::WaitForRaThreadToStart() {
+    auto now = std::chrono::system_clock::now();
+    auto deadline = now + 3s;
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!ra_thread_started_) {
+            auto status = cv.wait_until(lock, deadline);
+            if (status == std::cv_status::timeout) {
+                SNAP_LOG(ERROR) << "Read-ahead thread did not start";
+                return;
+            }
+        }
+    }
+}
+
 std::string SnapshotHandler::GetMergeStatus() {
     bool merge_not_initiated = false;
     bool merge_monitored = false;
@@ -618,7 +638,6 @@ bool SnapshotHandler::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t b
     std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
 
     if (it == read_ahead_buffer_map_.end()) {
-        SNAP_LOG(ERROR) << "Block: " << block << " not found in RA buffer";
         return false;
     }
 
@@ -642,6 +661,13 @@ MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void*
         MERGE_GROUP_STATE state = blk_state->merge_state_;
         switch (state) {
             case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
+                // If this is a merge-resume path, check if the data is
+                // available from scratch space. Data from scratch space takes
+                // higher precedence than from source device for overlapping
+                // blocks.
+                if (resume_merge_ && GetRABuffer(&lock, new_block, buffer)) {
+                    return (MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS);
+                }
                 blk_state->num_ios_in_progress += 1;  // ref count
                 [[fallthrough]];
             }
