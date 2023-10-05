@@ -151,7 +151,8 @@ std::string FastbootDevice::GetCurrentSlot() {
 }
 
 BootControlClient* FastbootDevice::boot1_1() const {
-    if (boot_control_hal_->GetVersion() >= android::hal::BootControlVersion::BOOTCTL_V1_1) {
+    if (boot_control_hal_ &&
+        boot_control_hal_->GetVersion() >= android::hal::BootControlVersion::BOOTCTL_V1_1) {
         return boot_control_hal_.get();
     }
     return nullptr;
