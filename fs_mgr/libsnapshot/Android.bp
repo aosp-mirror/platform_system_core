@@ -415,6 +415,9 @@ cc_test {
     test_options: {
         min_shipping_api_level: 30,
     },
+    data: [
+        "tools/testdata/cow_v2",
+    ],
     auto_gen_config: true,
     require_root: false,
     host_supported: true,
