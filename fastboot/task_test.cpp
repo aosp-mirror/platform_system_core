@@ -192,8 +192,7 @@ TEST_F(ParseTest, CorrectTaskLists) {
         GTEST_SKIP();
     }
 
-    LocalImageSource s;
-    fp->source = &s;
+    fp->source.reset(new LocalImageSource);
     fp->sparse_limit = std::numeric_limits<int64_t>::max();
 
     fastboot::MockFastbootDriver fb;
@@ -239,8 +238,7 @@ TEST_F(ParseTest, IsDynamicParitiontest) {
         GTEST_SKIP();
     }
 
-    LocalImageSource s;
-    fp->source = &s;
+    fp->source.reset(new LocalImageSource);
 
     fastboot::MockFastbootDriver fb;
     fp->fb = &fb;
@@ -260,7 +258,7 @@ TEST_F(ParseTest, IsDynamicParitiontest) {
                 ParseFastbootInfoLine(fp.get(), android::base::Tokenize(test.first, " "));
         auto flash_task = task->AsFlashTask();
         ASSERT_FALSE(flash_task == nullptr);
-        ASSERT_EQ(FlashTask::IsDynamicParitition(fp->source, flash_task), test.second);
+        ASSERT_EQ(FlashTask::IsDynamicParitition(fp->source.get(), flash_task), test.second);
     }
 }
 
@@ -269,8 +267,7 @@ TEST_F(ParseTest, CanOptimizeTest) {
         GTEST_SKIP();
     }
 
-    LocalImageSource s;
-    fp->source = &s;
+    fp->source.reset(new LocalImageSource);
     fp->sparse_limit = std::numeric_limits<int64_t>::max();
 
     fastboot::MockFastbootDriver fb;
@@ -301,7 +298,7 @@ TEST_F(ParseTest, CanOptimizeTest) {
     for (auto& test : patternmatchtest) {
         std::vector<std::unique_ptr<Task>> tasks = ParseFastbootInfo(fp.get(), test.first);
         tasks.erase(std::remove_if(tasks.begin(), tasks.end(), remove_if_callback), tasks.end());
-        ASSERT_EQ(OptimizedFlashSuperTask::CanOptimize(fp->source, tasks), test.second);
+        ASSERT_EQ(OptimizedFlashSuperTask::CanOptimize(fp->source.get(), tasks), test.second);
     }
 }
 
@@ -312,8 +309,7 @@ TEST_F(ParseTest, OptimizedFlashSuperPatternMatchTest) {
         GTEST_SKIP();
     }
 
-    LocalImageSource s;
-    fp->source = &s;
+    fp->source.reset(new LocalImageSource);
     fp->sparse_limit = std::numeric_limits<int64_t>::max();
 
     fastboot::MockFastbootDriver fb;
@@ -362,7 +358,7 @@ TEST_F(ParseTest, OptimizedFlashSuperPatternMatchTest) {
                     contains_optimized_task = true;
                 }
                 if (auto flash_task = task->AsFlashTask()) {
-                    if (FlashTask::IsDynamicParitition(fp->source, flash_task)) {
+                    if (FlashTask::IsDynamicParitition(fp->source.get(), flash_task)) {
                         return false;
                     }
                 }
