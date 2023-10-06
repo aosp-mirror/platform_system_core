@@ -17,6 +17,8 @@
 #ifndef __SOCKET_LOCAL_H
 #define __SOCKET_LOCAL_H
 
+#include <sys/socket.h>
+
 #define FILESYSTEM_SOCKET_PREFIX "/tmp/" 
 #define ANDROID_RESERVED_SOCKET_PREFIX "/dev/socket/"
 
