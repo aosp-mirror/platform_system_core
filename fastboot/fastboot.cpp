@@ -1414,21 +1414,6 @@ void do_for_partitions(const std::string& part, const std::string& slot,
     }
 }
 
-bool is_retrofit_device(const ImageSource* source) {
-    // Does this device use dynamic partitions at all?
-    std::vector<char> contents;
-    if (!source->ReadFile("super_empty.img", &contents)) {
-        return false;
-    }
-    auto metadata = android::fs_mgr::ReadFromImageBlob(contents.data(), contents.size());
-    for (const auto& partition : metadata->partitions) {
-        if (partition.attributes & LP_PARTITION_ATTR_SLOT_SUFFIXED) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Fetch a partition from the device to a given fd. This is a wrapper over FetchToFd to fetch
 // the full image.
 static uint64_t fetch_partition(const std::string& partition, borrowed_fd fd,
@@ -1880,19 +1865,6 @@ std::vector<std::unique_ptr<Task>> FlashAllTool::CollectTasksFromImageList() {
 
     // Sync the super partition. This will reboot to userspace fastboot if needed.
     tasks.emplace_back(std::make_unique<UpdateSuperTask>(fp_));
-    for (const auto& [image, slot] : os_images_) {
-        // Retrofit devices have two super partitions, named super_a and super_b.
-        // On these devices, secondary slots must be flashed as physical
-        // partitions (otherwise they would not mount on first boot). To enforce
-        // this, we delete any logical partitions for the "other" slot.
-        if (is_retrofit_device(fp_->source.get())) {
-            std::string partition_name = image->part_name + "_" + slot;
-            if (image->IsSecondary() &&
-                should_flash_in_userspace(fp_->source.get(), partition_name)) {
-                tasks.emplace_back(std::make_unique<DeleteTask>(fp_, partition_name));
-            }
-        }
-    }
 
     AddFlashTasks(os_images_, tasks);
 
