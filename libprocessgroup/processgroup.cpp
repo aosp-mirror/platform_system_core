@@ -219,7 +219,7 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
 
     while (retries--) {
         ret = rmdir(uid_pid_path.c_str());
-        if (!ret || errno != EBUSY) break;
+        if (!ret || errno != EBUSY || !retries) break;
         std::this_thread::sleep_for(5ms);
     }
 
