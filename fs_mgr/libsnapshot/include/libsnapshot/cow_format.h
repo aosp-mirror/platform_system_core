@@ -201,13 +201,9 @@ static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
 static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
-static constexpr uint64_t kCowOpSourceInfoCompressBit = (1ULL << 63);
 
 static inline uint64_t GetCowOpSourceInfoData(const CowOperation* op) {
     return op->source_info & kCowOpSourceInfoDataMask;
-}
-static inline bool GetCowOpSourceInfoCompression(const CowOperation* op) {
-    return !!(op->source_info & kCowOpSourceInfoCompressBit);
 }
 
 struct CowFooter {
