@@ -136,7 +136,6 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                            << v2_op.compression << ", op: " << v2_op;
                 return false;
             }
-            source_info |= kCowOpSourceInfoCompressBit;
         }
         new_op.source_info = source_info;
     }
