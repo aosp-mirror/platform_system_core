@@ -34,6 +34,7 @@ cc_binary {
 
     static_libs: [
         "libsnapshot_cow",
+        "libgflags",
     ],
 
     shared_libs: [

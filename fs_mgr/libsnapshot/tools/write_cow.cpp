@@ -18,10 +18,18 @@
 #include <libsnapshot/cow_compress.h>
 #include <libsnapshot/cow_format.h>
 #include <libsnapshot/cow_writer.h>
-#include <filesystem>
+
+#include <gflags/gflags.h>
+#include <iostream>
 
 #include "android-base/unique_fd.h"
 
+DEFINE_bool(silent, false, "Run silently");
+DEFINE_int32(writer_version, 2, "which version of COW writer to be used");
+DEFINE_bool(write_legacy, false,
+            "Writes a legacy cow_v2 in current directory, this cow was used to test backwards "
+            "compatibility between version 2 and version 3");
+DEFINE_bool(write_header, false, "Test reading/writing just the header");
 using namespace android::snapshot;
 
 // This writes a simple cow v2 file in the current directory. This file will serve as testdata for
@@ -29,7 +37,7 @@ using namespace android::snapshot;
 //
 // WARNING: We should not be overriding this test file, as it will serve as historic marker for what
 // a device with old writer_v2 will write as a cow.
-void write_cow_v2() {
+static void write_legacy_cow_v2() {
     CowOptions options;
     options.cluster_ops = 5;
     options.num_merge_ops = 1;
@@ -58,6 +66,49 @@ void write_cow_v2() {
     writer->Finalize();
 }
 
-int main() {
-    write_cow_v2();
+static bool WriteCow(const std::string& path) {
+    android::base::unique_fd fd(open(path.c_str(), O_RDONLY));
+    fd.reset(open(path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0664));
+    if (fd < 0) {
+        PLOG(ERROR) << "could not open " << path << " for writing";
+        return false;
+    }
+    CowOptions options;
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    std::unique_ptr<ICowWriter> writer =
+            CreateCowWriter(FLAGS_writer_version, options, std::move(fd));
+    if (!writer) {
+        return false;
+    }
+
+    writer->AddCopy(0, 5);
+    writer->AddRawBlocks(2, data.data(), data.size());
+    writer->AddLabel(1);
+    writer->AddXorBlocks(50, data.data(), data.size(), 24, 10);
+    writer->AddZeroBlocks(5, 10);
+    writer->AddLabel(2);
+    writer->Finalize();
+
+    if (!FLAGS_silent) {
+        std::cout << "Writing COW with writer v" << FLAGS_writer_version << "\n";
+    }
+
+    return true;
+}
+
+int main(int argc, char** argv) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    if (FLAGS_write_legacy) {
+        write_legacy_cow_v2();
+        return 0;
+    }
+    if (argc < 2) {
+        gflags::ShowUsageWithFlags(argv[0]);
+        return 1;
+    }
+    if (!WriteCow(argv[1])) {
+        return 1;
+    }
 }
