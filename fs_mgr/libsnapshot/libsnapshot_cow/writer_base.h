@@ -34,6 +34,7 @@ class CowWriterBase : public ICowWriter {
     // If the given label is not found, Initialize will fail.
     virtual bool Initialize(std::optional<uint64_t> label = {}) = 0;
 
+    bool Sync();
     bool AddCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks = 1) override;
     bool AddRawBlocks(uint64_t new_block_start, const void* data, size_t size) override;
     bool AddXorBlocks(uint32_t new_block_start, const void* data, size_t size, uint32_t old_block,
