@@ -21,15 +21,16 @@
 #include <android-base/result.h>
 #include <android-base/unique_fd.h>
 #include <errno.h>
+#include <iostream>
 #include <log/log.h>
 #include <modulewrapper.h>
 #include <openssl/span.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <trusty/tipc.h>
 #include <unistd.h>
-#include <iostream>
 
 #include "acvp_ipc.h"
 
@@ -208,6 +209,11 @@ Result<void> ModuleWrapper::ForwardResponse() {
     return {};
 }
 
+static bool EqString(bssl::Span<const uint8_t> cmd, const char *str) {
+    return cmd.size() == strlen(str) &&
+           memcmp(str, cmd.data(), cmd.size()) == 0;
+}
+
 int main() {
     for (;;) {
         auto buffer = bssl::acvp::RequestBuffer::New();
@@ -217,17 +223,24 @@ int main() {
             return EXIT_FAILURE;
         }
 
-        ModuleWrapper wrapper;
-        auto res = wrapper.SendMessage(args);
-        if (!res.ok()) {
-            std::cerr << res.error() << std::endl;
-            return EXIT_FAILURE;
-        }
+        if (EqString(args[0], "flush")) {
+            if (!bssl::acvp::FlushBuffer(STDOUT_FILENO)) {
+                ALOGE("Could not flush the buffer to stdout\n");
+                return EXIT_FAILURE;
+            }
+        } else {
+            ModuleWrapper wrapper;
+            auto res = wrapper.SendMessage(args);
+            if (!res.ok()) {
+                std::cerr << res.error() << std::endl;
+                return EXIT_FAILURE;
+            }
 
-        res = wrapper.ForwardResponse();
-        if (!res.ok()) {
-            std::cerr << res.error() << std::endl;
-            return EXIT_FAILURE;
+            res = wrapper.ForwardResponse();
+            if (!res.ok()) {
+                std::cerr << res.error() << std::endl;
+                return EXIT_FAILURE;
+            }
         }
     }
 
