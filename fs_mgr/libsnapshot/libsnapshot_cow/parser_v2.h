@@ -49,7 +49,5 @@ class CowParserV2 {
     std::optional<uint64_t> last_label_;
 };
 
-bool ReadCowHeader(android::base::borrowed_fd fd, CowHeader* header);
-
 }  // namespace snapshot
 }  // namespace android
