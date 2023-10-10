@@ -17,6 +17,7 @@
 
 #include <pthread.h>
 
+#include "libsnapshot/cow_format.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -114,13 +115,13 @@ bool MergeWorker::MergeReplaceZeroOps() {
                 SNAP_LOG(ERROR) << "AcquireBuffer failed in MergeReplaceOps";
                 return false;
             }
-            if (cow_op->type == kCowReplaceOp) {
+            if (GetCowOpSourceInfoType(*cow_op) == kCowReplaceOp) {
                 if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
                     SNAP_LOG(ERROR) << "Failed to read COW in merge";
                     return false;
                 }
             } else {
-                CHECK(cow_op->type == kCowZeroOp);
+                CHECK(GetCowOpSourceInfoType(*cow_op) == kCowZeroOp);
                 memset(buffer, 0, BLOCK_SZ);
             }
         }
