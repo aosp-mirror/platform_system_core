@@ -704,17 +704,6 @@ bool CowWriterV2::WriteRawData(const void* data, const size_t size) {
     return true;
 }
 
-bool CowWriterV2::Sync() {
-    if (is_dev_null_) {
-        return true;
-    }
-    if (fsync(fd_.get()) < 0) {
-        PLOG(ERROR) << "fsync failed";
-        return false;
-    }
-    return true;
-}
-
 bool CowWriterV2::Truncate(off_t length) {
     if (is_dev_null_ || is_block_device_) {
         return true;

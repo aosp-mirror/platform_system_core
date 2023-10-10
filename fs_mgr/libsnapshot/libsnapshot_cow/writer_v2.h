@@ -58,7 +58,6 @@ class CowWriterV2 : public CowWriterBase {
     bool FlushCluster();
 
     bool CompressBlocks(size_t num_blocks, const void* data);
-    bool Sync();
     bool Truncate(off_t length);
     bool EnsureSpaceAvailable(const uint64_t bytes_needed) const;
 
