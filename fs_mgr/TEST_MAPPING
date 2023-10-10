@@ -39,7 +39,7 @@
       "name": "vts_libdm_test"
     },
     {
-      "name": "vts_core_liblp_test"
+      "name": "liblp_test"
     },
     {
       "name": "vts_libsnapshot_test"
