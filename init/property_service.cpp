@@ -1461,8 +1461,6 @@ void PersistWriteThread::Work() {
             work_.pop_front();
         }
 
-        std::this_thread::sleep_for(1s);
-
         // Perform write/fsync outside the lock.
         WritePersistentProperty(std::get<0>(item), std::get<1>(item));
         NotifyPropertyChange(std::get<0>(item), std::get<1>(item));
