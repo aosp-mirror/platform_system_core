@@ -130,6 +130,21 @@ bool GetBatteryVoltageHelper(FastbootDevice* device, int32_t* battery_voltage) {
     return true;
 }
 
+bool GetBatterySoCHelper(FastbootDevice* device, int32_t* battery_soc) {
+    using aidl::android::hardware::health::HealthInfo;
+
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    HealthInfo health_info;
+    auto res = health_hal->getHealthInfo(&health_info);
+    if (!res.isOk()) return false;
+    *battery_soc = health_info.batteryLevel;
+    return true;
+}
+
 bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& /* args */,
                      std::string* message) {
     int32_t battery_voltage = 0;
@@ -182,6 +197,17 @@ bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& /
         return true;
     }
     *message = "Unable to get battery voltage";
+    return false;
+}
+
+bool GetBatterySoC(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                   std::string* message) {
+    int32_t battery_soc = 0;
+    if (GetBatterySoCHelper(device, &battery_soc)) {
+        *message = std::to_string(battery_soc);
+        return true;
+    }
+    *message = "Unable to get battery soc";
     return false;
 }
 
