@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include <fuzzer/FuzzedDataProvider.h>
-#include <utils/Log.h>
+#include <log/log.h>
 #include <utils/Vector.h>
 
 #include <functional>
