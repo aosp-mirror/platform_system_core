@@ -34,6 +34,35 @@
 namespace android {
 namespace snapshot {
 
+bool ReadCowHeader(android::base::borrowed_fd fd, CowHeader* header) {
+    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+
+    memset(header, 0, sizeof(*header));
+
+    if (!android::base::ReadFully(fd, &header->prefix, sizeof(header->prefix))) {
+        return false;
+    }
+    if (header->prefix.magic != kCowMagicNumber) {
+        LOG(ERROR) << "Header Magic corrupted. Magic: " << header->prefix.magic
+                   << "Expected: " << kCowMagicNumber;
+        return false;
+    }
+    if (header->prefix.header_size > sizeof(CowHeader)) {
+        LOG(ERROR) << "Unknown CowHeader size (got " << header->prefix.header_size
+                   << " bytes, expected at most " << sizeof(CowHeader) << " bytes)";
+        return false;
+    }
+
+    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+    return android::base::ReadFully(fd, header, header->prefix.header_size);
+}
+
 CowReader::CowReader(ReaderFlags reader_flag, bool is_merge)
     : fd_(-1),
       header_(),
