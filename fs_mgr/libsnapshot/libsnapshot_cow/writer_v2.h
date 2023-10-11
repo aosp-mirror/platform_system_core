@@ -63,6 +63,7 @@ class CowWriterV2 : public CowWriterBase {
 
   private:
     CowFooter footer_{};
+    CowHeader header_{};
     CowCompression compression_;
     // in the case that we are using one thread for compression, we can store and re-use the same
     // compressor
