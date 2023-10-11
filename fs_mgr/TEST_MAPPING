@@ -36,7 +36,7 @@
   ],
   "kernel-presubmit": [
     {
-      "name": "vts_libdm_test"
+      "name": "libdm_test"
     },
     {
       "name": "vts_core_liblp_test"
