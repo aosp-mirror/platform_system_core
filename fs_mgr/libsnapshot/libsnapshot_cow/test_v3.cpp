@@ -49,5 +49,14 @@ class CowOperationV3Test : public ::testing::Test {
     std::unique_ptr<TemporaryFile> cow_;
 };
 
+TEST_F(CowOperationV3Test, CowTypeTest) {
+    CowOperationV3 new_op;
+    CowOperationV2 old_op;
+    old_op.type = kCowReplaceOp;
+    ASSERT_NE(GetCowOpSourceInfoType(new_op), old_op.type);
+    SetCowOpSourceInfoType(&new_op, old_op.type);
+    ASSERT_EQ(GetCowOpSourceInfoType(new_op), old_op.type);
+}
+
 }  // namespace snapshot
 }  // namespace android
