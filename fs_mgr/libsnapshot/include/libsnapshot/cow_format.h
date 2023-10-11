@@ -149,6 +149,9 @@ struct CowOperationV2 {
 
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
+    // The operation code (see the constants and structures below).
+    uint8_t type;
+
     // If this operation reads from the data section of the COW, this contains
     // the length.
     uint16_t data_length;
@@ -156,10 +159,6 @@ struct CowOperationV3 {
     // The block of data in the new image that this operation modifies.
     uint32_t new_block;
 
-    // source_info with have the following layout
-    // |---4 bits ---| ---12 bits---| --- 48 bits ---|
-    // |--- type --- | -- unused -- | --- source --- |
-    //
     // The value of |source| depends on the operation code.
     //
     // CopyOp: a 32-bit block location in the source image.
@@ -168,6 +167,8 @@ struct CowOperationV3 {
     // ZeroOp: unused
     // LabelOp: a 64-bit opaque identifier.
     //
+    // For ops other than Label:
+    //  Bits 47-62 are reserved and must be zero.
     // A block is compressed if it’s data is < block_sz
     uint64_t source_info;
 } __attribute__((packed));
@@ -199,21 +200,9 @@ static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
-// this is a mask to grab the last 48 bits of a 64 bit integer
-static constexpr uint64_t kCowOpSourceInfoDataMask = (0x1ULL << 48) - 1;
-// this is a mask to grab the first 4 bits of a 64 bit integer
-static constexpr uint64_t kCowOpSourceInfoTypeBit = 60;
-static constexpr uint64_t kCowOpSourceInfoTypeNumBits = 4;
-static constexpr uint64_t kCowOpSourceInfoTypeMask = (1 << kCowOpSourceInfoTypeNumBits) - 1;
+static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
 
-static constexpr void SetCowOpSourceInfoType(CowOperation* op, const uint8_t type) {
-    op->source_info |= uint64_t(type) << kCowOpSourceInfoTypeBit;
-}
-static constexpr uint64_t GetCowOpSourceInfoType(const CowOperation& op) {
-    return (op.source_info >> kCowOpSourceInfoTypeBit) & kCowOpSourceInfoTypeMask;
-}
-
-static constexpr uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
+static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
     return op.source_info & kCowOpSourceInfoDataMask;
 }
 

@@ -18,7 +18,6 @@
 
 #include <pthread.h>
 
-#include "libsnapshot/cow_format.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -78,7 +77,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
         SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
         return nr_consecutive;
     }
-    if (GetCowOpSourceInfoType(*cow_op) == kCowXorOp) {
+    if (cow_op->type == kCowXorOp) {
         xor_op_vec.push_back(cow_op);
     }
 
@@ -107,7 +106,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
             break;
         }
 
-        if (GetCowOpSourceInfoType(*op) == kCowXorOp) {
+        if (op->type == kCowXorOp) {
             xor_op_vec.push_back(op);
         }
 

@@ -24,7 +24,6 @@
 #include <android-base/strings.h>
 #include <snapuserd/dm_user_block_server.h>
 
-#include "libsnapshot/cow_format.h"
 #include "merge_worker.h"
 #include "read_worker.h"
 
@@ -197,13 +196,13 @@ bool SnapshotHandler::ReadMetadata() {
     while (!cowop_iter->AtEnd()) {
         const CowOperation* cow_op = cowop_iter->Get();
 
-        if (GetCowOpSourceInfoType(*cow_op) == kCowCopyOp) {
+        if (cow_op->type == kCowCopyOp) {
             copy_ops += 1;
-        } else if (GetCowOpSourceInfoType(*cow_op) == kCowReplaceOp) {
+        } else if (cow_op->type == kCowReplaceOp) {
             replace_ops += 1;
-        } else if (GetCowOpSourceInfoType(*cow_op) == kCowZeroOp) {
+        } else if (cow_op->type == kCowZeroOp) {
             zero_ops += 1;
-        } else if (GetCowOpSourceInfoType(*cow_op) == kCowXorOp) {
+        } else if (cow_op->type == kCowXorOp) {
             xor_ops += 1;
         }
 
