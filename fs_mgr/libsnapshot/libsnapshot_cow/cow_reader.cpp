@@ -576,7 +576,7 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
         case kCowSequenceOp:
         case kCowReplaceOp:
         case kCowXorOp:
-            return GetRawBytes(GetCowOpSourceInfoData(op), buffer, len, read);
+            return GetRawBytes(GetCowOpSourceInfoData(*op), buffer, len, read);
         default:
             LOG(ERROR) << "Cannot get raw bytes of non-data op: " << *op;
             return false;
@@ -668,7 +668,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     if (op->type == kCowXorOp) {
         offset = data_loc_->at(op->new_block);
     } else {
-        offset = GetCowOpSourceInfoData(op);
+        offset = GetCowOpSourceInfoData(*op);
     }
 
     if (!decompressor) {
@@ -684,10 +684,10 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 bool CowReader::GetSourceOffset(const CowOperation* op, uint64_t* source_offset) {
     switch (op->type) {
         case kCowCopyOp:
-            *source_offset = GetCowOpSourceInfoData(op) * header_.block_size;
+            *source_offset = GetCowOpSourceInfoData(*op) * header_.block_size;
             return true;
         case kCowXorOp:
-            *source_offset = GetCowOpSourceInfoData(op);
+            *source_offset = GetCowOpSourceInfoData(*op);
             return true;
         default:
             return false;
