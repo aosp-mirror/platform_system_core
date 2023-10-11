@@ -235,9 +235,11 @@ class SnapuserdTest : public SnapuserdTestBase {
     bool Merge();
     void ValidateMerge();
     void ReadSnapshotDeviceAndValidate();
+    void ReadSnapshotAndValidateOverlappingBlocks();
     void Shutdown();
     void MergeInterrupt();
     void MergeInterruptFixed(int duration);
+    void MergeInterruptAndValidate(int duration);
     void MergeInterruptRandomly(int max_duration);
     bool StartMerge();
     void CheckMergeCompletion();
@@ -356,6 +358,76 @@ void SnapuserdTest::ReadSnapshotDeviceAndValidate() {
     offset += size_;
     ASSERT_EQ(ReadFullyAtOffset(fd, snapuserd_buffer.get(), size_, offset), true);
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
+}
+
+void SnapuserdTest::ReadSnapshotAndValidateOverlappingBlocks() {
+    // Open COW device
+    unique_fd fd(open(cow_system_->path, O_RDONLY));
+    ASSERT_GE(fd, 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(fd));
+
+    const auto& header = reader.GetHeader();
+    size_t total_mapped_addr_length = header.prefix.header_size + BUFFER_REGION_DEFAULT_SIZE;
+
+    ASSERT_GE(header.prefix.major_version, 2);
+
+    void* mapped_addr = mmap(NULL, total_mapped_addr_length, PROT_READ, MAP_SHARED, fd.get(), 0);
+    ASSERT_NE(mapped_addr, MAP_FAILED);
+
+    bool populate_data_from_scratch = false;
+    struct BufferState* ra_state =
+            reinterpret_cast<struct BufferState*>((char*)mapped_addr + header.prefix.header_size);
+    if (ra_state->read_ahead_state == kCowReadAheadDone) {
+        populate_data_from_scratch = true;
+    }
+
+    size_t num_merge_ops = header.num_merge_ops;
+    // We have some partial merge operations completed.
+    // To test the merge-resume path, forcefully corrupt the data of the base
+    // device for the offsets where the merge is still pending.
+    if (num_merge_ops && populate_data_from_scratch) {
+        std::string corrupt_buffer(4096, 0);
+        // Corrupt two blocks from the point where the merge has to be resumed by
+        // writing down zeroe's.
+        //
+        // Now, since this is a merge-resume path, the "correct" data should be
+        // in the scratch space of the COW device. When there is an I/O request
+        // from the snapshot device, the data has to be retrieved from the
+        // scratch space. If not and I/O is routed to the base device, we
+        // may end up with corruption.
+        off_t corrupt_offset = (num_merge_ops + 2) * 4096;
+
+        if (corrupt_offset < size_) {
+            ASSERT_EQ(android::base::WriteFullyAtOffset(base_fd_, (void*)corrupt_buffer.c_str(),
+                                                        4096, corrupt_offset),
+                      true);
+            corrupt_offset -= 4096;
+            ASSERT_EQ(android::base::WriteFullyAtOffset(base_fd_, (void*)corrupt_buffer.c_str(),
+                                                        4096, corrupt_offset),
+                      true);
+            fsync(base_fd_.get());
+        }
+    }
+
+    // Time to read the snapshot device.
+    unique_fd snapshot_fd(open(dmuser_dev_->GetPath().c_str(), O_RDONLY | O_DIRECT | O_SYNC));
+    ASSERT_GE(snapshot_fd, 0);
+
+    void* buff_addr;
+    ASSERT_EQ(posix_memalign(&buff_addr, 4096, size_), 0);
+
+    std::unique_ptr<void, decltype(&::free)> snapshot_buffer(buff_addr, ::free);
+
+    // Scan the entire snapshot device and read the data and verify data
+    // integrity. Since the base device was forcefully corrupted, the data from
+    // this scan should be retrieved from scratch space of the COW partition.
+    //
+    // Furthermore, after the merge is complete, base device data is again
+    // verified as the aforementioned corrupted blocks aren't persisted.
+    ASSERT_EQ(ReadFullyAtOffset(snapshot_fd, snapshot_buffer.get(), size_, 0), true);
+    ASSERT_EQ(memcmp(snapshot_buffer.get(), orig_buffer_.get(), size_), 0);
 }
 
 void SnapuserdTest::CreateCowDeviceWithCopyOverlap_2() {
@@ -665,6 +737,20 @@ void SnapuserdTest::MergeInterruptFixed(int duration) {
     ASSERT_TRUE(Merge());
 }
 
+void SnapuserdTest::MergeInterruptAndValidate(int duration) {
+    ASSERT_TRUE(StartMerge());
+
+    for (int i = 0; i < 15; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+        ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+        ReadSnapshotAndValidateOverlappingBlocks();
+        ASSERT_TRUE(StartMerge());
+    }
+
+    ASSERT_NO_FATAL_FAILURE(SimulateDaemonRestart());
+    ASSERT_TRUE(Merge());
+}
+
 void SnapuserdTest::MergeInterrupt() {
     // Interrupt merge at various intervals
     ASSERT_TRUE(StartMerge());
@@ -758,6 +844,15 @@ TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_2) {
 TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
     ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
     ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
+    ValidateMerge();
+}
+
+TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_IO_Validate_TEST) {
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_2());
+    ASSERT_NO_FATAL_FAILURE(MergeInterruptAndValidate(2));
     ValidateMerge();
 }
 

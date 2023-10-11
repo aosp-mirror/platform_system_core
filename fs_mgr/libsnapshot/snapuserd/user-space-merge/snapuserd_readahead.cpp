@@ -18,6 +18,7 @@
 
 #include <pthread.h>
 
+#include "libsnapshot/cow_format.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -77,7 +78,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
         SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
         return nr_consecutive;
     }
-    if (cow_op->type == kCowXorOp) {
+    if (GetCowOpSourceInfoType(*cow_op) == kCowXorOp) {
         xor_op_vec.push_back(cow_op);
     }
 
@@ -106,7 +107,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
             break;
         }
 
-        if (op->type == kCowXorOp) {
+        if (GetCowOpSourceInfoType(*op) == kCowXorOp) {
             xor_op_vec.push_back(op);
         }
 
@@ -206,6 +207,7 @@ bool ReadAhead::ReconstructDataFromCow() {
         return false;
     }
 
+    snapuserd_->RaThreadStarted();
     SNAP_LOG(INFO) << "ReconstructDataFromCow success";
     notify_read_ahead_failed.Cancel();
     return true;
@@ -716,9 +718,13 @@ bool ReadAhead::ReadAheadIOStart() {
     total_ra_blocks_completed_ += total_blocks_merged_;
     snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged_);
 
-    // Flush the data only if we have a overlapping blocks in the region
+    // Flush the scratch data - Technically, we should flush only for overlapping
+    // blocks; However, since this region is mmap'ed, the dirty pages can still
+    // get flushed to disk at any random point in time. Instead, make sure
+    // the data in scratch is in the correct state before merge thread resumes.
+    //
     // Notify the Merge thread to resume merging this window
-    if (!snapuserd_->ReadAheadIOCompleted(overlap_)) {
+    if (!snapuserd_->ReadAheadIOCompleted(true)) {
         SNAP_LOG(ERROR) << "ReadAheadIOCompleted failed...";
         snapuserd_->ReadAheadIOFailed();
         return false;

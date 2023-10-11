@@ -165,9 +165,10 @@ class CowReader final : public ICowReader {
     void UpdateMergeOpsCompleted(int num_merge_ops) { header_.num_merge_ops += num_merge_ops; }
 
   private:
+    bool ParseV2(android::base::borrowed_fd fd, std::optional<uint64_t> label);
     bool PrepMergeOps();
     uint64_t FindNumCopyops();
-    uint8_t GetCompressionType(const CowOperation* op);
+    uint8_t GetCompressionType();
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
@@ -184,7 +185,10 @@ class CowReader final : public ICowReader {
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     ReaderFlags reader_flag_;
     bool is_merge_{};
+    uint8_t compression_type_ = kCowCompressNone;
 };
+
+bool ReadCowHeader(android::base::borrowed_fd fd, CowHeader* header);
 
 }  // namespace snapshot
 }  // namespace android

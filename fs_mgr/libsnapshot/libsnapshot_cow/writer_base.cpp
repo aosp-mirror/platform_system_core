@@ -191,5 +191,16 @@ std::unique_ptr<chromeos_update_engine::FileDescriptor> CowWriterBase::OpenFileD
                                                       block_dev_size);
 }
 
+bool CowWriterBase::Sync() {
+    if (is_dev_null_) {
+        return true;
+    }
+    if (fsync(fd_.get()) < 0) {
+        PLOG(ERROR) << "fsync failed";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace snapshot
 }  // namespace android

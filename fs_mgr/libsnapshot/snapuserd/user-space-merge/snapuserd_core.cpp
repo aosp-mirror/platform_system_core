@@ -24,6 +24,7 @@
 #include <android-base/strings.h>
 #include <snapuserd/dm_user_block_server.h>
 
+#include "libsnapshot/cow_format.h"
 #include "merge_worker.h"
 #include "read_worker.h"
 
@@ -173,6 +174,10 @@ bool SnapshotHandler::ReadMetadata() {
     }
 
     SNAP_LOG(INFO) << "Merge-ops: " << header.num_merge_ops;
+    if (header.num_merge_ops) {
+        resume_merge_ = true;
+        SNAP_LOG(INFO) << "Resume Snapshot-merge";
+    }
 
     if (!MmapMetadata()) {
         SNAP_LOG(ERROR) << "mmap failed";
@@ -192,13 +197,13 @@ bool SnapshotHandler::ReadMetadata() {
     while (!cowop_iter->AtEnd()) {
         const CowOperation* cow_op = cowop_iter->Get();
 
-        if (cow_op->type == kCowCopyOp) {
+        if (GetCowOpSourceInfoType(*cow_op) == kCowCopyOp) {
             copy_ops += 1;
-        } else if (cow_op->type == kCowReplaceOp) {
+        } else if (GetCowOpSourceInfoType(*cow_op) == kCowReplaceOp) {
             replace_ops += 1;
-        } else if (cow_op->type == kCowZeroOp) {
+        } else if (GetCowOpSourceInfoType(*cow_op) == kCowZeroOp) {
             zero_ops += 1;
-        } else if (cow_op->type == kCowXorOp) {
+        } else if (GetCowOpSourceInfoType(*cow_op) == kCowXorOp) {
             xor_ops += 1;
         }
 
@@ -295,6 +300,11 @@ bool SnapshotHandler::Start() {
     if (ra_thread_) {
         ra_thread_status =
                 std::async(std::launch::async, &ReadAhead::RunThread, read_ahead_thread_.get());
+        // If this is a merge-resume path, wait until RA thread is fully up as
+        // the data has to be re-constructed from the scratch space.
+        if (resume_merge_ && ShouldReconstructDataFromCow()) {
+            WaitForRaThreadToStart();
+        }
     }
 
     // Launch worker threads
@@ -307,7 +317,9 @@ bool SnapshotHandler::Start() {
             std::async(std::launch::async, &MergeWorker::Run, merge_thread_.get());
 
     // Now that the worker threads are up, scan the partitions.
-    if (perform_verification_) {
+    // If the snapshot-merge is being resumed, there is no need to scan as the
+    // current slot is already marked as boot complete.
+    if (perform_verification_ && !resume_merge_) {
         update_verify_->VerifyUpdatePartition();
     }
 
