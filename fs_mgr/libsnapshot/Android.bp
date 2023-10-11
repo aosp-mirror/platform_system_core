@@ -201,6 +201,7 @@ cc_library_static {
         "libsnapshot_cow/snapshot_reader.cpp",
         "libsnapshot_cow/writer_base.cpp",
         "libsnapshot_cow/writer_v2.cpp",
+        "libsnapshot_cow/writer_v3.cpp",
     ],
     export_include_dirs: ["include"],
     host_supported: true,
@@ -392,6 +393,7 @@ cc_test {
     srcs: [
         "libsnapshot_cow/snapshot_reader_test.cpp",
         "libsnapshot_cow/test_v2.cpp",
+        "libsnapshot_cow/test_v3.cpp",
     ],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
