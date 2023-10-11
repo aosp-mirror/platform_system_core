@@ -20,7 +20,7 @@
 #include <utils/String8.h>
 
 #include <utils/Compat.h>
-#include <utils/Log.h>
+#include <log/log.h>
 #include <utils/String16.h>
 
 #include <ctype.h>

@@ -18,7 +18,7 @@
 
 #include <utils/Printer.h>
 #include <utils/Errors.h>
-#include <utils/Log.h>
+#include <log/log.h>
 
 #include <unwindstack/AndroidUnwinder.h>
 
