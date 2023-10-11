@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "libsnapshot/cow_format.h"
 #include "snapuserd.h"
 
 #include <csignal>
@@ -178,7 +177,7 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
         return false;
     }
 
-    switch (GetCowOpSourceInfoType(*cow_op)) {
+    switch (cow_op->type) {
         case kCowReplaceOp: {
             return ProcessReplaceOp(cow_op);
         }
@@ -192,8 +191,7 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
         }
 
         default: {
-            SNAP_LOG(ERROR) << "Unsupported operation-type found: "
-                            << GetCowOpSourceInfoType(*cow_op);
+            SNAP_LOG(ERROR) << "Unsupported operation-type found: " << cow_op->type;
         }
     }
     return false;
