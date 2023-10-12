@@ -19,7 +19,7 @@
 #include <thread>
 
 #include "fuzzer/FuzzedDataProvider.h"
-#include "utils/Log.h"
+#include "log/log.h"
 #include "utils/RWLock.h"
 #include "utils/RefBase.h"
 #include "utils/StrongPointer.h"
