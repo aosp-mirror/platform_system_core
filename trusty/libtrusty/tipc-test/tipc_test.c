@@ -44,6 +44,7 @@ static const char *closer2_name = "com.android.ipc-unittest.srv.closer2";
 static const char *closer3_name = "com.android.ipc-unittest.srv.closer3";
 static const char *main_ctrl_name = "com.android.ipc-unittest.ctrl";
 static const char* receiver_name = "com.android.trusty.memref.receiver";
+static const size_t memref_chunk_size = 4096;
 
 static const char* _sopts = "hsvDS:t:r:m:b:";
 /* clang-format off */
@@ -878,7 +879,7 @@ static int send_fd_test(void) {
     volatile char* buf = MAP_FAILED;
     BufferAllocator* allocator = NULL;
 
-    const size_t num_pages = 10;
+    const size_t num_chunks = 10;
 
     fd = tipc_connect(dev_name, receiver_name);
     if (fd < 0) {
@@ -894,7 +895,7 @@ static int send_fd_test(void) {
         goto cleanup;
     }
 
-    size_t buf_size = PAGE_SIZE * num_pages;
+    size_t buf_size = memref_chunk_size * num_chunks;
     dma_buf = DmabufHeapAlloc(allocator, "system", buf_size, 0, 0 /* legacy align */);
     if (dma_buf < 0) {
         ret = dma_buf;
@@ -927,13 +928,17 @@ static int send_fd_test(void) {
     tipc_close(fd);
 
     ret = 0;
-    for (size_t skip = 0; skip < num_pages; skip++) {
-        ret |= strcmp("Hello from Trusty!", (const char*)&buf[skip * PAGE_SIZE]) ? (-1) : 0;
+    for (size_t skip = 0; skip < num_chunks; skip++) {
+        int cmp = strcmp("Hello from Trusty!",
+                         (const char*)&buf[skip * memref_chunk_size]) ? (-1) : 0;
+        if (cmp)
+            fprintf(stderr, "Failed: Unexpected content at page %zu in dmabuf\n", skip);
+        ret |= cmp;
     }
 
 cleanup:
     if (buf != MAP_FAILED) {
-        munmap((char*)buf, PAGE_SIZE);
+        munmap((char*)buf, buf_size);
     }
     close(dma_buf);
     if (allocator) {
