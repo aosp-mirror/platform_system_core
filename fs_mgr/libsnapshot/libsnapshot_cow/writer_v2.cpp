@@ -243,7 +243,7 @@ bool CowWriterV2::OpenForWrite() {
 
     // Headers are not complete, but this ensures the file is at the right
     // position.
-    if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
+    if (!android::base::WriteFully(fd_, &header_, sizeof(CowHeader))) {
         PLOG(ERROR) << "write failed";
         return false;
     }
@@ -262,7 +262,7 @@ bool CowWriterV2::OpenForWrite() {
         return false;
     }
 
-    if (lseek(fd_.get(), sizeof(header_) + header_.buffer_size, SEEK_SET) < 0) {
+    if (lseek(fd_.get(), sizeof(CowHeader) + header_.buffer_size, SEEK_SET) < 0) {
         PLOG(ERROR) << "lseek failed";
         return false;
     }
