@@ -134,6 +134,7 @@ const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
         {FB_VAR_IS_FORCE_DEBUGGABLE, {GetIsForceDebuggable, nullptr}},
         {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
         {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
+        {FB_VAR_BATTERY_SOC, {GetBatterySoC, nullptr}},
         {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
         {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
         {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
