@@ -21,7 +21,7 @@
 #include <time.h>
 
 #include <android-base/macros.h>
-#include <utils/Log.h>
+#include <log/log.h>
 
 static constexpr size_t clock_id_max = 5;
 

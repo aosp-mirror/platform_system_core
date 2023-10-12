@@ -24,7 +24,7 @@
 #endif
 #include <inttypes.h>
 
-#include <utils/Log.h>
+#include <log/log.h>
 
 namespace android {
 

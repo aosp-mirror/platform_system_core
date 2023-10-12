@@ -24,7 +24,6 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <libsnapshot/cow_format.h>
 #include <libsnapshot/cow_reader.h>
 #include <zlib.h>
 
@@ -140,7 +139,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         const auto& v2_op = parser.ops()->at(i);
 
         auto& new_op = ops_->at(i);
-        SetCowOpSourceInfoType(&new_op, v2_op.type);
+        new_op.type = v2_op.type;
         new_op.data_length = v2_op.data_length;
 
         if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
@@ -150,7 +149,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         new_op.new_block = v2_op.new_block;
 
         uint64_t source_info = v2_op.source;
-        if (GetCowOpSourceInfoType(new_op) != kCowLabelOp) {
+        if (new_op.type != kCowLabelOp) {
             source_info &= kCowOpSourceInfoDataMask;
             if (source_info != v2_op.source) {
                 LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
@@ -167,7 +166,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                 return false;
             }
         }
-        new_op.source_info |= source_info;
+        new_op.source_info = source_info;
     }
 
     // If we're resuming a write, we're not ready to merge
@@ -290,7 +289,7 @@ bool CowReader::PrepMergeOps() {
     for (size_t i = 0; i < ops_->size(); i++) {
         auto& current_op = ops_->data()[i];
 
-        if (GetCowOpSourceInfoType(current_op) == kCowSequenceOp) {
+        if (current_op.type == kCowSequenceOp) {
             size_t seq_len = current_op.data_length / sizeof(uint32_t);
 
             merge_op_blocks->resize(merge_op_blocks->size() + seq_len);
@@ -602,7 +601,7 @@ std::unique_ptr<ICowOpIter> CowReader::GetMergeOpIter(bool ignore_progress) {
 }
 
 bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read) {
-    switch (GetCowOpSourceInfoType(*op)) {
+    switch (op->type) {
         case kCowSequenceOp:
         case kCowReplaceOp:
         case kCowXorOp:
@@ -695,7 +694,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     }
 
     uint64_t offset;
-    if (GetCowOpSourceInfoType(*op) == kCowXorOp) {
+    if (op->type == kCowXorOp) {
         offset = data_loc_->at(op->new_block);
     } else {
         offset = GetCowOpSourceInfoData(*op);
@@ -712,7 +711,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 }
 
 bool CowReader::GetSourceOffset(const CowOperation* op, uint64_t* source_offset) {
-    switch (GetCowOpSourceInfoType(*op)) {
+    switch (op->type) {
         case kCowCopyOp:
             *source_offset = GetCowOpSourceInfoData(*op) * header_.block_size;
             return true;
