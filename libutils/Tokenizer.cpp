@@ -19,7 +19,7 @@
 #include <utils/Tokenizer.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <utils/Log.h>
+#include <log/log.h>
 
 #ifndef DEBUG_TOKENIZER
 // Enables debug output for the tokenizer.
