@@ -389,10 +389,6 @@ init_first_stage_cc_defaults {
     ],
 
     static_executable: true,
-    lto: {
-        // b/169004486 ThinLTO breaks x86 static executables.
-        never: true,
-    },
     system_shared_libs: [],
 
     cflags: [

@@ -25,7 +25,6 @@
 #include <csignal>
 #include <optional>
 #include <set>
-#include "libsnapshot/cow_format.h"
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -407,9 +406,9 @@ bool Snapuserd::ReadMetadata() {
             break;
         }
 
-        if (GetCowOpSourceInfoType(*cow_op) == kCowReplaceOp) {
+        if (cow_op->type == kCowReplaceOp) {
             replace_ops++;
-        } else if (GetCowOpSourceInfoType(*cow_op) == kCowZeroOp) {
+        } else if (cow_op->type == kCowZeroOp) {
             zero_ops++;
         }
 
@@ -541,7 +540,7 @@ bool Snapuserd::ReadMetadata() {
             chunk_vec_.push_back(std::make_pair(ChunkToSector(data_chunk_id), cow_op));
             offset += sizeof(struct disk_exception);
             num_ops += 1;
-            if (GetCowOpSourceInfoType(*cow_op) == kCowCopyOp) {
+            if (cow_op->type == kCowCopyOp) {
                 copy_ops++;
             }
 
