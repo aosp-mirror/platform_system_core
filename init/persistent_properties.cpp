@@ -46,13 +46,6 @@ namespace {
 
 constexpr const char kLegacyPersistentPropertyDir[] = "/data/property";
 
-void AddPersistentProperty(const std::string& name, const std::string& value,
-                           PersistentProperties* persistent_properties) {
-    auto persistent_property_record = persistent_properties->add_properties();
-    persistent_property_record->set_name(name);
-    persistent_property_record->set_value(value);
-}
-
 Result<PersistentProperties> LoadLegacyPersistentProperties() {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(kLegacyPersistentPropertyDir), closedir);
     if (!dir) {
@@ -161,15 +154,22 @@ Result<PersistentProperties> ParsePersistentPropertyFile(const std::string& file
         return Error() << "Unable to parse persistent property file: Could not parse protobuf";
     }
     for (auto& prop : persistent_properties.properties()) {
-        if (!StartsWith(prop.name(), "persist.")) {
+        if (!StartsWith(prop.name(), "persist.") && !StartsWith(prop.name(), "next_boot.")) {
             return Error() << "Unable to load persistent property file: property '" << prop.name()
-                           << "' doesn't start with 'persist.'";
+                           << "' doesn't start with 'persist.' or 'next_boot.'";
         }
     }
     return persistent_properties;
 }
 
 }  // namespace
+
+void AddPersistentProperty(const std::string& name, const std::string& value,
+                           PersistentProperties* persistent_properties) {
+    auto persistent_property_record = persistent_properties->add_properties();
+    persistent_property_record->set_name(name);
+    persistent_property_record->set_value(value);
+}
 
 Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
