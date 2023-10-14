@@ -31,6 +31,7 @@
 #include <sys/mman.h>
 #include <trusty/tipc.h>
 #include <unistd.h>
+#include <algorithm>
 
 #include "acvp_ipc.h"
 
@@ -42,9 +43,6 @@ using android::base::Result;
 using android::base::unique_fd;
 using android::base::WriteFully;
 
-static inline size_t AlignUpToPage(size_t size) {
-    return (size + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
-}
 
 namespace {
 
@@ -104,15 +102,12 @@ Result<void> ModuleWrapper::SendMessage(bssl::Span<const bssl::Span<const uint8_
     struct acvp_req request;
     request.num_args = args.size();
 
-    size_t total_args_size = 0;
+    int total_args_size = 0;
     for (auto arg : args) {
         total_args_size += arg.size();
     }
 
-    shm_size_ = ACVP_MIN_SHARED_MEMORY;
-    if (total_args_size > shm_size_) {
-        shm_size_ = AlignUpToPage(total_args_size);
-    }
+    shm_size_ = std::max(ACVP_MIN_SHARED_MEMORY, total_args_size);
     request.buffer_size = shm_size_;
 
     struct iovec iov = {
