@@ -16,8 +16,6 @@
 
 #include "snapuserd_core.h"
 
-#include <sys/utsname.h>
-
 #include <android-base/chrono_utils.h>
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
@@ -26,6 +24,7 @@
 
 #include "merge_worker.h"
 #include "read_worker.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -417,22 +416,7 @@ struct BufferState* SnapshotHandler::GetBufferState() {
 }
 
 bool SnapshotHandler::IsIouringSupported() {
-    struct utsname uts;
-    unsigned int major, minor;
-
-    if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
-        SNAP_LOG(ERROR) << "Could not parse the kernel version from uname. "
-                        << " io_uring not supported";
-        return false;
-    }
-
-    // We will only support kernels from 5.6 onwards as IOSQE_ASYNC flag and
-    // IO_URING_OP_READ/WRITE opcodes were introduced only on 5.6 kernel
-    if (major >= 5) {
-        if (major == 5 && minor < 6) {
-            return false;
-        }
-    } else {
+    if (!KernelSupportsIoUring()) {
         return false;
     }
 
