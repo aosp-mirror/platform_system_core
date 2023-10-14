@@ -43,7 +43,6 @@
 #include <libdm/dm.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
-#include <liburing.h>
 #include <snapuserd/block_server.h>
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
@@ -247,7 +246,6 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool perform_verification_ = true;
     bool resume_merge_ = false;
 
-    std::unique_ptr<struct io_uring> ring_;
     std::unique_ptr<UpdateVerify> update_verify_;
     std::shared_ptr<IBlockServerOpener> block_server_opener_;
 };
