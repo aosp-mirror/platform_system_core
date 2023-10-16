@@ -18,6 +18,7 @@ namespace android {
 namespace snapshot {
 
 bool SetThreadPriority(int priority);
+bool KernelSupportsIoUring();
 
 }  // namespace snapshot
 }  // namespace android
