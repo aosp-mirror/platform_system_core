@@ -83,6 +83,10 @@ void SnapshotHandler::UpdateMergeCompletionPercentage() {
     SNAP_LOG(DEBUG) << "Merge-complete %: " << merge_completion_percentage_
                     << " num_merge_ops: " << ch->num_merge_ops
                     << " total-ops: " << reader_->get_num_total_data_ops();
+
+    if (ch->num_merge_ops == reader_->get_num_total_data_ops()) {
+        MarkMergeComplete();
+    }
 }
 
 bool SnapshotHandler::CommitMerge(int num_merge_ops) {
