@@ -29,6 +29,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 
 #include "transport.h"
 
@@ -66,4 +67,4 @@ class UsbTransport : public Transport {
 typedef std::function<int(usb_ifc_info*)> ifc_match_func;
 
 // 0 is non blocking
-UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms = 0);
+std::unique_ptr<UsbTransport> usb_open(ifc_match_func callback, uint32_t timeout_ms = 0);

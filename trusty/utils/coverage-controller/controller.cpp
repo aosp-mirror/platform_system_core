@@ -14,11 +14,16 @@
  * limitations under the License.
  */
 
+#include <android-base/stringprintf.h>
+#include <array>
 #include <getopt.h>
+#include <inttypes.h>
+#include <memory>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include <trusty/line-coverage/coverage.h>
 #include <trusty/tipc.h>
-#include <array>
-#include <memory>
 #include <vector>
 
 #include "controller.h"
@@ -48,10 +53,10 @@ void Controller::run(std::string output_dir) {
 
             if (complete_cnt != counters[index] && start_cnt == complete_cnt) {
                 WRITE_ONCE(control->cntrl_flags, FLAG_NONE);
-                std::string fmt = "/%d.%lu.profraw";
-                int sz = std::snprintf(nullptr, 0, fmt.c_str(), index, counters[index]);
-                std::string filename(sz+1, '.');
-                std::sprintf(filename.data(), fmt.c_str(), index, counters[index]);
+                std::string filename;
+                filename = android::base::StringPrintf("/%s.%" PRIu64 ".profraw",
+                                                    uuid_list_[index].c_str(),
+                                                    counters[index]);
                 filename.insert(0, output_dir);
                 android::base::Result<void> res = record_list_[index]->SaveFile(filename);
                 counters[index]++;
@@ -79,6 +84,7 @@ void Controller::setUpShm() {
     struct line_coverage_client_resp resp;
     uint32_t cur_index = record_list_.size();
     struct uuid zero_uuid = {0, 0, 0, { 0 }};
+    char uuid_str[UUID_STR_SIZE];
     req.hdr.cmd = LINE_COVERAGE_CLIENT_CMD_SEND_LIST;
     int rc = write(coverage_srv_fd, &req, sizeof(req));
         if (rc != (int)sizeof(req)) {
@@ -98,6 +104,21 @@ void Controller::setUpShm() {
             }
             if(uuid_set_.find(resp.send_list_args.uuid) == uuid_set_.end()) {
                 uuid_set_.insert(resp.send_list_args.uuid);
+                sprintf(uuid_str,
+                    "%08" PRIx32 "-%04" PRIx16 "-%04" PRIx16 "-%02" PRIx8 "%02" PRIx8
+                    "-%02" PRIx8 "%02" PRIx8 "%02" PRIx8 "%02" PRIx8 "%02" PRIx8 "%02" PRIx8,
+                    resp.send_list_args.uuid.time_low,
+                    resp.send_list_args.uuid.time_mid,
+                    resp.send_list_args.uuid.time_hi_and_version,
+                    resp.send_list_args.uuid.clock_seq_and_node[0],
+                    resp.send_list_args.uuid.clock_seq_and_node[1],
+                    resp.send_list_args.uuid.clock_seq_and_node[2],
+                    resp.send_list_args.uuid.clock_seq_and_node[3],
+                    resp.send_list_args.uuid.clock_seq_and_node[4],
+                    resp.send_list_args.uuid.clock_seq_and_node[5],
+                    resp.send_list_args.uuid.clock_seq_and_node[6],
+                    resp.send_list_args.uuid.clock_seq_and_node[7]);
+                uuid_list_.push_back(uuid_str);
                 record_list_.push_back(std::make_unique<CoverageRecord>(TIPC_DEV,
                                                                     &resp.send_list_args.uuid));
                 counters.push_back(0);

@@ -86,10 +86,9 @@ TEST_F(CowTest, CopyContiguous) {
     while (!iter->AtEnd()) {
         auto op = iter->Get();
         ASSERT_EQ(op->type, kCowCopyOp);
-        ASSERT_EQ(op->compression, kCowCompressNone);
         ASSERT_EQ(op->data_length, 0);
         ASSERT_EQ(op->new_block, 10 + i);
-        ASSERT_EQ(op->source, 1000 + i);
+        ASSERT_EQ(GetCowOpSourceInfoData(*op), 1000 + i);
         iter->Next();
         i += 1;
     }
@@ -133,10 +132,9 @@ TEST_F(CowTest, ReadWrite) {
     auto op = iter->Get();
 
     ASSERT_EQ(op->type, kCowCopyOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 10);
-    ASSERT_EQ(op->source, 20);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 20);
 
     std::string sink(data.size(), '\0');
 
@@ -145,7 +143,6 @@ TEST_F(CowTest, ReadWrite) {
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_FALSE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -157,20 +154,18 @@ TEST_F(CowTest, ReadWrite) {
 
     // Note: the zero operation gets split into two blocks.
     ASSERT_EQ(op->type, kCowZeroOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 51);
-    ASSERT_EQ(op->source, 0);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 0);
 
     iter->Next();
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowZeroOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 52);
-    ASSERT_EQ(op->source, 0);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 0);
 
     iter->Next();
     ASSERT_TRUE(iter->AtEnd());
@@ -212,10 +207,9 @@ TEST_F(CowTest, ReadWriteXor) {
     auto op = iter->Get();
 
     ASSERT_EQ(op->type, kCowCopyOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 10);
-    ASSERT_EQ(op->source, 20);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 20);
 
     std::string sink(data.size(), '\0');
 
@@ -224,10 +218,9 @@ TEST_F(CowTest, ReadWriteXor) {
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowXorOp);
-    ASSERT_FALSE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_EQ(GetCowOpSourceInfoData(op), 98314);  // 4096 * 24 + 10
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314);  // 4096 * 24 + 10
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
     ASSERT_EQ(sink, data);
 
@@ -237,20 +230,18 @@ TEST_F(CowTest, ReadWriteXor) {
 
     // Note: the zero operation gets split into two blocks.
     ASSERT_EQ(op->type, kCowZeroOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 51);
-    ASSERT_EQ(op->source, 0);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 0);
 
     iter->Next();
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
 
     ASSERT_EQ(op->type, kCowZeroOp);
-    ASSERT_EQ(op->compression, kCowCompressNone);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 52);
-    ASSERT_EQ(op->source, 0);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 0);
 
     iter->Next();
     ASSERT_TRUE(iter->AtEnd());
@@ -283,7 +274,6 @@ TEST_F(CowTest, CompressGz) {
     std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -339,7 +329,7 @@ TEST_P(CompressionTest, ThreadedBatchWrites) {
             total_blocks += 1;
             std::string sink(xor_data.size(), '\0');
             ASSERT_EQ(op->new_block, 50);
-            ASSERT_EQ(GetCowOpSourceInfoData(op), 98314);  // 4096 * 24 + 10
+            ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314);  // 4096 * 24 + 10
             ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
             ASSERT_EQ(sink, xor_data);
         }
@@ -480,7 +470,7 @@ TEST_P(CompressionTest, HorribleStream) {
     std::string expected = "The quick brown fox jumps over the lazy dog.";
     expected.resize(4096, '\0');
 
-    std::unique_ptr<ICompressor> compressor = ICompressor::Create(compression);
+    std::unique_ptr<ICompressor> compressor = ICompressor::Create(compression, 4096);
     auto result = compressor->Compress(expected.data(), expected.size());
     ASSERT_FALSE(result.empty());
 
@@ -530,7 +520,6 @@ TEST_F(CowTest, ClusterCompressGz) {
     std::string sink(data.size(), '\0');
 
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -548,7 +537,6 @@ TEST_F(CowTest, ClusterCompressGz) {
 
     sink = {};
     sink.resize(data2.size(), '\0');
-    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->data_length, 41);  // compressed!
     ASSERT_EQ(op->new_block, 51);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -593,7 +581,6 @@ TEST_F(CowTest, CompressTwoBlocks) {
 
     auto op = iter->Get();
     ASSERT_EQ(op->type, kCowReplaceOp);
-    ASSERT_TRUE(GetCowOpSourceInfoCompression(op));
     ASSERT_EQ(op->new_block, 51);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
 }
@@ -677,7 +664,7 @@ TEST_F(CowTest, AppendLabelSmall) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 3);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 3);
 
     iter->Next();
 
@@ -730,7 +717,7 @@ TEST_F(CowTest, AppendLabelMissing) {
     ASSERT_FALSE(iter->AtEnd());
     auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 0);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 0);
 
     iter->Next();
 
@@ -788,7 +775,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
     ASSERT_FALSE(iter->AtEnd());
     auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 5);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 5);
 
     iter->Next();
     ASSERT_TRUE(iter->AtEnd());
@@ -857,7 +844,7 @@ TEST_F(CowTest, AppendbyLabel) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 4);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 4);
 
     iter->Next();
 
@@ -875,7 +862,7 @@ TEST_F(CowTest, AppendbyLabel) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 5);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 5);
 
     iter->Next();
 
@@ -928,7 +915,7 @@ TEST_F(CowTest, ClusterTest) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 4);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 4);
 
     iter->Next();
 
@@ -953,7 +940,7 @@ TEST_F(CowTest, ClusterTest) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 5);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 5);
 
     iter->Next();
 
@@ -972,7 +959,7 @@ TEST_F(CowTest, ClusterTest) {
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 6);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 6);
 
     iter->Next();
 
@@ -1019,7 +1006,7 @@ TEST_F(CowTest, ClusterAppendTest) {
     ASSERT_FALSE(iter->AtEnd());
     auto op = iter->Get();
     ASSERT_EQ(op->type, kCowLabelOp);
-    ASSERT_EQ(op->source, 50);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 50);
 
     iter->Next();
 
@@ -1502,6 +1489,37 @@ TEST_F(CowTest, InvalidMergeOrderTest) {
     ASSERT_TRUE(writer->Finalize());
     ASSERT_TRUE(reader.Parse(cow_->fd));
     ASSERT_FALSE(reader.VerifyMergeOps());
+}
+
+unique_fd OpenTestFile(const std::string& file, int flags) {
+    std::string path = "tools/testdata/" + file;
+
+    unique_fd fd(open(path.c_str(), flags));
+    if (fd >= 0) {
+        return fd;
+    }
+
+    path = android::base::GetExecutableDirectory() + "/" + path;
+    return unique_fd{open(path.c_str(), flags)};
+}
+
+TEST_F(CowTest, CompatibilityTest) {
+    std::string filename = "cow_v2";
+    auto fd = OpenTestFile(filename, O_RDONLY);
+    if (fd.get() == -1) {
+        LOG(ERROR) << filename << " not found";
+        GTEST_SKIP();
+    }
+    CowReader reader;
+    reader.Parse(fd);
+
+    const auto& header = reader.GetHeader();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+
+    CowFooter footer;
+    ASSERT_TRUE(reader.GetFooter(&footer));
 }
 
 }  // namespace snapshot

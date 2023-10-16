@@ -28,11 +28,10 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
-#include "fastboot_driver.h"
 #include "fastboot_driver_interface.h"
 #include "filesystem.h"
-#include "super_flash_helper.h"
 #include "task.h"
 #include "util.h"
 
@@ -91,7 +90,7 @@ struct FlashingPlan {
     // If the image uses the default slot, or the user specified "all", then
     // the paired string will be empty. If the image requests a specific slot
     // (for example, system_other) it is specified instead.
-    ImageSource* source;
+    std::unique_ptr<ImageSource> source;
     bool wants_wipe = false;
     bool skip_reboot = false;
     bool wants_set_active = false;
@@ -150,7 +149,7 @@ class LocalImageSource final : public ImageSource {
 };
 
 char* get_android_product_out();
-bool should_flash_in_userspace(const std::string& partition_name);
+bool should_flash_in_userspace(const ImageSource* source, const std::string& partition_name);
 bool is_userspace_fastboot();
 void do_flash(const char* pname, const char* fname, const bool apply_vbmeta,
               const FlashingPlan* fp);
@@ -183,13 +182,12 @@ struct NetworkSerial {
 };
 
 Result<NetworkSerial, FastbootError> ParseNetworkSerial(const std::string& serial);
-bool supports_AB();
 std::string GetPartitionName(const ImageEntry& entry, const std::string& current_slot_);
 void flash_partition_files(const std::string& partition, const std::vector<SparsePtr>& files);
 int64_t get_sparse_limit(int64_t size, const FlashingPlan* fp);
 std::vector<SparsePtr> resparse_file(sparse_file* s, int64_t max_size);
 
-bool is_retrofit_device(fastboot::IFastBootDriver* fb);
+bool supports_AB(fastboot::IFastBootDriver* fb);
 bool is_logical(const std::string& partition);
 void fb_perform_format(const std::string& partition, int skip_if_not_supported,
                        const std::string& type_override, const std::string& size_override,

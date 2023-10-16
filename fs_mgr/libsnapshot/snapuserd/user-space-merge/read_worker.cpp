@@ -283,7 +283,8 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
                 // We found the sector in mapping. Check the type of COW OP and
                 // process it.
                 if (!ProcessCowOp(it->second, buffer)) {
-                    SNAP_LOG(ERROR) << "ProcessCowOp failed";
+                    SNAP_LOG(ERROR)
+                            << "ProcessCowOp failed, sector = " << sector << ", size = " << sz;
                     return false;
                 }
 

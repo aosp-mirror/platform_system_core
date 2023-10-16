@@ -22,6 +22,9 @@
 namespace android {
 namespace snapshot {
 
+struct CowOperationV3;
+typedef CowOperationV3 CowOperation;
+
 static constexpr uint64_t kCowMagicNumber = 0x436f77634f572121ULL;
 static constexpr uint32_t kCowVersionMajor = 2;
 static constexpr uint32_t kCowVersionMinor = 0;
@@ -49,7 +52,9 @@ static constexpr uint32_t kDefaultCowVersion = 2;
 //      |    Footer (fixed)     |
 //      +-----------------------+
 //
-// The operations begin immediately after the header, and the "raw data"
+// After the header is a 2mb scratch space that is used to read ahead data during merge operations
+//
+// The operations begin immediately after the scratch space, and the "raw data"
 // immediately follows the operation which refers to it. While streaming
 // an OTA, we can immediately write the op and data, syncing after each pair,
 // while storing operation metadata in memory. At the end, we compute data and
@@ -86,6 +91,18 @@ struct CowHeader {
 
     // Scratch space used during merge
     uint32_t buffer_size;
+
+} __attribute__((packed));
+
+struct CowHeaderV3 : public CowHeader {
+    // Location of sequence buffer in COW.
+    uint64_t sequence_buffer_offset;
+    // Size, in bytes, of the CowResumePoint buffer.
+    uint32_t resume_buffer_size;
+    // Size, in bytes, of the CowOperation buffer.
+    uint32_t op_buffer_size;
+    // Compression Algorithm
+    uint32_t compression_algorithm;
 } __attribute__((packed));
 
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
@@ -107,9 +124,8 @@ struct CowFooterOperation {
     uint64_t num_ops;
 } __attribute__((packed));
 
-// Cow operations are currently fixed-size entries, but this may change if
-// needed.
-struct CowOperation {
+// V2 version of COW. On disk format for older devices
+struct CowOperationV2 {
     // The operation code (see the constants and structures below).
     uint8_t type;
 
@@ -143,7 +159,33 @@ struct CowOperation {
     uint64_t source;
 } __attribute__((packed));
 
-static_assert(sizeof(CowOperation) == sizeof(CowFooterOperation));
+// The on disk format of cow (currently ==  CowOperation)
+struct CowOperationV3 {
+    // The operation code (see the constants and structures below).
+    uint8_t type;
+
+    // If this operation reads from the data section of the COW, this contains
+    // the length.
+    uint16_t data_length;
+
+    // The block of data in the new image that this operation modifies.
+    uint32_t new_block;
+
+    // The value of |source| depends on the operation code.
+    //
+    // CopyOp: a 32-bit block location in the source image.
+    // ReplaceOp: an absolute byte offset within the COW's data section.
+    // XorOp: an absolute byte offset in the source image.
+    // ZeroOp: unused
+    // LabelOp: a 64-bit opaque identifier.
+    //
+    // For ops other than Label:
+    //  Bits 47-62 are reserved and must be zero.
+    // A block is compressed if it’s data is < block_sz
+    uint64_t source_info;
+} __attribute__((packed));
+
+static_assert(sizeof(CowOperationV2) == sizeof(CowFooterOperation));
 
 static constexpr uint8_t kCowCopyOp = 1;
 static constexpr uint8_t kCowReplaceOp = 2;
@@ -170,11 +212,10 @@ static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
-static inline uint64_t GetCowOpSourceInfoData(const CowOperation* op) {
-    return op->source;
-}
-static inline bool GetCowOpSourceInfoCompression(const CowOperation* op) {
-    return op->compression != kCowCompressNone;
+static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
+
+static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
+    return op.source_info & kCowOpSourceInfoDataMask;
 }
 
 struct CowFooter {
@@ -198,10 +239,12 @@ struct BufferState {
 // 2MB Scratch space used for read-ahead
 static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 
+std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
+
 std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
 
-int64_t GetNextOpOffset(const CowOperation& op, uint32_t cluster_size);
-int64_t GetNextDataOffset(const CowOperation& op, uint32_t cluster_size);
+int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_size);
+int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_size);
 
 // Ops that are internal to the Cow Format and not OTA data
 bool IsMetadataOp(const CowOperation& op);

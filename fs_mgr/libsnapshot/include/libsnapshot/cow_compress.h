@@ -17,7 +17,6 @@
 #pragma once
 
 #include <memory>
-#include <string_view>
 #include "libsnapshot/cow_format.h"
 
 namespace android {
@@ -25,24 +24,28 @@ namespace snapshot {
 
 class ICompressor {
   public:
-    explicit ICompressor(uint32_t compression_level) : compression_level_(compression_level) {}
+    explicit ICompressor(uint32_t compression_level, uint32_t block_size)
+        : compression_level_(compression_level), block_size_(block_size) {}
 
     virtual ~ICompressor() {}
     // Factory methods for compression methods.
-    static std::unique_ptr<ICompressor> Gz(uint32_t compression_level);
-    static std::unique_ptr<ICompressor> Brotli(uint32_t compression_level);
-    static std::unique_ptr<ICompressor> Lz4(uint32_t compression_level);
-    static std::unique_ptr<ICompressor> Zstd(uint32_t compression_level);
+    static std::unique_ptr<ICompressor> Gz(uint32_t compression_level, const int32_t block_size);
+    static std::unique_ptr<ICompressor> Brotli(uint32_t compression_level,
+                                               const int32_t block_size);
+    static std::unique_ptr<ICompressor> Lz4(uint32_t compression_level, const int32_t block_size);
+    static std::unique_ptr<ICompressor> Zstd(uint32_t compression_level, const int32_t block_size);
 
-    static std::unique_ptr<ICompressor> Create(CowCompression compression);
+    static std::unique_ptr<ICompressor> Create(CowCompression compression,
+                                               const int32_t block_size);
 
     uint32_t GetCompressionLevel() const { return compression_level_; }
-
+    uint32_t GetBlockSize() const { return block_size_; }
     [[nodiscard]] virtual std::basic_string<uint8_t> Compress(const void* data,
                                                               size_t length) const = 0;
 
   private:
     uint32_t compression_level_;
+    uint32_t block_size_;
 };
 }  // namespace snapshot
 }  // namespace android

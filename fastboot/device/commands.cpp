@@ -134,6 +134,7 @@ const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
         {FB_VAR_IS_FORCE_DEBUGGABLE, {GetIsForceDebuggable, nullptr}},
         {FB_VAR_OFF_MODE_CHARGE_STATE, {GetOffModeChargeState, nullptr}},
         {FB_VAR_BATTERY_VOLTAGE, {GetBatteryVoltage, nullptr}},
+        {FB_VAR_BATTERY_SOC, {GetBatterySoC, nullptr}},
         {FB_VAR_BATTERY_SOC_OK, {GetBatterySoCOk, nullptr}},
         {FB_VAR_HW_REVISION, {GetHardwareRevision, nullptr}},
         {FB_VAR_SUPER_PARTITION_NAME, {GetSuperPartitionName, nullptr}},
@@ -639,6 +640,12 @@ bool UpdateSuperHandler(FastbootDevice* device, const std::vector<std::string>& 
     return UpdateSuper(device, args[1], wipe);
 }
 
+static bool IsLockedDsu() {
+    std::string active_dsu;
+    android::gsi::GetActiveDsu(&active_dsu);
+    return android::base::EndsWith(active_dsu, ".lock");
+}
+
 bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
     if (args.size() != 2) {
         return device->WriteFail("Invalid arguments");
@@ -653,6 +660,11 @@ bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
         return device->WriteStatus(FastbootResult::FAIL, "No GSI is installed");
     }
 
+    if ((args[1] == "wipe" || args[1] == "disable") && GetDeviceLockStatus() && IsLockedDsu()) {
+        // Block commands that modify the states of locked DSU
+        return device->WriteFail("Command not available on locked DSU/devices");
+    }
+
     if (args[1] == "wipe") {
         if (!android::gsi::UninstallGsi()) {
             return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
@@ -661,6 +673,17 @@ bool GsiHandler(FastbootDevice* device, const std::vector<std::string>& args) {
         if (!android::gsi::DisableGsi()) {
             return device->WriteStatus(FastbootResult::FAIL, strerror(errno));
         }
+    } else if (args[1] == "status") {
+        std::string active_dsu;
+        if (!android::gsi::IsGsiRunning()) {
+            device->WriteInfo("Not running");
+        } else if (!android::gsi::GetActiveDsu(&active_dsu)) {
+            return device->WriteFail(strerror(errno));
+        } else {
+            device->WriteInfo("Running active DSU: " + active_dsu);
+        }
+    } else {
+        return device->WriteFail("Invalid arguments");
     }
     return device->WriteStatus(FastbootResult::OKAY, "Success");
 }

@@ -48,7 +48,7 @@ namespace fs_mgr {
 //
 class FsManagerAvbOps {
   public:
-    FsManagerAvbOps();
+    explicit FsManagerAvbOps(const std::string& slot_suffix = {});
 
     static FsManagerAvbOps* GetInstanceFromAvbOps(AvbOps* ops) {
         return reinterpret_cast<FsManagerAvbOps*>(ops->user_data);
@@ -66,6 +66,7 @@ class FsManagerAvbOps {
     std::string GetPartitionPath(const char* partition_name);
     AvbOps avb_ops_;
     Fstab fstab_;
+    std::string slot_suffix_;
 };
 
 }  // namespace fs_mgr
