@@ -12,6 +12,7 @@ cc_defaults {
         "-Wno-unused-argument",
         "-Wno-unused-function",
         "-Wno-nullability-completeness",
+        "-Wno-reorder-init-list",
         "-Os",
         "-fno-finite-loops",
         "-DANDROID_DEBUGGABLE=0",

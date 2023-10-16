@@ -34,7 +34,7 @@
 #include <sys/prctl.h>
 #endif
 
-#include <utils/Log.h>
+#include <log/log.h>
 
 #if defined(__ANDROID__)
 #include <processgroup/processgroup.h>

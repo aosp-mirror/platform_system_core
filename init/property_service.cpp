@@ -412,9 +412,8 @@ static std::optional<uint32_t> PropertySet(const std::string& name, const std::s
         }
     }
 
-    // Don't write properties to disk until after we have read all default
-    // properties to prevent them from being overwritten by default values.
-    if (socket && persistent_properties_loaded && StartsWith(name, "persist.")) {
+    bool need_persist = StartsWith(name, "persist.") || StartsWith(name, "next_boot.");
+    if (socket && persistent_properties_loaded && need_persist) {
         if (persist_write_thread) {
             persist_write_thread->Write(name, value, std::move(*socket));
             return {};
@@ -1247,9 +1246,6 @@ void CreateSerializedPropertyInfo() {
         // Don't check for failure here, since we don't always have all of these partitions.
         // E.g. In case of recovery, the vendor partition will not have mounted and we
         // still need the system / platform properties to function.
-        if (access("/dev/selinux/apex_property_contexts", R_OK) != -1) {
-            LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
-        }
         if (access("/system_ext/etc/selinux/system_ext_property_contexts", R_OK) != -1) {
             LoadPropertyInfoFromFile("/system_ext/etc/selinux/system_ext_property_contexts",
                                      &property_infos);
@@ -1273,7 +1269,6 @@ void CreateSerializedPropertyInfo() {
         LoadPropertyInfoFromFile("/vendor_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/product_property_contexts", &property_infos);
         LoadPropertyInfoFromFile("/odm_property_contexts", &property_infos);
-        LoadPropertyInfoFromFile("/dev/selinux/apex_property_contexts", &property_infos);
     }
 
     auto serialized_contexts = std::string();
@@ -1402,11 +1397,43 @@ static void HandleInitSocket() {
         case InitMessage::kLoadPersistentProperties: {
             load_override_properties();
             // Read persistent properties after all default values have been loaded.
+            // Apply staged and persistent properties
+            bool has_staged_prop = false;
+            auto const staged_prefix = std::string_view("next_boot.");
+            auto const staged_persist_prefix = std::string_view("next_boot.persist.");
+            auto persist_props_map = std::unordered_map<std::string, std::string>();
+
             auto persistent_properties = LoadPersistentProperties();
-            for (const auto& persistent_property_record : persistent_properties.properties()) {
-                InitPropertySet(persistent_property_record.name(),
-                                persistent_property_record.value());
+            for (const auto& property_record : persistent_properties.properties()) {
+                auto const& prop_name = property_record.name();
+                auto const& prop_value = property_record.value();
+
+                if (StartsWith(prop_name, staged_prefix)) {
+                  has_staged_prop = true;
+                  auto actual_prop_name = prop_name.substr(staged_prefix.size());
+                  InitPropertySet(actual_prop_name, prop_value);
+                  if (StartsWith(prop_name, staged_persist_prefix)) {
+                    persist_props_map[actual_prop_name] = prop_value;
+                  }
+                } else if (!persist_props_map.count(prop_name)) {
+                  InitPropertySet(prop_name, prop_value);
+                }
             }
+
+            // Update persist prop file if there are staged props
+            if (has_staged_prop) {
+                PersistentProperties updated_persist_props;
+                for (auto const& [prop_name, prop_value] : persist_props_map) {
+                    AddPersistentProperty(prop_name, prop_value, &updated_persist_props);
+                }
+
+                // write current updated persist prop file
+                auto result = WritePersistentPropertyFile(updated_persist_props);
+                if (!result.ok()) {
+                    LOG(ERROR) << "Could not store persistent property: " << result.error();
+                }
+            }
+
             // Apply debug ramdisk special settings after persistent properties are loaded.
             if (android::base::GetBoolProperty("ro.force.debuggable", false)) {
                 // Always enable usb adb if device is booted with debug ramdisk.
@@ -1464,8 +1491,6 @@ void PersistWriteThread::Work() {
             item = std::move(work_.front());
             work_.pop_front();
         }
-
-        std::this_thread::sleep_for(1s);
 
         // Perform write/fsync outside the lock.
         WritePersistentProperty(std::get<0>(item), std::get<1>(item));

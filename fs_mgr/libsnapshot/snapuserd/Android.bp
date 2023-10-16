@@ -74,6 +74,11 @@ cc_library_static {
         "user-space-merge/worker.cpp",
         "utility.cpp",
     ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
     static_libs: [
         "libbase",
         "libdm",
@@ -102,6 +107,12 @@ cc_defaults {
         "dm-snapshot-merge/snapuserd_server.cpp",
         "snapuserd_daemon.cpp",
         "user-space-merge/snapuserd_server.cpp",
+    ],
+
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
 
     static_libs: [
@@ -214,8 +225,8 @@ cc_test {
     require_root: false,
 }
 
-cc_test {
-    name: "snapuserd_test",
+cc_defaults {
+    name: "snapuserd_test_defaults",
     defaults: [
         "fs_mgr_defaults",
         "libsnapshot_cow_defaults",
@@ -225,6 +236,11 @@ cc_test {
         "testing/harness.cpp",
         "testing/host_harness.cpp",
         "user-space-merge/snapuserd_test.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
     ],
     shared_libs: [
         "libbase",
@@ -256,5 +272,69 @@ cc_test {
         min_shipping_api_level: 30,
     },
     auto_gen_config: true,
-    require_root: false,
+    require_root: true,
+    compile_multilib: "first",
+}
+
+cc_test {
+    name: "snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    host_supported: true,
+    test_suites: [
+        "device-tests",
+    ],
+}
+
+// vts tests cannot be host_supported.
+cc_test {
+    name: "vts_snapuserd_test",
+    defaults: ["snapuserd_test_defaults"],
+    test_suites: [
+        "vts",
+    ],
+}
+
+cc_binary_host {
+    name: "snapuserd_extractor",
+    defaults: [
+        "fs_mgr_defaults",
+        "libsnapshot_cow_defaults",
+    ],
+    srcs: [
+        "testing/dm_user_harness.cpp",
+        "testing/harness.cpp",
+        "testing/host_harness.cpp",
+        "user-space-merge/extractor.cpp",
+        "snapuserd_extractor.cpp",
+    ],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbrotli",
+        "libcutils_sockets",
+        "libdm",
+        "libext2_uuid",
+        "libext4_utils",
+        "libfs_mgr_file_wait",
+        "libgflags",
+        "libsnapshot_cow",
+        "libsnapuserd",
+        "liburing",
+        "libz",
+    ],
+    include_dirs: [
+        "bionic/libc/kernel",
+        ".",
+    ],
+    header_libs: [
+        "libstorage_literals_headers",
+        "libfiemap_headers",
+    ],
 }

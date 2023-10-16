@@ -420,7 +420,7 @@ Result<void> Service::ExecStart() {
         }
     });
 
-    if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
+    if (is_updatable() && !IsDefaultMountNamespaceReady()) {
         // Don't delay the service for ExecStart() as the semantic is that
         // the caller might depend on the side effect of the execution.
         return Error() << "Cannot start an updatable service '" << name_
@@ -581,7 +581,7 @@ Result<void> Service::Start() {
         }
     });
 
-    if (is_updatable() && !ServiceList::GetInstance().IsServicesUpdated()) {
+    if (is_updatable() && !IsDefaultMountNamespaceReady()) {
         ServiceList::GetInstance().DelayService(*this);
         return Error() << "Cannot start an updatable service '" << name_
                        << "' before configs from APEXes are all loaded. "

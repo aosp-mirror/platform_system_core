@@ -189,35 +189,32 @@ void SnapshotHandler::InitiateMerge() {
     cv.notify_all();
 }
 
+static inline bool IsMergeBeginError(MERGE_IO_TRANSITION io_state) {
+    return io_state == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
+           io_state == MERGE_IO_TRANSITION::IO_TERMINATED;
+}
+
 // Invoked by Merge thread - Waits on RA thread to resume merging. Will
 // be waken up RA thread.
 bool SnapshotHandler::WaitForMergeBegin() {
-    {
-        std::unique_lock<std::mutex> lock(lock_);
-        while (!MergeInitiated()) {
-            cv.wait(lock);
+    std::unique_lock<std::mutex> lock(lock_);
 
-            if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-                SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
-                return false;
-            }
-        }
+    cv.wait(lock, [this]() -> bool { return MergeInitiated() || IsMergeBeginError(io_state_); });
 
-        while (!(io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN ||
-                 io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                 io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED)) {
-            cv.wait(lock);
-        }
-
-        if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-            io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-            SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
-            return false;
-        }
-
-        return true;
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
     }
+
+    cv.wait(lock, [this]() -> bool {
+        return io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN || IsMergeBeginError(io_state_);
+    });
+
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
+    }
+    return true;
 }
 
 // Invoked by RA thread - Flushes the RA block to scratch space if necessary
@@ -366,6 +363,26 @@ void SnapshotHandler::WaitForMergeComplete() {
              io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED ||
              io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED)) {
         cv.wait(lock);
+    }
+}
+
+void SnapshotHandler::RaThreadStarted() {
+    std::unique_lock<std::mutex> lock(lock_);
+    ra_thread_started_ = true;
+}
+
+void SnapshotHandler::WaitForRaThreadToStart() {
+    auto now = std::chrono::system_clock::now();
+    auto deadline = now + 3s;
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!ra_thread_started_) {
+            auto status = cv.wait_until(lock, deadline);
+            if (status == std::cv_status::timeout) {
+                SNAP_LOG(ERROR) << "Read-ahead thread did not start";
+                return;
+            }
+        }
     }
 }
 
@@ -621,7 +638,6 @@ bool SnapshotHandler::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t b
     std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
 
     if (it == read_ahead_buffer_map_.end()) {
-        SNAP_LOG(ERROR) << "Block: " << block << " not found in RA buffer";
         return false;
     }
 
@@ -645,6 +661,13 @@ MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void*
         MERGE_GROUP_STATE state = blk_state->merge_state_;
         switch (state) {
             case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
+                // If this is a merge-resume path, check if the data is
+                // available from scratch space. Data from scratch space takes
+                // higher precedence than from source device for overlapping
+                // blocks.
+                if (resume_merge_ && GetRABuffer(&lock, new_block, buffer)) {
+                    return (MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS);
+                }
                 blk_state->num_ios_in_progress += 1;  // ref count
                 [[fallthrough]];
             }
