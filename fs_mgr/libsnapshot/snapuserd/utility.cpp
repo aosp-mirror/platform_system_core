@@ -15,6 +15,7 @@
 #include "utility.h"
 
 #include <sys/resource.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
@@ -30,6 +31,20 @@ bool SetThreadPriority([[maybe_unused]] int priority) {
 #else
     return true;
 #endif
+}
+
+bool KernelSupportsIoUring() {
+    struct utsname uts {};
+    unsigned int major, minor;
+
+    uname(&uts);
+    if (sscanf(uts.release, "%u.%u", &major, &minor) != 2) {
+        return false;
+    }
+
+    // We will only support kernels from 5.6 onwards as IOSQE_ASYNC flag and
+    // IO_URING_OP_READ/WRITE opcodes were introduced only on 5.6 kernel
+    return major > 5 || (major == 5 && minor >= 6);
 }
 
 }  // namespace snapshot
