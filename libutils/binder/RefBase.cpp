@@ -18,6 +18,7 @@
 // #define LOG_NDEBUG 0
 
 #include <memory>
+#include <mutex>
 
 #include <android-base/macros.h>
 
@@ -26,8 +27,6 @@
 
 #include <utils/RefBase.h>
 #include <utils/String8.h>
-
-#include <utils/Mutex.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
@@ -310,7 +309,7 @@ public:
         String8 text;
 
         {
-            Mutex::Autolock _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
             char buf[128];
             snprintf(buf, sizeof(buf),
                      "Strong references on RefBase %p (weakref_type %p):\n",
@@ -353,7 +352,7 @@ private:
     void addRef(ref_entry** refs, const void* id, int32_t mRef)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
 
             ref_entry* ref = new ref_entry;
             // Reference count at the time of the snapshot, but before the
@@ -372,7 +371,7 @@ private:
     void removeRef(ref_entry** refs, const void* id)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
 
             ref_entry* const head = *refs;
             ref_entry* ref = head;
@@ -406,7 +405,7 @@ private:
     void renameRefsId(ref_entry* r, const void* old_id, const void* new_id)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
             ref_entry* ref = r;
             while (ref != NULL) {
                 if (ref->id == old_id) {
@@ -434,7 +433,7 @@ private:
         }
     }
 
-    mutable Mutex mMutex;
+    mutable std::mutex mMutex;
     ref_entry* mStrongRefs;
     ref_entry* mWeakRefs;
 
