@@ -208,7 +208,6 @@ cc_library {
     defaults: ["libutils_impl_defaults"],
 
     cflags: [
-        "-DCALLSTACKS=1",
         "-DDEBUG_POLL_AND_WAKE=1",
         "-DDEBUG_REFS=1",
         "-DDEBUG_TOKENIZER=1",
