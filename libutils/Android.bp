@@ -132,25 +132,19 @@ cc_defaults {
     ],
     native_bridge_supported: true,
 
+    whole_static_libs: ["libutils_binder"],
+
     srcs: [
-        "Errors.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
         "LightRefBase.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
-        "RefBase.cpp",
-        "SharedBuffer.cpp",
         "StopWatch.cpp",
-        "String8.cpp",
-        "String16.cpp",
-        "StrongPointer.cpp",
         "SystemClock.cpp",
         "Threads.cpp",
         "Timers.cpp",
         "Tokenizer.cpp",
-        "Unicode.cpp",
-        "VectorImpl.cpp",
         "misc.cpp",
     ],
 
@@ -274,24 +268,6 @@ cc_fuzz {
 }
 
 cc_fuzz {
-    name: "libutils_fuzz_string8",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["String8_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_string16",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["String16_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_vector",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["Vector_fuzz.cpp"],
-}
-
-cc_fuzz {
     name: "libutils_fuzz_printer",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["Printer_fuzz.cpp"],
@@ -316,12 +292,6 @@ cc_fuzz {
 }
 
 cc_fuzz {
-    name: "libutils_fuzz_refbase",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["RefBase_fuzz.cpp"],
-}
-
-cc_fuzz {
     name: "libutils_fuzz_lrucache",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["LruCache_fuzz.cpp"],
@@ -340,18 +310,11 @@ cc_test {
     srcs: [
         "BitSet_test.cpp",
         "CallStack_test.cpp",
-        "Errors_test.cpp",
         "FileMap_test.cpp",
         "LruCache_test.cpp",
         "Mutex_test.cpp",
-        "SharedBuffer_test.cpp",
         "Singleton_test.cpp",
-        "String16_test.cpp",
-        "String8_test.cpp",
-        "StrongPointer_test.cpp",
         "Timers_test.cpp",
-        "Unicode_test.cpp",
-        "Vector_test.cpp",
     ],
 
     target: {
@@ -373,7 +336,6 @@ cc_test {
         linux: {
             srcs: [
                 "Looper_test.cpp",
-                "RefBase_test.cpp",
             ],
         },
         host: {
@@ -426,10 +388,4 @@ cc_test_library {
     ],
     shared_libs: ["libutils_test_singleton1"],
     header_libs: ["libutils_headers"],
-}
-
-cc_benchmark {
-    name: "libutils_benchmark",
-    srcs: ["Vector_benchmark.cpp"],
-    shared_libs: ["libutils"],
 }
