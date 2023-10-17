@@ -89,8 +89,6 @@ static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
 static constexpr auto kUpdateStateCheckInterval = 2s;
 
-MergeFailureCode CheckMergeConsistency(const std::string& name, const SnapshotStatus& status);
-
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
 SnapshotManager::~SnapshotManager() {}
@@ -120,9 +118,7 @@ std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceI
 }
 
 SnapshotManager::SnapshotManager(IDeviceInfo* device)
-    : dm_(device->GetDeviceMapper()), device_(device), metadata_dir_(device_->GetMetadataDir()) {
-    merge_consistency_checker_ = android::snapshot::CheckMergeConsistency;
-}
+    : dm_(device->GetDeviceMapper()), device_(device), metadata_dir_(device_->GetMetadataDir()) {}
 
 static std::string GetCowName(const std::string& snapshot_name) {
     return snapshot_name + "-cow";
@@ -1365,13 +1361,6 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
         }
     }
 
-    // Merge is complete at this point
-
-    auto code = CheckMergeConsistency(lock, name, snapshot_status);
-    if (code != MergeFailureCode::Ok) {
-        return MergeResult(UpdateState::MergeFailed, code);
-    }
-
     // Merging is done. First, update the status file to indicate the merge
     // is complete. We do this before calling OnSnapshotMergeComplete, even
     // though this means the write is potentially wasted work (since in the
@@ -1399,80 +1388,6 @@ static std::string GetMappedCowDeviceName(const std::string& snapshot,
         return GetCowImageDeviceName(snapshot);
     }
     return GetCowName(snapshot);
-}
-
-MergeFailureCode SnapshotManager::CheckMergeConsistency(LockedFile* lock, const std::string& name,
-                                                        const SnapshotStatus& status) {
-    CHECK(lock);
-
-    return merge_consistency_checker_(name, status);
-}
-
-MergeFailureCode CheckMergeConsistency(const std::string& name, const SnapshotStatus& status) {
-    if (!status.using_snapuserd()) {
-        // Do not try to verify old-style COWs yet.
-        return MergeFailureCode::Ok;
-    }
-
-    auto& dm = DeviceMapper::Instance();
-
-    std::string cow_image_name = GetMappedCowDeviceName(name, status);
-    std::string cow_image_path;
-    if (!dm.GetDmDevicePathByName(cow_image_name, &cow_image_path)) {
-        LOG(ERROR) << "Failed to get path for cow device: " << cow_image_name;
-        return MergeFailureCode::GetCowPathConsistencyCheck;
-    }
-
-    // First pass, count # of ops.
-    size_t num_ops = 0;
-    {
-        unique_fd fd(open(cow_image_path.c_str(), O_RDONLY | O_CLOEXEC));
-        if (fd < 0) {
-            PLOG(ERROR) << "Failed to open " << cow_image_name;
-            return MergeFailureCode::OpenCowConsistencyCheck;
-        }
-
-        CowReader reader;
-        if (!reader.Parse(std::move(fd))) {
-            LOG(ERROR) << "Failed to parse cow " << cow_image_path;
-            return MergeFailureCode::ParseCowConsistencyCheck;
-        }
-
-        num_ops = reader.get_num_total_data_ops();
-    }
-
-    // Second pass, try as hard as we can to get the actual number of blocks
-    // the system thinks is merged.
-    unique_fd fd(open(cow_image_path.c_str(), O_RDONLY | O_DIRECT | O_SYNC | O_CLOEXEC));
-    if (fd < 0) {
-        PLOG(ERROR) << "Failed to open direct " << cow_image_name;
-        return MergeFailureCode::OpenCowDirectConsistencyCheck;
-    }
-
-    void* addr;
-    size_t page_size = getpagesize();
-    if (posix_memalign(&addr, page_size, page_size) < 0) {
-        PLOG(ERROR) << "posix_memalign with page size " << page_size;
-        return MergeFailureCode::MemAlignConsistencyCheck;
-    }
-
-    // COWs are always at least 2MB, this is guaranteed in snapshot creation.
-    std::unique_ptr<void, decltype(&::free)> buffer(addr, ::free);
-    if (!android::base::ReadFully(fd, buffer.get(), page_size)) {
-        PLOG(ERROR) << "Direct read failed " << cow_image_name;
-        return MergeFailureCode::DirectReadConsistencyCheck;
-    }
-
-    auto header = reinterpret_cast<CowHeader*>(buffer.get());
-    if (header->num_merge_ops != num_ops) {
-        LOG(ERROR) << "COW consistency check failed, expected " << num_ops << " to be merged, "
-                   << "but " << header->num_merge_ops << " were actually recorded.";
-        LOG(ERROR) << "Aborting merge progress for snapshot " << name
-                   << ", will try again next boot";
-        return MergeFailureCode::WrongMergeCountConsistencyCheck;
-    }
-
-    return MergeFailureCode::Ok;
 }
 
 MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
