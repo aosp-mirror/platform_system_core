@@ -23,14 +23,14 @@ cc_binary {
 
 
 cc_binary {
-    name: "basic_v2_cow_writer",
+    name: "write_cow",
     host_supported: true,
     defaults: [
         "fs_mgr_defaults",
         "libsnapshot_cow_defaults",
     ],
 
-    srcs: ["basic_v2_cow_writer.cpp"],
+    srcs: ["write_cow.cpp"],
 
     static_libs: [
         "libsnapshot_cow",
