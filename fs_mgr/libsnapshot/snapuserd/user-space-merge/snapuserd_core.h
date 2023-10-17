@@ -159,6 +159,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     bool ShouldReconstructDataFromCow() { return populate_data_from_cow_; }
     void FinishReconstructDataFromCow() { populate_data_from_cow_ = false; }
+    void MarkMergeComplete();
     // Return the snapshot status
     std::string GetMergeStatus();
 
@@ -245,6 +246,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     int num_worker_threads_ = kNumWorkerThreads;
     bool perform_verification_ = true;
     bool resume_merge_ = false;
+    bool merge_complete_ = false;
 
     std::unique_ptr<UpdateVerify> update_verify_;
     std::shared_ptr<IBlockServerOpener> block_server_opener_;

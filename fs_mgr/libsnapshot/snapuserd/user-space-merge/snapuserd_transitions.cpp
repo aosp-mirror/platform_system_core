@@ -386,10 +386,16 @@ void SnapshotHandler::WaitForRaThreadToStart() {
     }
 }
 
+void SnapshotHandler::MarkMergeComplete() {
+    std::lock_guard<std::mutex> lock(lock_);
+    merge_complete_ = true;
+}
+
 std::string SnapshotHandler::GetMergeStatus() {
     bool merge_not_initiated = false;
     bool merge_monitored = false;
     bool merge_failed = false;
+    bool merge_complete = false;
 
     {
         std::lock_guard<std::mutex> lock(lock_);
@@ -405,10 +411,9 @@ std::string SnapshotHandler::GetMergeStatus() {
         if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED) {
             merge_failed = true;
         }
-    }
 
-    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
-    bool merge_complete = (ch->num_merge_ops == reader_->get_num_total_data_ops());
+        merge_complete = merge_complete_;
+    }
 
     if (merge_not_initiated) {
         // Merge was not initiated yet; however, we have merge completion
@@ -444,7 +449,6 @@ std::string SnapshotHandler::GetMergeStatus() {
         return "snapshot-merge-failed";
     }
 
-    // Merge complete
     if (merge_complete) {
         return "snapshot-merge-complete";
     }
