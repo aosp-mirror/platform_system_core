@@ -26,7 +26,9 @@
 #include <libsnapshot/cow_writer.h>
 #include "cow_decompress.h"
 #include "libsnapshot/cow_format.h"
+#include "writer_v2.h"
 #include "writer_v3.h"
+
 using android::base::unique_fd;
 using testing::AssertionFailure;
 using testing::AssertionResult;
@@ -48,6 +50,28 @@ class CowOperationV3Test : public ::testing::Test {
 
     std::unique_ptr<TemporaryFile> cow_;
 };
+
+TEST_F(CowOperationV3Test, CowHeaderV2Test) {
+    CowOptions options;
+    options.cluster_ops = 5;
+    options.num_merge_ops = 1;
+    options.block_size = 4096;
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+    auto writer_v2 = std::make_unique<CowWriterV2>(options, GetCowFd());
+    ASSERT_TRUE(writer_v2->Initialize());
+    ASSERT_TRUE(writer_v2->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.GetHeader();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.block_size, options.block_size);
+    ASSERT_EQ(header.cluster_ops, options.cluster_ops);
+}
 
 }  // namespace snapshot
 }  // namespace android
