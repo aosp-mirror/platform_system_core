@@ -405,15 +405,6 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Add new public entries above this line.
 
-    // Helpers for failure injection.
-    using MergeConsistencyChecker =
-            std::function<MergeFailureCode(const std::string& name, const SnapshotStatus& status)>;
-
-    void set_merge_consistency_checker(MergeConsistencyChecker checker) {
-        merge_consistency_checker_ = checker;
-    }
-    MergeConsistencyChecker merge_consistency_checker() const { return merge_consistency_checker_; }
-
   private:
     FRIEND_TEST(SnapshotTest, CleanFirstStageMount);
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
@@ -657,8 +648,6 @@ class SnapshotManager final : public ISnapshotManager {
     MergeResult CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel);
     MergeResult CheckTargetMergeState(LockedFile* lock, const std::string& name,
                                       const SnapshotUpdateStatus& update_status);
-    MergeFailureCode CheckMergeConsistency(LockedFile* lock, const std::string& name,
-                                           const SnapshotStatus& update_status);
 
     auto UpdateStateToStr(enum UpdateState state);
     // Get status or table information about a device-mapper node with a single target.
@@ -847,7 +836,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
     std::unique_ptr<LpMetadata> old_partition_metadata_;
     std::optional<bool> is_snapshot_userspace_;
-    MergeConsistencyChecker merge_consistency_checker_;
 };
 
 }  // namespace snapshot
