@@ -93,8 +93,8 @@ cc_defaults {
     srcs: [
         "builder_test.cpp",
         "super_layout_builder_test.cpp",
-        "test_partition_opener.cpp",
         "utility_test.cpp",
+        ":TestPartitionOpener_group",
     ],
 }
 
@@ -121,4 +121,9 @@ cc_test {
 cc_test {
     name: "vts_kernel_liblp_test",
     defaults: ["liblp_test_defaults"],
+}
+
+filegroup {
+   name: "TestPartitionOpener_group",
+   srcs: [ "test_partition_opener.cpp"],
 }
