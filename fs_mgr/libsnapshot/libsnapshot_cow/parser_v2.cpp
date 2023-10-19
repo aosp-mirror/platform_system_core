@@ -46,15 +46,6 @@ bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<u
         LOG(ERROR) << "Clusters must contain at least two operations to function.";
         return false;
     }
-    if (header_.op_size != sizeof(CowOperationV2)) {
-        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
-                   << sizeof(CowOperationV2);
-        return false;
-    }
-    if (header_.cluster_ops == 1) {
-        LOG(ERROR) << "Clusters must contain at least two operations to function.";
-        return false;
-    }
 
     if ((header_.prefix.major_version > kCowVersionMajor) ||
         (header_.prefix.minor_version != kCowVersionMinor)) {
