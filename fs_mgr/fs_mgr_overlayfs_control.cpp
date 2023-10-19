@@ -144,7 +144,8 @@ bool fs_mgr_overlayfs_setup_one(const std::string& overlay, const std::string& m
     if (fs_mgr_overlayfs_already_mounted(mount_point)) {
         return true;
     }
-    auto fsrec_mount_point = overlay + "/" + android::base::Basename(mount_point) + "/";
+    const auto base = GetEncodedBaseDirForMountPoint(mount_point);
+    auto fsrec_mount_point = overlay + "/" + base + "/";
 
     AutoSetFsCreateCon createcon(kOverlayfsFileContext);
     if (!createcon.Ok()) {
@@ -286,10 +287,10 @@ bool fs_mgr_overlayfs_teardown_one(const std::string& overlay, const std::string
     }
 
     auto cleanup_all = mount_point.empty();
-    const auto partition_name = android::base::Basename(mount_point);
-    const auto oldpath = top + (cleanup_all ? "" : ("/" + partition_name));
+    const auto base = GetEncodedBaseDirForMountPoint(mount_point);
+    const auto oldpath = top + (cleanup_all ? "" : ("/" + base));
     const auto newpath = cleanup_all ? overlay + "/." + kOverlayTopDir + ".teardown"
-                                     : top + "/." + partition_name + ".teardown";
+                                     : top + "/." + base + ".teardown";
     auto ret = fs_mgr_rm_all(newpath);
     if (!rename(oldpath.c_str(), newpath.c_str())) {
         if (change) *change = true;
