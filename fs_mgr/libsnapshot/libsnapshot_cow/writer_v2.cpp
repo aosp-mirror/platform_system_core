@@ -262,11 +262,6 @@ bool CowWriterV2::OpenForWrite() {
         return false;
     }
 
-    if (lseek(fd_.get(), sizeof(CowHeader) + header_.buffer_size, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-
     InitPos();
     InitBatchWrites();
 
