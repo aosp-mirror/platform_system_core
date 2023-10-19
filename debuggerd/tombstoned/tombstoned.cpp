@@ -283,9 +283,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 
 static void perform_request(std::unique_ptr<Crash> crash) {
   unique_fd output_fd;
-  bool intercepted =
-      intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
-  if (intercepted) {
+  if (intercept_manager->FindIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
     if (crash->crash_type == kDebuggerdTombstoneProto) {
       crash->output.proto = CrashArtifact::devnull();
     }
