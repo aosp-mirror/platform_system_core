@@ -17,22 +17,21 @@ package {
 }
 
 cc_fuzz {
-    name: "trusty_keymaster_fuzzer",
+    name: "trusty_keymint_fuzzer",
     defaults: ["trusty_fuzzer_defaults"],
     srcs: [":trusty_tipc_fuzzer"],
     cflags: [
-        "-DTRUSTY_APP_PORT=\"com.android.trusty.keymaster\"",
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.keymint\"",
         "-DTRUSTY_APP_UUID=\"5f902ace-5e5c-4cd8-ae54-87b88c22ddaf\"",
-        "-DTRUSTY_APP_FILENAME=\"keymaster.syms.elf\"",
+        "-DTRUSTY_APP_FILENAME=\"keymint_app.syms.elf\"",
     ],
     fuzz_config: {
-       cc: ["trong@google.com", "drysdale@google.com"],
+       cc: ["drysdale@google.com"],
        componentid: 1084733,
        hotlists: ["4271696"],
     },
 
     // The initial corpus for this fuzzer was derived by dumping messages from
-    // the `secure_env` emulator interface for cuttlefish while running the
-    // keystore2 tests in the emulator.
+    // the HAL service while running the VTS tests for KeyMint.
     corpus: ["corpus/*"],
 }
