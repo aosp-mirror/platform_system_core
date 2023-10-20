@@ -441,20 +441,24 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
         // entries of |moved_mounts|.
 
         // use as the bound directory in /dev.
-        AutoSetFsCreateCon createcon;
-        auto new_context = fs_mgr_get_context(entry.mount_point);
-        if (new_context.empty() || !createcon.Set(new_context)) {
-            continue;
-        }
         MoveEntry new_entry{entry.mount_point, "/dev/TemporaryDir-XXXXXX", entry.shared_flag};
-        const auto target = mkdtemp(new_entry.dir.data());
-        if (!createcon.Restore()) {
-            return false;
-        }
-        if (!target) {
-            retval = false;
-            PERROR << "temporary directory for MS_BIND";
-            continue;
+        {
+            AutoSetFsCreateCon createcon;
+            auto new_context = fs_mgr_get_context(entry.mount_point);
+            if (new_context.empty() || !createcon.Set(new_context)) {
+                continue;
+            }
+            const auto target = mkdtemp(new_entry.dir.data());
+            if (!target) {
+                retval = false;
+                PERROR << "temporary directory for MS_MOVE";
+                continue;
+            }
+            if (!createcon.Restore()) {
+                retval = false;
+                rmdir(new_entry.dir.c_str());
+                continue;
+            }
         }
 
         if (new_entry.shared_flag) {
@@ -465,6 +469,7 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
             if (new_entry.shared_flag) {
                 fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, true);
             }
+            rmdir(new_entry.dir.c_str());
             continue;
         }
         moved_mounts.push_back(std::move(new_entry));
