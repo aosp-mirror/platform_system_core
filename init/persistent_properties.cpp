@@ -115,24 +115,6 @@ void RemoveLegacyPersistentPropertyFiles() {
     }
 }
 
-PersistentProperties LoadPersistentPropertiesFromMemory() {
-    PersistentProperties persistent_properties;
-    __system_property_foreach(
-        [](const prop_info* pi, void* cookie) {
-            __system_property_read_callback(
-                pi,
-                [](void* cookie, const char* name, const char* value, unsigned serial) {
-                    if (StartsWith(name, "persist.")) {
-                        auto properties = reinterpret_cast<PersistentProperties*>(cookie);
-                        AddPersistentProperty(name, value, properties);
-                    }
-                },
-                cookie);
-        },
-        &persistent_properties);
-    return persistent_properties;
-}
-
 Result<std::string> ReadPersistentPropertyFile() {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     if (access(temp_filename.c_str(), F_OK) == 0) {
@@ -219,6 +201,24 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     fsync(dir_fd.get());
 
     return {};
+}
+
+PersistentProperties LoadPersistentPropertiesFromMemory() {
+    PersistentProperties persistent_properties;
+    __system_property_foreach(
+            [](const prop_info* pi, void* cookie) {
+                __system_property_read_callback(
+                        pi,
+                        [](void* cookie, const char* name, const char* value, unsigned serial) {
+                            if (StartsWith(name, "persist.")) {
+                                auto properties = reinterpret_cast<PersistentProperties*>(cookie);
+                                AddPersistentProperty(name, value, properties);
+                            }
+                        },
+                        cookie);
+            },
+            &persistent_properties);
+    return persistent_properties;
 }
 
 // Persistent properties are not written often, so we rather not keep any data in memory and read
