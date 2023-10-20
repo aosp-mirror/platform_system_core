@@ -60,6 +60,7 @@ constexpr char kPhysicalDevice[] = "/dev/block/by-name/";
 
 constexpr char kLowerdirOption[] = "lowerdir=";
 constexpr char kUpperdirOption[] = "upperdir=";
+constexpr char kWorkdirOption[] = "workdir=";
 
 bool fs_mgr_is_dsu_running() {
     // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
@@ -87,6 +88,14 @@ std::vector<const std::string> OverlayMountPoints() {
     }
 
     return {kScratchMountPoint, kCacheMountPoint};
+}
+
+std::string GetEncodedBaseDirForMountPoint(const std::string& mount_point) {
+    std::string normalized_path;
+    if (mount_point.empty() || !android::base::Realpath(mount_point, &normalized_path)) {
+        return "";
+    }
+    return android::base::StringReplace(normalized_path, "/", "@", true);
 }
 
 static bool fs_mgr_is_dir(const std::string& path) {
@@ -202,21 +211,6 @@ static bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     return has_shared_blocks;
 }
 
-static std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
-    if (!fs_mgr_is_dir(mount_point)) return "";
-    const auto base = android::base::Basename(mount_point) + "/";
-    for (const auto& overlay_mount_point : OverlayMountPoints()) {
-        auto dir = overlay_mount_point + "/" + kOverlayTopDir + "/" + base;
-        auto upper = dir + kUpperName;
-        if (!fs_mgr_is_dir(upper)) continue;
-        auto work = dir + kWorkName;
-        if (!fs_mgr_is_dir(work)) continue;
-        if (access(work.c_str(), R_OK | W_OK)) continue;
-        return dir;
-    }
-    return "";
-}
-
 const std::string fs_mgr_mount_point(const std::string& mount_point) {
     if ("/"s != mount_point) return mount_point;
     return "/system";
@@ -225,16 +219,30 @@ const std::string fs_mgr_mount_point(const std::string& mount_point) {
 // default options for mount_point, returns empty string for none available.
 static std::string fs_mgr_get_overlayfs_options(const FstabEntry& entry) {
     const auto mount_point = fs_mgr_mount_point(entry.mount_point);
-    auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
-    if (candidate.empty()) return "";
-    auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + candidate + kUpperName +
-               ",workdir=" + candidate + kWorkName + android::fs_mgr::CheckOverlayfs().mount_flags;
-    for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
-        if (android::base::StartsWith(flag, "context=")) {
-            ret += "," + flag;
-        }
+    if (!fs_mgr_is_dir(mount_point)) {
+        return "";
     }
-    return ret;
+    const auto base = GetEncodedBaseDirForMountPoint(mount_point);
+    if (base.empty()) {
+        return "";
+    }
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
+        const auto dir = overlay_mount_point + "/" + kOverlayTopDir + "/" + base + "/";
+        const auto upper = dir + kUpperName;
+        const auto work = dir + kWorkName;
+        if (!fs_mgr_is_dir(upper) || !fs_mgr_is_dir(work) || access(work.c_str(), R_OK | W_OK)) {
+            continue;
+        }
+        auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + upper + "," +
+                   kWorkdirOption + work + android::fs_mgr::CheckOverlayfs().mount_flags;
+        for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
+            if (android::base::StartsWith(flag, "context=")) {
+                ret += "," + flag;
+            }
+        }
+        return ret;
+    }
+    return "";
 }
 
 bool AutoSetFsCreateCon::Set(const std::string& context) {
