@@ -1419,8 +1419,6 @@ static void HandleInitSocket() {
             // Apply staged and persistent properties
             bool has_staged_prop = false;
             auto const staged_prefix = std::string_view("next_boot.");
-            auto const staged_persist_prefix = std::string_view("next_boot.persist.");
-            auto persist_props_map = std::unordered_map<std::string, std::string>();
 
             auto persistent_properties = LoadPersistentProperties();
             for (const auto& property_record : persistent_properties.properties()) {
@@ -1431,23 +1429,16 @@ static void HandleInitSocket() {
                   has_staged_prop = true;
                   auto actual_prop_name = prop_name.substr(staged_prefix.size());
                   InitPropertySet(actual_prop_name, prop_value);
-                  if (StartsWith(prop_name, staged_persist_prefix)) {
-                    persist_props_map[actual_prop_name] = prop_value;
-                  }
-                } else if (!persist_props_map.count(prop_name)) {
+                } else {
                   InitPropertySet(prop_name, prop_value);
                 }
             }
 
             // Update persist prop file if there are staged props
             if (has_staged_prop) {
-                PersistentProperties updated_persist_props;
-                for (auto const& [prop_name, prop_value] : persist_props_map) {
-                    AddPersistentProperty(prop_name, prop_value, &updated_persist_props);
-                }
-
+                PersistentProperties props = LoadPersistentPropertiesFromMemory();
                 // write current updated persist prop file
-                auto result = WritePersistentPropertyFile(updated_persist_props);
+                auto result = WritePersistentPropertyFile(props);
                 if (!result.ok()) {
                     LOG(ERROR) << "Could not store persistent property: " << result.error();
                 }
