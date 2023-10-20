@@ -114,7 +114,7 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
                R"(#\d\d pc [0-9a-f]+\s+ \S+ (\(offset 0x[0-9a-f]+\) )?\()" frame_name R"(\+)");
 
 static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, unique_fd* output_fd,
-                                 InterceptStatus* status, DebuggerdDumpType intercept_type) {
+                                 InterceptResponse* response, DebuggerdDumpType intercept_type) {
   intercept_fd->reset(socket_local_client(kTombstonedInterceptSocketName,
                                           ANDROID_SOCKET_NAMESPACE_RESERVED, SOCK_SEQPACKET));
   if (intercept_fd->get() == -1) {
@@ -155,18 +155,15 @@ static void tombstoned_intercept(pid_t target_pid, unique_fd* intercept_fd, uniq
     FAIL() << "failed to send output fd to tombstoned: " << strerror(errno);
   }
 
-  InterceptResponse response;
-  rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), &response, sizeof(response)));
+  rc = TEMP_FAILURE_RETRY(read(intercept_fd->get(), response, sizeof(*response)));
   if (rc == -1) {
     FAIL() << "failed to read response from tombstoned: " << strerror(errno);
   } else if (rc == 0) {
     FAIL() << "failed to read response from tombstoned (EOF)";
-  } else if (rc != sizeof(response)) {
-    FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(response)
+  } else if (rc != sizeof(*response)) {
+    FAIL() << "received packet of unexpected length from tombstoned: expected " << sizeof(*response)
            << ", received " << rc;
   }
-
-  *status = response.status;
 }
 
 static bool pac_supported() {
@@ -225,9 +222,10 @@ void CrasherTest::StartIntercept(unique_fd* output_fd, DebuggerdDumpType interce
     FAIL() << "crasher hasn't been started";
   }
 
-  InterceptStatus status;
-  tombstoned_intercept(crasher_pid, &this->intercept_fd, output_fd, &status, intercept_type);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
+  InterceptResponse response = {};
+  tombstoned_intercept(crasher_pid, &this->intercept_fd, output_fd, &response, intercept_type);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
 }
 
 void CrasherTest::FinishIntercept(int* result) {
@@ -1744,9 +1742,10 @@ TEST(tombstoned, no_notify) {
     pid_t pid = 123'456'789 + i;
 
     unique_fd intercept_fd, output_fd;
-    InterceptStatus status;
-    tombstoned_intercept(pid, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
-    ASSERT_EQ(InterceptStatus::kRegistered, status);
+    InterceptResponse response = {};
+    tombstoned_intercept(pid, &intercept_fd, &output_fd, &response, kDebuggerdTombstone);
+    ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+        << "Error message: " << response.error_message;
 
     {
       unique_fd tombstoned_socket, input_fd;
@@ -1778,9 +1777,10 @@ TEST(tombstoned, stress) {
       pid_t pid = pid_base + dump;
 
       unique_fd intercept_fd, output_fd;
-      InterceptStatus status;
-      tombstoned_intercept(pid, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
-      ASSERT_EQ(InterceptStatus::kRegistered, status);
+      InterceptResponse response = {};
+      tombstoned_intercept(pid, &intercept_fd, &output_fd, &response, kDebuggerdTombstone);
+      ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+          << "Error messeage: " << response.error_message;
 
       // Pretend to crash, and then immediately close the socket.
       unique_fd sockfd(socket_local_client(kTombstonedCrashSocketName,
@@ -1811,9 +1811,10 @@ TEST(tombstoned, stress) {
       pid_t pid = pid_base + dump;
 
       unique_fd intercept_fd, output_fd;
-      InterceptStatus status;
-      tombstoned_intercept(pid, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
-      ASSERT_EQ(InterceptStatus::kRegistered, status);
+      InterceptResponse response = {};
+      tombstoned_intercept(pid, &intercept_fd, &output_fd, &response, kDebuggerdTombstone);
+      ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+          << "Error message: " << response.error_message;
 
       {
         unique_fd tombstoned_socket, input_fd;
@@ -1838,16 +1839,17 @@ TEST(tombstoned, stress) {
   }
 }
 
-TEST(tombstoned, java_trace_intercept_smoke) {
+TEST(tombstoned, intercept_java_trace_smoke) {
   // Using a "real" PID is a little dangerous here - if the test fails
   // or crashes, we might end up getting a bogus / unreliable stack
   // trace.
   const pid_t self = getpid();
 
   unique_fd intercept_fd, output_fd;
-  InterceptStatus status;
-  tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdJavaBacktrace);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
+  InterceptResponse response = {};
+  tombstoned_intercept(self, &intercept_fd, &output_fd, &response, kDebuggerdJavaBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
 
   // First connect to tombstoned requesting a native tombstone. This
   // should result in a "regular" FD and not the installed intercept.
@@ -1869,25 +1871,96 @@ TEST(tombstoned, java_trace_intercept_smoke) {
   ASSERT_STREQ("java", outbuf);
 }
 
-TEST(tombstoned, multiple_intercepts) {
+TEST(tombstoned, intercept_multiple_dump_types) {
   const pid_t fake_pid = 1'234'567;
   unique_fd intercept_fd, output_fd;
-  InterceptStatus status;
-  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &status, kDebuggerdJavaBacktrace);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdJavaBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
 
   unique_fd intercept_fd_2, output_fd_2;
-  tombstoned_intercept(fake_pid, &intercept_fd_2, &output_fd_2, &status, kDebuggerdNativeBacktrace);
-  ASSERT_EQ(InterceptStatus::kFailedAlreadyRegistered, status);
+  tombstoned_intercept(fake_pid, &intercept_fd_2, &output_fd_2, &response,
+                       kDebuggerdNativeBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+}
+
+TEST(tombstoned, intercept_bad_pid) {
+  const pid_t fake_pid = -1;
+  unique_fd intercept_fd, output_fd;
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdNativeBacktrace);
+  ASSERT_EQ(InterceptStatus::kFailed, response.status)
+      << "Error message: " << response.error_message;
+  ASSERT_MATCH(response.error_message, "bad pid");
+}
+
+TEST(tombstoned, intercept_bad_dump_types) {
+  const pid_t fake_pid = 1'234'567;
+  unique_fd intercept_fd, output_fd;
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response,
+                       static_cast<DebuggerdDumpType>(20));
+  ASSERT_EQ(InterceptStatus::kFailed, response.status)
+      << "Error message: " << response.error_message;
+  ASSERT_MATCH(response.error_message, "bad dump type \\[unknown\\]");
+
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdAnyIntercept);
+  ASSERT_EQ(InterceptStatus::kFailed, response.status)
+      << "Error message: " << response.error_message;
+  ASSERT_MATCH(response.error_message, "bad dump type kDebuggerdAnyIntercept");
+
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdTombstoneProto);
+  ASSERT_EQ(InterceptStatus::kFailed, response.status)
+      << "Error message: " << response.error_message;
+  ASSERT_MATCH(response.error_message, "bad dump type kDebuggerdTombstoneProto");
+}
+
+TEST(tombstoned, intercept_already_registered) {
+  const pid_t fake_pid = 1'234'567;
+  unique_fd intercept_fd1, output_fd1;
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd1, &output_fd1, &response, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  unique_fd intercept_fd2, output_fd2;
+  tombstoned_intercept(fake_pid, &intercept_fd2, &output_fd2, &response, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kFailedAlreadyRegistered, response.status)
+      << "Error message: " << response.error_message;
+  ASSERT_MATCH(response.error_message, "already registered, type kDebuggerdTombstone");
+}
+
+TEST(tombstoned, intercept_tombstone_proto_matched_to_tombstone) {
+  const pid_t fake_pid = 1'234'567;
+
+  unique_fd intercept_fd, output_fd;
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  const char data[] = "tombstone_proto";
+  unique_fd tombstoned_socket, input_fd;
+  ASSERT_TRUE(
+      tombstoned_connect(fake_pid, &tombstoned_socket, &input_fd, kDebuggerdTombstoneProto));
+  ASSERT_TRUE(android::base::WriteFully(input_fd.get(), data, sizeof(data)));
+  tombstoned_notify_completion(tombstoned_socket.get());
+
+  char outbuf[sizeof(data)];
+  ASSERT_TRUE(android::base::ReadFully(output_fd.get(), outbuf, sizeof(outbuf)));
+  ASSERT_STREQ("tombstone_proto", outbuf);
 }
 
 TEST(tombstoned, intercept_any) {
   const pid_t fake_pid = 1'234'567;
 
   unique_fd intercept_fd, output_fd;
-  InterceptStatus status;
-  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &status, kDebuggerdNativeBacktrace);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
+  InterceptResponse response = {};
+  tombstoned_intercept(fake_pid, &intercept_fd, &output_fd, &response, kDebuggerdNativeBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
 
   const char any[] = "any";
   unique_fd tombstoned_socket, input_fd;
@@ -1898,6 +1971,77 @@ TEST(tombstoned, intercept_any) {
   char outbuf[sizeof(any)];
   ASSERT_TRUE(android::base::ReadFully(output_fd.get(), outbuf, sizeof(outbuf)));
   ASSERT_STREQ("any", outbuf);
+}
+
+TEST(tombstoned, intercept_any_failed_with_multiple_intercepts) {
+  const pid_t fake_pid = 1'234'567;
+
+  InterceptResponse response = {};
+  unique_fd intercept_fd1, output_fd1;
+  tombstoned_intercept(fake_pid, &intercept_fd1, &output_fd1, &response, kDebuggerdNativeBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  unique_fd intercept_fd2, output_fd2;
+  tombstoned_intercept(fake_pid, &intercept_fd2, &output_fd2, &response, kDebuggerdJavaBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  unique_fd tombstoned_socket, input_fd;
+  ASSERT_FALSE(tombstoned_connect(fake_pid, &tombstoned_socket, &input_fd, kDebuggerdAnyIntercept));
+}
+
+TEST(tombstoned, intercept_multiple_verify_intercept) {
+  // Need to use our pid for java since that will verify the pid.
+  const pid_t fake_pid = getpid();
+
+  InterceptResponse response = {};
+  unique_fd intercept_fd1, output_fd1;
+  tombstoned_intercept(fake_pid, &intercept_fd1, &output_fd1, &response, kDebuggerdNativeBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  unique_fd intercept_fd2, output_fd2;
+  tombstoned_intercept(fake_pid, &intercept_fd2, &output_fd2, &response, kDebuggerdJavaBacktrace);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  unique_fd intercept_fd3, output_fd3;
+  tombstoned_intercept(fake_pid, &intercept_fd3, &output_fd3, &response, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
+
+  const char native_data[] = "native";
+  unique_fd tombstoned_socket1, input_fd1;
+  ASSERT_TRUE(
+      tombstoned_connect(fake_pid, &tombstoned_socket1, &input_fd1, kDebuggerdNativeBacktrace));
+  ASSERT_TRUE(android::base::WriteFully(input_fd1.get(), native_data, sizeof(native_data)));
+  tombstoned_notify_completion(tombstoned_socket1.get());
+
+  char native_outbuf[sizeof(native_data)];
+  ASSERT_TRUE(android::base::ReadFully(output_fd1.get(), native_outbuf, sizeof(native_outbuf)));
+  ASSERT_STREQ("native", native_outbuf);
+
+  const char java_data[] = "java";
+  unique_fd tombstoned_socket2, input_fd2;
+  ASSERT_TRUE(
+      tombstoned_connect(fake_pid, &tombstoned_socket2, &input_fd2, kDebuggerdJavaBacktrace));
+  ASSERT_TRUE(android::base::WriteFully(input_fd2.get(), java_data, sizeof(java_data)));
+  tombstoned_notify_completion(tombstoned_socket2.get());
+
+  char java_outbuf[sizeof(java_data)];
+  ASSERT_TRUE(android::base::ReadFully(output_fd2.get(), java_outbuf, sizeof(java_outbuf)));
+  ASSERT_STREQ("java", java_outbuf);
+
+  const char tomb_data[] = "tombstone";
+  unique_fd tombstoned_socket3, input_fd3;
+  ASSERT_TRUE(tombstoned_connect(fake_pid, &tombstoned_socket3, &input_fd3, kDebuggerdTombstone));
+  ASSERT_TRUE(android::base::WriteFully(input_fd3.get(), tomb_data, sizeof(tomb_data)));
+  tombstoned_notify_completion(tombstoned_socket3.get());
+
+  char tomb_outbuf[sizeof(tomb_data)];
+  ASSERT_TRUE(android::base::ReadFully(output_fd3.get(), tomb_outbuf, sizeof(tomb_outbuf)));
+  ASSERT_STREQ("tombstone", tomb_outbuf);
 }
 
 TEST(tombstoned, interceptless_backtrace) {
@@ -2132,10 +2276,11 @@ TEST(tombstoned, proto) {
 TEST(tombstoned, proto_intercept) {
   const pid_t self = getpid();
   unique_fd intercept_fd, output_fd;
-  InterceptStatus status;
 
-  tombstoned_intercept(self, &intercept_fd, &output_fd, &status, kDebuggerdTombstone);
-  ASSERT_EQ(InterceptStatus::kRegistered, status);
+  InterceptResponse response = {};
+  tombstoned_intercept(self, &intercept_fd, &output_fd, &response, kDebuggerdTombstone);
+  ASSERT_EQ(InterceptStatus::kRegistered, response.status)
+      << "Error message: " << response.error_message;
 
   unique_fd tombstoned_socket, text_fd, proto_fd;
   ASSERT_TRUE(
