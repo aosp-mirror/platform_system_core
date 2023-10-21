@@ -707,7 +707,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
         return false;
     }
     auto ret = true;
-    auto scratch_can_be_mounted = true;
+    auto scratch_can_be_mounted = !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false);
     for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
         if (fs_mgr_is_verity_enabled(entry)) continue;
         auto mount_point = fs_mgr_mount_point(entry.mount_point);
