@@ -76,6 +76,10 @@
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
 
+static constexpr char APPCOMPAT_OVERRIDE_PROP_FOLDERNAME[] =
+        "/dev/__properties__/appcompat_override";
+static constexpr char APPCOMPAT_OVERRIDE_PROP_TREE_FILE[] =
+        "/dev/__properties__/appcompat_override/property_info";
 using namespace std::literals;
 
 using android::base::ErrnoError;
@@ -1288,11 +1292,17 @@ void CreateSerializedPropertyInfo() {
         return;
     }
 
-    constexpr static const char kPropertyInfosPath[] = "/dev/__properties__/property_info";
-    if (!WriteStringToFile(serialized_contexts, kPropertyInfosPath, 0444, 0, 0, false)) {
+    if (!WriteStringToFile(serialized_contexts, PROP_TREE_FILE, 0444, 0, 0, false)) {
         PLOG(ERROR) << "Unable to write serialized property infos to file";
     }
-    selinux_android_restorecon(kPropertyInfosPath, 0);
+    selinux_android_restorecon(PROP_TREE_FILE, 0);
+
+    mkdir(APPCOMPAT_OVERRIDE_PROP_FOLDERNAME, S_IRWXU | S_IXGRP | S_IXOTH);
+    if (!WriteStringToFile(serialized_contexts, APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0444, 0, 0,
+                           false)) {
+        PLOG(ERROR) << "Unable to write appcompat override property infos to file";
+    }
+    selinux_android_restorecon(APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0);
 }
 
 static void ExportKernelBootProps() {
@@ -1409,8 +1419,6 @@ static void HandleInitSocket() {
             // Apply staged and persistent properties
             bool has_staged_prop = false;
             auto const staged_prefix = std::string_view("next_boot.");
-            auto const staged_persist_prefix = std::string_view("next_boot.persist.");
-            auto persist_props_map = std::unordered_map<std::string, std::string>();
 
             auto persistent_properties = LoadPersistentProperties();
             for (const auto& property_record : persistent_properties.properties()) {
@@ -1421,23 +1429,16 @@ static void HandleInitSocket() {
                   has_staged_prop = true;
                   auto actual_prop_name = prop_name.substr(staged_prefix.size());
                   InitPropertySet(actual_prop_name, prop_value);
-                  if (StartsWith(prop_name, staged_persist_prefix)) {
-                    persist_props_map[actual_prop_name] = prop_value;
-                  }
-                } else if (!persist_props_map.count(prop_name)) {
+                } else {
                   InitPropertySet(prop_name, prop_value);
                 }
             }
 
             // Update persist prop file if there are staged props
             if (has_staged_prop) {
-                PersistentProperties updated_persist_props;
-                for (auto const& [prop_name, prop_value] : persist_props_map) {
-                    AddPersistentProperty(prop_name, prop_value, &updated_persist_props);
-                }
-
+                PersistentProperties props = LoadPersistentPropertiesFromMemory();
                 // write current updated persist prop file
-                auto result = WritePersistentPropertyFile(updated_persist_props);
+                auto result = WritePersistentPropertyFile(props);
                 if (!result.ok()) {
                     LOG(ERROR) << "Could not store persistent property: " << result.error();
                 }
