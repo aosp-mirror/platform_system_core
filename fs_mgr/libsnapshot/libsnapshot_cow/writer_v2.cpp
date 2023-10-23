@@ -269,9 +269,11 @@ bool CowWriterV2::OpenForWrite() {
 }
 
 bool CowWriterV2::OpenForAppend(uint64_t label) {
-    if (!ReadCowHeader(fd_, &header_)) {
+    CowHeaderV3 header_v3;
+    if (!ReadCowHeader(fd_, &header_v3)) {
         return false;
     }
+    header_ = header_v3;
 
     CowParserV2 parser;
     if (!parser.Parse(fd_, header_, {label})) {
