@@ -198,13 +198,13 @@ void LiplpApisFuzzer::process() {
                     [&]() {
                         uint32_t groupVectorSize = metadata->groups.size();
                         uint32_t randomGroupIndex =
-                                mFdp.ConsumeIntegralInRange<uint32_t>(0, groupVectorSize);
+                                mFdp.ConsumeIntegralInRange<uint32_t>(0, groupVectorSize - 1);
                         GetPartitionGroupName(metadata->groups[randomGroupIndex]);
                     },
                     [&]() {
                         uint32_t blockDeviceVectorSize = metadata->block_devices.size();
                         uint32_t randomBlockDeviceIndex =
-                                mFdp.ConsumeIntegralInRange<uint32_t>(0, blockDeviceVectorSize);
+                                mFdp.ConsumeIntegralInRange<uint32_t>(0, blockDeviceVectorSize - 1);
                         GetBlockDevicePartitionName(
                                 metadata->block_devices[randomBlockDeviceIndex]);
                     },
@@ -224,7 +224,7 @@ void LiplpApisFuzzer::process() {
                     [&]() {
                         uint32_t partitionVectorSize = metadata->partitions.size();
                         uint32_t randomPartitionIndex =
-                                mFdp.ConsumeIntegralInRange<uint32_t>(0, partitionVectorSize);
+                                mFdp.ConsumeIntegralInRange<uint32_t>(0, partitionVectorSize - 1);
                         GetPartitionName(metadata->partitions[randomPartitionIndex]);
                     },
                     [&]() { GetTotalSuperPartitionSize(metadataValue); },
