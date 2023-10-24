@@ -158,15 +158,25 @@ bool VerifyCheckpointing() {
     // not checkpointing.
     auto vold = GetVold();
     bool checkpointing = false;
-    if (!vold->isCheckpointing(&checkpointing).isOk()) {
-        LOG(ERROR) << "Could not determine checkpointing status.";
-        return false;
-    }
-    if (checkpointing) {
-        LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
-        LOG(ERROR) << "To force end checkpointing, call 'vdc checkpoint commitChanges'";
-        LOG(ERROR) << "Warning: this can lead to data corruption if rolled back.";
-        return false;
+    bool show_help = true;
+
+    while (true) {
+        if (!vold->isCheckpointing(&checkpointing).isOk()) {
+            LOG(ERROR) << "Could not determine checkpointing status.";
+            return false;
+        }
+        if (!checkpointing) {
+            break;
+        }
+        if (show_help) {
+            show_help = false;
+            std::cerr << "WARNING: Userdata checkpoint is in progress. To force end checkpointing, "
+                         "call 'vdc checkpoint commitChanges'. This can lead to data corruption if "
+                         "rolled back."
+                      << std::endl;
+            LOG(INFO) << "Waiting for checkpoint to complete and then continue remount.";
+        }
+        std::this_thread::sleep_for(4s);
     }
     return true;
 }
