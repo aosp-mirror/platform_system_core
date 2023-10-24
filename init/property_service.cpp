@@ -1396,33 +1396,12 @@ static void HandleInitSocket() {
     switch (init_message.msg_case()) {
         case InitMessage::kLoadPersistentProperties: {
             load_override_properties();
-            // Read persistent properties after all default values have been loaded.
-            // Apply staged and persistent properties
-            bool has_staged_prop = false;
-            auto const staged_prefix = std::string_view("next_boot.");
 
             auto persistent_properties = LoadPersistentProperties();
             for (const auto& property_record : persistent_properties.properties()) {
                 auto const& prop_name = property_record.name();
                 auto const& prop_value = property_record.value();
-
-                if (StartsWith(prop_name, staged_prefix)) {
-                  has_staged_prop = true;
-                  auto actual_prop_name = prop_name.substr(staged_prefix.size());
-                  InitPropertySet(actual_prop_name, prop_value);
-                } else {
-                  InitPropertySet(prop_name, prop_value);
-                }
-            }
-
-            // Update persist prop file if there are staged props
-            if (has_staged_prop) {
-                PersistentProperties props = LoadPersistentPropertiesFromMemory();
-                // write current updated persist prop file
-                auto result = WritePersistentPropertyFile(props);
-                if (!result.ok()) {
-                    LOG(ERROR) << "Could not store persistent property: " << result.error();
-                }
+                InitPropertySet(prop_name, prop_value);
             }
 
             // Apply debug ramdisk special settings after persistent properties are loaded.
