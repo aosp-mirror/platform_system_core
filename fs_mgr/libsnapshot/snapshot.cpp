@@ -3658,7 +3658,7 @@ std::unique_ptr<ICowWriter> SnapshotManager::OpenCompressedSnapshotWriter(
         return nullptr;
     }
 
-    CowHeader header;
+    CowHeaderV3 header;
     if (!ReadCowHeader(cow_fd, &header)) {
         LOG(ERROR) << "OpenCompressedSnapshotWriter: read header failed";
         return nullptr;
