@@ -172,7 +172,7 @@ class CowReader final : public ICowReader {
 
     android::base::unique_fd owned_fd_;
     android::base::borrowed_fd fd_;
-    CowHeader header_;
+    CowHeaderV3 header_;
     std::optional<CowFooter> footer_;
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
@@ -188,7 +188,10 @@ class CowReader final : public ICowReader {
     uint8_t compression_type_ = kCowCompressNone;
 };
 
-bool ReadCowHeader(android::base::borrowed_fd fd, CowHeader* header);
+// Though this function takes in a CowHeaderV3, the struct could be populated as a v1/v2 CowHeader.
+// The extra fields will just be filled as 0. V3 header is strictly a superset of v1/v2 header and
+// contains all of the latter's field
+bool ReadCowHeader(android::base::borrowed_fd fd, CowHeaderV3* header);
 
 }  // namespace snapshot
 }  // namespace android

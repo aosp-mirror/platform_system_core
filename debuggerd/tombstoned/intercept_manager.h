@@ -28,17 +28,17 @@
 #include "dump_type.h"
 
 struct InterceptManager;
+struct InterceptRequest;
+struct InterceptResponse;
 
 struct Intercept {
-  ~Intercept() {
-    event_free(intercept_event);
-  }
+  ~Intercept();
 
   InterceptManager* intercept_manager = nullptr;
   event* intercept_event = nullptr;
   android::base::unique_fd sockfd;
 
-  pid_t intercept_pid = -1;
+  pid_t pid = -1;
   android::base::unique_fd output_fd;
   bool registered = false;
   DebuggerdDumpType dump_type = kDebuggerdNativeBacktrace;
@@ -46,12 +46,17 @@ struct Intercept {
 
 struct InterceptManager {
   event_base* base;
-  std::unordered_map<pid_t, std::unique_ptr<Intercept>> intercepts;
+  std::unordered_map<pid_t, std::unordered_map<DebuggerdDumpType, Intercept*>> intercepts;
   evconnlistener* listener = nullptr;
 
   InterceptManager(event_base* _Nonnull base, int intercept_socket);
   InterceptManager(InterceptManager& copy) = delete;
   InterceptManager(InterceptManager&& move) = delete;
 
-  bool GetIntercept(pid_t pid, DebuggerdDumpType dump_type, android::base::unique_fd* out_fd);
+  bool CanRegister(const InterceptRequest& request, InterceptResponse& response);
+  Intercept* Get(const pid_t pid, const DebuggerdDumpType dump_type);
+  void Register(Intercept* intercept);
+  void Unregister(Intercept* intercept);
+
+  bool FindIntercept(pid_t pid, DebuggerdDumpType dump_type, android::base::unique_fd* out_fd);
 };
