@@ -16,7 +16,6 @@
 
 #define LOG_TAG "unicode"
 
-#include <android-base/macros.h>
 #include <limits.h>
 #include <utils/Unicode.h>
 
@@ -92,11 +91,11 @@ static inline void utf32_codepoint_to_utf8(uint8_t* dstP, char32_t srcChar, size
     switch (bytes)
     {   /* note: everything falls through. */
         case 4: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
-            FALLTHROUGH_INTENDED;
+            [[fallthrough]];
         case 3: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
-            FALLTHROUGH_INTENDED;
+            [[fallthrough]];
         case 2: *--dstP = (uint8_t)((srcChar | kByteMark) & kByteMask); srcChar >>= 6;
-            FALLTHROUGH_INTENDED;
+            [[fallthrough]];
         case 1: *--dstP = (uint8_t)(srcChar | kFirstByteMark[bytes]);
     }
 }
@@ -304,15 +303,15 @@ ssize_t utf16_to_utf8_length(const char16_t *src, size_t src_len)
 
     while (in < end) {
         char16_t w = *in++;
-        if (LIKELY(w < 0x0080)) {
+        if (w < 0x0080) [[likely]] {
             utf8_len += 1;
             continue;
         }
-        if (LIKELY(w < 0x0800)) {
+        if (w < 0x0800) [[likely]] {
             utf8_len += 2;
             continue;
         }
-        if (LIKELY(!is_any_surrogate(w))) {
+        if (!is_any_surrogate(w)) [[likely]] {
             utf8_len += 3;
             continue;
         }
@@ -345,20 +344,20 @@ void utf16_to_utf8(const char16_t* src, size_t src_len, char* dst, size_t dst_le
 
     while (in < in_end) {
         char16_t w = *in++;
-        if (LIKELY(w < 0x0080)) {
+        if (w < 0x0080) [[likely]] {
             if (out + 1 > out_end)
                 return err_out();
             *out++ = (char)(w & 0xff);
             continue;
         }
-        if (LIKELY(w < 0x0800)) {
+        if (w < 0x0800) [[likely]] {
             if (out + 2 > out_end)
                 return err_out();
             *out++ = (char)(0xc0 | ((w >> 6) & 0x1f));
             *out++ = (char)(0x80 | ((w >> 0) & 0x3f));
             continue;
         }
-        if (LIKELY(!is_any_surrogate(w))) {
+        if (!is_any_surrogate(w)) [[likely]] {
             if (out + 3 > out_end)
                 return err_out();
             *out++ = (char)(0xe0 | ((w >> 12) & 0xf));
@@ -420,25 +419,25 @@ ssize_t utf8_to_utf16_length(const uint8_t* u8str, size_t u8len, bool overreadIs
     while (in < in_end) {
         uint8_t c = *in;
         utf16_len++;
-        if (LIKELY((c & 0x80) == 0)) {
+        if ((c & 0x80) == 0) [[likely]] {
             in++;
             continue;
         }
-        if (UNLIKELY(c < 0xc0)) {
+        if (c < 0xc0) [[unlikely]] {
             ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
             in++;
             continue;
         }
-        if (LIKELY(c < 0xe0)) {
+        if (c < 0xe0) [[likely]] {
             in += 2;
             continue;
         }
-        if (LIKELY(c < 0xf0)) {
+        if (c < 0xf0) [[likely]] {
             in += 3;
             continue;
         } else {
             uint8_t c2, c3, c4;
-            if (UNLIKELY(c >= 0xf8)) {
+            if (c >= 0xf8) [[unlikely]] {
                 ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
             }
             c2 = in[1]; c3 = in[2]; c4 = in[3];
@@ -487,25 +486,25 @@ char16_t* utf8_to_utf16_no_null_terminator(
 
     while (in < in_end && out < out_end) {
         c = *in++;
-        if (LIKELY((c & 0x80) == 0)) {
+        if ((c & 0x80) == 0) [[likely]] {
             *out++ = (char16_t)(c);
             continue;
         }
-        if (UNLIKELY(c < 0xc0)) {
+        if (c < 0xc0) [[unlikely]] {
             ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
             *out++ = (char16_t)(c);
             continue;
         }
-        if (LIKELY(c < 0xe0)) {
-            if (UNLIKELY(in + 1 > in_end)) {
+        if (c < 0xe0) [[likely]] {
+            if (in + 1 > in_end) [[unlikely]] {
                 return err_in();
             }
             c2 = *in++;
             *out++ = (char16_t)(((c & 0x1f) << 6) | (c2 & 0x3f));
             continue;
         }
-        if (LIKELY(c < 0xf0)) {
-            if (UNLIKELY(in + 2 > in_end)) {
+        if (c < 0xf0) [[likely]] {
+            if (in + 2 > in_end) [[unlikely]] {
                 return err_in();
             }
             c2 = *in++; c3 = *in++;
@@ -513,19 +512,19 @@ char16_t* utf8_to_utf16_no_null_terminator(
                                 ((c2 & 0x3f) << 6) | (c3 & 0x3f));
             continue;
         } else {
-            if (UNLIKELY(in + 3 > in_end)) {
+            if (in + 3 > in_end) [[unlikely]] {
                 return err_in();
             }
-            if (UNLIKELY(c >= 0xf8)) {
+            if (c >= 0xf8) [[unlikely]] {
                 ALOGW("Invalid UTF-8 leading byte: 0x%02x", c);
             }
             // Multiple UTF16 characters with surrogates
             c2 = *in++; c3 = *in++; c4 = *in++;
             w = utf8_4b_to_utf32(c, c2, c3, c4);
-            if (UNLIKELY(w < 0x10000)) {
+            if (w < 0x10000) [[unlikely]] {
                 *out++ = (char16_t)(w);
             } else {
-                if (UNLIKELY(out + 2 > out_end)) {
+                if (out + 2 > out_end) [[unlikely]] {
                     // Ooops.... not enough room for this surrogate pair.
                     return out;
                 }
