@@ -19,7 +19,6 @@
 
 #include <utils/String8.h>
 
-#include <utils/Compat.h>
 #include <log/log.h>
 #include <utils/String16.h>
 
@@ -429,6 +428,13 @@ void String8::toLower()
 
 // ---------------------------------------------------------------------------
 // Path functions
+
+// TODO: we should remove all the path functions from String8
+#if defined(_WIN32)
+#define OS_PATH_SEPARATOR '\\'
+#else
+#define OS_PATH_SEPARATOR '/'
+#endif
 
 String8 String8::getPathDir(void) const
 {
