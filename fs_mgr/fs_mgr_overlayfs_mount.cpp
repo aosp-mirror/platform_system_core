@@ -288,10 +288,6 @@ static bool fs_mgr_overlayfs_set_shared_mount(const std::string& mount_point, bo
     if (ret) {
         PERROR << "__mount(target=" << mount_point
                << ",flag=" << (shared_flag ? "MS_SHARED" : "MS_PRIVATE") << ")=" << ret;
-        // If "/system" doesn't look like a mountpoint, retry with "/".
-        if (errno == EINVAL && mount_point == "/system") {
-            return fs_mgr_overlayfs_set_shared_mount("/", shared_flag);
-        }
         return false;
     }
     return true;
@@ -393,6 +389,8 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
     bool retval = true;
     bool move_dir_shared = true;
     bool parent_shared = true;
+    bool root_shared = true;
+    bool root_made_private = false;
 
     // There could be multiple mount entries with the same mountpoint.
     // Group these entries together with stable_sort, and keep only the last entry of a group.
@@ -419,6 +417,9 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
             (mount_point == "/system" && entry.mount_point == "/")) {
             parent_shared = entry.shared_flag;
         }
+        if (entry.mount_point == "/") {
+            root_shared = entry.shared_flag;
+        }
     }
 
     // Precondition is that kMoveMountTempDir is MS_PRIVATE, otherwise don't try to move any
@@ -429,7 +430,13 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
 
     // Need to make the original mountpoint MS_PRIVATE, so that the overlayfs can be MS_MOVE.
     // This could happen if its parent mount is remounted later.
-    fs_mgr_overlayfs_set_shared_mount(mount_point, false);
+    if (!fs_mgr_overlayfs_set_shared_mount(mount_point, false)) {
+        // If failed to set "/system" mount type, it might be due to "/system" not being a valid
+        // mountpoint after switch root. Retry with "/" in this case.
+        if (errno == EINVAL && mount_point == "/system") {
+            root_made_private = fs_mgr_overlayfs_set_shared_mount("/", false);
+        }
+    }
 
     for (const auto& entry : mountinfo) {
         // Find all immediate submounts.
@@ -514,6 +521,9 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
     // If the original (overridden) mount was MS_SHARED, then set the overlayfs mount to MS_SHARED.
     if (parent_shared) {
         fs_mgr_overlayfs_set_shared_mount(mount_point, true);
+    }
+    if (root_shared && root_made_private) {
+        fs_mgr_overlayfs_set_shared_mount("/", true);
     }
 
     return retval;
