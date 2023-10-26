@@ -20,8 +20,6 @@
 #include <memory>
 #include <mutex>
 
-#include <android-base/macros.h>
-
 #include <fcntl.h>
 #include <log/log.h>
 
@@ -65,7 +63,7 @@
 #endif
 
 #if CALLSTACK_ENABLED
-#include <utils/CallStack.h>
+#include "../../include/utils/CallStack.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -536,7 +534,7 @@ void RefBase::forceIncStrong(const void* id) const
     case INITIAL_STRONG_VALUE:
         refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE,
                 std::memory_order_relaxed);
-        FALLTHROUGH_INTENDED;
+        [[fallthrough]];
     case 0:
         refs->mBase->onFirstRef();
     }
