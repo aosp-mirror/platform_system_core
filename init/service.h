@@ -160,7 +160,7 @@ class Service {
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void KillProcessGroup(int signal, bool report_oneshot = false);
+    void KillProcessGroup(int signal);
     void SetProcessAttributesAndCaps(InterprocessFifo setsid_finished);
     void ResetFlagsForStart();
     Result<void> CheckConsole();
