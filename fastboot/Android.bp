@@ -446,3 +446,14 @@ cc_library_headers {
     host_supported: true,
     export_include_dirs: ["."],
 }
+
+python_test_host {
+    name: "fastboot_integration_test",
+    main: "test_fastboot.py",
+    srcs: ["test_fastboot.py"],
+    data: [":fastboot"],
+    test_config: "fastboot_integration_test.xml",
+    test_options: {
+        unit_test: false,
+    },
+}
