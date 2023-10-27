@@ -129,7 +129,7 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::s
     }
 
     if (!attr->GetPathForTask(tid, path)) {
-        PLOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return false;
     }
 
@@ -601,7 +601,7 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     CHECK_GT(initialPid, 0);
 
     if (memControl && !UsePerAppMemcg()) {
-        PLOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
+        LOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
         return -EINVAL;
     }
 
@@ -623,13 +623,13 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
 
 static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t value) {
     if (!isMemoryCgroupSupported()) {
-        PLOG(ERROR) << "Memcg is not mounted.";
+        LOG(ERROR) << "Memcg is not mounted.";
         return false;
     }
 
     std::string path;
     if (!CgroupGetAttributePathForTask(attr_name, tid, &path)) {
-        PLOG(ERROR) << "Failed to find attribute '" << attr_name << "'";
+        LOG(ERROR) << "Failed to find attribute '" << attr_name << "'";
         return false;
     }
 
