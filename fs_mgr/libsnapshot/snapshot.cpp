@@ -3513,6 +3513,11 @@ Return SnapshotManager::InitializeUpdateSnapshots(
             return Return::Error();
         }
 
+        if (!android::fs_mgr::WaitForFile(cow_path, 6s)) {
+            LOG(ERROR) << "Timed out waiting for device to appear: " << cow_path;
+            return Return::Error();
+        }
+
         if (it->second.using_snapuserd()) {
             unique_fd fd(open(cow_path.c_str(), O_RDWR | O_CLOEXEC));
             if (fd < 0) {
