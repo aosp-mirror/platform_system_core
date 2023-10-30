@@ -28,26 +28,24 @@ enum DebuggerdDumpType : uint8_t {
   kDebuggerdTombstoneProto,
 };
 
-inline std::ostream& operator<<(std::ostream& stream, const DebuggerdDumpType& rhs) {
-  switch (rhs) {
+inline const char* get_dump_type_name(const DebuggerdDumpType& dump_type) {
+  switch (dump_type) {
     case kDebuggerdNativeBacktrace:
-      stream << "kDebuggerdNativeBacktrace";
-      break;
+      return "kDebuggerdNativeBacktrace";
     case kDebuggerdTombstone:
-      stream << "kDebuggerdTombstone";
-      break;
+      return "kDebuggerdTombstone";
     case kDebuggerdJavaBacktrace:
-      stream << "kDebuggerdJavaBacktrace";
-      break;
+      return "kDebuggerdJavaBacktrace";
     case kDebuggerdAnyIntercept:
-      stream << "kDebuggerdAnyIntercept";
-      break;
+      return "kDebuggerdAnyIntercept";
     case kDebuggerdTombstoneProto:
-      stream << "kDebuggerdTombstoneProto";
-      break;
+      return "kDebuggerdTombstoneProto";
     default:
-      stream << "[unknown]";
+      return "[unknown]";
   }
+}
 
+inline std::ostream& operator<<(std::ostream& stream, const DebuggerdDumpType& rhs) {
+  stream << get_dump_type_name(rhs);
   return stream;
 }

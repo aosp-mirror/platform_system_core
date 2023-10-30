@@ -30,10 +30,14 @@ namespace init {
 // Builtins and service definitions both have their arguments start at 1 and finish at 3.
 Result<std::pair<int, rlimit>> ParseRlimit(const std::vector<std::string>& args) {
     static const std::vector<std::pair<const char*, int>> text_to_resources = {
-        {"cpu", 0},       {"fsize", 1}, {"data", 2},    {"stack", 3},
-        {"core", 4},      {"rss", 5},   {"nproc", 6},   {"nofile", 7},
-        {"memlock", 8},   {"as", 9},    {"locks", 10},  {"sigpending", 11},
-        {"msgqueue", 12}, {"nice", 13}, {"rtprio", 14}, {"rttime", 15},
+            {"cpu", RLIMIT_CPU},           {"fsize", RLIMIT_FSIZE},
+            {"data", RLIMIT_DATA},         {"stack", RLIMIT_STACK},
+            {"core", RLIMIT_CORE},         {"rss", RLIMIT_RSS},
+            {"nproc", RLIMIT_NPROC},       {"nofile", RLIMIT_NOFILE},
+            {"memlock", RLIMIT_MEMLOCK},   {"as", RLIMIT_AS},
+            {"locks", RLIMIT_LOCKS},       {"sigpending", RLIMIT_SIGPENDING},
+            {"msgqueue", RLIMIT_MSGQUEUE}, {"nice", RLIMIT_NICE},
+            {"rtprio", RLIMIT_RTPRIO},     {"rttime", RLIMIT_RTTIME},
     };
 
     int resource;
@@ -49,6 +53,8 @@ Result<std::pair<int, rlimit>> ParseRlimit(const std::vector<std::string>& args)
         std::string resource_string;
         if (StartsWith(args[1], "RLIM_")) {
             resource_string = args[1].substr(5);
+        } else if (StartsWith(args[1], "RLIMIT_")) {
+            resource_string = args[1].substr(7);
         } else {
             resource_string = args[1];
         }

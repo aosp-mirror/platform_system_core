@@ -58,3 +58,4 @@ std::vector<const std::string> OverlayMountPoints();
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
 bool fs_mgr_wants_overlayfs(android::fs_mgr::FstabEntry* entry);
 android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
+std::string GetEncodedBaseDirForMountPoint(const std::string& mount_point);

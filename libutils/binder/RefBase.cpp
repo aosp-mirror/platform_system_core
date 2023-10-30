@@ -18,16 +18,13 @@
 // #define LOG_NDEBUG 0
 
 #include <memory>
-
-#include <android-base/macros.h>
+#include <mutex>
 
 #include <fcntl.h>
 #include <log/log.h>
 
 #include <utils/RefBase.h>
 #include <utils/String8.h>
-
-#include <utils/Mutex.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
@@ -58,15 +55,17 @@
 // log all reference counting operations
 #define PRINT_REFS 0
 
+#if !defined(ANDROID_UTILS_CALLSTACK_ENABLED)
 #if defined(__linux__)
 // CallStack is only supported on linux type platforms.
-#define CALLSTACK_ENABLED 1
+#define ANDROID_UTILS_CALLSTACK_ENABLED 1
 #else
-#define CALLSTACK_ENABLED 0
-#endif
+#define ANDROID_UTILS_CALLSTACK_ENABLED 0
+#endif  // defined(__linux__)
+#endif  // !defined(ANDROID_UTILS_CALLSTACK_ENABLED)
 
-#if CALLSTACK_ENABLED
-#include <utils/CallStack.h>
+#if ANDROID_UTILS_CALLSTACK_ENABLED
+#include "../../include/utils/CallStack.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -233,7 +232,7 @@ public:
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
                 CallStack::logStack(LOG_TAG, refs->stack.get());
 #endif
                 refs = refs->next;
@@ -247,7 +246,7 @@ public:
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
                 CallStack::logStack(LOG_TAG, refs->stack.get());
 #endif
                 refs = refs->next;
@@ -255,7 +254,7 @@ public:
         }
         if (dumpStack) {
             ALOGE("above errors at:");
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         }
@@ -310,7 +309,7 @@ public:
         String8 text;
 
         {
-            Mutex::Autolock _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
             char buf[128];
             snprintf(buf, sizeof(buf),
                      "Strong references on RefBase %p (weakref_type %p):\n",
@@ -344,7 +343,7 @@ private:
     {
         ref_entry* next;
         const void* id;
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
         CallStack::CallStackUPtr stack;
 #endif
         int32_t ref;
@@ -353,7 +352,7 @@ private:
     void addRef(ref_entry** refs, const void* id, int32_t mRef)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
 
             ref_entry* ref = new ref_entry;
             // Reference count at the time of the snapshot, but before the
@@ -361,7 +360,7 @@ private:
             // decrement the reference count.
             ref->ref = mRef;
             ref->id = id;
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
             ref->stack = CallStack::getCurrent(2);
 #endif
             ref->next = *refs;
@@ -372,7 +371,7 @@ private:
     void removeRef(ref_entry** refs, const void* id)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
 
             ref_entry* const head = *refs;
             ref_entry* ref = head;
@@ -397,7 +396,7 @@ private:
                 ref = ref->next;
             }
 
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         }
@@ -406,7 +405,7 @@ private:
     void renameRefsId(ref_entry* r, const void* old_id, const void* new_id)
     {
         if (mTrackEnabled) {
-            AutoMutex _l(mMutex);
+            std::lock_guard<std::mutex> _l(mMutex);
             ref_entry* ref = r;
             while (ref != NULL) {
                 if (ref->id == old_id) {
@@ -425,7 +424,7 @@ private:
             snprintf(buf, sizeof(buf), "\t%c ID %p (ref %d):\n",
                      inc, refs->id, refs->ref);
             out->append(buf);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
             out->append(CallStack::stackToString("\t\t", refs->stack.get()));
 #else
             out->append("\t\t(call stacks disabled)");
@@ -434,7 +433,7 @@ private:
         }
     }
 
-    mutable Mutex mMutex;
+    mutable std::mutex mMutex;
     ref_entry* mStrongRefs;
     ref_entry* mWeakRefs;
 
@@ -537,7 +536,7 @@ void RefBase::forceIncStrong(const void* id) const
     case INITIAL_STRONG_VALUE:
         refs->mStrong.fetch_sub(INITIAL_STRONG_VALUE,
                 std::memory_order_relaxed);
-        FALLTHROUGH_INTENDED;
+        [[fallthrough]];
     case 0:
         refs->mBase->onFirstRef();
     }
@@ -791,7 +790,7 @@ RefBase::~RefBase()
                   "object.",
                   mRefs->mWeak.load(), this);
 
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         } else if (strongs != 0) {

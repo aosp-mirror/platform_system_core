@@ -37,6 +37,22 @@ class CowWriterV3 : public CowWriterBase {
     virtual bool EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) override;
     virtual bool EmitLabel(uint64_t label) override;
     virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
+
+  private:
+    void SetupHeaders();
+    bool ParseOptions();
+    bool OpenForWrite();
+
+  private:
+    CowHeaderV3 header_{};
+    CowCompression compression_;
+    // in the case that we are using one thread for compression, we can store and re-use the same
+    // compressor
+
+    uint64_t next_op_pos_ = 0;
+    uint64_t next_data_pos_ = 0;
+
+    int num_compress_threads_ = 1;
 };
 
 }  // namespace snapshot
