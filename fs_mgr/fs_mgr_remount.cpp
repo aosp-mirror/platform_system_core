@@ -88,17 +88,6 @@ const std::string system_mount_point(const android::fs_mgr::FstabEntry& entry) {
     return entry.mount_point;
 }
 
-const FstabEntry* GetWrappedEntry(const Fstab& overlayfs_candidates, const FstabEntry& entry) {
-    auto mount_point = system_mount_point(entry);
-    auto it = std::find_if(overlayfs_candidates.begin(), overlayfs_candidates.end(),
-                           [&mount_point](const auto& entry) {
-                               return android::base::StartsWith(mount_point,
-                                                                system_mount_point(entry) + "/");
-                           });
-    if (it == overlayfs_candidates.end()) return nullptr;
-    return &(*it);
-}
-
 class MyLogger {
   public:
     explicit MyLogger(bool verbose) : verbose_(verbose) {}
@@ -169,15 +158,25 @@ bool VerifyCheckpointing() {
     // not checkpointing.
     auto vold = GetVold();
     bool checkpointing = false;
-    if (!vold->isCheckpointing(&checkpointing).isOk()) {
-        LOG(ERROR) << "Could not determine checkpointing status.";
-        return false;
-    }
-    if (checkpointing) {
-        LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
-        LOG(ERROR) << "To force end checkpointing, call 'vdc checkpoint commitChanges'";
-        LOG(ERROR) << "Warning: this can lead to data corruption if rolled back.";
-        return false;
+    bool show_help = true;
+
+    while (true) {
+        if (!vold->isCheckpointing(&checkpointing).isOk()) {
+            LOG(ERROR) << "Could not determine checkpointing status.";
+            return false;
+        }
+        if (!checkpointing) {
+            break;
+        }
+        if (show_help) {
+            show_help = false;
+            std::cerr << "WARNING: Userdata checkpoint is in progress. To force end checkpointing, "
+                         "call 'vdc checkpoint commitChanges'. This can lead to data corruption if "
+                         "rolled back."
+                      << std::endl;
+            LOG(INFO) << "Waiting for checkpoint to complete and then continue remount.";
+        }
+        std::this_thread::sleep_for(4s);
     }
     return true;
 }
@@ -195,9 +194,6 @@ static bool IsRemountable(Fstab& candidates, const FstabEntry& entry) {
     }
     if (auto candidate_entry = GetEntryForMountPoint(&candidates, entry.mount_point)) {
         return candidate_entry->fs_type == entry.fs_type;
-    }
-    if (GetWrappedEntry(candidates, entry)) {
-        return false;
     }
     return true;
 }
@@ -252,11 +248,6 @@ bool GetRemountList(const Fstab& fstab, const std::vector<std::string>& argv, Fs
         }
 
         const FstabEntry* entry = &*it;
-        if (auto wrap = GetWrappedEntry(candidates, *entry); wrap != nullptr) {
-            LOG(INFO) << "partition " << arg << " covered by overlayfs for " << wrap->mount_point
-                      << ", switching";
-            entry = wrap;
-        }
 
         // If it's already remounted, include it so it gets gracefully skipped
         // later on.

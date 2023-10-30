@@ -32,6 +32,24 @@ static int GetVsrLevel() {
     return android::base::GetIntProperty("ro.vendor.api_level", -1);
 }
 
+// Returns true iff the device has the specified feature.
+bool DeviceSupportsFeature(const char* feature) {
+    bool device_supports_feature = false;
+    FILE* p = popen("pm list features", "re");
+    if (p) {
+        char* line = NULL;
+        size_t len = 0;
+        while (getline(&line, &len, p) > 0) {
+            if (strstr(line, feature)) {
+                device_supports_feature = true;
+                break;
+            }
+        }
+        pclose(p);
+    }
+    return device_supports_feature;
+}
+
 TEST(fs, ErofsSupported) {
     // T-launch GKI kernels and higher must support EROFS.
     if (GetVsrLevel() < __ANDROID_API_T__) {
@@ -82,7 +100,8 @@ TEST(fs, PartitionTypes) {
     ASSERT_TRUE(android::base::Readlink("/dev/block/by-name/userdata", &userdata_bdev));
 
     std::vector<std::string> must_be_f2fs = {"/data"};
-    if (vsr_level >= __ANDROID_API_U__) {
+    if (vsr_level >= __ANDROID_API_U__ &&
+        !DeviceSupportsFeature("android.hardware.type.automotive")) {
         must_be_f2fs.emplace_back("/metadata");
     }
 

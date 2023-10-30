@@ -67,6 +67,7 @@ TEST(rlimit, RlimitSuccess) {
                     {{"rtprio", "10", "10"}, {14, {10, 10}}},
                     {{"rttime", "10", "10"}, {15, {10, 10}}},
 
+                    // For some reason, we spelled these wrong.
                     {{"RLIM_CPU", "10", "10"}, {0, {10, 10}}},
                     {{"RLIM_FSIZE", "10", "10"}, {1, {10, 10}}},
                     {{"RLIM_DATA", "10", "10"}, {2, {10, 10}}},
@@ -83,6 +84,24 @@ TEST(rlimit, RlimitSuccess) {
                     {{"RLIM_NICE", "10", "10"}, {13, {10, 10}}},
                     {{"RLIM_RTPRIO", "10", "10"}, {14, {10, 10}}},
                     {{"RLIM_RTTIME", "10", "10"}, {15, {10, 10}}},
+
+                    // These are the correct spellings.
+                    {{"RLIMIT_CPU", "10", "10"}, {0, {10, 10}}},
+                    {{"RLIMIT_FSIZE", "10", "10"}, {1, {10, 10}}},
+                    {{"RLIMIT_DATA", "10", "10"}, {2, {10, 10}}},
+                    {{"RLIMIT_STACK", "10", "10"}, {3, {10, 10}}},
+                    {{"RLIMIT_CORE", "10", "10"}, {4, {10, 10}}},
+                    {{"RLIMIT_RSS", "10", "10"}, {5, {10, 10}}},
+                    {{"RLIMIT_NPROC", "10", "10"}, {6, {10, 10}}},
+                    {{"RLIMIT_NOFILE", "10", "10"}, {7, {10, 10}}},
+                    {{"RLIMIT_MEMLOCK", "10", "10"}, {8, {10, 10}}},
+                    {{"RLIMIT_AS", "10", "10"}, {9, {10, 10}}},
+                    {{"RLIMIT_LOCKS", "10", "10"}, {10, {10, 10}}},
+                    {{"RLIMIT_SIGPENDING", "10", "10"}, {11, {10, 10}}},
+                    {{"RLIMIT_MSGQUEUE", "10", "10"}, {12, {10, 10}}},
+                    {{"RLIMIT_NICE", "10", "10"}, {13, {10, 10}}},
+                    {{"RLIMIT_RTPRIO", "10", "10"}, {14, {10, 10}}},
+                    {{"RLIMIT_RTTIME", "10", "10"}, {15, {10, 10}}},
 
                     {{"0", "10", "10"}, {0, {10, 10}}},
                     {{"1", "10", "10"}, {1, {10, 10}}},
@@ -113,6 +132,7 @@ TEST(rlimit, RlimitFailure) {
             {{"100", "10", "10"}, "Resource '100' over the maximum resource value '16'"},
             {{"bad_string", "10", "10"}, "Could not parse resource 'bad_string'"},
             {{"RLIM_", "10", "10"}, "Could not parse resource 'RLIM_'"},
+            {{"RLIMIT_", "10", "10"}, "Could not parse resource 'RLIMIT_'"},
             {{"cpu", "abc", "10"}, "Could not parse soft limit 'abc'"},
             {{"cpu", "10", "abc"}, "Could not parse hard limit 'abc'"},
             {{"cpu", "unlimit", "10"}, "Could not parse soft limit 'unlimit'"},

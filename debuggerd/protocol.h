@@ -65,7 +65,7 @@ struct InterceptRequest {
 };
 
 enum class InterceptStatus : uint8_t {
-  // Returned when an intercept of a different type has already been
+  // Returned when an intercept of the same type has already been
   // registered (and is active) for a given PID.
   kFailedAlreadyRegistered,
   // Returned in all other failure cases.

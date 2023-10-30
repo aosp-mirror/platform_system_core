@@ -60,6 +60,7 @@ constexpr char kPhysicalDevice[] = "/dev/block/by-name/";
 
 constexpr char kLowerdirOption[] = "lowerdir=";
 constexpr char kUpperdirOption[] = "upperdir=";
+constexpr char kWorkdirOption[] = "workdir=";
 
 bool fs_mgr_is_dsu_running() {
     // Since android::gsi::CanBootIntoGsi() or android::gsi::MarkSystemAsGsi() is
@@ -87,6 +88,14 @@ std::vector<const std::string> OverlayMountPoints() {
     }
 
     return {kScratchMountPoint, kCacheMountPoint};
+}
+
+std::string GetEncodedBaseDirForMountPoint(const std::string& mount_point) {
+    std::string normalized_path;
+    if (mount_point.empty() || !android::base::Realpath(mount_point, &normalized_path)) {
+        return "";
+    }
+    return android::base::StringReplace(normalized_path, "/", "@", true);
 }
 
 static bool fs_mgr_is_dir(const std::string& path) {
@@ -202,21 +211,6 @@ static bool fs_mgr_overlayfs_enabled(FstabEntry* entry) {
     return has_shared_blocks;
 }
 
-static std::string fs_mgr_get_overlayfs_candidate(const std::string& mount_point) {
-    if (!fs_mgr_is_dir(mount_point)) return "";
-    const auto base = android::base::Basename(mount_point) + "/";
-    for (const auto& overlay_mount_point : OverlayMountPoints()) {
-        auto dir = overlay_mount_point + "/" + kOverlayTopDir + "/" + base;
-        auto upper = dir + kUpperName;
-        if (!fs_mgr_is_dir(upper)) continue;
-        auto work = dir + kWorkName;
-        if (!fs_mgr_is_dir(work)) continue;
-        if (access(work.c_str(), R_OK | W_OK)) continue;
-        return dir;
-    }
-    return "";
-}
-
 const std::string fs_mgr_mount_point(const std::string& mount_point) {
     if ("/"s != mount_point) return mount_point;
     return "/system";
@@ -225,16 +219,30 @@ const std::string fs_mgr_mount_point(const std::string& mount_point) {
 // default options for mount_point, returns empty string for none available.
 static std::string fs_mgr_get_overlayfs_options(const FstabEntry& entry) {
     const auto mount_point = fs_mgr_mount_point(entry.mount_point);
-    auto candidate = fs_mgr_get_overlayfs_candidate(mount_point);
-    if (candidate.empty()) return "";
-    auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + candidate + kUpperName +
-               ",workdir=" + candidate + kWorkName + android::fs_mgr::CheckOverlayfs().mount_flags;
-    for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
-        if (android::base::StartsWith(flag, "context=")) {
-            ret += "," + flag;
-        }
+    if (!fs_mgr_is_dir(mount_point)) {
+        return "";
     }
-    return ret;
+    const auto base = GetEncodedBaseDirForMountPoint(mount_point);
+    if (base.empty()) {
+        return "";
+    }
+    for (const auto& overlay_mount_point : OverlayMountPoints()) {
+        const auto dir = overlay_mount_point + "/" + kOverlayTopDir + "/" + base + "/";
+        const auto upper = dir + kUpperName;
+        const auto work = dir + kWorkName;
+        if (!fs_mgr_is_dir(upper) || !fs_mgr_is_dir(work) || access(work.c_str(), R_OK | W_OK)) {
+            continue;
+        }
+        auto ret = kLowerdirOption + mount_point + "," + kUpperdirOption + upper + "," +
+                   kWorkdirOption + work + android::fs_mgr::CheckOverlayfs().mount_flags;
+        for (const auto& flag : android::base::Split(entry.fs_options, ",")) {
+            if (android::base::StartsWith(flag, "context=")) {
+                ret += "," + flag;
+            }
+        }
+        return ret;
+    }
+    return "";
 }
 
 bool AutoSetFsCreateCon::Set(const std::string& context) {
@@ -373,54 +381,86 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
 
     auto retval = true;
 
-    struct move_entry {
+    struct MoveEntry {
         std::string mount_point;
         std::string dir;
         bool shared_flag;
     };
-    std::vector<move_entry> move;
+
+    std::vector<MoveEntry> moved_mounts;
     auto parent_private = false;
     auto parent_made_private = false;
     auto dev_private = false;
     auto dev_made_private = false;
-    for (auto& entry : ReadMountinfoFromFile("/proc/self/mountinfo")) {
+
+    // There could be multiple mount entries with the same mountpoint.
+    // Group these entries together with stable_sort, and keep only the last entry of a group.
+    // Only move mount the last entry in an over mount group, because the other entries are
+    // overshadowed and only the filesystem mounted with the last entry participates in file
+    // pathname resolution.
+    auto mountinfo = ReadMountinfoFromFile("/proc/self/mountinfo");
+    std::stable_sort(mountinfo.begin(), mountinfo.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.mount_point < rhs.mount_point;
+    });
+    std::reverse(mountinfo.begin(), mountinfo.end());
+    auto erase_from = std::unique(
+            mountinfo.begin(), mountinfo.end(),
+            [](const auto& lhs, const auto& rhs) { return lhs.mount_point == rhs.mount_point; });
+    mountinfo.erase(erase_from, mountinfo.end());
+    std::reverse(mountinfo.begin(), mountinfo.end());
+    // mountinfo is reversed twice, so still is in lexical sorted order.
+
+    for (const auto& entry : mountinfo) {
         if ((entry.mount_point == mount_point) && !entry.shared_flag) {
             parent_private = true;
         }
         if ((entry.mount_point == "/dev") && !entry.shared_flag) {
             dev_private = true;
         }
+    }
 
+    // Need to make the original mountpoint MS_PRIVATE, so that the overlayfs can be MS_MOVE.
+    // This could happen if its parent mount is remounted later.
+    if (!parent_private) {
+        parent_made_private = fs_mgr_overlayfs_set_shared_mount(mount_point, false);
+    }
+
+    for (const auto& entry : mountinfo) {
+        // Find all immediate submounts.
         if (!android::base::StartsWith(entry.mount_point, mount_point + "/")) {
             continue;
         }
-        if (std::find_if(move.begin(), move.end(), [&entry](const auto& it) {
-                return android::base::StartsWith(entry.mount_point, it.mount_point + "/");
-            }) != move.end()) {
+        // Exclude duplicated or more specific entries.
+        if (std::find_if(moved_mounts.begin(), moved_mounts.end(), [&entry](const auto& it) {
+                return it.mount_point == entry.mount_point ||
+                       android::base::StartsWith(entry.mount_point, it.mount_point + "/");
+            }) != moved_mounts.end()) {
             continue;
         }
+        // mountinfo is in lexical order, so no need to worry about |entry| being a parent mount of
+        // entries of |moved_mounts|.
 
         // use as the bound directory in /dev.
-        AutoSetFsCreateCon createcon;
-        auto new_context = fs_mgr_get_context(entry.mount_point);
-        if (new_context.empty() || !createcon.Set(new_context)) {
-            continue;
-        }
-        move_entry new_entry = {std::move(entry.mount_point), "/dev/TemporaryDir-XXXXXX",
-                                entry.shared_flag};
-        const auto target = mkdtemp(new_entry.dir.data());
-        if (!createcon.Restore()) {
-            return false;
-        }
-        if (!target) {
-            retval = false;
-            PERROR << "temporary directory for MS_BIND";
-            continue;
+        MoveEntry new_entry{entry.mount_point, "/dev/TemporaryDir-XXXXXX", entry.shared_flag};
+        {
+            AutoSetFsCreateCon createcon;
+            auto new_context = fs_mgr_get_context(entry.mount_point);
+            if (new_context.empty() || !createcon.Set(new_context)) {
+                continue;
+            }
+            const auto target = mkdtemp(new_entry.dir.data());
+            if (!target) {
+                retval = false;
+                PERROR << "temporary directory for MS_MOVE";
+                continue;
+            }
+            if (!createcon.Restore()) {
+                retval = false;
+                rmdir(new_entry.dir.c_str());
+                continue;
+            }
         }
 
-        if (!parent_private && !parent_made_private) {
-            parent_made_private = fs_mgr_overlayfs_set_shared_mount(mount_point, false);
-        }
         if (new_entry.shared_flag) {
             new_entry.shared_flag = fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, false);
         }
@@ -429,9 +469,10 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
             if (new_entry.shared_flag) {
                 fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, true);
             }
+            rmdir(new_entry.dir.c_str());
             continue;
         }
-        move.emplace_back(std::move(new_entry));
+        moved_mounts.push_back(std::move(new_entry));
     }
 
     // hijack __mount() report format to help triage
@@ -455,7 +496,7 @@ static bool fs_mgr_overlayfs_mount(const FstabEntry& entry) {
     }
 
     // Move submounts back.
-    for (const auto& entry : move) {
+    for (const auto& entry : moved_mounts) {
         if (!dev_private && !dev_made_private) {
             dev_made_private = fs_mgr_overlayfs_set_shared_mount("/dev", false);
         }
@@ -650,22 +691,13 @@ Fstab fs_mgr_overlayfs_candidate_list(const Fstab& fstab) {
             !fs_mgr_wants_overlayfs(&new_entry)) {
             continue;
         }
-        auto new_mount_point = fs_mgr_mount_point(entry.mount_point);
-        auto duplicate_or_more_specific = false;
-        for (auto it = candidates.begin(); it != candidates.end();) {
-            auto it_mount_point = fs_mgr_mount_point(it->mount_point);
-            if ((it_mount_point == new_mount_point) ||
-                (android::base::StartsWith(new_mount_point, it_mount_point + "/"))) {
-                duplicate_or_more_specific = true;
-                break;
-            }
-            if (android::base::StartsWith(it_mount_point, new_mount_point + "/")) {
-                it = candidates.erase(it);
-            } else {
-                ++it;
-            }
+        const auto new_mount_point = fs_mgr_mount_point(new_entry.mount_point);
+        if (std::find_if(candidates.begin(), candidates.end(), [&](const auto& it) {
+                return fs_mgr_mount_point(it.mount_point) == new_mount_point;
+            }) != candidates.end()) {
+            continue;
         }
-        if (!duplicate_or_more_specific) candidates.emplace_back(std::move(new_entry));
+        candidates.push_back(std::move(new_entry));
     }
     return candidates;
 }
@@ -699,7 +731,7 @@ bool fs_mgr_overlayfs_mount_all(Fstab* fstab) {
         return false;
     }
     auto ret = true;
-    auto scratch_can_be_mounted = true;
+    auto scratch_can_be_mounted = !fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false);
     for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
         if (fs_mgr_is_verity_enabled(entry)) continue;
         auto mount_point = fs_mgr_mount_point(entry.mount_point);
