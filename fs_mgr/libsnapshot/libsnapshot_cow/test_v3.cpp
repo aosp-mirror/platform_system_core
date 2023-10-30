@@ -206,5 +206,41 @@ TEST_F(CowTestV3, ConsecutiveReplaceOp) {
     ASSERT_EQ(i, 5);
 }
 
+TEST_F(CowTestV3, CopyOp) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    ASSERT_TRUE(writer->AddCopy(10, 1000, 100));
+    ASSERT_TRUE(writer->Finalize());
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.GetHeader();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, 3);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.block_size, options.block_size);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    size_t i = 0;
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowCopyOp);
+        ASSERT_EQ(op->data_length, 0);
+        ASSERT_EQ(op->new_block, 10 + i);
+        ASSERT_EQ(GetCowOpSourceInfoData(*op), 1000 + i);
+        iter->Next();
+        i += 1;
+    }
+
+    ASSERT_EQ(i, 100);
+}
+
 }  // namespace snapshot
 }  // namespace android

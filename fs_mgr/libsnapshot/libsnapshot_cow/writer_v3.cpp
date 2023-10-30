@@ -168,9 +168,17 @@ bool CowWriterV3::OpenForWrite() {
 }
 
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (new_block || old_block || num_blocks) return false;
-    return false;
+    for (size_t i = 0; i < num_blocks; i++) {
+        CowOperationV3 op = {};
+        op.type = kCowCopyOp;
+        op.new_block = new_block + i;
+        op.source_info = old_block + i;
+        if (!WriteOperation(op)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool CowWriterV3::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
