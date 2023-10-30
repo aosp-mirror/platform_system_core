@@ -35,10 +35,8 @@ class CowParserV2 final : public CowParserBase {
 
     const CowHeader& header() const { return header_; }
     std::shared_ptr<std::vector<CowOperationV2>> get_v2ops() { return v2_ops_; }
-    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc() const override;
 
   private:
-    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     bool ParseOps(android::base::borrowed_fd fd, std::optional<uint64_t> label);
     std::shared_ptr<std::vector<CowOperationV2>> v2_ops_;
     std::optional<CowFooter> footer_;
