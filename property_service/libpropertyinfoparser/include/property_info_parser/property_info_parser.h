@@ -20,6 +20,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+static constexpr char PROP_TREE_FILE[] = "/dev/__properties__/property_info";
+
 namespace android {
 namespace properties {
 
