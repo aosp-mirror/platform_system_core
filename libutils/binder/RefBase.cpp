@@ -55,14 +55,16 @@
 // log all reference counting operations
 #define PRINT_REFS 0
 
+#if !defined(ANDROID_UTILS_CALLSTACK_ENABLED)
 #if defined(__linux__)
 // CallStack is only supported on linux type platforms.
-#define CALLSTACK_ENABLED 1
+#define ANDROID_UTILS_CALLSTACK_ENABLED 1
 #else
-#define CALLSTACK_ENABLED 0
-#endif
+#define ANDROID_UTILS_CALLSTACK_ENABLED 0
+#endif  // defined(__linux__)
+#endif  // !defined(ANDROID_UTILS_CALLSTACK_ENABLED)
 
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
 #include "../../include/utils/CallStack.h"
 #endif
 
@@ -230,7 +232,7 @@ public:
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
                 CallStack::logStack(LOG_TAG, refs->stack.get());
 #endif
                 refs = refs->next;
@@ -244,7 +246,7 @@ public:
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
                 CallStack::logStack(LOG_TAG, refs->stack.get());
 #endif
                 refs = refs->next;
@@ -252,7 +254,7 @@ public:
         }
         if (dumpStack) {
             ALOGE("above errors at:");
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         }
@@ -341,7 +343,7 @@ private:
     {
         ref_entry* next;
         const void* id;
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
         CallStack::CallStackUPtr stack;
 #endif
         int32_t ref;
@@ -358,7 +360,7 @@ private:
             // decrement the reference count.
             ref->ref = mRef;
             ref->id = id;
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
             ref->stack = CallStack::getCurrent(2);
 #endif
             ref->next = *refs;
@@ -394,7 +396,7 @@ private:
                 ref = ref->next;
             }
 
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         }
@@ -422,7 +424,7 @@ private:
             snprintf(buf, sizeof(buf), "\t%c ID %p (ref %d):\n",
                      inc, refs->id, refs->ref);
             out->append(buf);
-#if DEBUG_REFS_CALLSTACK_ENABLED && CALLSTACK_ENABLED
+#if DEBUG_REFS_CALLSTACK_ENABLED && ANDROID_UTILS_CALLSTACK_ENABLED
             out->append(CallStack::stackToString("\t\t", refs->stack.get()));
 #else
             out->append("\t\t(call stacks disabled)");
@@ -788,7 +790,7 @@ RefBase::~RefBase()
                   "object.",
                   mRefs->mWeak.load(), this);
 
-#if CALLSTACK_ENABLED
+#if ANDROID_UTILS_CALLSTACK_ENABLED
             CallStack::logStack(LOG_TAG);
 #endif
         } else if (strongs != 0) {
