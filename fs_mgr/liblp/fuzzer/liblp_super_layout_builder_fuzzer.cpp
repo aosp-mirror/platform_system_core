@@ -38,8 +38,6 @@ static constexpr uint32_t kSuperLayoutValidMetadataSize = 8_KiB;
 static constexpr uint32_t kMinMetadataValue = 0;
 static constexpr uint32_t kMaxMetadataValue = 10000;
 static constexpr uint32_t kMaxBytes = 20;
-static constexpr uint32_t kMinSlot = 0;
-static constexpr uint32_t kMaxSlot = 10;
 static constexpr uint32_t kMinOpen = 0;
 static constexpr uint32_t kMaxOpen = 2;
 
@@ -58,14 +56,14 @@ class SuperLayoutBuilderFuzzer {
     void invokeSuperLayoutBuilderAPIs();
     void callRandomOpen(int32_t open);
     void addMultiplePartitions(int32_t numPartitions);
-    void setupSuperLayoutBuilder(string fuzzPartitionName);
+    void setupSuperLayoutBuilder();
     SuperLayoutBuilder mSuperLayoutBuilder;
     unique_ptr<MetadataBuilder> mSuperBuilder;
     unique_ptr<LpMetadata> mMetadata;
     bool mOpenSuccess = false;
 };
 
-void SuperLayoutBuilderFuzzer::setupSuperLayoutBuilder(string fuzzPartitionName) {
+void SuperLayoutBuilderFuzzer::setupSuperLayoutBuilder() {
     uint64_t randomBlockDevSize =
             mFdp.ConsumeIntegralInRange<uint64_t>(kMinBlockDevValue, kMaxBlockDevValue);
     uint64_t blockDevSize = mFdp.ConsumeBool() ? kSuperLayoutValidBlockDevSize : randomBlockDevSize;
@@ -73,7 +71,7 @@ void SuperLayoutBuilderFuzzer::setupSuperLayoutBuilder(string fuzzPartitionName)
             mFdp.ConsumeIntegralInRange<uint32_t>(kMinMetadataValue, kMaxMetadataValue);
     uint32_t metadataMaxSize =
             mFdp.ConsumeBool() ? kSuperLayoutValidMetadataSize : randomMetadataMaxSize;
-    uint32_t metadataSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(kMinSlot, kMaxSlot);
+    uint32_t metadataSlotCount = mFdp.ConsumeBool() ? 0 : 1;
     mSuperBuilder = MetadataBuilder::New(blockDevSize, metadataMaxSize, metadataSlotCount);
 
     if (mSuperBuilder.get()) {
@@ -85,10 +83,6 @@ void SuperLayoutBuilderFuzzer::setupSuperLayoutBuilder(string fuzzPartitionName)
 
         uint32_t randomOpen = mFdp.ConsumeIntegralInRange<uint32_t>(kMinOpen, kMaxOpen);
         callRandomOpen(randomOpen);
-
-        if (!fuzzPartitionName.size()) {
-            fuzzPartitionName = "builder_partition";
-        }
     }
 }
 
@@ -125,7 +119,10 @@ void SuperLayoutBuilderFuzzer::invokeSuperLayoutBuilderAPIs() {
     string imageName = mFdp.ConsumeRandomLengthString(kMaxBytes);
     string fuzzPartitionName =
             mFdp.ConsumeBool() ? "builder_partition" : mFdp.ConsumeRandomLengthString(kMaxBytes);
-    setupSuperLayoutBuilder(fuzzPartitionName);
+    if (!fuzzPartitionName.size()) {
+        fuzzPartitionName = "builder_partition";
+    }
+    setupSuperLayoutBuilder();
     if (mOpenSuccess) {
         while (mFdp.remaining_bytes()) {
             auto invokeSuperAPIs = mFdp.PickValueInArray<const function<void()>>({

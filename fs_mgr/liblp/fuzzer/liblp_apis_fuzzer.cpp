@@ -39,8 +39,6 @@ static constexpr uint32_t kValidAlignmentOffset = 0;
 static constexpr uint32_t kValidLogicalBlockSize = 4096;
 static constexpr uint32_t kMinMetadataSize = 0;
 static constexpr uint32_t kMaxMetadataSize = 10000;
-static constexpr uint32_t kMinSlot = 0;
-static constexpr uint32_t kMaxSlot = 10;
 static constexpr uint32_t kMinFactor = 0;
 static constexpr uint32_t kMaxFactor = 10;
 static constexpr uint32_t kMetadataGeometrySize = 4096;
@@ -108,7 +106,7 @@ void LiplpApisFuzzer::setupBuilder() {
     uint32_t randomMetadataMaxSize =
             mFdp.ConsumeIntegralInRange<uint32_t>(kMinMetadataSize, kMaxMetadataSize);
     uint32_t metadataMaxSize = mFdp.ConsumeBool() ? kMetadataSize : randomMetadataMaxSize;
-    uint32_t metadataSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(kMinSlot, kMaxSlot);
+    uint32_t metadataSlotCount = mFdp.ConsumeBool() ? 0 : 1;
     mBuilder = MetadataBuilder::New(blockDevSize, metadataMaxSize, metadataSlotCount);
 
     if (mBuilder.get()) {
@@ -128,14 +126,15 @@ void LiplpApisFuzzer::setupBuilder() {
         Partition* super = mBuilder->AddPartition(mSuperPartitionName, LP_PARTITION_ATTR_READONLY);
         mBuilder->AddPartition(mPartitionName, LP_PARTITION_ATTR_READONLY);
 
-        int64_t numSectors = mFdp.ConsumeBool() ? mFdp.ConsumeIntegralInRange<uint64_t>(
-                                                          kMinSectorValue, kMaxSectorValue)
-                                                : kValidNumSectors;
-        int64_t physicalSector = mFdp.ConsumeBool() ? mFdp.ConsumeIntegralInRange<uint64_t>(
+        if (super) {
+            int64_t numSectors = mFdp.ConsumeBool() ? mFdp.ConsumeIntegralInRange<uint64_t>(
                                                               kMinSectorValue, kMaxSectorValue)
-                                                    : kValidPhysicalSector;
-
-        mBuilder->AddLinearExtent(super, mBlockDeviceInfoName, numSectors, physicalSector);
+                                                    : kValidNumSectors;
+            int64_t physicalSector = mFdp.ConsumeBool() ? mFdp.ConsumeIntegralInRange<uint64_t>(
+                                                                  kMinSectorValue, kMaxSectorValue)
+                                                        : kValidPhysicalSector;
+            mBuilder->AddLinearExtent(super, mBlockDeviceInfoName, numSectors, physicalSector);
+        }
     }
 }
 
