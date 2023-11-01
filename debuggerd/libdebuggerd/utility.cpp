@@ -382,8 +382,10 @@ const char* get_sigcode(const siginfo_t* si) {
           return "SEGV_MTEAERR";
         case SEGV_MTESERR:
           return "SEGV_MTESERR";
+        case SEGV_CPERR:
+          return "SEGV_CPERR";
       }
-      static_assert(NSIGSEGV == SEGV_MTESERR, "missing SEGV_* si_code");
+      static_assert(NSIGSEGV == SEGV_CPERR, "missing SEGV_* si_code");
       break;
     case SIGSYS:
       switch (si->si_code) {
