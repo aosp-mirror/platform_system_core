@@ -46,13 +46,6 @@ namespace {
 
 constexpr const char kLegacyPersistentPropertyDir[] = "/data/property";
 
-void AddPersistentProperty(const std::string& name, const std::string& value,
-                           PersistentProperties* persistent_properties) {
-    auto persistent_property_record = persistent_properties->add_properties();
-    persistent_property_record->set_name(name);
-    persistent_property_record->set_value(value);
-}
-
 Result<PersistentProperties> LoadLegacyPersistentProperties() {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(kLegacyPersistentPropertyDir), closedir);
     if (!dir) {
@@ -122,24 +115,6 @@ void RemoveLegacyPersistentPropertyFiles() {
     }
 }
 
-PersistentProperties LoadPersistentPropertiesFromMemory() {
-    PersistentProperties persistent_properties;
-    __system_property_foreach(
-        [](const prop_info* pi, void* cookie) {
-            __system_property_read_callback(
-                pi,
-                [](void* cookie, const char* name, const char* value, unsigned serial) {
-                    if (StartsWith(name, "persist.")) {
-                        auto properties = reinterpret_cast<PersistentProperties*>(cookie);
-                        AddPersistentProperty(name, value, properties);
-                    }
-                },
-                cookie);
-        },
-        &persistent_properties);
-    return persistent_properties;
-}
-
 Result<std::string> ReadPersistentPropertyFile() {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     if (access(temp_filename.c_str(), F_OK) == 0) {
@@ -161,15 +136,22 @@ Result<PersistentProperties> ParsePersistentPropertyFile(const std::string& file
         return Error() << "Unable to parse persistent property file: Could not parse protobuf";
     }
     for (auto& prop : persistent_properties.properties()) {
-        if (!StartsWith(prop.name(), "persist.")) {
+        if (!StartsWith(prop.name(), "persist.") && !StartsWith(prop.name(), "next_boot.")) {
             return Error() << "Unable to load persistent property file: property '" << prop.name()
-                           << "' doesn't start with 'persist.'";
+                           << "' doesn't start with 'persist.' or 'next_boot.'";
         }
     }
     return persistent_properties;
 }
 
 }  // namespace
+
+void AddPersistentProperty(const std::string& name, const std::string& value,
+                           PersistentProperties* persistent_properties) {
+    auto persistent_property_record = persistent_properties->add_properties();
+    persistent_property_record->set_name(name);
+    persistent_property_record->set_value(value);
+}
 
 Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
@@ -219,6 +201,24 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     fsync(dir_fd.get());
 
     return {};
+}
+
+PersistentProperties LoadPersistentPropertiesFromMemory() {
+    PersistentProperties persistent_properties;
+    __system_property_foreach(
+            [](const prop_info* pi, void* cookie) {
+                __system_property_read_callback(
+                        pi,
+                        [](void* cookie, const char* name, const char* value, unsigned serial) {
+                            if (StartsWith(name, "persist.")) {
+                                auto properties = reinterpret_cast<PersistentProperties*>(cookie);
+                                AddPersistentProperty(name, value, properties);
+                            }
+                        },
+                        cookie);
+            },
+            &persistent_properties);
+    return persistent_properties;
 }
 
 // Persistent properties are not written often, so we rather not keep any data in memory and read

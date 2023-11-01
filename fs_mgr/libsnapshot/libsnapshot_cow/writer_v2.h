@@ -58,12 +58,12 @@ class CowWriterV2 : public CowWriterBase {
     bool FlushCluster();
 
     bool CompressBlocks(size_t num_blocks, const void* data);
-    bool Sync();
     bool Truncate(off_t length);
     bool EnsureSpaceAvailable(const uint64_t bytes_needed) const;
 
   private:
     CowFooter footer_{};
+    CowHeader header_{};
     CowCompression compression_;
     // in the case that we are using one thread for compression, we can store and re-use the same
     // compressor

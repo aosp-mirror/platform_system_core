@@ -28,10 +28,40 @@
 #include <zlib.h>
 
 #include "cow_decompress.h"
+#include "libsnapshot/cow_format.h"
 #include "parser_v2.h"
 
 namespace android {
 namespace snapshot {
+
+bool ReadCowHeader(android::base::borrowed_fd fd, CowHeaderV3* header) {
+    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+
+    memset(header, 0, sizeof(*header));
+
+    if (!android::base::ReadFully(fd, &header->prefix, sizeof(header->prefix))) {
+        return false;
+    }
+    if (header->prefix.magic != kCowMagicNumber) {
+        LOG(ERROR) << "Header Magic corrupted. Magic: " << header->prefix.magic
+                   << "Expected: " << kCowMagicNumber;
+        return false;
+    }
+    if (header->prefix.header_size > sizeof(CowHeaderV3)) {
+        LOG(ERROR) << "Unknown CowHeader size (got " << header->prefix.header_size
+                   << " bytes, expected at most " << sizeof(CowHeaderV3) << " bytes)";
+        return false;
+    }
+
+    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
+        PLOG(ERROR) << "lseek header failed";
+        return false;
+    }
+    return android::base::ReadFully(fd, header, header->prefix.header_size);
+}
 
 CowReader::CowReader(ReaderFlags reader_flag, bool is_merge)
     : fd_(-1),
@@ -136,7 +166,6 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
                            << v2_op.compression << ", op: " << v2_op;
                 return false;
             }
-            source_info |= kCowOpSourceInfoCompressBit;
         }
         new_op.source_info = source_info;
     }
@@ -577,7 +606,7 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
         case kCowSequenceOp:
         case kCowReplaceOp:
         case kCowXorOp:
-            return GetRawBytes(GetCowOpSourceInfoData(op), buffer, len, read);
+            return GetRawBytes(GetCowOpSourceInfoData(*op), buffer, len, read);
         default:
             LOG(ERROR) << "Cannot get raw bytes of non-data op: " << *op;
             return false;
@@ -669,7 +698,7 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     if (op->type == kCowXorOp) {
         offset = data_loc_->at(op->new_block);
     } else {
-        offset = GetCowOpSourceInfoData(op);
+        offset = GetCowOpSourceInfoData(*op);
     }
 
     if (!decompressor) {
@@ -685,10 +714,10 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 bool CowReader::GetSourceOffset(const CowOperation* op, uint64_t* source_offset) {
     switch (op->type) {
         case kCowCopyOp:
-            *source_offset = GetCowOpSourceInfoData(op) * header_.block_size;
+            *source_offset = GetCowOpSourceInfoData(*op) * header_.block_size;
             return true;
         case kCowXorOp:
-            *source_offset = GetCowOpSourceInfoData(op);
+            *source_offset = GetCowOpSourceInfoData(*op);
             return true;
         default:
             return false;

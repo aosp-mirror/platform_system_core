@@ -91,6 +91,18 @@ struct CowHeader {
 
     // Scratch space used during merge
     uint32_t buffer_size;
+
+} __attribute__((packed));
+
+struct CowHeaderV3 : public CowHeader {
+    // Location of sequence buffer in COW.
+    uint64_t sequence_buffer_offset;
+    // Size, in bytes, of the CowResumePoint buffer.
+    uint32_t resume_buffer_size;
+    // Size, in bytes, of the CowOperation buffer.
+    uint32_t op_buffer_size;
+    // Compression Algorithm
+    uint32_t compression_algorithm;
 } __attribute__((packed));
 
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
@@ -201,13 +213,9 @@ static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
 static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
-static constexpr uint64_t kCowOpSourceInfoCompressBit = (1ULL << 63);
 
-static inline uint64_t GetCowOpSourceInfoData(const CowOperation* op) {
-    return op->source_info & kCowOpSourceInfoDataMask;
-}
-static inline bool GetCowOpSourceInfoCompression(const CowOperation* op) {
-    return !!(op->source_info & kCowOpSourceInfoCompressBit);
+static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
+    return op.source_info & kCowOpSourceInfoDataMask;
 }
 
 struct CowFooter {

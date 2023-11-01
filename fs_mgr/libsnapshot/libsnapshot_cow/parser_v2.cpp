@@ -23,35 +23,6 @@ namespace snapshot {
 
 using android::base::borrowed_fd;
 
-bool ReadCowHeader(android::base::borrowed_fd fd, CowHeader* header) {
-    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek header failed";
-        return false;
-    }
-
-    memset(header, 0, sizeof(*header));
-
-    if (!android::base::ReadFully(fd, &header->prefix, sizeof(header->prefix))) {
-        return false;
-    }
-    if (header->prefix.magic != kCowMagicNumber) {
-        LOG(ERROR) << "Header Magic corrupted. Magic: " << header->prefix.magic
-                   << "Expected: " << kCowMagicNumber;
-        return false;
-    }
-    if (header->prefix.header_size > sizeof(CowHeader)) {
-        LOG(ERROR) << "Unknown CowHeader size (got " << header->prefix.header_size
-                   << " bytes, expected at most " << sizeof(CowHeader) << " bytes)";
-        return false;
-    }
-
-    if (lseek(fd.get(), 0, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek header failed";
-        return false;
-    }
-    return android::base::ReadFully(fd, header, header->prefix.header_size);
-}
-
 bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<uint64_t> label) {
     auto pos = lseek(fd.get(), 0, SEEK_END);
     if (pos < 0) {
@@ -64,15 +35,6 @@ bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<u
     if (header_.footer_size != sizeof(CowFooter)) {
         LOG(ERROR) << "Footer size unknown, read " << header_.footer_size << ", expected "
                    << sizeof(CowFooter);
-        return false;
-    }
-    if (header_.op_size != sizeof(CowOperationV2)) {
-        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
-                   << sizeof(CowOperationV2);
-        return false;
-    }
-    if (header_.cluster_ops == 1) {
-        LOG(ERROR) << "Clusters must contain at least two operations to function.";
         return false;
     }
     if (header_.op_size != sizeof(CowOperationV2)) {

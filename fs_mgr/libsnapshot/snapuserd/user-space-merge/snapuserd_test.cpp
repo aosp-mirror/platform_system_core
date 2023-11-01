@@ -47,8 +47,6 @@
 #include "testing/temp_device.h"
 #include "utility.h"
 
-DEFINE_string(force_config, "", "Force testing mode with iouring disabled");
-
 namespace android {
 namespace snapshot {
 
@@ -62,7 +60,7 @@ using testing::AssertionFailure;
 using testing::AssertionResult;
 using testing::AssertionSuccess;
 
-class SnapuserdTestBase : public ::testing::Test {
+class SnapuserdTestBase : public ::testing::TestWithParam<bool> {
   protected:
     void SetUp() override;
     void TearDown() override;
@@ -627,16 +625,11 @@ void SnapuserdTest::CreateCowDeviceOrderedOps() {
 }
 
 void SnapuserdTest::InitCowDevice() {
-    bool use_iouring = true;
-    if (FLAGS_force_config == "iouring_disabled") {
-        use_iouring = false;
-    }
-
     auto factory = harness_->GetBlockServerFactory();
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     auto handler =
             handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
-                                  base_dev_->GetPath(), opener, 1, use_iouring, false);
+                                  base_dev_->GetPath(), opener, 1, GetParam(), false);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -780,7 +773,7 @@ void SnapuserdTest::MergeInterrupt() {
     ASSERT_TRUE(Merge());
 }
 
-TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
+TEST_P(SnapuserdTest, Snapshot_IO_TEST) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
@@ -794,7 +787,7 @@ TEST_F(SnapuserdTest, Snapshot_IO_TEST) {
     ASSERT_NO_FATAL_FAILURE(ReadSnapshotDeviceAndValidate());
 }
 
-TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
+TEST_P(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
@@ -808,7 +801,7 @@ TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST) {
     read_future.wait();
 }
 
-TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
+TEST_P(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
@@ -823,31 +816,31 @@ TEST_F(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
     read_future.wait();
 }
 
-TEST_F(SnapuserdTest, Snapshot_Merge_Resume) {
+TEST_P(SnapuserdTest, Snapshot_Merge_Resume) {
     ASSERT_NO_FATAL_FAILURE(SetupDefault());
     ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_1) {
+TEST_P(SnapuserdTest, Snapshot_COPY_Overlap_TEST_1) {
     ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
     ASSERT_TRUE(Merge());
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_TEST_2) {
+TEST_P(SnapuserdTest, Snapshot_COPY_Overlap_TEST_2) {
     ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_2());
     ASSERT_TRUE(Merge());
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
+TEST_P(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_TEST) {
     ASSERT_NO_FATAL_FAILURE(SetupCopyOverlap_1());
     ASSERT_NO_FATAL_FAILURE(MergeInterrupt());
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_IO_Validate_TEST) {
+TEST_P(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_IO_Validate_TEST) {
     if (!harness_->HasUserDevice()) {
         GTEST_SKIP() << "Skipping snapshot read; not supported";
     }
@@ -856,25 +849,25 @@ TEST_F(SnapuserdTest, Snapshot_COPY_Overlap_Merge_Resume_IO_Validate_TEST) {
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Ordered) {
+TEST_P(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Ordered) {
     ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
     ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(300));
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Ordered) {
+TEST_P(SnapuserdTest, Snapshot_Merge_Crash_Random_Ordered) {
     ASSERT_NO_FATAL_FAILURE(SetupOrderedOps());
     ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(500));
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Inverted) {
+TEST_P(SnapuserdTest, Snapshot_Merge_Crash_Fixed_Inverted) {
     ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
     ASSERT_NO_FATAL_FAILURE(MergeInterruptFixed(50));
     ValidateMerge();
 }
 
-TEST_F(SnapuserdTest, Snapshot_Merge_Crash_Random_Inverted) {
+TEST_P(SnapuserdTest, Snapshot_Merge_Crash_Random_Inverted) {
     ASSERT_NO_FATAL_FAILURE(SetupOrderedOpsInverted());
     ASSERT_NO_FATAL_FAILURE(MergeInterruptRandomly(50));
     ValidateMerge();
@@ -941,7 +934,7 @@ AssertionResult HandlerTest::ReadSectors(sector_t sector, uint64_t size, void* b
 }
 
 // This test mirrors ReadSnapshotDeviceAndValidate.
-TEST_F(HandlerTest, Read) {
+TEST_P(HandlerTest, Read) {
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(size_);
 
     // COPY
@@ -970,19 +963,40 @@ TEST_F(HandlerTest, Read) {
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), (char*)orig_buffer_.get() + (size_ * 4), size_), 0);
 }
 
-TEST_F(HandlerTest, ReadUnalignedSector) {
+TEST_P(HandlerTest, ReadUnalignedSector) {
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(BLOCK_SZ);
 
     ASSERT_TRUE(ReadSectors(1, BLOCK_SZ, snapuserd_buffer.get()));
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get() + SECTOR_SIZE, BLOCK_SZ), 0);
 }
 
-TEST_F(HandlerTest, ReadUnalignedSize) {
+TEST_P(HandlerTest, ReadUnalignedSize) {
     std::unique_ptr<uint8_t[]> snapuserd_buffer = std::make_unique<uint8_t[]>(SECTOR_SIZE);
 
     ASSERT_TRUE(ReadSectors(0, SECTOR_SIZE, snapuserd_buffer.get()));
     ASSERT_EQ(memcmp(snapuserd_buffer.get(), orig_buffer_.get(), SECTOR_SIZE), 0);
 }
+
+std::vector<bool> GetIoUringConfigs() {
+#if __ANDROID__
+    if (!android::base::GetBoolProperty("ro.virtual_ab.io_uring.enabled", false)) {
+        return {false};
+    }
+#endif
+    if (!KernelSupportsIoUring()) {
+        return {false};
+    }
+    return {false, true};
+}
+
+std::string IoUringConfigName(const testing::TestParamInfo<SnapuserdTest::ParamType>& info) {
+    return info.param ? "io_uring" : "sync";
+}
+
+INSTANTIATE_TEST_SUITE_P(Io, SnapuserdTest, ::testing::ValuesIn(GetIoUringConfigs()),
+                         IoUringConfigName);
+INSTANTIATE_TEST_SUITE_P(Io, HandlerTest, ::testing::ValuesIn(GetIoUringConfigs()),
+                         IoUringConfigName);
 
 }  // namespace snapshot
 }  // namespace android
