@@ -243,7 +243,7 @@ bool CowWriterV2::OpenForWrite() {
 
     // Headers are not complete, but this ensures the file is at the right
     // position.
-    if (!android::base::WriteFully(fd_, &header_, sizeof(header_))) {
+    if (!android::base::WriteFully(fd_, &header_, sizeof(CowHeader))) {
         PLOG(ERROR) << "write failed";
         return false;
     }
@@ -262,11 +262,6 @@ bool CowWriterV2::OpenForWrite() {
         return false;
     }
 
-    if (lseek(fd_.get(), sizeof(header_) + header_.buffer_size, SEEK_SET) < 0) {
-        PLOG(ERROR) << "lseek failed";
-        return false;
-    }
-
     InitPos();
     InitBatchWrites();
 
@@ -274,9 +269,11 @@ bool CowWriterV2::OpenForWrite() {
 }
 
 bool CowWriterV2::OpenForAppend(uint64_t label) {
-    if (!ReadCowHeader(fd_, &header_)) {
+    CowHeaderV3 header_v3;
+    if (!ReadCowHeader(fd_, &header_v3)) {
         return false;
     }
+    header_ = header_v3;
 
     CowParserV2 parser;
     if (!parser.Parse(fd_, header_, {label})) {
@@ -699,17 +696,6 @@ void CowWriterV2::AddOperation(const CowOperationV2& op) {
 
 bool CowWriterV2::WriteRawData(const void* data, const size_t size) {
     if (!android::base::WriteFullyAtOffset(fd_, data, size, next_data_pos_)) {
-        return false;
-    }
-    return true;
-}
-
-bool CowWriterV2::Sync() {
-    if (is_dev_null_) {
-        return true;
-    }
-    if (fsync(fd_.get()) < 0) {
-        PLOG(ERROR) << "fsync failed";
         return false;
     }
     return true;

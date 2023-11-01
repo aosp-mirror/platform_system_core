@@ -30,7 +30,7 @@
 #include <cutils/compiler.h>
 
 #include <utils/Timers.h>
-#include <utils/Log.h>
+#include <log/log.h>
 
 namespace android {
 

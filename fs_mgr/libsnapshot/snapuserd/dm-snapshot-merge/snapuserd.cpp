@@ -508,7 +508,7 @@ bool Snapuserd::ReadMetadata() {
             // the merge of operations are done based on the ops present
             // in the file.
             //===========================================================
-            uint64_t block_source = GetCowOpSourceInfoData(cow_op);
+            uint64_t block_source = GetCowOpSourceInfoData(*cow_op);
             if (prev_id.has_value()) {
                 if (dest_blocks.count(cow_op->new_block) || source_blocks.count(block_source)) {
                     break;

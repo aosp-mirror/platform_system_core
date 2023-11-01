@@ -23,6 +23,7 @@
 #include <android-base/stringprintf.h>
 #include <libsnapshot/cow_format.h>
 #include "writer_v2.h"
+#include "writer_v3.h"
 
 namespace android {
 namespace snapshot {
@@ -83,11 +84,6 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
     os << "CowOperation(";
     EmitCowTypeString(os, op.type);
     if (op.type == kCowReplaceOp || op.type == kCowXorOp || op.type == kCowSequenceOp) {
-        if (op.source_info & kCowOpSourceInfoCompressBit) {
-            os << ", compressed";
-        } else {
-            os << ", uncompressed";
-        }
         os << ", data_length:" << op.data_length;
     }
     if (op.type != kCowClusterOp && op.type != kCowSequenceOp && op.type != kCowLabelOp) {
@@ -153,6 +149,9 @@ std::unique_ptr<ICowWriter> CreateCowWriter(uint32_t version, const CowOptions& 
         case 1:
         case 2:
             base = std::make_unique<CowWriterV2>(options, std::move(fd));
+            break;
+        case 3:
+            base = std::make_unique<CowWriterV3>(options, std::move(fd));
             break;
         default:
             LOG(ERROR) << "Cannot create unknown cow version: " << version;

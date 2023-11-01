@@ -25,7 +25,7 @@ Linux, macOS, or Windows.
 ## Transport and Framing
 
 1. Host sends a command, which is an ascii string in a single
-   packet no greater than 64 bytes.
+   packet no greater than 4096 bytes.
 
 2. Client response with a single packet no greater than 256 bytes.
    The first four bytes of the response are "OKAY", "FAIL", "DATA",
