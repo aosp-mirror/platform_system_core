@@ -179,8 +179,9 @@ Result<void> ServiceParser::ParsePriority(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &service_->proc_attr_.priority,
                   static_cast<int>(ANDROID_PRIORITY_HIGHEST),  // highest is negative
                   static_cast<int>(ANDROID_PRIORITY_LOWEST))) {
-        return Errorf("process priority value must be range {} - {}", ANDROID_PRIORITY_HIGHEST,
-                      ANDROID_PRIORITY_LOWEST);
+        return Errorf("process priority value must be range {} - {}",
+                      static_cast<int>(ANDROID_PRIORITY_HIGHEST),
+                      static_cast<int>(ANDROID_PRIORITY_LOWEST));
     }
     return {};
 }
