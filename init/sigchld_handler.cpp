@@ -139,10 +139,10 @@ void WaitToBeReaped(const std::vector<pid_t>& pids, std::chrono::milliseconds ti
     }
     LOG(INFO) << "Waiting for " << pids.size() << " pids to be reaped took " << t << " with "
               << alive_pids.size() << " of them still running";
-    for (pid_t pid : pids) {
+    for (pid_t pid : alive_pids) {
         std::string status = "(no-such-pid)";
         ReadFileToString(StringPrintf("/proc/%d/status", pid), &status);
-        LOG(INFO) << "Still running: " << pid << ' ' << status;
+        LOG(INFO) << "Still running: " << pid << '\n' << status;
     }
 }
 
