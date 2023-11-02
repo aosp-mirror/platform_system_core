@@ -78,7 +78,8 @@ void CowWriterV3::SetupHeaders() {
     // during COW size estimation
     header_.sequence_buffer_offset = 0;
     header_.resume_buffer_size = 0;
-    header_.op_buffer_size = 0;
+    header_.op_count = 0;
+    header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
     return;
 }
@@ -159,10 +160,6 @@ bool CowWriterV3::OpenForWrite() {
         LOG(ERROR) << "Header sync failed";
         return false;
     }
-
-    next_op_pos_ = 0;
-    next_data_pos_ = 0;
-
     return true;
 }
 
@@ -205,8 +202,7 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
 }
 
 bool CowWriterV3::Finalize() {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    return false;
+    return Sync();
 }
 
 uint64_t CowWriterV3::GetCowSize() {
