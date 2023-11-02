@@ -18,12 +18,14 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 
+#include <libsnapshot/cow_format.h>
+
 namespace android {
 namespace snapshot {
 
 using android::base::borrowed_fd;
 
-bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<uint64_t> label) {
+bool CowParserV2::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional<uint64_t> label) {
     auto pos = lseek(fd.get(), 0, SEEK_END);
     if (pos < 0) {
         PLOG(ERROR) << "lseek end failed";
@@ -47,8 +49,7 @@ bool CowParserV2::Parse(borrowed_fd fd, const CowHeader& header, std::optional<u
         return false;
     }
 
-    if ((header_.prefix.major_version > kCowVersionMajor) ||
-        (header_.prefix.minor_version != kCowVersionMinor)) {
+    if (header_.prefix.major_version > 2 || header_.prefix.minor_version != 0) {
         LOG(ERROR) << "Header version mismatch, "
                    << "major version: " << header_.prefix.major_version
                    << ", expected: " << kCowVersionMajor
@@ -190,10 +191,56 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
         }
     }
 
-    ops_ = ops_buffer;
-    ops_->shrink_to_fit();
+    v2_ops_ = ops_buffer;
+    v2_ops_->shrink_to_fit();
     data_loc_ = data_loc;
     return true;
+}
+
+bool CowParserV2::Translate(TranslatedCowOps* out) {
+    out->ops = std::make_shared<std::vector<CowOperationV3>>(v2_ops_->size());
+
+    // Translate the operation buffer from on disk to in memory
+    for (size_t i = 0; i < out->ops->size(); i++) {
+        const auto& v2_op = v2_ops_->at(i);
+
+        auto& new_op = out->ops->at(i);
+        new_op.type = v2_op.type;
+        new_op.data_length = v2_op.data_length;
+
+        if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
+            LOG(ERROR) << "Out-of-range new block in COW op: " << v2_op;
+            return false;
+        }
+        new_op.new_block = v2_op.new_block;
+
+        uint64_t source_info = v2_op.source;
+        if (new_op.type != kCowLabelOp) {
+            source_info &= kCowOpSourceInfoDataMask;
+            if (source_info != v2_op.source) {
+                LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
+                return false;
+            }
+        }
+        if (v2_op.compression != kCowCompressNone) {
+            if (header_.compression_algorithm == kCowCompressNone) {
+                header_.compression_algorithm = v2_op.compression;
+            } else if (header_.compression_algorithm != v2_op.compression) {
+                LOG(ERROR) << "COW has mixed compression types which is not supported;"
+                           << " previously saw " << header_.compression_algorithm << ", got "
+                           << v2_op.compression << ", op: " << v2_op;
+                return false;
+            }
+        }
+        new_op.source_info = source_info;
+    }
+
+    out->header = header_;
+    return true;
+}
+
+std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> CowParserV2::data_loc() const {
+    return data_loc_;
 }
 
 }  // namespace snapshot
