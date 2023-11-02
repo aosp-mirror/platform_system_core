@@ -37,7 +37,7 @@ using testing::AssertionSuccess;
 namespace android {
 namespace snapshot {
 
-class CowOperationV3Test : public ::testing::Test {
+class CowTestV3 : public ::testing::Test {
   protected:
     virtual void SetUp() override {
         cow_ = std::make_unique<TemporaryFile>();
@@ -51,7 +51,7 @@ class CowOperationV3Test : public ::testing::Test {
     std::unique_ptr<TemporaryFile> cow_;
 };
 
-TEST_F(CowOperationV3Test, CowHeaderV2Test) {
+TEST_F(CowTestV3, CowHeaderV2Test) {
     CowOptions options;
     options.cluster_ops = 5;
     options.num_merge_ops = 1;
@@ -67,10 +67,26 @@ TEST_F(CowOperationV3Test, CowHeaderV2Test) {
 
     const auto& header = reader.GetHeader();
     ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
-    ASSERT_EQ(header.prefix.major_version, kCowVersionMajor);
-    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.prefix.major_version, 2);
+    ASSERT_EQ(header.prefix.minor_version, 0);
     ASSERT_EQ(header.block_size, options.block_size);
     ASSERT_EQ(header.cluster_ops, options.cluster_ops);
+}
+
+TEST_F(CowTestV3, Header) {
+    CowOptions options;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.GetHeader();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, 3);
+    ASSERT_EQ(header.prefix.minor_version, 0);
+    ASSERT_EQ(header.block_size, options.block_size);
+    ASSERT_EQ(header.cluster_ops, 0);
 }
 
 }  // namespace snapshot
