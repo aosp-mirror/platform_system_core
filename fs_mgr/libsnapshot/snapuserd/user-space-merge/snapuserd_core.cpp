@@ -112,7 +112,7 @@ bool SnapshotHandler::CommitMerge(int num_merge_ops) {
             return false;
         }
 
-        if (!android::base::WriteFully(cow_fd_, &header, sizeof(CowHeader))) {
+        if (!android::base::WriteFully(cow_fd_, &header, header.prefix.header_size)) {
             SNAP_PLOG(ERROR) << "Write to header failed";
             return false;
         }
