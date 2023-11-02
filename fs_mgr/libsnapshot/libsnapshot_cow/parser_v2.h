@@ -21,7 +21,7 @@
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
-#include <libsnapshot_cow/parser_base.h>
+#include "parser_base.h"
 
 namespace android {
 namespace snapshot {
