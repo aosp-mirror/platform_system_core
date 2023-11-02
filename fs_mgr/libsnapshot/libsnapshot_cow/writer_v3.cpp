@@ -155,6 +155,7 @@ bool CowWriterV3::OpenForWrite() {
             return false;
         }
     }
+    header_.op_count_max = options_.op_count_max;
 
     if (!Sync()) {
         LOG(ERROR) << "Header sync failed";
@@ -184,9 +185,17 @@ bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size
 }
 
 bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (new_block_start && num_blocks) return false;
-    return false;
+    for (uint64_t i = 0; i < num_blocks; i++) {
+        CowOperationV3 op;
+        op.type = kCowZeroOp;
+        op.data_length = 0;
+        op.new_block = new_block_start + i;
+        op.source_info = 0;
+        if (!WriteOperation(op)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool CowWriterV3::EmitLabel(uint64_t label) {
@@ -201,7 +210,33 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     return false;
 }
 
+bool CowWriterV3::WriteOperation(const CowOperationV3& op) {
+    if (IsEstimating()) {
+        header_.op_count++;
+        header_.op_count_max++;
+        return true;
+    }
+
+    if (header_.op_count + 1 > header_.op_count_max) {
+        LOG(ERROR) << "Maximum number of ops reached: " << header_.op_count_max;
+        return false;
+    }
+
+    const off_t offset = GetOpOffset(header_.op_count);
+    if (!android::base::WriteFullyAtOffset(fd_, &op, sizeof(op), offset)) {
+        return false;
+    }
+
+    header_.op_count++;
+    return true;
+}
+
 bool CowWriterV3::Finalize() {
+    CHECK_GE(header_.prefix.header_size, sizeof(CowHeaderV3));
+    CHECK_LE(header_.prefix.header_size, sizeof(header_));
+    if (!android::base::WriteFullyAtOffset(fd_, &header_, header_.prefix.header_size, 0)) {
+        return false;
+    }
     return Sync();
 }
 
