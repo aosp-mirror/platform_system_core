@@ -46,12 +46,9 @@ class CowWriterV3 : public CowWriterBase {
   private:
     CowHeaderV3 header_{};
     CowCompression compression_;
+
     // in the case that we are using one thread for compression, we can store and re-use the same
     // compressor
-
-    uint64_t next_op_pos_ = 0;
-    uint64_t next_data_pos_ = 0;
-
     int num_compress_threads_ = 1;
 };
 
