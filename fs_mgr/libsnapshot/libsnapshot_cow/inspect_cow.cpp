@@ -74,13 +74,13 @@ static void ShowBad(CowReader& reader, const CowOperation* op) {
     }
 }
 
-static bool ShowRawOpStreamV2(borrowed_fd fd, const CowHeader& header) {
+static bool ShowRawOpStreamV2(borrowed_fd fd, const CowHeaderV3& header) {
     CowParserV2 parser;
     if (!parser.Parse(fd, header)) {
         LOG(ERROR) << "v2 parser failed";
         return false;
     }
-    for (const auto& op : *parser.ops()) {
+    for (const auto& op : *parser.get_v2ops()) {
         std::cout << op << "\n";
         if (auto iter = parser.data_loc()->find(op.new_block); iter != parser.data_loc()->end()) {
             std::cout << "    data loc: " << iter->second << "\n";
