@@ -108,9 +108,9 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
     static passwd static_passwd = {
         .pw_name = static_name,
         .pw_dir = static_dir,
-        .pw_shell = static_shell,
         .pw_uid = 0,
         .pw_gid = 0,
+        .pw_shell = static_shell,
     };
 
     for (size_t n = 0; n < android_id_count; ++n) {
