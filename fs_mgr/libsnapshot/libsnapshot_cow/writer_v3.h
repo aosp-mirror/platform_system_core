@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include <future>
+#include <android-base/logging.h>
+
 #include "writer_base.h"
 
 namespace android {
@@ -42,6 +43,13 @@ class CowWriterV3 : public CowWriterBase {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
+    bool WriteOperation(const CowOperationV3& op);
+
+    off_t GetOpOffset(uint32_t op_index) const {
+        CHECK_LT(op_index, header_.op_count_max);
+        return header_.prefix.header_size + header_.buffer_size +
+               (op_index * sizeof(CowOperationV3));
+    }
 
   private:
     CowHeaderV3 header_{};
