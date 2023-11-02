@@ -89,5 +89,36 @@ TEST_F(CowTestV3, Header) {
     ASSERT_EQ(header.cluster_ops, 0);
 }
 
+TEST_F(CowTestV3, ZeroOp) {
+    CowOptions options;
+    options.op_count_max = 20;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_TRUE(writer->AddZeroBlocks(1, 2));
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_EQ(reader.header_v3().op_count, 2);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    auto op = iter->Get();
+    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->data_length, 0);
+    ASSERT_EQ(op->new_block, 1);
+    ASSERT_EQ(op->source_info, 0);
+
+    iter->Next();
+    ASSERT_FALSE(iter->AtEnd());
+    op = iter->Get();
+
+    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->data_length, 0);
+    ASSERT_EQ(op->new_block, 2);
+    ASSERT_EQ(op->source_info, 0);
+}
+
 }  // namespace snapshot
 }  // namespace android
