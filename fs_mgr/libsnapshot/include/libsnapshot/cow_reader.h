@@ -185,6 +185,7 @@ class CowReader final : public ICowReader {
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
     ReaderFlags reader_flag_;
     bool is_merge_{};
+    uint8_t compression_type_ = kCowCompressNone;
 };
 
 // Though this function takes in a CowHeaderV3, the struct could be populated as a v1/v2 CowHeader.

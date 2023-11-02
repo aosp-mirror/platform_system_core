@@ -28,6 +28,7 @@
 #include <zlib.h>
 
 #include "cow_decompress.h"
+#include "libsnapshot/cow_format.h"
 #include "parser_v2.h"
 
 namespace android {
@@ -84,6 +85,7 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->data_loc_ = data_loc_;
     cow->block_pos_index_ = block_pos_index_;
     cow->is_merge_ = is_merge_;
+    cow->compression_type_ = compression_type_;
     return cow;
 }
 
@@ -102,14 +104,11 @@ bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
         PLOG(ERROR) << "lseek header failed";
         return false;
     }
-
-    CHECK_GE(header_.prefix.header_size, sizeof(CowHeader));
-    CHECK_LE(header_.prefix.header_size, sizeof(header_));
-
-    if (!android::base::ReadFully(fd_, &header_, header_.prefix.header_size)) {
+    if (!android::base::ReadFully(fd_, &header_, sizeof(header_))) {
         PLOG(ERROR) << "read header failed";
         return false;
     }
+
     return true;
 }
 
@@ -125,34 +124,51 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         return false;
     }
 
-    std::unique_ptr<CowParserBase> parser;
-    switch (header_.prefix.major_version) {
-        case 1:
-        case 2:
-            parser = std::make_unique<CowParserV2>();
-            break;
-        case 3:
-            break;
-        default:
-            LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
+    CowParserV2 parser;
+    if (!parser.Parse(fd, header_, label)) {
+        return false;
+    }
+
+    footer_ = parser.footer();
+    fd_size_ = parser.fd_size();
+    last_label_ = parser.last_label();
+    data_loc_ = parser.data_loc();
+    ops_ = std::make_shared<std::vector<CowOperation>>(parser.ops()->size());
+
+    // Translate the operation buffer from on disk to in memory
+    for (size_t i = 0; i < parser.ops()->size(); i++) {
+        const auto& v2_op = parser.ops()->at(i);
+
+        auto& new_op = ops_->at(i);
+        new_op.type = v2_op.type;
+        new_op.data_length = v2_op.data_length;
+
+        if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
+            LOG(ERROR) << "Out-of-range new block in COW op: " << v2_op;
             return false;
-    }
+        }
+        new_op.new_block = v2_op.new_block;
 
-    if (!parser->Parse(fd, header_, label)) {
-        return false;
+        uint64_t source_info = v2_op.source;
+        if (new_op.type != kCowLabelOp) {
+            source_info &= kCowOpSourceInfoDataMask;
+            if (source_info != v2_op.source) {
+                LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
+                return false;
+            }
+        }
+        if (v2_op.compression != kCowCompressNone) {
+            if (compression_type_ == kCowCompressNone) {
+                compression_type_ = v2_op.compression;
+            } else if (compression_type_ != v2_op.compression) {
+                LOG(ERROR) << "COW has mixed compression types which is not supported;"
+                           << " previously saw " << compression_type_ << ", got "
+                           << v2_op.compression << ", op: " << v2_op;
+                return false;
+            }
+        }
+        new_op.source_info = source_info;
     }
-
-    TranslatedCowOps ops_info;
-    if (!parser->Translate(&ops_info)) {
-        return false;
-    }
-
-    header_ = ops_info.header;
-    ops_ = std::move(ops_info.ops);
-    footer_ = parser->footer();
-    fd_size_ = parser->fd_size();
-    last_label_ = parser->last_label();
-    data_loc_ = parser->data_loc();
 
     // If we're resuming a write, we're not ready to merge
     if (label.has_value()) return true;
@@ -648,7 +664,7 @@ class CowDataStream final : public IByteStream {
 };
 
 uint8_t CowReader::GetCompressionType() {
-    return header_.compression_algorithm;
+    return compression_type_;
 }
 
 ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
