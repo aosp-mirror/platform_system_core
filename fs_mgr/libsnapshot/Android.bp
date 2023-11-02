@@ -198,7 +198,6 @@ cc_library_static {
         "libsnapshot_cow/cow_format.cpp",
         "libsnapshot_cow/cow_reader.cpp",
         "libsnapshot_cow/parser_v2.cpp",
-        "libsnapshot_cow/parser_v3.cpp",
         "libsnapshot_cow/snapshot_reader.cpp",
         "libsnapshot_cow/writer_base.cpp",
         "libsnapshot_cow/writer_v2.cpp",
