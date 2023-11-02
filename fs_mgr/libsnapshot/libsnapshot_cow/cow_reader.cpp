@@ -29,6 +29,7 @@
 
 #include "cow_decompress.h"
 #include "parser_v2.h"
+#include "parser_v3.h"
 
 namespace android {
 namespace snapshot {
@@ -132,6 +133,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
             parser = std::make_unique<CowParserV2>();
             break;
         case 3:
+            parser = std::make_unique<CowParserV3>();
             break;
         default:
             LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
