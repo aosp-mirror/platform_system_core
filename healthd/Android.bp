@@ -100,44 +100,6 @@ cc_library_static {
     ],
 }
 
-cc_defaults {
-    name: "android.hardware.health@2.0-service_defaults",
-
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-
-    static_libs: [
-        "android.hardware.health@2.0-impl",
-        "android.hardware.health@1.0-convert",
-        "libhealthservice",
-        "libhealthstoragedefault",
-        "libbatterymonitor",
-    ],
-
-    shared_libs: [
-        "libbase",
-        "libcutils",
-        "libhidlbase",
-        "liblog",
-        "libutils",
-        "android.hardware.health@2.0",
-    ],
-}
-
-cc_binary {
-    name: "android.hardware.health@2.0-service",
-    defaults: ["android.hardware.health@2.0-service_defaults"],
-
-    vendor: true,
-    relative_install_path: "hw",
-    init_rc: ["android.hardware.health@2.0-service.rc"],
-    srcs: [
-        "HealthServiceDefault.cpp",
-    ],
-}
-
 cc_library_static {
     name: "libhealthd_charger_nops",
     recovery_available: true,
