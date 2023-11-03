@@ -136,6 +136,7 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
+int Service::sigchld_fd_ = -1;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)

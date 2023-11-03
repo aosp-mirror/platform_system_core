@@ -117,7 +117,7 @@ namespace init {
 
 static int property_triggers_enabled = 0;
 
-static int sigchld_fd = -1;
+int sigchld_fd = -1;
 static int sigterm_fd = -1;
 static int property_fd = -1;
 
@@ -800,6 +800,7 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         PLOG(FATAL) << cs_result.error();
     }
     sigchld_fd = cs_result.value();
+    Service::SetSigchldFd(sigchld_fd);
 
     if (sigismember(&mask, SIGTERM)) {
         Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGTERM);
