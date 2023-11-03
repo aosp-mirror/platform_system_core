@@ -601,8 +601,8 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
-    if (offset < header_.prefix.header_size || offset >= fd_size_ - sizeof(CowFooter) ||
-        len >= fd_size_ || offset + len > fd_size_ - sizeof(CowFooter)) {
+    if (offset < header_.prefix.header_size || offset >= fd_size_ || offset + len > fd_size_ ||
+        len >= fd_size_) {
         LOG(ERROR) << "invalid data offset: " << offset << ", " << len << " bytes";
         return false;
     }
