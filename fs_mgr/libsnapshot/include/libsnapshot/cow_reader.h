@@ -145,6 +145,7 @@ class CowReader final : public ICowReader {
                      size_t ignore_bytes = 0) override;
 
     CowHeader& GetHeader() override { return header_; }
+    const CowHeaderV3& header_v3() const { return header_; }
 
     bool GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read);
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);

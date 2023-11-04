@@ -24,15 +24,58 @@ namespace snapshot {
 using android::base::borrowed_fd;
 
 bool CowParserV3::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional<uint64_t> label) {
-    LOG(ERROR) << "this function should never be called";
-    if (fd.get() || sizeof(header) > 0 || label) return false;
-    return false;
+    auto pos = lseek(fd.get(), 0, SEEK_END);
+    if (pos < 0) {
+        PLOG(ERROR) << "lseek end failed";
+        return false;
+    }
+    fd_size_ = pos;
+    header_ = header;
+
+    if (header_.footer_size != 0) {
+        LOG(ERROR) << "Footer size isn't 0, read " << header_.footer_size;
+        return false;
+    }
+    if (header_.op_size != sizeof(CowOperationV3)) {
+        LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
+                   << sizeof(CowOperationV3);
+        return false;
+    }
+    if (header_.cluster_ops != 0) {
+        LOG(ERROR) << "Cluster ops not supported in v3";
+        return false;
+    }
+
+    if (header_.prefix.major_version != 3 || header_.prefix.minor_version != 0) {
+        LOG(ERROR) << "Header version mismatch, "
+                   << "major version: " << header_.prefix.major_version
+                   << ", expected: " << kCowVersionMajor
+                   << ", minor version: " << header_.prefix.minor_version
+                   << ", expected: " << kCowVersionMinor;
+        return false;
+    }
+
+    return ParseOps(fd, label);
 }
 
-bool CowParserV3::ParseOps(android::base::borrowed_fd fd, std::optional<uint64_t> label) {
-    LOG(ERROR) << "this function should never be called";
-    if (fd.get() || label) return false;
-    return false;
+bool CowParserV3::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
+    ops_ = std::make_shared<std::vector<CowOperationV3>>();
+    ops_->resize(header_.op_count);
+
+    const off_t offset = header_.prefix.header_size + header_.buffer_size;
+    if (!android::base::ReadFullyAtOffset(fd, ops_->data(), ops_->size() * sizeof(CowOperationV3),
+                                          offset)) {
+        PLOG(ERROR) << "read ops failed";
+        return false;
+    }
+
+    // :TODO: sequence buffer & resume buffer follow
+    // Once we implement labels, we'll have to discard unused ops and adjust
+    // the header as needed.
+    CHECK(!label);
+
+    ops_->shrink_to_fit();
+    return true;
 }
 
 bool CowParserV3::Translate(TranslatedCowOps* out) {
