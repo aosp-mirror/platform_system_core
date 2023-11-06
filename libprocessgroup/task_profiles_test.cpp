@@ -116,7 +116,7 @@ class ProfileAttributeMock : public IProfileAttribute {
     }
     bool GetPathForTask(int tid, std::string* path) const override {
 #ifdef __ANDROID__
-        CHECK(CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, path));
+        CHECK(CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, path));
         CHECK_GT(path->length(), 0);
         if (path->rbegin()[0] != '/') {
             *path += "/";
