@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -192,6 +193,5 @@ class CowReader final : public ICowReader {
 // The extra fields will just be filled as 0. V3 header is strictly a superset of v1/v2 header and
 // contains all of the latter's field
 bool ReadCowHeader(android::base::borrowed_fd fd, CowHeaderV3* header);
-
 }  // namespace snapshot
 }  // namespace android
