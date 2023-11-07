@@ -58,6 +58,10 @@ bool CowParserV3::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional
     return ParseOps(fd, label);
 }
 
+off_t CowParserV3::GetDataOffset() const {
+    return sizeof(CowHeaderV3) + header_.buffer_size + header_.op_count_max * sizeof(CowOperation);
+}
+
 bool CowParserV3::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
     ops_ = std::make_shared<std::vector<CowOperationV3>>();
     ops_->resize(header_.op_count);
@@ -69,12 +73,24 @@ bool CowParserV3::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
         return false;
     }
 
+    // fill out mapping of XOR op data location
+    uint64_t data_pos = GetDataOffset();
+
+    xor_data_loc_ = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
+
+    for (auto op : *ops_) {
+        if (op.type == kCowXorOp) {
+            xor_data_loc_->insert({op.new_block, data_pos});
+        }
+        data_pos += op.data_length;
+    }
     // :TODO: sequence buffer & resume buffer follow
     // Once we implement labels, we'll have to discard unused ops and adjust
     // the header as needed.
     CHECK(!label);
 
     ops_->shrink_to_fit();
+
     return true;
 }
 
