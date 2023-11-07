@@ -63,7 +63,7 @@ bool CowParserV2::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional
 
 bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
     uint64_t pos;
-    auto data_loc = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
+    auto xor_data_loc = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
     // Skip the scratch space
     if (header_.prefix.major_version >= 2 && (header_.buffer_size > 0)) {
@@ -111,7 +111,7 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
             auto& current_op = ops_buffer->data()[current_op_num];
             current_op_num++;
             if (current_op.type == kCowXorOp) {
-                data_loc->insert({current_op.new_block, data_pos});
+                xor_data_loc->insert({current_op.new_block, data_pos});
             }
             pos += sizeof(CowOperationV2) + GetNextOpOffset(current_op, header_.cluster_ops);
             data_pos += current_op.data_length + GetNextDataOffset(current_op, header_.cluster_ops);
@@ -193,7 +193,7 @@ bool CowParserV2::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
 
     v2_ops_ = ops_buffer;
     v2_ops_->shrink_to_fit();
-    data_loc_ = data_loc;
+    xor_data_loc_ = xor_data_loc;
     return true;
 }
 
@@ -237,10 +237,6 @@ bool CowParserV2::Translate(TranslatedCowOps* out) {
 
     out->header = header_;
     return true;
-}
-
-std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> CowParserV2::data_loc() const {
-    return data_loc_;
 }
 
 }  // namespace snapshot

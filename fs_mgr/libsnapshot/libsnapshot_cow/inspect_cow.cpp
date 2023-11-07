@@ -82,7 +82,8 @@ static bool ShowRawOpStreamV2(borrowed_fd fd, const CowHeaderV3& header) {
     }
     for (const auto& op : *parser.get_v2ops()) {
         std::cout << op << "\n";
-        if (auto iter = parser.data_loc()->find(op.new_block); iter != parser.data_loc()->end()) {
+        if (auto iter = parser.xor_data_loc()->find(op.new_block);
+            iter != parser.xor_data_loc()->end()) {
             std::cout << "    data loc: " << iter->second << "\n";
         }
     }
