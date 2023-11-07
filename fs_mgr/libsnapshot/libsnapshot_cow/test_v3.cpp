@@ -94,6 +94,24 @@ TEST_F(CowTestV3, Header) {
     ASSERT_EQ(header.cluster_ops, 0);
 }
 
+TEST_F(CowTestV3, MaxOp) {
+    CowOptions options;
+    options.op_count_max = 20;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_FALSE(writer->AddZeroBlocks(1, 21));
+    ASSERT_FALSE(writer->AddZeroBlocks(1, 1));
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_FALSE(writer->AddRawBlocks(5, data.data(), data.size()));
+
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_EQ(reader.header_v3().op_count, 20);
+}
+
 TEST_F(CowTestV3, ZeroOp) {
     CowOptions options;
     options.op_count_max = 20;
