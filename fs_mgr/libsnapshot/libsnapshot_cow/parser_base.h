@@ -38,7 +38,9 @@ class CowParserBase {
                        std::optional<uint64_t> label = {}) = 0;
     virtual bool Translate(TranslatedCowOps* out) = 0;
     virtual std::optional<CowFooter> footer() const { return std::nullopt; }
-    virtual std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc() const = 0;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> xor_data_loc() {
+        return xor_data_loc_;
+    };
 
     uint64_t fd_size() const { return fd_size_; }
     const std::optional<uint64_t>& last_label() const { return last_label_; }
@@ -47,6 +49,7 @@ class CowParserBase {
     CowHeaderV3 header_ = {};
     uint64_t fd_size_;
     std::optional<uint64_t> last_label_;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> xor_data_loc_ = {};
 };
 
 }  // namespace snapshot
