@@ -82,7 +82,7 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->merge_op_start_ = merge_op_start_;
     cow->num_total_data_ops_ = num_total_data_ops_;
     cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
-    cow->data_loc_ = data_loc_;
+    cow->xor_data_loc_ = xor_data_loc_;
     cow->block_pos_index_ = block_pos_index_;
     cow->is_merge_ = is_merge_;
     return cow;
@@ -139,7 +139,6 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
             LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
             return false;
     }
-
     if (!parser->Parse(fd, header_, label)) {
         return false;
     }
@@ -154,7 +153,7 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     footer_ = parser->footer();
     fd_size_ = parser->fd_size();
     last_label_ = parser->last_label();
-    data_loc_ = parser->data_loc();
+    xor_data_loc_ = parser->xor_data_loc();
 
     // If we're resuming a write, we're not ready to merge
     if (label.has_value()) return true;
@@ -682,11 +681,10 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 
     uint64_t offset;
     if (op->type == kCowXorOp) {
-        offset = data_loc_->at(op->new_block);
+        offset = xor_data_loc_->at(op->new_block);
     } else {
         offset = GetCowOpSourceInfoData(*op);
     }
-
     if (!decompressor) {
         CowDataStream stream(this, offset + ignore_bytes, op->data_length - ignore_bytes);
         return stream.ReadFully(buffer, buffer_size);
