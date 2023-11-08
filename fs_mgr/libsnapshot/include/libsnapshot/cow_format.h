@@ -99,8 +99,10 @@ struct CowHeaderV3 : public CowHeader {
     uint64_t sequence_buffer_offset;
     // Size, in bytes, of the CowResumePoint buffer.
     uint32_t resume_buffer_size;
-    // Size, in bytes, of the CowOperation buffer.
-    uint32_t op_buffer_size;
+    // Number of CowOperationV3 structs in the operation buffer, currently and total
+    // region size.
+    uint32_t op_count;
+    uint32_t op_count_max;
     // Compression Algorithm
     uint32_t compression_algorithm;
 } __attribute__((packed));

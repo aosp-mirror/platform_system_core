@@ -212,7 +212,7 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
     if (root.isMember("Cgroups2")) {
         const Json::Value& cgroups2 = root["Cgroups2"];
         std::string root_path = cgroups2["Path"].asString();
-        MergeCgroupToDescriptors(descriptors, cgroups2, CGROUPV2_CONTROLLER_NAME, "", 2);
+        MergeCgroupToDescriptors(descriptors, cgroups2, CGROUPV2_HIERARCHY_NAME, "", 2);
 
         const Json::Value& childGroups = cgroups2["Controllers"];
         for (Json::Value::ArrayIndex i = 0; i < childGroups.size(); ++i) {
@@ -358,7 +358,7 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     const format::CgroupController* controller = descriptor.controller();
 
     if (controller->version() == 2) {
-        if (!strcmp(controller->name(), CGROUPV2_CONTROLLER_NAME)) {
+        if (!strcmp(controller->name(), CGROUPV2_HIERARCHY_NAME)) {
             return MountV2CgroupController(descriptor);
         } else {
             return ActivateV2CgroupController(descriptor);

@@ -25,8 +25,6 @@
 namespace android {
 namespace init {
 
-void AddPersistentProperty(const std::string& name, const std::string& value,
-                           PersistentProperties* persistent_properties);
 PersistentProperties LoadPersistentProperties();
 void WritePersistentProperty(const std::string& name, const std::string& value);
 PersistentProperties LoadPersistentPropertiesFromMemory();

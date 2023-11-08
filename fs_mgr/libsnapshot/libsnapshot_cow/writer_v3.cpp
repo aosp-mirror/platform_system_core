@@ -78,7 +78,8 @@ void CowWriterV3::SetupHeaders() {
     // during COW size estimation
     header_.sequence_buffer_offset = 0;
     header_.resume_buffer_size = 0;
-    header_.op_buffer_size = 0;
+    header_.op_count = 0;
+    header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
     return;
 }
@@ -154,42 +155,80 @@ bool CowWriterV3::OpenForWrite() {
             return false;
         }
     }
+    header_.op_count_max = options_.op_count_max;
 
     if (!Sync()) {
         LOG(ERROR) << "Header sync failed";
         return false;
     }
-
-    next_op_pos_ = 0;
-    next_data_pos_ = 0;
-
+    next_data_pos_ =
+            sizeof(CowHeaderV3) + header_.buffer_size + header_.op_count_max * sizeof(CowOperation);
     return true;
 }
 
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (new_block || old_block || num_blocks) return false;
-    return false;
+    for (size_t i = 0; i < num_blocks; i++) {
+        CowOperationV3 op = {};
+        op.type = kCowCopyOp;
+        op.new_block = new_block + i;
+        op.source_info = old_block + i;
+        if (!WriteOperation(op)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool CowWriterV3::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-
-    if (new_block_start || data || size) return false;
-    return false;
+    return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
 }
 
 bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                 uint32_t old_block, uint16_t offset) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (new_block_start || old_block || offset || data || size) return false;
-    return false;
+    return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
+}
+
+bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
+                             uint64_t old_block, uint16_t offset, uint8_t type) {
+    const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
+    const size_t num_blocks = (size / header_.block_size);
+
+    for (size_t i = 0; i < num_blocks; i++) {
+        CowOperation op = {};
+        op.new_block = new_block_start + i;
+
+        op.type = type;
+        op.data_length = static_cast<uint16_t>(header_.block_size);
+
+        if (type == kCowXorOp) {
+            op.source_info = (old_block + i) * header_.block_size + offset;
+        } else {
+            op.source_info = next_data_pos_;
+        }
+        if (!WriteOperation(op, iter, header_.block_size)) {
+            LOG(ERROR) << "AddRawBlocks: write failed";
+            return false;
+        }
+
+        iter += header_.block_size;
+    }
+
+    return true;
 }
 
 bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (new_block_start && num_blocks) return false;
-    return false;
+    for (uint64_t i = 0; i < num_blocks; i++) {
+        CowOperationV3 op;
+        op.type = kCowZeroOp;
+        op.data_length = 0;
+        op.new_block = new_block_start + i;
+        op.source_info = 0;
+        if (!WriteOperation(op)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool CowWriterV3::EmitLabel(uint64_t label) {
@@ -204,9 +243,44 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     return false;
 }
 
+bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, size_t size) {
+    if (IsEstimating()) {
+        header_.op_count++;
+        header_.op_count_max++;
+        return true;
+    }
+
+    if (header_.op_count + 1 > header_.op_count_max) {
+        LOG(ERROR) << "Maximum number of ops reached: " << header_.op_count_max;
+        return false;
+    }
+
+    const off_t offset = GetOpOffset(header_.op_count);
+    if (!android::base::WriteFullyAtOffset(fd_, &op, sizeof(op), offset)) {
+        PLOG(ERROR) << "write failed for " << op << " at " << offset;
+        return false;
+    }
+    if (data && size > 0) {
+        if (!android::base::WriteFullyAtOffset(fd_, data, size, next_data_pos_)) {
+            PLOG(ERROR) << "write failed for data of size: " << size
+                        << " at offset: " << next_data_pos_;
+            return false;
+        }
+    }
+    header_.op_count++;
+    next_data_pos_ += op.data_length;
+    next_op_pos_ += sizeof(CowOperationV3);
+
+    return true;
+}
+
 bool CowWriterV3::Finalize() {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    return false;
+    CHECK_GE(header_.prefix.header_size, sizeof(CowHeaderV3));
+    CHECK_LE(header_.prefix.header_size, sizeof(header_));
+    if (!android::base::WriteFullyAtOffset(fd_, &header_, header_.prefix.header_size, 0)) {
+        return false;
+    }
+    return Sync();
 }
 
 uint64_t CowWriterV3::GetCowSize() {

@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include <future>
+#include <android-base/logging.h>
+
 #include "writer_base.h"
 
 namespace android {
@@ -42,16 +43,25 @@ class CowWriterV3 : public CowWriterBase {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
+    bool WriteOperation(const CowOperationV3& op, const void* data = nullptr, size_t size = 0);
+    bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
+                    uint16_t offset, uint8_t type);
+
+    off_t GetOpOffset(uint32_t op_index) const {
+        CHECK_LT(op_index, header_.op_count_max);
+        return header_.prefix.header_size + header_.buffer_size +
+               (op_index * sizeof(CowOperationV3));
+    }
 
   private:
     CowHeaderV3 header_{};
     CowCompression compression_;
-    // in the case that we are using one thread for compression, we can store and re-use the same
-    // compressor
 
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
 
+    // in the case that we are using one thread for compression, we can store and re-use the same
+    // compressor
     int num_compress_threads_ = 1;
 };
 
