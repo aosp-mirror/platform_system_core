@@ -129,7 +129,7 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::s
     }
 
     if (!attr->GetPathForTask(tid, path)) {
-        PLOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        LOG(ERROR) << "Failed to find cgroup for tid " << tid;
         return false;
     }
 
@@ -213,7 +213,7 @@ static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
     return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
 }
 
-static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
+static int RemoveCgroup(const char* cgroup, uid_t uid, int pid, unsigned int retries) {
     int ret = 0;
     auto uid_pid_path = ConvertUidPidToPath(cgroup, uid, pid);
 
@@ -233,7 +233,7 @@ static int RemoveProcessGroup(const char* cgroup, uid_t uid, int pid, unsigned i
     return ret;
 }
 
-static bool RemoveUidProcessGroups(const std::string& uid_path, bool empty_only) {
+static bool RemoveUidCgroups(const std::string& uid_path, bool empty_only) {
     std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path.c_str()), closedir);
     bool empty = true;
     if (uid != NULL) {
@@ -275,11 +275,11 @@ static bool RemoveUidProcessGroups(const std::string& uid_path, bool empty_only)
     return empty;
 }
 
-void removeAllProcessGroupsInternal(bool empty_only) {
+static void removeAllProcessGroupsInternal(bool empty_only) {
     std::vector<std::string> cgroups;
     std::string path, memcg_apps_path;
 
-    if (CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &path)) {
+    if (CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &path)) {
         cgroups.push_back(path);
     }
     if (CgroupGetMemcgAppsPath(&memcg_apps_path) && memcg_apps_path != path) {
@@ -302,7 +302,7 @@ void removeAllProcessGroupsInternal(bool empty_only) {
                 }
 
                 auto path = StringPrintf("%s/%s", cgroup_root_path.c_str(), dir->d_name);
-                if (!RemoveUidProcessGroups(path, empty_only)) {
+                if (!RemoveUidCgroups(path, empty_only)) {
                     LOG(VERBOSE) << "Skip removing " << path;
                     continue;
                 }
@@ -461,7 +461,7 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
 
     std::string hierarchy_root_path;
     if (CgroupsAvailable()) {
-        CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+        CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &hierarchy_root_path);
     }
     const char* cgroup = hierarchy_root_path.c_str();
 
@@ -511,12 +511,12 @@ static int KillProcessGroup(uid_t uid, int initialPid, int signal, int retries) 
         }
 
         // 400 retries correspond to 2 secs max timeout
-        int err = RemoveProcessGroup(cgroup, uid, initialPid, 400);
+        int err = RemoveCgroup(cgroup, uid, initialPid, 400);
 
         if (isMemoryCgroupSupported() && UsePerAppMemcg()) {
             std::string memcg_apps_path;
             if (CgroupGetMemcgAppsPath(&memcg_apps_path) &&
-                RemoveProcessGroup(memcg_apps_path.c_str(), uid, initialPid, 400) < 0) {
+                RemoveCgroup(memcg_apps_path.c_str(), uid, initialPid, 400) < 0) {
                 return -1;
             }
         }
@@ -543,7 +543,7 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal) {
 int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal) {
     std::string hierarchy_root_path;
     if (CgroupsAvailable()) {
-        CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &hierarchy_root_path);
+        CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &hierarchy_root_path);
     }
     const char* cgroup = hierarchy_root_path.c_str();
     return DoKillProcessGroupOnce(cgroup, uid, initialPid, signal);
@@ -601,7 +601,7 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     CHECK_GT(initialPid, 0);
 
     if (memControl && !UsePerAppMemcg()) {
-        PLOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
+        LOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
         return -EINVAL;
     }
 
@@ -617,19 +617,19 @@ int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
     }
 
     std::string cgroup;
-    CgroupGetControllerPath(CGROUPV2_CONTROLLER_NAME, &cgroup);
+    CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &cgroup);
     return createProcessGroupInternal(uid, initialPid, cgroup, true);
 }
 
 static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t value) {
     if (!isMemoryCgroupSupported()) {
-        PLOG(ERROR) << "Memcg is not mounted.";
+        LOG(ERROR) << "Memcg is not mounted.";
         return false;
     }
 
     std::string path;
     if (!CgroupGetAttributePathForTask(attr_name, tid, &path)) {
-        PLOG(ERROR) << "Failed to find attribute '" << attr_name << "'";
+        LOG(ERROR) << "Failed to find attribute '" << attr_name << "'";
         return false;
     }
 

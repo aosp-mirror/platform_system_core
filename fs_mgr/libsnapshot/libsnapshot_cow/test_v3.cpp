@@ -94,6 +94,24 @@ TEST_F(CowTestV3, Header) {
     ASSERT_EQ(header.cluster_ops, 0);
 }
 
+TEST_F(CowTestV3, MaxOp) {
+    CowOptions options;
+    options.op_count_max = 20;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_FALSE(writer->AddZeroBlocks(1, 21));
+    ASSERT_FALSE(writer->AddZeroBlocks(1, 1));
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_FALSE(writer->AddRawBlocks(5, data.data(), data.size()));
+
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    ASSERT_EQ(reader.header_v3().op_count, 20);
+}
+
 TEST_F(CowTestV3, ZeroOp) {
     CowOptions options;
     options.op_count_max = 20;
@@ -218,7 +236,7 @@ TEST_F(CowTestV3, CopyOp) {
     CowReader reader;
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
-    const auto& header = reader.GetHeader();
+    const auto& header = reader.header_v3();
     ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
     ASSERT_EQ(header.prefix.major_version, 3);
     ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
@@ -242,5 +260,166 @@ TEST_F(CowTestV3, CopyOp) {
     ASSERT_EQ(i, 100);
 }
 
+TEST_F(CowTestV3, XorOp) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    std::string data = "This is test data-1. Testing xor";
+    data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer->AddXorBlocks(50, data.data(), data.size(), 24, 10));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.header_v3();
+    ASSERT_EQ(header.op_count, 1);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
+    std::string sink(data.size(), '\0');
+
+    ASSERT_EQ(op->type, kCowXorOp);
+    ASSERT_EQ(op->data_length, 4096);
+    ASSERT_EQ(op->new_block, 50);
+    ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314);  // 4096 * 24 + 10
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
+}
+
+TEST_F(CowTestV3, ConsecutiveXorOp) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    std::string data;
+    data.resize(options.block_size * 5);
+    for (int i = 0; i < data.size(); i++) {
+        data[i] = char(rand() % 256);
+    }
+
+    ASSERT_TRUE(writer->AddXorBlocks(50, data.data(), data.size(), 24, 10));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.header_v3();
+    ASSERT_EQ(header.op_count, 5);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    std::string sink(data.size(), '\0');
+    size_t i = 0;
+
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowXorOp);
+        ASSERT_EQ(op->data_length, 4096);
+        ASSERT_EQ(op->new_block, 50 + i);
+        ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314 + (i * options.block_size));  // 4096 * 24 + 10
+        ASSERT_TRUE(
+                ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
+        iter->Next();
+        i++;
+    }
+    ASSERT_EQ(sink, data);
+
+    ASSERT_EQ(i, 5);
+}
+
+TEST_F(CowTestV3, AllOps) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    std::string data;
+    data.resize(options.block_size * 5);
+    for (int i = 0; i < data.size(); i++) {
+        data[i] = char(rand() % 256);
+    }
+
+    ASSERT_TRUE(writer->AddZeroBlocks(10, 5));
+    ASSERT_TRUE(writer->AddCopy(15, 3, 5));
+    ASSERT_TRUE(writer->AddRawBlocks(18, data.data(), data.size()));
+    ASSERT_TRUE(writer->AddXorBlocks(50, data.data(), data.size(), 24, 10));
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.header_v3();
+    ASSERT_EQ(header.prefix.magic, kCowMagicNumber);
+    ASSERT_EQ(header.prefix.major_version, 3);
+    ASSERT_EQ(header.prefix.minor_version, kCowVersionMinor);
+    ASSERT_EQ(header.block_size, options.block_size);
+    ASSERT_EQ(header.buffer_size, BUFFER_REGION_DEFAULT_SIZE);
+    ASSERT_EQ(header.op_count, 20);
+    ASSERT_EQ(header.op_count_max, 100);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    size_t i = 0;
+
+    while (i < 5) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowZeroOp);
+        ASSERT_EQ(op->new_block, 10 + i);
+        iter->Next();
+        i++;
+    }
+    i = 0;
+    while (i < 5) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowCopyOp);
+        ASSERT_EQ(op->new_block, 15 + i);
+        ASSERT_EQ(GetCowOpSourceInfoData(*op), 3 + i);
+        iter->Next();
+        i++;
+    }
+    i = 0;
+    std::string sink(data.size(), '\0');
+
+    while (i < 5) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowReplaceOp);
+        ASSERT_EQ(op->data_length, options.block_size);
+        ASSERT_EQ(op->new_block, 18 + i);
+        ASSERT_TRUE(
+                ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
+        iter->Next();
+        i++;
+    }
+    ASSERT_EQ(sink, data);
+
+    i = 0;
+    std::fill(sink.begin(), sink.end(), '\0');
+    while (i < 5) {
+        auto op = iter->Get();
+        ASSERT_EQ(op->type, kCowXorOp);
+        ASSERT_EQ(op->data_length, 4096);
+        ASSERT_EQ(op->new_block, 50 + i);
+        ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314 + (i * options.block_size));  // 4096 * 24 + 10
+        ASSERT_TRUE(
+                ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
+        iter->Next();
+        i++;
+    }
+    ASSERT_EQ(sink, data);
+}
 }  // namespace snapshot
 }  // namespace android

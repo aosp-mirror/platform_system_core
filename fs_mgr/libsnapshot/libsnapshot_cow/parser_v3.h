@@ -45,13 +45,10 @@ class CowParserV3 final : public CowParserBase {
     bool Parse(android::base::borrowed_fd fd, const CowHeaderV3& header,
                std::optional<uint64_t> label = {}) override;
     bool Translate(TranslatedCowOps* out) override;
-    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc() const override {
-        return nullptr;
-    };
 
   private:
     bool ParseOps(android::base::borrowed_fd fd, std::optional<uint64_t> label);
-
+    off_t GetDataOffset() const;
     CowHeaderV3 header_ = {};
     std::shared_ptr<std::vector<CowOperationV3>> ops_;
 };

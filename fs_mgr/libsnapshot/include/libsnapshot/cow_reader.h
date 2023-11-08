@@ -183,7 +183,7 @@ class CowReader final : public ICowReader {
     uint64_t num_total_data_ops_{};
     uint64_t num_ordered_ops_to_merge_{};
     bool has_seq_ops_{};
-    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> xor_data_loc_;
     ReaderFlags reader_flag_;
     bool is_merge_{};
 };
