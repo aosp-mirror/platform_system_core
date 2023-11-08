@@ -191,14 +191,13 @@ int main(int argc, char* argv[]) {
   }
 
   // Retrieve package information from system, switching egid so we can read the file.
+  pkg_info info = {.name = pkgname};
   gid_t old_egid = getegid();
   if (setegid(AID_PACKAGE_INFO) == -1) error(1, errno, "setegid(AID_PACKAGE_INFO) failed");
-  pkg_info info;
-  memset(&info, 0, sizeof(info));
-  info.name = pkgname;
   if (!packagelist_parse(packagelist_parse_callback, &info)) {
     error(1, errno, "packagelist_parse failed");
   }
+  if (setegid(old_egid) == -1) error(1, errno, "couldn't restore egid");
 
   // Handle a multi-user data path
   if (userId > 0) {
@@ -211,7 +210,6 @@ int main(int argc, char* argv[]) {
   if (info.uid == 0) {
     error(1, 0, "unknown package: %s", pkgname);
   }
-  if (setegid(old_egid) == -1) error(1, errno, "couldn't restore egid");
 
   // Verify that user id is not too big.
   if ((UID_MAX - info.uid) / AID_USER_OFFSET < (uid_t)userId) {
