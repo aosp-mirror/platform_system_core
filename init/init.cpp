@@ -108,6 +108,7 @@ using android::base::SetProperty;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
+using android::base::unique_fd;
 using android::fs_mgr::AvbHandle;
 using android::snapshot::SnapshotManager;
 
@@ -116,7 +117,8 @@ namespace init {
 
 static int property_triggers_enabled = 0;
 
-static int signal_fd = -1;
+int sigchld_fd = -1;
+static int sigterm_fd = -1;
 static int property_fd = -1;
 
 struct PendingControlMessage {
@@ -713,8 +715,9 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     HandlePowerctlMessage("shutdown,container");
 }
 
-static void HandleSignalFd() {
+static void HandleSignalFd(int signal) {
     signalfd_siginfo siginfo;
+    const int signal_fd = signal == SIGCHLD ? sigchld_fd : sigterm_fd;
     ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
     if (bytes_read != sizeof(siginfo)) {
         PLOG(ERROR) << "Failed to read siginfo from signal_fd";
@@ -748,6 +751,24 @@ static void UnblockSignals() {
     }
 }
 
+static Result<int> CreateAndRegisterSignalFd(Epoll* epoll, int signal) {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, signal);
+    unique_fd signal_fd(signalfd(-1, &mask, SFD_CLOEXEC));
+    if (signal_fd == -1) {
+        return ErrnoError() << "failed to create signalfd for signal " << signal;
+    }
+
+    auto result = epoll->RegisterHandler(
+            signal_fd.get(), [signal]() { HandleSignalFd(signal); }, EPOLLIN | EPOLLPRI);
+    if (!result.ok()) {
+        return result.error();
+    }
+
+    return signal_fd.release();
+}
+
 static void InstallSignalFdHandler(Epoll* epoll) {
     // Applying SA_NOCLDSTOP to a defaulted SIGCHLD handler prevents the signalfd from receiving
     // SIGCHLD when a child process stops or continues (b/77867680#comment9).
@@ -774,14 +795,19 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
-    if (signal_fd == -1) {
-        PLOG(FATAL) << "failed to create signalfd";
+    Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGCHLD);
+    if (!cs_result.ok()) {
+        PLOG(FATAL) << cs_result.error();
     }
+    sigchld_fd = cs_result.value();
+    Service::SetSigchldFd(sigchld_fd);
 
-    constexpr int flags = EPOLLIN | EPOLLPRI;
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd, flags); !result.ok()) {
-        LOG(FATAL) << result.error();
+    if (sigismember(&mask, SIGTERM)) {
+        Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGTERM);
+        if (!cs_result.ok()) {
+            PLOG(FATAL) << cs_result.error();
+        }
+        sigterm_fd = cs_result.value();
     }
 }
 
