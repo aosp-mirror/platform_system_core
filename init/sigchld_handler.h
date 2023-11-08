@@ -25,7 +25,8 @@ namespace init {
 
 void ReapAnyOutstandingChildren();
 
-void WaitToBeReaped(const std::vector<pid_t>& pids, std::chrono::milliseconds timeout);
+void WaitToBeReaped(int sigchld_fd, const std::vector<pid_t>& pids,
+                    std::chrono::milliseconds timeout);
 
 }  // namespace init
 }  // namespace android
