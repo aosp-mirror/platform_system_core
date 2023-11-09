@@ -339,15 +339,16 @@ TEST_F(CowTestV3, ConsecutiveXorOp) {
     ASSERT_EQ(i, 5);
 }
 
-TEST_F(CowTestV3, AllOps) {
+TEST_F(CowTestV3, AllOpsWithCompression) {
     CowOptions options;
+    options.compression = "gz";
     options.op_count_max = 100;
     auto writer = CreateCowWriter(3, options, GetCowFd());
 
     std::string data;
     data.resize(options.block_size * 5);
     for (int i = 0; i < data.size(); i++) {
-        data[i] = char(rand() % 256);
+        data[i] = char(rand() % 4);
     }
 
     ASSERT_TRUE(writer->AddZeroBlocks(10, 5));
@@ -397,7 +398,6 @@ TEST_F(CowTestV3, AllOps) {
     while (i < 5) {
         auto op = iter->Get();
         ASSERT_EQ(op->type, kCowReplaceOp);
-        ASSERT_EQ(op->data_length, options.block_size);
         ASSERT_EQ(op->new_block, 18 + i);
         ASSERT_TRUE(
                 ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
@@ -411,7 +411,6 @@ TEST_F(CowTestV3, AllOps) {
     while (i < 5) {
         auto op = iter->Get();
         ASSERT_EQ(op->type, kCowXorOp);
-        ASSERT_EQ(op->data_length, 4096);
         ASSERT_EQ(op->new_block, 50 + i);
         ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314 + (i * options.block_size));  // 4096 * 24 + 10
         ASSERT_TRUE(
@@ -420,6 +419,43 @@ TEST_F(CowTestV3, AllOps) {
         i++;
     }
     ASSERT_EQ(sink, data);
+}
+
+TEST_F(CowTestV3, GzCompression) {
+    CowOptions options;
+    options.op_count_max = 100;
+    options.compression = "gz";
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
+    ASSERT_TRUE(writer->Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto header = reader.header_v3();
+    ASSERT_EQ(header.compression_algorithm, kCowCompressGz);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+    auto op = iter->Get();
+
+    std::string sink(data.size(), '\0');
+
+    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_EQ(op->data_length, 56);  // compressed!
+    ASSERT_EQ(op->new_block, 50);
+    ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
+    ASSERT_EQ(sink, data);
+
+    iter->Next();
+    ASSERT_TRUE(iter->AtEnd());
 }
 }  // namespace snapshot
 }  // namespace android
