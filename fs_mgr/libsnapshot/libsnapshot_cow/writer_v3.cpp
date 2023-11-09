@@ -97,6 +97,8 @@ bool CowWriterV3::ParseOptions() {
         LOG(ERROR) << "unrecognized compression: " << options_.compression;
         return false;
     }
+    header_.compression_algorithm = *algorithm;
+
     if (parts.size() > 1) {
         if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
             LOG(ERROR) << "failed to parse compression level invalid type: " << parts[1];
@@ -108,6 +110,7 @@ bool CowWriterV3::ParseOptions() {
     }
 
     compression_.algorithm = *algorithm;
+    compressor_ = ICompressor::Create(compression_, header_.block_size);
     return true;
 }
 
@@ -191,27 +194,41 @@ bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size
 
 bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
                              uint64_t old_block, uint16_t offset, uint8_t type) {
-    const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
     const size_t num_blocks = (size / header_.block_size);
-
     for (size_t i = 0; i < num_blocks; i++) {
+        const uint8_t* const iter =
+                reinterpret_cast<const uint8_t*>(data) + (header_.block_size * i);
+
         CowOperation op = {};
         op.new_block = new_block_start + i;
 
         op.type = type;
-        op.data_length = static_cast<uint16_t>(header_.block_size);
-
         if (type == kCowXorOp) {
             op.source_info = (old_block + i) * header_.block_size + offset;
         } else {
             op.source_info = next_data_pos_;
         }
-        if (!WriteOperation(op, iter, header_.block_size)) {
-            LOG(ERROR) << "AddRawBlocks: write failed";
+        std::basic_string<uint8_t> compressed_data;
+        const void* out_data = iter;
+
+        op.data_length = header_.block_size;
+
+        if (compression_.algorithm) {
+            if (!compressor_) {
+                PLOG(ERROR) << "Compressor not initialized";
+                return false;
+            }
+            compressed_data = compressor_->Compress(out_data, header_.block_size);
+            if (compressed_data.size() < op.data_length) {
+                out_data = compressed_data.data();
+                op.data_length = compressed_data.size();
+            }
+        }
+        if (!WriteOperation(op, out_data, op.data_length)) {
+            PLOG(ERROR) << "AddRawBlocks with compression: write failed. new block: "
+                        << new_block_start << " compression: " << compression_.algorithm;
             return false;
         }
-
-        iter += header_.block_size;
     }
 
     return true;

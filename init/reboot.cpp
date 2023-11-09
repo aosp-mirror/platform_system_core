@@ -563,7 +563,7 @@ static void StopServices(const std::set<std::string>& services, std::chrono::mil
         }
     }
     if (timeout > 0ms) {
-        WaitToBeReaped(pids, timeout);
+        WaitToBeReaped(sigchld_fd, pids, timeout);
     } else {
         // Even if we don't to wait for services to stop, we still optimistically reap zombies.
         ReapAnyOutstandingChildren();
