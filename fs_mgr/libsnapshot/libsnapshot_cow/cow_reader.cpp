@@ -685,7 +685,8 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
     } else {
         offset = GetCowOpSourceInfoData(*op);
     }
-    if (!decompressor || op->data_length == header_.block_size) {
+    if (!decompressor ||
+        ((op->data_length == header_.block_size) && (header_.prefix.major_version == 3))) {
         CowDataStream stream(this, offset + ignore_bytes, op->data_length - ignore_bytes);
         return stream.ReadFully(buffer, buffer_size);
     }
