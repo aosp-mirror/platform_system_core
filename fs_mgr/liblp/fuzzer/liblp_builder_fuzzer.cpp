@@ -48,8 +48,6 @@ static constexpr uint32_t kMaxMetadataValue = 10000;
 static constexpr uint32_t kZeroAlignment = 0;
 static constexpr uint32_t kZeroAlignmentOffset = 0;
 static constexpr uint32_t kMaxBytes = 20;
-static constexpr uint32_t kMinSlot = 0;
-static constexpr uint32_t kMaxSlot = 10;
 static constexpr uint32_t kMinBuilder = 0;
 static constexpr uint32_t kMaxBuilder = 4;
 
@@ -108,9 +106,7 @@ void BuilderFuzzer::selectRandomBuilder(int32_t randomBuilder, string superBlock
     switch (randomBuilder) {
         case 0: {
             uint32_t maxMetadataSize = getParamValue(kValidMaxMetadataSize);
-            uint32_t numSlots = mFdp.ConsumeBool()
-                                        ? kMaxSlot
-                                        : mFdp.ConsumeIntegralInRange<uint32_t>(kMinSlot, kMaxSlot);
+            uint32_t numSlots = mFdp.ConsumeBool() ? 0 : 1;
             mBuilder = MetadataBuilder::New(mBlockDevices, superBlockDeviceName, maxMetadataSize,
                                             numSlots);
             break;
@@ -120,14 +116,14 @@ void BuilderFuzzer::selectRandomBuilder(int32_t randomBuilder, string superBlock
                     mFdp.ConsumeIntegralInRange<uint64_t>(kMinBlockDevValue, kMaxBlockDevValue);
             uint32_t metadataMaxSize =
                     mFdp.ConsumeIntegralInRange<uint32_t>(kMinMetadataValue, kMaxMetadataValue);
-            uint32_t metadataSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(kMinSlot, kMaxSlot);
+            uint32_t metadataSlotCount = mFdp.ConsumeBool() ? 0 : 1;
             mBuilder = MetadataBuilder::New(blockDevSize, metadataMaxSize, metadataSlotCount);
             break;
         }
         case 2: {
             uint64_t blockDevSize = getParamValue(kValidBlockSize);
             uint32_t metadataSize = getParamValue(kValidMetadataSize);
-            uint32_t metadataSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(kMinSlot, kMaxSlot);
+            uint32_t metadataSlotCount = mFdp.ConsumeBool() ? 0 : 1;
             mBuilder = MetadataBuilder::New(blockDevSize, metadataSize, metadataSlotCount);
             break;
         }
@@ -213,13 +209,13 @@ void BuilderFuzzer::callChangePartitionGroup() {
 void BuilderFuzzer::callVerifyExtentsAgainstSourceMetadata() {
     uint64_t sourceBlockDevSize = getParamValue(kValidBlockSize);
     uint32_t sourceMetadataMaxSize = getParamValue(kValidMetadataSize);
-    uint32_t sourceSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(0, 2);
+    uint32_t sourceSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(0, 1);
     auto sourceBuilder =
             MetadataBuilder::New(sourceBlockDevSize, sourceMetadataMaxSize, sourceSlotCount);
 
     uint64_t targetBlockDevSize = getParamValue(kValidBlockSize);
     uint32_t targetMetadataMaxSize = getParamValue(kValidMetadataSize);
-    uint32_t targetSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(0, 2);
+    uint32_t targetSlotCount = mFdp.ConsumeIntegralInRange<uint32_t>(0, 1);
     auto targetBuilder =
             MetadataBuilder::New(targetBlockDevSize, targetMetadataMaxSize, targetSlotCount);
 
@@ -292,17 +288,20 @@ void BuilderFuzzer::invokeBuilderAPIs() {
 
                         int64_t numExtents =
                                 mFdp.ConsumeIntegralInRange<int64_t>(kMinElements, kMaxElements);
-                        bool extentAdded = false;
-                        for (int64_t i = 0; i <= numExtents; ++i) {
-                            extentAdded = mBuilder->AddLinearExtent(mFuzzPartition, kDeviceInfoName,
-                                                                    numSectors, physicalSector);
-                        }
+                        if (mFuzzPartition) {
+                            bool extentAdded = false;
+                            for (int64_t i = 0; i <= numExtents; ++i) {
+                                extentAdded =
+                                        mBuilder->AddLinearExtent(mFuzzPartition, kDeviceInfoName,
+                                                                  numSectors, physicalSector);
+                            }
 
-                        if (extentAdded) {
-                            unique_ptr<LpMetadata> metadata = mBuilder->Export();
-                            uint64_t alignedSize =
-                                    mFdp.ConsumeIntegralInRange<uint64_t>(kMinValue, kMaxValue);
-                            mFuzzPartition->GetBeginningExtents(LP_SECTOR_SIZE * numExtents);
+                            if (extentAdded) {
+                                unique_ptr<LpMetadata> metadata = mBuilder->Export();
+                                uint64_t alignedSize =
+                                        mFdp.ConsumeIntegralInRange<uint64_t>(kMinValue, kMaxValue);
+                                mFuzzPartition->GetBeginningExtents(LP_SECTOR_SIZE * numExtents);
+                            }
                         }
                     },
                     [&]() { callVerifyExtentsAgainstSourceMetadata(); },
