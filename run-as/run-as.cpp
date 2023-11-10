@@ -76,9 +76,6 @@ static void check_directory(const char* path, uid_t uid) {
     error(1, errno, "couldn't stat %s", path);
   }
 
-  // /data/user/0 is a known safe symlink.
-  if (strcmp("/data/user/0", path) == 0) return;
-
   // Must be a real directory, not a symlink.
   if (!S_ISDIR(st.st_mode)) {
     error(1, 0, "%s not a directory: %o", path, st.st_mode);
