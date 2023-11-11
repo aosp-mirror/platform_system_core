@@ -420,6 +420,7 @@ cc_test {
     },
     data: [
         "tools/testdata/cow_v2",
+        "tools/testdata/incompressible_block",
     ],
     auto_gen_config: true,
     require_root: false,

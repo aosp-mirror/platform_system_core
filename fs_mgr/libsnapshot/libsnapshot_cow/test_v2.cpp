@@ -1522,6 +1522,37 @@ TEST_F(CowTest, CompatibilityTest) {
     ASSERT_TRUE(reader.GetFooter(&footer));
 }
 
+TEST_F(CowTest, DecompressIncompressibleBlock) {
+    auto fd = OpenTestFile("incompressible_block", O_RDONLY);
+    ASSERT_GE(fd, 0);
+
+    std::string original;
+    ASSERT_TRUE(android::base::ReadFdToString(fd, &original)) << strerror(errno);
+    ASSERT_EQ(original.size(), 4096);
+
+    CowOptions options;
+    options.compression = "gz";
+    auto writer = CreateCowWriter(2, options, GetCowFd());
+    ASSERT_NE(writer, nullptr);
+    ASSERT_TRUE(writer->AddRawBlocks(0, original.data(), original.size()));
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    std::string block(original.size(), '\0');
+    ASSERT_EQ(iter->Get()->data_length, 4096);
+    ASSERT_TRUE(ReadData(reader, iter->Get(), block.data(), block.size()));
+
+    for (size_t i = 0; i < block.size(); i++) {
+        ASSERT_EQ(block[i], original[i]) << "mismatch at byte " << i;
+    }
+}
+
 }  // namespace snapshot
 }  // namespace android
 
