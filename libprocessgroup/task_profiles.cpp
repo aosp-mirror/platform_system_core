@@ -316,7 +316,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p
     FdCacheHelper::Init(controller_.GetProcsFilePath(path_, 0, 0), fd_[ProfileAction::RCT_PROCESS]);
 }
 
-bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_name) {
+bool SetCgroupAction::AddTidToCgroup(int tid, int fd, ResourceCacheType cache_type) const {
     if (tid <= 0) {
         return true;
     }
@@ -332,6 +332,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_nam
         return true;
     }
 
+    const char* controller_name = controller()->name();
     // ENOSPC is returned when cpuset cgroup that we are joining has no online cpus
     if (errno == ENOSPC && !strcmp(controller_name, "cpuset")) {
         // This is an abnormal case happening only in testing, so report it only once
@@ -345,7 +346,8 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_nam
                    << "' into cpuset because all cpus in that cpuset are offline";
         empty_cpuset_reported = true;
     } else {
-        PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
+        PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; path=" << path_ << "; "
+                    << (cache_type == RCT_TASK ? "task" : "process");
     }
 
     return false;
@@ -356,7 +358,7 @@ ProfileAction::CacheUseResult SetCgroupAction::UseCachedFd(ResourceCacheType cac
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (FdCacheHelper::IsCached(fd_[cache_type])) {
         // fd is cached, reuse it
-        if (!AddTidToCgroup(id, fd_[cache_type], controller()->name())) {
+        if (!AddTidToCgroup(id, fd_[cache_type], cache_type)) {
             LOG(ERROR) << "Failed to add task into cgroup";
             return ProfileAction::FAIL;
         }
@@ -391,7 +393,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
         PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << procs_path;
         return false;
     }
-    if (!AddTidToCgroup(pid, tmp_fd, controller()->name())) {
+    if (!AddTidToCgroup(pid, tmp_fd, RCT_PROCESS)) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
@@ -412,7 +414,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
         PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << tasks_path;
         return false;
     }
-    if (!AddTidToCgroup(tid, tmp_fd, controller()->name())) {
+    if (!AddTidToCgroup(tid, tmp_fd, RCT_TASK)) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
