@@ -322,6 +322,7 @@ bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, siz
     if (IsEstimating()) {
         header_.op_count++;
         header_.op_count_max++;
+        next_data_pos_ += op.data_length;
         return true;
     }
 
