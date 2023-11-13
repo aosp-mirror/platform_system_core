@@ -94,6 +94,16 @@ struct CowHeader {
 
 } __attribute__((packed));
 
+// Resume point structure used for resume buffer
+struct ResumePoint {
+    // monotonically increasing value used by update_engine
+    uint64_t label;
+    // Index of last CowOperation guaranteed to be resumable
+    uint32_t op_index;
+} __attribute__((packed));
+
+static constexpr uint8_t kNumResumePoints = 4;
+
 struct CowHeaderV3 : public CowHeader {
     // Location of sequence buffer in COW.
     uint64_t sequence_buffer_offset;
@@ -244,6 +254,8 @@ static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 
 std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+
+std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
 
 int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_size);

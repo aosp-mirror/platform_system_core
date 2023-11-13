@@ -45,12 +45,16 @@ class CowParserV3 final : public CowParserBase {
     bool Parse(android::base::borrowed_fd fd, const CowHeaderV3& header,
                std::optional<uint64_t> label = {}) override;
     bool Translate(TranslatedCowOps* out) override;
+    std::shared_ptr<std::vector<ResumePoint>> resume_points() const { return resume_points_; }
 
   private:
-    bool ParseOps(android::base::borrowed_fd fd, std::optional<uint64_t> label);
+    bool ParseOps(android::base::borrowed_fd fd, const uint32_t op_index);
+    std::optional<uint32_t> FindResumeOp(const uint32_t label);
     off_t GetDataOffset() const;
     CowHeaderV3 header_ = {};
     std::shared_ptr<std::vector<CowOperationV3>> ops_;
+    bool ReadResumeBuffer(android::base::borrowed_fd fd);
+    std::shared_ptr<std::vector<ResumePoint>> resume_points_;
 };
 
 }  // namespace snapshot

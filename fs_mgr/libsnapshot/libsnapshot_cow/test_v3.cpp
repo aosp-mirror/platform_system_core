@@ -457,5 +457,30 @@ TEST_F(CowTestV3, GzCompression) {
     iter->Next();
     ASSERT_TRUE(iter->AtEnd());
 }
+
+TEST_F(CowTestV3, ResumePointTest) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+
+    ASSERT_TRUE(writer->AddZeroBlocks(0, 15));
+    ASSERT_TRUE(writer->AddLabel(0));
+    ASSERT_TRUE(writer->AddZeroBlocks(15, 15));
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto header = reader.header_v3();
+    ASSERT_EQ(header.op_count, 30);
+
+    CowWriterV3 second_writer(options, GetCowFd());
+    ASSERT_TRUE(second_writer.Initialize(0));
+    ASSERT_TRUE(second_writer.Finalize());
+
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    header = reader.header_v3();
+    ASSERT_EQ(header.op_count, 15);
+}
 }  // namespace snapshot
 }  // namespace android
