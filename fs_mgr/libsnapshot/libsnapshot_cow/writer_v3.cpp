@@ -34,6 +34,7 @@
 #include <zlib.h>
 
 #include <fcntl.h>
+#include <libsnapshot_cow/parser_v3.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -77,7 +78,7 @@ void CowWriterV3::SetupHeaders() {
     // WIP: not quite sure how some of these are calculated yet, assuming buffer_size is determined
     // during COW size estimation
     header_.sequence_buffer_offset = 0;
-    header_.resume_buffer_size = 0;
+    header_.resume_buffer_size = kNumResumePoints;
     header_.op_count = 0;
     header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
@@ -120,11 +121,14 @@ bool CowWriterV3::Initialize(std::optional<uint64_t> label) {
     if (!InitFd() || !ParseOptions()) {
         return false;
     }
-
-    CHECK(!label.has_value());
-
-    if (!OpenForWrite()) {
-        return false;
+    if (!label) {
+        if (!OpenForWrite()) {
+            return false;
+        }
+    } else {
+        if (!OpenForAppend(*label)) {
+            return false;
+        }
     }
 
     return true;
@@ -159,13 +163,44 @@ bool CowWriterV3::OpenForWrite() {
         }
     }
     header_.op_count_max = options_.op_count_max;
+    resume_points_ = std::make_shared<std::vector<ResumePoint>>();
 
     if (!Sync()) {
         LOG(ERROR) << "Header sync failed";
         return false;
     }
-    next_data_pos_ =
-            sizeof(CowHeaderV3) + header_.buffer_size + header_.op_count_max * sizeof(CowOperation);
+    next_data_pos_ = GetDataOffset();
+    return true;
+}
+
+bool CowWriterV3::OpenForAppend(uint64_t label) {
+    CowHeaderV3 header_v3;
+    if (!ReadCowHeader(fd_, &header_v3)) {
+        LOG(ERROR) << "Couldn't read Cow Header";
+        return false;
+    }
+
+    header_ = header_v3;
+
+    CHECK(label >= 0);
+    CowParserV3 parser;
+    if (!parser.Parse(fd_, header_, label)) {
+        PLOG(ERROR) << "unable to parse with given label: " << label;
+        return false;
+    }
+
+    resume_points_ = parser.resume_points();
+    options_.block_size = header_.block_size;
+    next_data_pos_ = GetDataOffset();
+
+    TranslatedCowOps ops;
+    parser.Translate(&ops);
+    header_.op_count = ops.ops->size();
+
+    for (const auto& op : *ops.ops) {
+        next_data_pos_ += op.data_length;
+    }
+
     return true;
 }
 
@@ -249,9 +284,32 @@ bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) 
 }
 
 bool CowWriterV3::EmitLabel(uint64_t label) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (label) return false;
-    return false;
+    // remove all labels greater than this current one. we want to avoid the situation of adding
+    // in
+    // duplicate labels with differing op values
+    auto remove_if_callback = [&](const auto& resume_point) -> bool {
+        if (resume_point.label >= label) return true;
+        return false;
+    };
+    resume_points_->erase(
+            std::remove_if(resume_points_->begin(), resume_points_->end(), remove_if_callback),
+            resume_points_->end());
+
+    resume_points_->push_back({label, header_.op_count});
+    // remove the oldest resume point if resume_buffer is full
+    while (resume_points_->size() > header_.resume_buffer_size) {
+        resume_points_->erase(resume_points_->begin());
+    }
+
+    CHECK_LE(resume_points_->size(), header_.resume_buffer_size);
+
+    if (!android::base::WriteFullyAtOffset(fd_, resume_points_->data(),
+                                           resume_points_->size() * sizeof(ResumePoint),
+                                           GetResumeOffset())) {
+        PLOG(ERROR) << "writing resume buffer failed";
+        return false;
+    }
+    return Sync();
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
