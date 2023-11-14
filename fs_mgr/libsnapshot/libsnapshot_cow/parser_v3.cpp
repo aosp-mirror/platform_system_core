@@ -15,8 +15,10 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/strings.h>
 
 #include <libsnapshot/cow_format.h>
+#include <libsnapshot/cow_reader.h>
 
 namespace android {
 namespace snapshot {
@@ -36,6 +38,7 @@ bool CowParserV3::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional
         LOG(ERROR) << "Footer size isn't 0, read " << header_.footer_size;
         return false;
     }
+
     if (header_.op_size != sizeof(CowOperationV3)) {
         LOG(ERROR) << "Operation size unknown, read " << header_.op_size << ", expected "
                    << sizeof(CowOperationV3);
@@ -55,18 +58,54 @@ bool CowParserV3::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional
         return false;
     }
 
-    return ParseOps(fd, label);
+    std::optional<uint32_t> op_index = header_.op_count;
+    if (label) {
+        if (!ReadResumeBuffer(fd)) {
+            PLOG(ERROR) << "Failed to read resume buffer";
+            return false;
+        }
+        op_index = FindResumeOp(label.value());
+        if (op_index == std::nullopt) {
+            LOG(ERROR) << "failed to get op index from given label: " << label.value();
+            return false;
+        }
+    }
+
+    return ParseOps(fd, op_index.value());
+}
+
+bool CowParserV3::ReadResumeBuffer(borrowed_fd fd) {
+    resume_points_ = std::make_shared<std::vector<ResumePoint>>(header_.resume_buffer_size);
+
+    return android::base::ReadFullyAtOffset(fd, resume_points_->data(),
+                                            header_.resume_buffer_size * sizeof(ResumePoint),
+                                            header_.prefix.header_size + header_.buffer_size);
+}
+
+std::optional<uint32_t> CowParserV3::FindResumeOp(const uint32_t label) {
+    for (auto& resume_point : *resume_points_) {
+        if (resume_point.label == label) {
+            return resume_point.op_index;
+        }
+    }
+    LOG(ERROR) << "failed to find label: " << label << "from following labels";
+    LOG(ERROR) << android::base::Join(*resume_points_, " ");
+
+    return std::nullopt;
 }
 
 off_t CowParserV3::GetDataOffset() const {
-    return sizeof(CowHeaderV3) + header_.buffer_size + header_.op_count_max * sizeof(CowOperation);
+    return sizeof(CowHeaderV3) + header_.buffer_size +
+           header_.resume_buffer_size * sizeof(ResumePoint) +
+           header_.op_count_max * sizeof(CowOperation);
 }
 
-bool CowParserV3::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
+bool CowParserV3::ParseOps(borrowed_fd fd, const uint32_t op_index) {
     ops_ = std::make_shared<std::vector<CowOperationV3>>();
-    ops_->resize(header_.op_count);
+    ops_->resize(op_index);
 
-    const off_t offset = header_.prefix.header_size + header_.buffer_size;
+    const off_t offset = header_.prefix.header_size + header_.buffer_size +
+                         header_.resume_buffer_size * sizeof(ResumePoint);
     if (!android::base::ReadFullyAtOffset(fd, ops_->data(), ops_->size() * sizeof(CowOperationV3),
                                           offset)) {
         PLOG(ERROR) << "read ops failed";
@@ -87,7 +126,6 @@ bool CowParserV3::ParseOps(borrowed_fd fd, std::optional<uint64_t> label) {
     // :TODO: sequence buffer & resume buffer follow
     // Once we implement labels, we'll have to discard unused ops and adjust
     // the header as needed.
-    CHECK(!label);
 
     ops_->shrink_to_fit();
 
