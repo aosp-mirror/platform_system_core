@@ -52,12 +52,12 @@ class CowWriterV3 : public CowWriterBase {
     off_t GetOpOffset(uint32_t op_index) const {
         CHECK_LT(op_index, header_.op_count_max);
         return header_.prefix.header_size + header_.buffer_size +
-               (header_.resume_buffer_size * sizeof(ResumePoint)) +
+               (header_.resume_point_max * sizeof(ResumePoint)) +
                (op_index * sizeof(CowOperationV3));
     }
     off_t GetDataOffset() const {
         return sizeof(CowHeaderV3) + header_.buffer_size +
-               (header_.resume_buffer_size * sizeof(ResumePoint)) +
+               (header_.resume_point_max * sizeof(ResumePoint)) +
                header_.op_count_max * sizeof(CowOperation);
     }
     off_t GetResumeOffset() const { return sizeof(CowHeaderV3) + header_.buffer_size; }
