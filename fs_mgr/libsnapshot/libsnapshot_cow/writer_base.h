@@ -62,6 +62,8 @@ class CowWriterBase : public ICowWriter {
     bool InitFd();
     bool ValidateNewBlock(uint64_t new_block);
 
+    bool IsEstimating() const { return is_dev_null_; }
+
     CowOptions options_;
 
     android::base::unique_fd fd_;

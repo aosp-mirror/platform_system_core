@@ -178,5 +178,37 @@ TEST(persistent_properties, RejectNonPersistProperty) {
     EXPECT_FALSE(it == read_back_properties.properties().end());
 }
 
+TEST(persistent_properties, StagedPersistProperty) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    persistent_property_filename = tf.path;
+
+    std::vector<std::pair<std::string, std::string>> persistent_properties = {
+        {"persist.sys.locale", "en-US"},
+        {"next_boot.persist.test.numbers", "54321"},
+        {"persist.sys.timezone", "America/Los_Angeles"},
+        {"persist.test.numbers", "12345"},
+        {"next_boot.persist.test.extra", "abc"},
+    };
+
+    ASSERT_RESULT_OK(
+            WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
+
+    std::vector<std::pair<std::string, std::string>> expected_persistent_properties = {
+        {"persist.sys.locale", "en-US"},
+        {"persist.sys.timezone", "America/Los_Angeles"},
+        {"persist.test.numbers", "54321"},
+        {"persist.test.extra", "abc"},
+    };
+
+    // lock down that staged props are applied
+    auto first_read_back_properties = LoadPersistentProperties();
+    CheckPropertiesEqual(expected_persistent_properties, first_read_back_properties);
+
+    // lock down that other props are not overwritten
+    auto second_read_back_properties = LoadPersistentProperties();
+    CheckPropertiesEqual(expected_persistent_properties, second_read_back_properties);
+}
+
 }  // namespace init
 }  // namespace android

@@ -28,8 +28,8 @@
 #include <zlib.h>
 
 #include "cow_decompress.h"
-#include "libsnapshot/cow_format.h"
 #include "parser_v2.h"
+#include "parser_v3.h"
 
 namespace android {
 namespace snapshot {
@@ -82,10 +82,9 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->merge_op_start_ = merge_op_start_;
     cow->num_total_data_ops_ = num_total_data_ops_;
     cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
-    cow->data_loc_ = data_loc_;
+    cow->xor_data_loc_ = xor_data_loc_;
     cow->block_pos_index_ = block_pos_index_;
     cow->is_merge_ = is_merge_;
-    cow->compression_type_ = compression_type_;
     return cow;
 }
 
@@ -104,11 +103,14 @@ bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
         PLOG(ERROR) << "lseek header failed";
         return false;
     }
-    if (!android::base::ReadFully(fd_, &header_, sizeof(header_))) {
+
+    CHECK_GE(header_.prefix.header_size, sizeof(CowHeader));
+    CHECK_LE(header_.prefix.header_size, sizeof(header_));
+
+    if (!android::base::ReadFully(fd_, &header_, header_.prefix.header_size)) {
         PLOG(ERROR) << "read header failed";
         return false;
     }
-
     return true;
 }
 
@@ -124,51 +126,34 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         return false;
     }
 
-    CowParserV2 parser;
-    if (!parser.Parse(fd, header_, label)) {
+    std::unique_ptr<CowParserBase> parser;
+    switch (header_.prefix.major_version) {
+        case 1:
+        case 2:
+            parser = std::make_unique<CowParserV2>();
+            break;
+        case 3:
+            parser = std::make_unique<CowParserV3>();
+            break;
+        default:
+            LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
+            return false;
+    }
+    if (!parser->Parse(fd, header_, label)) {
         return false;
     }
 
-    footer_ = parser.footer();
-    fd_size_ = parser.fd_size();
-    last_label_ = parser.last_label();
-    data_loc_ = parser.data_loc();
-    ops_ = std::make_shared<std::vector<CowOperation>>(parser.ops()->size());
-
-    // Translate the operation buffer from on disk to in memory
-    for (size_t i = 0; i < parser.ops()->size(); i++) {
-        const auto& v2_op = parser.ops()->at(i);
-
-        auto& new_op = ops_->at(i);
-        new_op.type = v2_op.type;
-        new_op.data_length = v2_op.data_length;
-
-        if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
-            LOG(ERROR) << "Out-of-range new block in COW op: " << v2_op;
-            return false;
-        }
-        new_op.new_block = v2_op.new_block;
-
-        uint64_t source_info = v2_op.source;
-        if (new_op.type != kCowLabelOp) {
-            source_info &= kCowOpSourceInfoDataMask;
-            if (source_info != v2_op.source) {
-                LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
-                return false;
-            }
-        }
-        if (v2_op.compression != kCowCompressNone) {
-            if (compression_type_ == kCowCompressNone) {
-                compression_type_ = v2_op.compression;
-            } else if (compression_type_ != v2_op.compression) {
-                LOG(ERROR) << "COW has mixed compression types which is not supported;"
-                           << " previously saw " << compression_type_ << ", got "
-                           << v2_op.compression << ", op: " << v2_op;
-                return false;
-            }
-        }
-        new_op.source_info = source_info;
+    TranslatedCowOps ops_info;
+    if (!parser->Translate(&ops_info)) {
+        return false;
     }
+
+    header_ = ops_info.header;
+    ops_ = std::move(ops_info.ops);
+    footer_ = parser->footer();
+    fd_size_ = parser->fd_size();
+    last_label_ = parser->last_label();
+    xor_data_loc_ = parser->xor_data_loc();
 
     // If we're resuming a write, we're not ready to merge
     if (label.has_value()) return true;
@@ -615,8 +600,8 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
-    if (offset < header_.prefix.header_size || offset >= fd_size_ - sizeof(CowFooter) ||
-        len >= fd_size_ || offset + len > fd_size_ - sizeof(CowFooter)) {
+    if (offset < header_.prefix.header_size || offset >= fd_size_ || offset + len > fd_size_ ||
+        len >= fd_size_) {
         LOG(ERROR) << "invalid data offset: " << offset << ", " << len << " bytes";
         return false;
     }
@@ -664,7 +649,7 @@ class CowDataStream final : public IByteStream {
 };
 
 uint8_t CowReader::GetCompressionType() {
-    return compression_type_;
+    return header_.compression_algorithm;
 }
 
 ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
@@ -696,12 +681,12 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 
     uint64_t offset;
     if (op->type == kCowXorOp) {
-        offset = data_loc_->at(op->new_block);
+        offset = xor_data_loc_->at(op->new_block);
     } else {
         offset = GetCowOpSourceInfoData(*op);
     }
-
-    if (!decompressor) {
+    if (!decompressor ||
+        ((op->data_length == header_.block_size) && (header_.prefix.major_version == 3))) {
         CowDataStream stream(this, offset + ignore_bytes, op->data_length - ignore_bytes);
         return stream.ReadFully(buffer, buffer_size);
     }
