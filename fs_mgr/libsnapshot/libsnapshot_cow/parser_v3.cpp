@@ -75,10 +75,10 @@ bool CowParserV3::Parse(borrowed_fd fd, const CowHeaderV3& header, std::optional
 }
 
 bool CowParserV3::ReadResumeBuffer(borrowed_fd fd) {
-    resume_points_ = std::make_shared<std::vector<ResumePoint>>(header_.resume_buffer_size);
+    resume_points_ = std::make_shared<std::vector<ResumePoint>>(header_.resume_point_count);
 
     return android::base::ReadFullyAtOffset(fd, resume_points_->data(),
-                                            header_.resume_buffer_size * sizeof(ResumePoint),
+                                            header_.resume_point_count * sizeof(ResumePoint),
                                             header_.prefix.header_size + header_.buffer_size);
 }
 
@@ -96,7 +96,7 @@ std::optional<uint32_t> CowParserV3::FindResumeOp(const uint64_t label) {
 
 off_t CowParserV3::GetDataOffset() const {
     return sizeof(CowHeaderV3) + header_.buffer_size +
-           header_.resume_buffer_size * sizeof(ResumePoint) +
+           header_.resume_point_max * sizeof(ResumePoint) +
            header_.op_count_max * sizeof(CowOperation);
 }
 
@@ -105,7 +105,7 @@ bool CowParserV3::ParseOps(borrowed_fd fd, const uint32_t op_index) {
     ops_->resize(op_index);
 
     const off_t offset = header_.prefix.header_size + header_.buffer_size +
-                         header_.resume_buffer_size * sizeof(ResumePoint);
+                         header_.resume_point_max * sizeof(ResumePoint);
     if (!android::base::ReadFullyAtOffset(fd, ops_->data(), ops_->size() * sizeof(CowOperationV3),
                                           offset)) {
         PLOG(ERROR) << "read ops failed";
