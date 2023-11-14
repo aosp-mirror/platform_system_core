@@ -136,6 +136,7 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
+int Service::sigchld_fd_ = -1;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)
@@ -194,7 +195,7 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     }
 }
 
-void Service::KillProcessGroup(int signal, bool report_oneshot) {
+void Service::KillProcessGroup(int signal) {
     // If we've already seen a successful result from killProcessGroup*(), then we have removed
     // the cgroup already and calling these functions a second time will simply result in an error.
     // This is true regardless of which signal was sent.
@@ -202,20 +203,11 @@ void Service::KillProcessGroup(int signal, bool report_oneshot) {
     if (!process_cgroup_empty_) {
         LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
                   << ") process group...";
-        int max_processes = 0;
         int r;
         if (signal == SIGTERM) {
-            r = killProcessGroupOnce(uid(), pid_, signal, &max_processes);
+            r = killProcessGroupOnce(uid(), pid_, signal);
         } else {
-            r = killProcessGroup(uid(), pid_, signal, &max_processes);
-        }
-
-        if (report_oneshot && max_processes > 0) {
-            LOG(WARNING)
-                    << "Killed " << max_processes
-                    << " additional processes from a oneshot process group for service '" << name_
-                    << "'. This is new behavior, previously child processes would not be killed in "
-                       "this case.";
+            r = killProcessGroup(uid(), pid_, signal);
         }
 
         if (r == 0) process_cgroup_empty_ = true;
@@ -265,7 +257,7 @@ void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
 
 void Service::Reap(const siginfo_t& siginfo) {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
-        KillProcessGroup(SIGKILL, false);
+        KillProcessGroup(SIGKILL);
     } else {
         // Legacy behavior from ~2007 until Android R: this else branch did not exist and we did not
         // kill the process group in this case.
@@ -273,7 +265,7 @@ void Service::Reap(const siginfo_t& siginfo) {
             // The new behavior in Android R is to kill these process groups in all cases.  The
             // 'true' parameter instructions KillProcessGroup() to report a warning message where it
             // detects a difference in behavior has occurred.
-            KillProcessGroup(SIGKILL, true);
+            KillProcessGroup(SIGKILL);
         }
     }
 
