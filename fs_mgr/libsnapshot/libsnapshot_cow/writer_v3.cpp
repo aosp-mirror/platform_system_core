@@ -78,7 +78,8 @@ void CowWriterV3::SetupHeaders() {
     // WIP: not quite sure how some of these are calculated yet, assuming buffer_size is determined
     // during COW size estimation
     header_.sequence_buffer_offset = 0;
-    header_.resume_buffer_size = kNumResumePoints;
+    header_.resume_point_count = 0;
+    header_.resume_point_max = kNumResumePoints;
     header_.op_count = 0;
     header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
@@ -296,12 +297,13 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
             resume_points_->end());
 
     resume_points_->push_back({label, header_.op_count});
+    header_.resume_point_count++;
     // remove the oldest resume point if resume_buffer is full
-    while (resume_points_->size() > header_.resume_buffer_size) {
+    while (resume_points_->size() > header_.resume_point_max) {
         resume_points_->erase(resume_points_->begin());
     }
 
-    CHECK_LE(resume_points_->size(), header_.resume_buffer_size);
+    CHECK_LE(resume_points_->size(), header_.resume_point_max);
 
     if (!android::base::WriteFullyAtOffset(fd_, resume_points_->data(),
                                            resume_points_->size() * sizeof(ResumePoint),
