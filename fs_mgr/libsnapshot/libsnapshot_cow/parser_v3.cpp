@@ -94,18 +94,12 @@ std::optional<uint32_t> CowParserV3::FindResumeOp(const uint64_t label) {
     return std::nullopt;
 }
 
-off_t CowParserV3::GetDataOffset() const {
-    return sizeof(CowHeaderV3) + header_.buffer_size +
-           header_.resume_point_max * sizeof(ResumePoint) +
-           header_.op_count_max * sizeof(CowOperation);
-}
-
 bool CowParserV3::ParseOps(borrowed_fd fd, const uint32_t op_index) {
     ops_ = std::make_shared<std::vector<CowOperationV3>>();
     ops_->resize(op_index);
 
-    const off_t offset = header_.prefix.header_size + header_.buffer_size +
-                         header_.resume_point_max * sizeof(ResumePoint);
+    // read beginning of operation buffer -> so op_index = 0
+    const off_t offset = GetOpOffset(0, header_);
     if (!android::base::ReadFullyAtOffset(fd, ops_->data(), ops_->size() * sizeof(CowOperationV3),
                                           offset)) {
         PLOG(ERROR) << "read ops failed";
@@ -113,7 +107,7 @@ bool CowParserV3::ParseOps(borrowed_fd fd, const uint32_t op_index) {
     }
 
     // fill out mapping of XOR op data location
-    uint64_t data_pos = GetDataOffset();
+    uint64_t data_pos = GetDataOffset(header_);
 
     xor_data_loc_ = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
