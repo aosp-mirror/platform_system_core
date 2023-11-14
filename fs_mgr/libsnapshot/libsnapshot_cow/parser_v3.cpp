@@ -82,7 +82,7 @@ bool CowParserV3::ReadResumeBuffer(borrowed_fd fd) {
                                             header_.prefix.header_size + header_.buffer_size);
 }
 
-std::optional<uint32_t> CowParserV3::FindResumeOp(const uint32_t label) {
+std::optional<uint32_t> CowParserV3::FindResumeOp(const uint64_t label) {
     for (auto& resume_point : *resume_points_) {
         if (resume_point.label == label) {
             return resume_point.op_index;
