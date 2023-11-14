@@ -868,7 +868,13 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
 
                 auto controller = cg_map.FindController(controller_name);
                 if (controller.HasValue()) {
-                    profile->Add(std::make_unique<SetCgroupAction>(controller, path));
+                    if (controller.version() == 1) {
+                        profile->Add(std::make_unique<SetCgroupAction>(controller, path));
+                    } else {
+                        LOG(WARNING) << "A JoinCgroup action in the " << profile_name
+                                     << " profile is used for controller " << controller_name
+                                     << " in the cgroup v2 hierarchy and will be ignored";
+                    }
                 } else {
                     LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
                 }
