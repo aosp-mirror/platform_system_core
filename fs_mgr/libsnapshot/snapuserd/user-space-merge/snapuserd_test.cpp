@@ -627,9 +627,10 @@ void SnapuserdTest::CreateCowDeviceOrderedOps() {
 void SnapuserdTest::InitCowDevice() {
     auto factory = harness_->GetBlockServerFactory();
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
+    handlers_->DisableVerification();
     auto handler =
             handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
-                                  base_dev_->GetPath(), opener, 1, GetParam(), false);
+                                  base_dev_->GetPath(), opener, 1, GetParam());
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
