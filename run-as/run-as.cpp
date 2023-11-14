@@ -196,14 +196,6 @@ int main(int argc, char* argv[]) {
   }
   if (setegid(old_egid) == -1) error(1, errno, "couldn't restore egid");
 
-  // Handle a multi-user data path
-  if (userId > 0) {
-    free(info.data_dir);
-    if (asprintf(&info.data_dir, "/data/user/%d/%s", userId, pkgname) == -1) {
-      error(1, errno, "asprintf failed");
-    }
-  }
-
   if (info.uid == 0) {
     error(1, 0, "unknown package: %s", pkgname);
   }
@@ -224,6 +216,12 @@ int main(int argc, char* argv[]) {
   // Reject any non-debuggable package.
   if (!info.debuggable) {
     error(1, 0, "package not debuggable: %s", pkgname);
+  }
+
+  // Ensure we have the right data path for the specific user.
+  free(info.data_dir);
+  if (asprintf(&info.data_dir, "/data/user/%d/%s", userId, pkgname) == -1) {
+    error(1, errno, "asprintf failed");
   }
 
   // Check that the data directory path is valid.
