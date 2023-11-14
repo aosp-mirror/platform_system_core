@@ -71,6 +71,7 @@ subsystem vfio
 /dev/mtp_usb              0660   root       mtp
 /dev/usb_accessory        0660   root       usb
 /dev/tun                  0660   system     vpn
+/dev/hidraw*              0660   system     system
 
 # CDMA radio interface MUX
 /dev/ppp                  0660   radio      vpn
