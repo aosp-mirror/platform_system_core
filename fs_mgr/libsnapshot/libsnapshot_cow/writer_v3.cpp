@@ -170,7 +170,7 @@ bool CowWriterV3::OpenForWrite() {
         LOG(ERROR) << "Header sync failed";
         return false;
     }
-    next_data_pos_ = GetDataOffset();
+    next_data_pos_ = GetDataOffset(header_);
     return true;
 }
 
@@ -192,7 +192,7 @@ bool CowWriterV3::OpenForAppend(uint64_t label) {
 
     resume_points_ = parser.resume_points();
     options_.block_size = header_.block_size;
-    next_data_pos_ = GetDataOffset();
+    next_data_pos_ = GetDataOffset(header_);
 
     TranslatedCowOps ops;
     parser.Translate(&ops);
@@ -307,7 +307,7 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
 
     if (!android::base::WriteFullyAtOffset(fd_, resume_points_->data(),
                                            resume_points_->size() * sizeof(ResumePoint),
-                                           GetResumeOffset())) {
+                                           GetResumeOffset(header_))) {
         PLOG(ERROR) << "writing resume buffer failed";
         return false;
     }
@@ -333,7 +333,7 @@ bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, siz
         return false;
     }
 
-    const off_t offset = GetOpOffset(header_.op_count);
+    const off_t offset = GetOpOffset(header_.op_count, header_);
     if (!android::base::WriteFullyAtOffset(fd_, &op, sizeof(op), offset)) {
         PLOG(ERROR) << "write failed for " << op << " at " << offset;
         return false;
