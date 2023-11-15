@@ -2825,7 +2825,8 @@ TEST_F(CrasherTest, verify_build_id) {
     }
 
     prev_file = match[1];
-    unwindstack::Elf elf(unwindstack::Memory::CreateFileMemory(prev_file, 0).release());
+    auto elf_memory = unwindstack::Memory::CreateFileMemory(prev_file, 0);
+    unwindstack::Elf elf(elf_memory);
     if (!elf.Init() || !elf.valid()) {
       // Skipping invalid elf files.
       continue;
