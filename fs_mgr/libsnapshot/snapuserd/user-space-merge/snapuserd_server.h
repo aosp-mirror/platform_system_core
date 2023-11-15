@@ -40,6 +40,8 @@ namespace snapshot {
 
 static constexpr uint32_t kMaxPacketSize = 512;
 static constexpr uint8_t kMaxMergeThreads = 2;
+static constexpr char kBootSnapshotsWithoutSlotSwitch[] =
+        "/metadata/ota/snapshot-boot-without-slot-switch";
 
 class UserSnapshotServer {
   private:
