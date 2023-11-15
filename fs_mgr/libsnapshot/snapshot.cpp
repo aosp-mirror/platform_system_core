@@ -4339,32 +4339,30 @@ std::string SnapshotManager::ReadSourceBuildFingerprint() {
 }
 
 bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
-    auto slot = GetCurrentSlot();
-    if (slot == Slot::Target) {
-        // Merge in-progress
-        if (IsSnapuserdRequired()) {
+    // We cannot grab /metadata/ota lock here as this
+    // is in reboot path. See b/308900853
+    //
+    // Check if any of the partitions are mounted
+    // off dm-user block device. If so, then we are certain
+    // that OTA update in progress.
+    auto current_suffix = device_->GetSlotSuffix();
+    auto& dm = DeviceMapper::Instance();
+    auto dm_block_devices = dm.FindDmPartitions();
+    if (dm_block_devices.empty()) {
+        LOG(ERROR) << "No dm-enabled block device is found.";
+        return false;
+    }
+    for (auto& partition : dm_block_devices) {
+        std::string partition_name = partition.first + current_suffix;
+        DeviceMapper::TargetInfo snap_target;
+        if (!GetSingleTarget(partition_name, TableQuery::Status, &snap_target)) {
+            return false;
+        }
+        auto type = DeviceMapper::GetTargetType(snap_target.spec);
+        if (type == "user") {
             return true;
         }
     }
-
-    // Let's check more deeper to see if snapshots are mounted
-    auto lock = LockExclusive();
-    if (!lock) {
-        return false;
-    }
-
-    std::vector<std::string> snapshots;
-    if (!ListSnapshots(lock.get(), &snapshots)) {
-        return false;
-    }
-
-    for (const auto& snapshot : snapshots) {
-        // Active snapshot and daemon is alive
-        if (IsSnapshotDevice(snapshot) && EnsureSnapuserdConnected(2s)) {
-            return true;
-        }
-    }
-
     return false;
 }
 
