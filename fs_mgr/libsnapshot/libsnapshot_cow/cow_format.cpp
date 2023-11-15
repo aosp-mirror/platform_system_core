@@ -100,6 +100,11 @@ std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
     return os;
 }
 
+std::ostream& operator<<(std::ostream& os, ResumePoint const& resume_point) {
+    os << "ResumePoint(" << resume_point.label << " , " << resume_point.op_index << ")";
+    return os;
+}
+
 int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_ops) {
     if (op.type == kCowClusterOp) {
         return op.source;
