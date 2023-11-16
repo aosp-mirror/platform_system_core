@@ -196,11 +196,12 @@ void Service::NotifyStateChange(const std::string& new_state) const {
 }
 
 void Service::KillProcessGroup(int signal) {
-    // If we've already seen a successful result from killProcessGroup*(), then we have removed
-    // the cgroup already and calling these functions a second time will simply result in an error.
-    // This is true regardless of which signal was sent.
-    // These functions handle their own logging, so no additional logging is needed.
-    if (!process_cgroup_empty_) {
+    // Always attempt the process kill if process is still running.
+    // Cgroup clean up routines are idempotent. It's safe to call
+    // killProcessGroup repeatedly. During shutdown, `init` will
+    // call this function to send SIGTERM/SIGKILL to all processes.
+    // These signals must be sent for a successful shutdown.
+    if (!process_cgroup_empty_ || IsRunning()) {
         LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
                   << ") process group...";
         int r;
