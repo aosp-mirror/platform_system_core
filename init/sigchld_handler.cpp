@@ -138,7 +138,7 @@ static void ReapAndRemove(std::vector<pid_t>& alive_pids) {
     }
 }
 
-static void DiscardSiginfo(int signal_fd) {
+static void HandleSignal(int signal_fd) {
     signalfd_siginfo siginfo;
     ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
     if (bytes_read != sizeof(siginfo)) {
@@ -151,21 +151,36 @@ void WaitToBeReaped(int sigchld_fd, const std::vector<pid_t>& pids,
                     std::chrono::milliseconds timeout) {
     Timer t;
     Epoll epoll;
-    // The init process passes a valid sigchld_fd argument but unit tests do not.
     if (sigchld_fd >= 0) {
-        epoll.RegisterHandler(sigchld_fd, [sigchld_fd]() { DiscardSiginfo(sigchld_fd); });
-    }
-    std::vector<pid_t> alive_pids(pids.begin(), pids.end());
-    while (!alive_pids.empty() && t.duration() < timeout) {
-        ReapAndRemove(alive_pids);
-        if (alive_pids.empty()) {
-            break;
-        }
-        if (sigchld_fd >= 0) {
-            epoll.Wait(std::max(timeout - t.duration(), 0ms));
+        if (auto result = epoll.Open(); result.ok()) {
+            result =
+                    epoll.RegisterHandler(sigchld_fd, [sigchld_fd]() { HandleSignal(sigchld_fd); });
+            if (!result.ok()) {
+                LOG(WARNING) << __func__
+                             << " RegisterHandler() failed. Falling back to sleep_for(): "
+                             << result.error();
+                sigchld_fd = -1;
+            }
         } else {
-            std::this_thread::sleep_for(50ms);
+            LOG(WARNING) << __func__ << " Epoll::Open() failed. Falling back to sleep_for(): "
+                         << result.error();
+            sigchld_fd = -1;
         }
+    }
+    std::vector<pid_t> alive_pids(pids);
+    ReapAndRemove(alive_pids);
+    while (!alive_pids.empty() && t.duration() < timeout) {
+        if (sigchld_fd >= 0) {
+            auto result = epoll.Wait(std::max(timeout - t.duration(), 0ms));
+            if (result.ok()) {
+                ReapAndRemove(alive_pids);
+                continue;
+            } else {
+                LOG(WARNING) << "Epoll::Wait() failed " << result.error();
+            }
+        }
+        std::this_thread::sleep_for(50ms);
+        ReapAndRemove(alive_pids);
     }
     LOG(INFO) << "Waiting for " << pids.size() << " pids to be reaped took " << t << " with "
               << alive_pids.size() << " of them still running";
