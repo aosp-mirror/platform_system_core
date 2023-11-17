@@ -851,7 +851,14 @@ static int __mount(const std::string& source, const std::string& target, const F
                   << ",type=" << entry.fs_type << ", gc_allowance=" << gc_allowance << "%)=" << ret
                   << "(" << save_errno << ")";
         }
-        ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
+
+        // Let's get the raw dm target, if it's a symlink, since some existing applications
+        // rely on /proc/mounts to find the userdata's dm target path. Don't break that assumption.
+        std::string real_source;
+        if (!android::base::Realpath(source, &real_source)) {
+            real_source = source;
+        }
+        ret = mount(real_source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
                     opts.c_str());
         save_errno = errno;
         if (try_f2fs_gc_allowance) gc_allowance += 10;
