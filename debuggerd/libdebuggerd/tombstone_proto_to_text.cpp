@@ -28,7 +28,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <async_safe/log.h>
 #include <bionic/macros.h>
 
 #include "tombstone.pb.h"
@@ -138,7 +137,8 @@ static void print_thread_registers(CallbackType callback, const Tombstone& tombs
       break;
 
     default:
-      async_safe_fatal("unknown architecture");
+      CBL("Unknown architecture %d printing thread registers", tombstone.arch());
+      return;
   }
 
   for (const auto& reg : thread.registers()) {
