@@ -87,7 +87,6 @@ bool setProcessGroupSwappiness(uid_t uid, int initialPid, int swappiness);
 bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInBytes);
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 
-void removeAllProcessGroups(void);
 void removeAllEmptyProcessGroups(void);
 
 // Provides the path for an attribute in a specific process group
