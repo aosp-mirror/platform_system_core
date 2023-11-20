@@ -311,7 +311,7 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
         PLOG(ERROR) << "writing resume buffer failed";
         return false;
     }
-    return Sync();
+    return Finalize();
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
