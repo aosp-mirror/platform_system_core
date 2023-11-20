@@ -100,6 +100,7 @@ bool CowWriterV3::ParseOptions() {
         return false;
     }
     header_.compression_algorithm = *algorithm;
+    header_.op_count_max = options_.op_count_max;
 
     if (parts.size() > 1) {
         if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
@@ -163,7 +164,7 @@ bool CowWriterV3::OpenForWrite() {
             return false;
         }
     }
-    header_.op_count_max = options_.op_count_max;
+
     resume_points_ = std::make_shared<std::vector<ResumePoint>>();
 
     if (!Sync()) {
