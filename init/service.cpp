@@ -37,6 +37,7 @@
 #include <cutils/sockets.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
+#include <sys/signalfd.h>
 
 #include <string>
 
@@ -68,6 +69,7 @@ using android::base::make_scope_guard;
 using android::base::SetProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
+using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -136,7 +138,6 @@ static bool ExpandArgsAndExecv(const std::vector<std::string>& args, bool sigsto
 
 unsigned long Service::next_start_order_ = 1;
 bool Service::is_exec_service_running_ = false;
-int Service::sigchld_fd_ = -1;
 
 Service::Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
                  const std::string& filename, const std::vector<std::string>& args)
@@ -790,6 +791,35 @@ void Service::SetMountNamespace() {
     }
     // Use the "default" mount namespace only if it's ready
     mount_namespace_ = IsDefaultMountNamespaceReady() ? NS_DEFAULT : NS_BOOTSTRAP;
+}
+
+static int ThreadCount() {
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir("/proc/self/task"), closedir);
+    if (!dir) {
+        return -1;
+    }
+
+    int count = 0;
+    dirent* entry;
+    while ((entry = readdir(dir.get())) != nullptr) {
+        if (entry->d_name[0] != '.') {
+            count++;
+        }
+    }
+    return count;
+}
+
+// Must be called BEFORE any threads are created. See also the sigprocmask() man page.
+unique_fd Service::CreateSigchldFd() {
+    CHECK_EQ(ThreadCount(), 1);
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
+        PLOG(FATAL) << "Failed to block SIGCHLD";
+    }
+
+    return unique_fd(signalfd(-1, &mask, SFD_CLOEXEC));
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {
