@@ -79,7 +79,7 @@ bool CowParserV3::ReadResumeBuffer(borrowed_fd fd) {
 
     return android::base::ReadFullyAtOffset(fd, resume_points_->data(),
                                             header_.resume_point_count * sizeof(ResumePoint),
-                                            header_.prefix.header_size + header_.buffer_size);
+                                            GetResumeOffset(header_));
 }
 
 std::optional<uint32_t> CowParserV3::FindResumeOp(const uint64_t label) {
