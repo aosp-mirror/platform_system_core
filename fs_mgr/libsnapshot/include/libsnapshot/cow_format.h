@@ -105,8 +105,8 @@ struct ResumePoint {
 static constexpr uint8_t kNumResumePoints = 4;
 
 struct CowHeaderV3 : public CowHeader {
-    // Location of sequence buffer in COW.
-    uint64_t sequence_buffer_offset;
+    // Number of sequence data stored (each of which is a 32 byte integer)
+    uint64_t sequence_data_count;
     // number of currently written resume points
     uint32_t resume_point_count;
     // Size, in bytes, of the CowResumePoint buffer.
