@@ -482,5 +482,43 @@ TEST_F(CowTestV3, ResumePointTest) {
     header = reader.header_v3();
     ASSERT_EQ(header.op_count, 15);
 }
+
+TEST_F(CowTestV3, BufferMetadataSyncTest) {
+    CowOptions options;
+    options.op_count_max = 100;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    /*
+    Header metadafields
+    sequence_data_count = 0;
+    resume_point_count = 0;
+    resume_point_max = 4;
+    */
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto header = reader.header_v3();
+    ASSERT_EQ(header.sequence_data_count, 0);
+    ASSERT_EQ(header.resume_point_count, 0);
+    ASSERT_EQ(header.resume_point_max, 4);
+
+    writer->AddLabel(0);
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    header = reader.header_v3();
+    ASSERT_EQ(header.sequence_data_count, 0);
+    ASSERT_EQ(header.resume_point_count, 1);
+    ASSERT_EQ(header.resume_point_max, 4);
+
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+    header = reader.header_v3();
+
+    /*
+    Header metadafields
+    sequence_data_count = 1;
+    resume_point_count = 0;
+    resume_point_max = 4;
+    */
+}
 }  // namespace snapshot
 }  // namespace android
