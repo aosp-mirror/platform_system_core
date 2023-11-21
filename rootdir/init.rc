@@ -808,6 +808,7 @@ on post-fs-data
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
     mkdir /data/misc/appcompat/ 0700 system system
+    mkdir /data/misc/uprobestats-configs/ 0777 uprobestats uprobestats
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
