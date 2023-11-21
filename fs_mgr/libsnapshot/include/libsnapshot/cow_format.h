@@ -107,9 +107,9 @@ static constexpr uint8_t kNumResumePoints = 4;
 struct CowHeaderV3 : public CowHeader {
     // Number of sequence data stored (each of which is a 32 byte integer)
     uint64_t sequence_data_count;
-    // number of currently written resume points
+    // Number of currently written resume points &&
     uint32_t resume_point_count;
-    // Size, in bytes, of the CowResumePoint buffer.
+    // Number of max resume points that can be written
     uint32_t resume_point_max;
     // Number of CowOperationV3 structs in the operation buffer, currently and total
     // region size.
@@ -232,17 +232,21 @@ static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
     return op.source_info & kCowOpSourceInfoDataMask;
 }
 
-static constexpr off_t GetOpOffset(uint32_t op_index, const CowHeaderV3 header) {
-    return header.prefix.header_size + header.buffer_size +
-           (header.resume_point_max * sizeof(ResumePoint)) + (op_index * sizeof(CowOperationV3));
-}
-static constexpr off_t GetDataOffset(const CowHeaderV3 header) {
-    return header.prefix.header_size + header.buffer_size +
-           (header.resume_point_max * sizeof(ResumePoint)) +
-           header.op_count_max * sizeof(CowOperation);
-}
-static constexpr off_t GetResumeOffset(const CowHeaderV3 header) {
+static constexpr off_t GetSequenceOffset(const CowHeaderV3& header) {
     return header.prefix.header_size + header.buffer_size;
+}
+
+static constexpr off_t GetResumeOffset(const CowHeaderV3& header) {
+    return GetSequenceOffset(header) + (header.sequence_data_count * sizeof(uint32_t));
+}
+
+static constexpr off_t GetOpOffset(uint32_t op_index, const CowHeaderV3& header) {
+    return GetResumeOffset(header) + (header.resume_point_max * sizeof(ResumePoint)) +
+           (op_index * sizeof(CowOperationV3));
+}
+
+static constexpr off_t GetDataOffset(const CowHeaderV3& header) {
+    return GetOpOffset(header.op_count_max, header);
 }
 
 struct CowFooter {
