@@ -219,6 +219,12 @@ static int RemoveCgroup(const char* cgroup, uid_t uid, int pid, unsigned int ret
 
     while (retries--) {
         ret = rmdir(uid_pid_path.c_str());
+        // If we get an error 2 'No such file or directory' , that means the
+        // cgroup is already removed, treat it as success and return 0 for
+        // idempotency.
+        if (ret < 0 && errno == ENOENT) {
+            ret = 0;
+        }
         if (!ret || errno != EBUSY || !retries) break;
         std::this_thread::sleep_for(5ms);
     }
@@ -228,6 +234,9 @@ static int RemoveCgroup(const char* cgroup, uid_t uid, int pid, unsigned int ret
         // so free up the kernel resources for the UID level cgroup.
         const auto uid_path = ConvertUidToPath(cgroup, uid);
         ret = rmdir(uid_path.c_str());
+        if (ret < 0 && errno == ENOENT) {
+            ret = 0;
+        }
     }
 
     return ret;
