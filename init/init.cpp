@@ -117,7 +117,6 @@ namespace init {
 
 static int property_triggers_enabled = 0;
 
-int sigchld_fd = -1;
 static int sigterm_fd = -1;
 static int property_fd = -1;
 
@@ -717,7 +716,7 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
 
 static void HandleSignalFd(int signal) {
     signalfd_siginfo siginfo;
-    const int signal_fd = signal == SIGCHLD ? sigchld_fd : sigterm_fd;
+    const int signal_fd = signal == SIGCHLD ? Service::GetSigchldFd() : sigterm_fd;
     ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
     if (bytes_read != sizeof(siginfo)) {
         PLOG(ERROR) << "Failed to read siginfo from signal_fd";
@@ -751,20 +750,24 @@ static void UnblockSignals() {
     }
 }
 
+static Result<void> RegisterSignalFd(Epoll* epoll, int signal, int fd) {
+    return epoll->RegisterHandler(
+            fd, [signal]() { HandleSignalFd(signal); }, EPOLLIN | EPOLLPRI);
+}
+
 static Result<int> CreateAndRegisterSignalFd(Epoll* epoll, int signal) {
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, signal);
-    unique_fd signal_fd(signalfd(-1, &mask, SFD_CLOEXEC));
-    if (signal_fd == -1) {
-        return ErrnoError() << "failed to create signalfd for signal " << signal;
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        return ErrnoError() << "failed to block signal " << signal;
     }
 
-    auto result = epoll->RegisterHandler(
-            signal_fd.get(), [signal]() { HandleSignalFd(signal); }, EPOLLIN | EPOLLPRI);
-    if (!result.ok()) {
-        return result.error();
+    unique_fd signal_fd(signalfd(-1, &mask, SFD_CLOEXEC));
+    if (signal_fd.get() < 0) {
+        return ErrnoError() << "failed to create signalfd for signal " << signal;
     }
+    OR_RETURN(RegisterSignalFd(epoll, signal, signal_fd.get()));
 
     return signal_fd.release();
 }
@@ -775,34 +778,18 @@ static void InstallSignalFdHandler(Epoll* epoll) {
     const struct sigaction act { .sa_flags = SA_NOCLDSTOP, .sa_handler = SIG_DFL };
     sigaction(SIGCHLD, &act, nullptr);
 
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-
-    if (!IsRebootCapable()) {
-        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
-        // In that case, receiving SIGTERM will cause the system to shut down.
-        sigaddset(&mask, SIGTERM);
-    }
-
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        PLOG(FATAL) << "failed to block signals";
-    }
-
     // Register a handler to unblock signals in the child processes.
     const int result = pthread_atfork(nullptr, nullptr, &UnblockSignals);
     if (result != 0) {
         LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGCHLD);
+    Result<void> cs_result = RegisterSignalFd(epoll, SIGCHLD, Service::GetSigchldFd());
     if (!cs_result.ok()) {
         PLOG(FATAL) << cs_result.error();
     }
-    sigchld_fd = cs_result.value();
-    Service::SetSigchldFd(sigchld_fd);
 
-    if (sigismember(&mask, SIGTERM)) {
+    if (!IsRebootCapable()) {
         Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGTERM);
         if (!cs_result.ok()) {
             PLOG(FATAL) << cs_result.error();

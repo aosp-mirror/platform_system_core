@@ -77,7 +77,7 @@ void CowWriterV3::SetupHeaders() {
     // v3 specific fields
     // WIP: not quite sure how some of these are calculated yet, assuming buffer_size is determined
     // during COW size estimation
-    header_.sequence_buffer_offset = 0;
+    header_.sequence_data_count = 0;
     header_.resume_point_count = 0;
     header_.resume_point_max = kNumResumePoints;
     header_.op_count = 0;
@@ -100,6 +100,7 @@ bool CowWriterV3::ParseOptions() {
         return false;
     }
     header_.compression_algorithm = *algorithm;
+    header_.op_count_max = options_.op_count_max;
 
     if (parts.size() > 1) {
         if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
@@ -163,7 +164,7 @@ bool CowWriterV3::OpenForWrite() {
             return false;
         }
     }
-    header_.op_count_max = options_.op_count_max;
+
     resume_points_ = std::make_shared<std::vector<ResumePoint>>();
 
     if (!Sync()) {
@@ -311,13 +312,18 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
         PLOG(ERROR) << "writing resume buffer failed";
         return false;
     }
-    return Sync();
+    return Finalize();
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
-    LOG(ERROR) << __LINE__ << " " << __FILE__ << " <- function here should never be called";
-    if (num_ops && data) return false;
-    return false;
+    // TODO: size sequence buffer based on options
+    header_.sequence_data_count = num_ops;
+    if (!android::base::WriteFullyAtOffset(fd_, data, sizeof(data[0]) * num_ops,
+                                           GetSequenceOffset(header_))) {
+        PLOG(ERROR) << "writing sequence buffer failed";
+        return false;
+    }
+    return true;
 }
 
 bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, size_t size) {
