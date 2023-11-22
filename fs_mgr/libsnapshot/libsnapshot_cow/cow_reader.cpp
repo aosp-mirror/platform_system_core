@@ -24,12 +24,13 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <libsnapshot/cow_format.h>
 #include <libsnapshot/cow_reader.h>
 #include <zlib.h>
 
 #include "cow_decompress.h"
-#include "libsnapshot/cow_format.h"
 #include "parser_v2.h"
+#include "parser_v3.h"
 
 namespace android {
 namespace snapshot {
@@ -82,10 +83,9 @@ std::unique_ptr<CowReader> CowReader::CloneCowReader() {
     cow->merge_op_start_ = merge_op_start_;
     cow->num_total_data_ops_ = num_total_data_ops_;
     cow->num_ordered_ops_to_merge_ = num_ordered_ops_to_merge_;
-    cow->data_loc_ = data_loc_;
+    cow->xor_data_loc_ = xor_data_loc_;
     cow->block_pos_index_ = block_pos_index_;
     cow->is_merge_ = is_merge_;
-    cow->compression_type_ = compression_type_;
     return cow;
 }
 
@@ -104,11 +104,14 @@ bool CowReader::InitForMerge(android::base::unique_fd&& fd) {
         PLOG(ERROR) << "lseek header failed";
         return false;
     }
-    if (!android::base::ReadFully(fd_, &header_, sizeof(header_))) {
+
+    CHECK_GE(header_.prefix.header_size, sizeof(CowHeader));
+    CHECK_LE(header_.prefix.header_size, sizeof(header_));
+
+    if (!android::base::ReadFully(fd_, &header_, header_.prefix.header_size)) {
         PLOG(ERROR) << "read header failed";
         return false;
     }
-
     return true;
 }
 
@@ -124,51 +127,34 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
         return false;
     }
 
-    CowParserV2 parser;
-    if (!parser.Parse(fd, header_, label)) {
+    std::unique_ptr<CowParserBase> parser;
+    switch (header_.prefix.major_version) {
+        case 1:
+        case 2:
+            parser = std::make_unique<CowParserV2>();
+            break;
+        case 3:
+            parser = std::make_unique<CowParserV3>();
+            break;
+        default:
+            LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
+            return false;
+    }
+    if (!parser->Parse(fd, header_, label)) {
         return false;
     }
 
-    footer_ = parser.footer();
-    fd_size_ = parser.fd_size();
-    last_label_ = parser.last_label();
-    data_loc_ = parser.data_loc();
-    ops_ = std::make_shared<std::vector<CowOperation>>(parser.ops()->size());
-
-    // Translate the operation buffer from on disk to in memory
-    for (size_t i = 0; i < parser.ops()->size(); i++) {
-        const auto& v2_op = parser.ops()->at(i);
-
-        auto& new_op = ops_->at(i);
-        new_op.type = v2_op.type;
-        new_op.data_length = v2_op.data_length;
-
-        if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
-            LOG(ERROR) << "Out-of-range new block in COW op: " << v2_op;
-            return false;
-        }
-        new_op.new_block = v2_op.new_block;
-
-        uint64_t source_info = v2_op.source;
-        if (new_op.type != kCowLabelOp) {
-            source_info &= kCowOpSourceInfoDataMask;
-            if (source_info != v2_op.source) {
-                LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
-                return false;
-            }
-        }
-        if (v2_op.compression != kCowCompressNone) {
-            if (compression_type_ == kCowCompressNone) {
-                compression_type_ = v2_op.compression;
-            } else if (compression_type_ != v2_op.compression) {
-                LOG(ERROR) << "COW has mixed compression types which is not supported;"
-                           << " previously saw " << compression_type_ << ", got "
-                           << v2_op.compression << ", op: " << v2_op;
-                return false;
-            }
-        }
-        new_op.source_info = source_info;
+    TranslatedCowOps ops_info;
+    if (!parser->Translate(&ops_info)) {
+        return false;
     }
+
+    header_ = ops_info.header;
+    ops_ = std::move(ops_info.ops);
+    footer_ = parser->footer();
+    fd_size_ = parser->fd_size();
+    last_label_ = parser->last_label();
+    xor_data_loc_ = parser->xor_data_loc();
 
     // If we're resuming a write, we're not ready to merge
     if (label.has_value()) return true;
@@ -280,52 +266,31 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
 //                        Replace-op-4, Zero-op-9, Replace-op-5 }
 //==============================================================
 bool CowReader::PrepMergeOps() {
-    auto merge_op_blocks = std::make_unique<std::vector<uint32_t>>();
     std::vector<int> other_ops;
-    auto seq_ops_set = std::unordered_set<uint32_t>();
-    auto block_map = std::make_unique<std::unordered_map<uint32_t, int>>();
-    size_t num_seqs = 0;
-    size_t read;
+    std::vector<uint32_t> merge_op_blocks;
+    std::unordered_map<uint32_t, int> block_map;
 
-    for (size_t i = 0; i < ops_->size(); i++) {
-        auto& current_op = ops_->data()[i];
-
-        if (current_op.type == kCowSequenceOp) {
-            size_t seq_len = current_op.data_length / sizeof(uint32_t);
-
-            merge_op_blocks->resize(merge_op_blocks->size() + seq_len);
-            if (!GetRawBytes(&current_op, &merge_op_blocks->data()[num_seqs],
-                             current_op.data_length, &read)) {
-                PLOG(ERROR) << "Failed to read sequence op!";
-                return false;
-            }
-            for (size_t j = num_seqs; j < num_seqs + seq_len; j++) {
-                seq_ops_set.insert(merge_op_blocks->data()[j]);
-            }
-            num_seqs += seq_len;
-        }
-
-        if (IsMetadataOp(current_op)) {
-            continue;
-        }
-
-        // Sequence ops must be the first ops in the stream.
-        if (seq_ops_set.empty() && IsOrderedOp(current_op)) {
-            merge_op_blocks->emplace_back(current_op.new_block);
-        } else if (seq_ops_set.count(current_op.new_block) == 0) {
-            other_ops.push_back(current_op.new_block);
-        }
-        block_map->insert({current_op.new_block, i});
+    switch (header_.prefix.major_version) {
+        case 1:
+        case 2:
+            GetSequenceDataV2(&merge_op_blocks, &other_ops, &block_map);
+            break;
+        case 3:
+            GetSequenceData(&merge_op_blocks, &other_ops, &block_map);
+            break;
+        default:
+            break;
     }
-    for (auto block : *merge_op_blocks) {
-        if (block_map->count(block) == 0) {
+
+    for (auto block : merge_op_blocks) {
+        if (block_map.count(block) == 0) {
             LOG(ERROR) << "Invalid Sequence Ops. Could not find Cow Op for new block " << block;
             return false;
         }
     }
 
-    if (merge_op_blocks->size() > header_.num_merge_ops) {
-        num_ordered_ops_to_merge_ = merge_op_blocks->size() - header_.num_merge_ops;
+    if (merge_op_blocks.size() > header_.num_merge_ops) {
+        num_ordered_ops_to_merge_ = merge_op_blocks.size() - header_.num_merge_ops;
     } else {
         num_ordered_ops_to_merge_ = 0;
     }
@@ -341,9 +306,9 @@ bool CowReader::PrepMergeOps() {
         std::sort(other_ops.begin(), other_ops.end(), std::greater<int>());
     }
 
-    merge_op_blocks->insert(merge_op_blocks->end(), other_ops.begin(), other_ops.end());
+    merge_op_blocks.insert(merge_op_blocks.end(), other_ops.begin(), other_ops.end());
 
-    num_total_data_ops_ = merge_op_blocks->size();
+    num_total_data_ops_ = merge_op_blocks.size();
     if (header_.num_merge_ops > 0) {
         merge_op_start_ = header_.num_merge_ops;
     }
@@ -353,21 +318,91 @@ bool CowReader::PrepMergeOps() {
         // the ops vector as required for merge operations.
         auto merge_ops_buffer = std::make_shared<std::vector<CowOperation>>();
         merge_ops_buffer->reserve(num_total_data_ops_);
-        for (auto block : *merge_op_blocks) {
-            merge_ops_buffer->emplace_back(ops_->data()[block_map->at(block)]);
+        for (auto block : merge_op_blocks) {
+            merge_ops_buffer->emplace_back(ops_->data()[block_map.at(block)]);
         }
         ops_->clear();
         ops_ = merge_ops_buffer;
         ops_->shrink_to_fit();
     } else {
-        for (auto block : *merge_op_blocks) {
-            block_pos_index_->push_back(block_map->at(block));
+        for (auto block : merge_op_blocks) {
+            block_pos_index_->push_back(block_map.at(block));
         }
     }
 
-    block_map->clear();
-    merge_op_blocks->clear();
+    block_map.clear();
+    merge_op_blocks.clear();
 
+    return true;
+}
+
+bool CowReader::GetSequenceDataV2(std::vector<uint32_t>* merge_op_blocks,
+                                  std::vector<int>* other_ops,
+                                  std::unordered_map<uint32_t, int>* block_map) {
+    auto seq_ops_set = std::unordered_set<uint32_t>();
+    size_t num_seqs = 0;
+    size_t read;
+    for (size_t i = 0; i < ops_->size(); i++) {
+        auto& current_op = ops_->data()[i];
+
+        if (current_op.type == kCowSequenceOp) {
+            size_t seq_len = current_op.data_length / sizeof(uint32_t);
+
+            merge_op_blocks->resize(merge_op_blocks->size() + seq_len);
+            if (!GetRawBytes(&current_op, &merge_op_blocks->data()[num_seqs],
+                             current_op.data_length, &read)) {
+                PLOG(ERROR) << "Failed to read sequence op!";
+                return false;
+            }
+            for (size_t j = num_seqs; j < num_seqs + seq_len; j++) {
+                seq_ops_set.insert(merge_op_blocks->at(j));
+            }
+            num_seqs += seq_len;
+        }
+
+        if (IsMetadataOp(current_op)) {
+            continue;
+        }
+
+        // Sequence ops must be the first ops in the stream.
+        if (seq_ops_set.empty() && IsOrderedOp(current_op)) {
+            merge_op_blocks->emplace_back(current_op.new_block);
+        } else if (seq_ops_set.count(current_op.new_block) == 0) {
+            other_ops->push_back(current_op.new_block);
+        }
+        block_map->insert({current_op.new_block, i});
+    }
+    return false;
+}
+
+bool CowReader::GetSequenceData(std::vector<uint32_t>* merge_op_blocks, std::vector<int>* other_ops,
+                                std::unordered_map<uint32_t, int>* block_map) {
+    std::unordered_set<uint32_t> seq_ops_set;
+    // read sequence ops data
+    merge_op_blocks->resize(header_.sequence_data_count);
+    if (!android::base::ReadFullyAtOffset(
+                fd_, merge_op_blocks->data(),
+                header_.sequence_data_count * sizeof(merge_op_blocks->at(0)),
+                GetSequenceOffset(header_))) {
+        PLOG(ERROR) << "failed to read sequence buffer. seq_data_count: "
+                    << header_.sequence_data_count << " at offset: " << GetSequenceOffset(header_);
+        return false;
+    }
+    seq_ops_set.reserve(merge_op_blocks->size());
+    for (auto& i : *merge_op_blocks) {
+        seq_ops_set.insert(i);
+    }
+    // read ordered op data
+    for (size_t i = 0; i < ops_->size(); i++) {
+        auto& current_op = ops_->data()[i];
+        // Sequence ops must be the first ops in the stream.
+        if (seq_ops_set.empty()) {
+            merge_op_blocks->emplace_back(current_op.new_block);
+        } else if (seq_ops_set.count(current_op.new_block) == 0) {
+            other_ops->push_back(current_op.new_block);
+        }
+        block_map->insert({current_op.new_block, i});
+    }
     return true;
 }
 
@@ -615,8 +650,8 @@ bool CowReader::GetRawBytes(const CowOperation* op, void* buffer, size_t len, si
 
 bool CowReader::GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read) {
     // Validate the offset, taking care to acknowledge possible overflow of offset+len.
-    if (offset < header_.prefix.header_size || offset >= fd_size_ - sizeof(CowFooter) ||
-        len >= fd_size_ || offset + len > fd_size_ - sizeof(CowFooter)) {
+    if (offset < header_.prefix.header_size || offset >= fd_size_ || offset + len > fd_size_ ||
+        len >= fd_size_) {
         LOG(ERROR) << "invalid data offset: " << offset << ", " << len << " bytes";
         return false;
     }
@@ -664,7 +699,7 @@ class CowDataStream final : public IByteStream {
 };
 
 uint8_t CowReader::GetCompressionType() {
-    return compression_type_;
+    return header_.compression_algorithm;
 }
 
 ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_size,
@@ -696,12 +731,12 @@ ssize_t CowReader::ReadData(const CowOperation* op, void* buffer, size_t buffer_
 
     uint64_t offset;
     if (op->type == kCowXorOp) {
-        offset = data_loc_->at(op->new_block);
+        offset = xor_data_loc_->at(op->new_block);
     } else {
         offset = GetCowOpSourceInfoData(*op);
     }
-
-    if (!decompressor) {
+    if (!decompressor ||
+        ((op->data_length == header_.block_size) && (header_.prefix.major_version == 3))) {
         CowDataStream stream(this, offset + ignore_bytes, op->data_length - ignore_bytes);
         return stream.ReadFully(buffer, buffer_size);
     }

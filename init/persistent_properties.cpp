@@ -46,6 +46,13 @@ namespace {
 
 constexpr const char kLegacyPersistentPropertyDir[] = "/data/property";
 
+void AddPersistentProperty(const std::string& name, const std::string& value,
+                           PersistentProperties* persistent_properties) {
+    auto persistent_property_record = persistent_properties->add_properties();
+    persistent_property_record->set_name(name);
+    persistent_property_record->set_value(value);
+}
+
 Result<PersistentProperties> LoadLegacyPersistentProperties() {
     std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(kLegacyPersistentPropertyDir), closedir);
     if (!dir) {
@@ -145,13 +152,6 @@ Result<PersistentProperties> ParsePersistentPropertyFile(const std::string& file
 }
 
 }  // namespace
-
-void AddPersistentProperty(const std::string& name, const std::string& value,
-                           PersistentProperties* persistent_properties) {
-    auto persistent_property_record = persistent_properties->add_properties();
-    persistent_property_record->set_name(name);
-    persistent_property_record->set_value(value);
-}
 
 Result<PersistentProperties> LoadPersistentPropertyFile() {
     auto file_contents = ReadPersistentPropertyFile();
@@ -266,8 +266,57 @@ PersistentProperties LoadPersistentProperties() {
         }
     }
 
-    return *persistent_properties;
+    // loop over to find all staged props
+    auto const staged_prefix = std::string_view("next_boot.");
+    auto staged_props = std::unordered_map<std::string, std::string>();
+    for (const auto& property_record : persistent_properties->properties()) {
+        auto const& prop_name = property_record.name();
+        auto const& prop_value = property_record.value();
+        if (StartsWith(prop_name, staged_prefix)) {
+            auto actual_prop_name = prop_name.substr(staged_prefix.size());
+            staged_props[actual_prop_name] = prop_value;
+        }
+    }
+
+    if (staged_props.empty()) {
+        return *persistent_properties;
+    }
+
+    // if has staging, apply staging and perserve the original prop order
+    PersistentProperties updated_persistent_properties;
+    for (const auto& property_record : persistent_properties->properties()) {
+        auto const& prop_name = property_record.name();
+        auto const& prop_value = property_record.value();
+
+        // don't include staged props anymore
+        if (StartsWith(prop_name, staged_prefix)) {
+            continue;
+        }
+
+        auto iter = staged_props.find(prop_name);
+        if (iter != staged_props.end()) {
+            AddPersistentProperty(prop_name, iter->second, &updated_persistent_properties);
+            staged_props.erase(iter);
+        } else {
+            AddPersistentProperty(prop_name, prop_value, &updated_persistent_properties);
+        }
+    }
+
+    // add any additional staged props
+    for (auto const& [prop_name, prop_value] : staged_props) {
+        AddPersistentProperty(prop_name, prop_value, &updated_persistent_properties);
+    }
+
+    // write current updated persist prop file
+    auto result = WritePersistentPropertyFile(updated_persistent_properties);
+    if (!result.ok()) {
+        LOG(ERROR) << "Could not store persistent property: " << result.error();
+    }
+
+    return updated_persistent_properties;
 }
+
+
 
 }  // namespace init
 }  // namespace android

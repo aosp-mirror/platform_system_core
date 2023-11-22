@@ -37,6 +37,7 @@
 #include <cutils/sockets.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
+#include <sys/signalfd.h>
 
 #include <string>
 
@@ -68,6 +69,7 @@ using android::base::make_scope_guard;
 using android::base::SetProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
+using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 namespace android {
@@ -194,28 +196,20 @@ void Service::NotifyStateChange(const std::string& new_state) const {
     }
 }
 
-void Service::KillProcessGroup(int signal, bool report_oneshot) {
-    // If we've already seen a successful result from killProcessGroup*(), then we have removed
-    // the cgroup already and calling these functions a second time will simply result in an error.
-    // This is true regardless of which signal was sent.
-    // These functions handle their own logging, so no additional logging is needed.
-    if (!process_cgroup_empty_) {
+void Service::KillProcessGroup(int signal) {
+    // Always attempt the process kill if process is still running.
+    // Cgroup clean up routines are idempotent. It's safe to call
+    // killProcessGroup repeatedly. During shutdown, `init` will
+    // call this function to send SIGTERM/SIGKILL to all processes.
+    // These signals must be sent for a successful shutdown.
+    if (!process_cgroup_empty_ || IsRunning()) {
         LOG(INFO) << "Sending signal " << signal << " to service '" << name_ << "' (pid " << pid_
                   << ") process group...";
-        int max_processes = 0;
         int r;
         if (signal == SIGTERM) {
-            r = killProcessGroupOnce(uid(), pid_, signal, &max_processes);
+            r = killProcessGroupOnce(uid(), pid_, signal);
         } else {
-            r = killProcessGroup(uid(), pid_, signal, &max_processes);
-        }
-
-        if (report_oneshot && max_processes > 0) {
-            LOG(WARNING)
-                    << "Killed " << max_processes
-                    << " additional processes from a oneshot process group for service '" << name_
-                    << "'. This is new behavior, previously child processes would not be killed in "
-                       "this case.";
+            r = killProcessGroup(uid(), pid_, signal);
         }
 
         if (r == 0) process_cgroup_empty_ = true;
@@ -265,7 +259,7 @@ void Service::SetProcessAttributesAndCaps(InterprocessFifo setsid_finished) {
 
 void Service::Reap(const siginfo_t& siginfo) {
     if (!(flags_ & SVC_ONESHOT) || (flags_ & SVC_RESTART)) {
-        KillProcessGroup(SIGKILL, false);
+        KillProcessGroup(SIGKILL);
     } else {
         // Legacy behavior from ~2007 until Android R: this else branch did not exist and we did not
         // kill the process group in this case.
@@ -273,7 +267,7 @@ void Service::Reap(const siginfo_t& siginfo) {
             // The new behavior in Android R is to kill these process groups in all cases.  The
             // 'true' parameter instructions KillProcessGroup() to report a warning message where it
             // detects a difference in behavior has occurred.
-            KillProcessGroup(SIGKILL, true);
+            KillProcessGroup(SIGKILL);
         }
     }
 
@@ -797,6 +791,35 @@ void Service::SetMountNamespace() {
     }
     // Use the "default" mount namespace only if it's ready
     mount_namespace_ = IsDefaultMountNamespaceReady() ? NS_DEFAULT : NS_BOOTSTRAP;
+}
+
+static int ThreadCount() {
+    std::unique_ptr<DIR, decltype(&closedir)> dir(opendir("/proc/self/task"), closedir);
+    if (!dir) {
+        return -1;
+    }
+
+    int count = 0;
+    dirent* entry;
+    while ((entry = readdir(dir.get())) != nullptr) {
+        if (entry->d_name[0] != '.') {
+            count++;
+        }
+    }
+    return count;
+}
+
+// Must be called BEFORE any threads are created. See also the sigprocmask() man page.
+unique_fd Service::CreateSigchldFd() {
+    CHECK_EQ(ThreadCount(), 1);
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
+        PLOG(FATAL) << "Failed to block SIGCHLD";
+    }
+
+    return unique_fd(signalfd(-1, &mask, SFD_CLOEXEC));
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {

@@ -156,11 +156,15 @@ class Service {
     const Subcontext* subcontext() const { return subcontext_; }
     const std::string& filename() const { return filename_; }
     void set_filename(const std::string& name) { filename_ = name; }
+    static int GetSigchldFd() {
+        static int sigchld_fd = CreateSigchldFd().release();
+        return sigchld_fd;
+    }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void KillProcessGroup(int signal, bool report_oneshot = false);
+    void KillProcessGroup(int signal);
     void SetProcessAttributesAndCaps(InterprocessFifo setsid_finished);
     void ResetFlagsForStart();
     Result<void> CheckConsole();
@@ -168,6 +172,8 @@ class Service {
     void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated,
                     InterprocessFifo setsid_finished);
     void SetMountNamespace();
+    static ::android::base::unique_fd CreateSigchldFd();
+
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
 

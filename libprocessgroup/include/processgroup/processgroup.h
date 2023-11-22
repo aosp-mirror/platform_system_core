@@ -26,7 +26,8 @@
 
 __BEGIN_DECLS
 
-static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
+static constexpr const char* CGROUPV2_HIERARCHY_NAME = "cgroup2";
+[[deprecated]] static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
 
 bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
@@ -67,14 +68,11 @@ void DropTaskProfilesResourceCaching();
 // Return 0 and removes the cgroup if there are no longer any processes in it.
 // Returns -1 in the case of an error occurring or if there are processes still running
 // even after retrying for up to 200ms.
-// If max_processes is not nullptr, it returns the maximum number of processes seen in the cgroup
-// during the killing process.  Note that this can be 0 if all processes from the process group have
-// already been terminated.
-int killProcessGroup(uid_t uid, int initialPid, int signal, int* max_processes = nullptr);
+int killProcessGroup(uid_t uid, int initialPid, int signal);
 
 // Returns the same as killProcessGroup(), however it does not retry, which means
 // that it only returns 0 in the case that the cgroup exists and it contains no processes.
-int killProcessGroupOnce(uid_t uid, int initialPid, int signal, int* max_processes = nullptr);
+int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
 
 // Sends the provided signal to all members of a process group, but does not wait for processes to
 // exit, or for the cgroup to be removed. Callers should also ensure that killProcessGroup is called
@@ -89,7 +87,6 @@ bool setProcessGroupSwappiness(uid_t uid, int initialPid, int swappiness);
 bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInBytes);
 bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
 
-void removeAllProcessGroups(void);
 void removeAllEmptyProcessGroups(void);
 
 // Provides the path for an attribute in a specific process group

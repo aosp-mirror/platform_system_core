@@ -94,13 +94,27 @@ struct CowHeader {
 
 } __attribute__((packed));
 
+// Resume point structure used for resume buffer
+struct ResumePoint {
+    // monotonically increasing value used by update_engine
+    uint64_t label;
+    // Index of last CowOperation guaranteed to be resumable
+    uint32_t op_index;
+} __attribute__((packed));
+
+static constexpr uint8_t kNumResumePoints = 4;
+
 struct CowHeaderV3 : public CowHeader {
-    // Location of sequence buffer in COW.
-    uint64_t sequence_buffer_offset;
-    // Size, in bytes, of the CowResumePoint buffer.
-    uint32_t resume_buffer_size;
-    // Size, in bytes, of the CowOperation buffer.
-    uint32_t op_buffer_size;
+    // Number of sequence data stored (each of which is a 32 byte integer)
+    uint64_t sequence_data_count;
+    // Number of currently written resume points &&
+    uint32_t resume_point_count;
+    // Number of max resume points that can be written
+    uint32_t resume_point_max;
+    // Number of CowOperationV3 structs in the operation buffer, currently and total
+    // region size.
+    uint32_t op_count;
+    uint32_t op_count_max;
     // Compression Algorithm
     uint32_t compression_algorithm;
 } __attribute__((packed));
@@ -218,6 +232,23 @@ static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
     return op.source_info & kCowOpSourceInfoDataMask;
 }
 
+static constexpr off_t GetSequenceOffset(const CowHeaderV3& header) {
+    return header.prefix.header_size + header.buffer_size;
+}
+
+static constexpr off_t GetResumeOffset(const CowHeaderV3& header) {
+    return GetSequenceOffset(header) + (header.sequence_data_count * sizeof(uint32_t));
+}
+
+static constexpr off_t GetOpOffset(uint32_t op_index, const CowHeaderV3& header) {
+    return GetResumeOffset(header) + (header.resume_point_max * sizeof(ResumePoint)) +
+           (op_index * sizeof(CowOperationV3));
+}
+
+static constexpr off_t GetDataOffset(const CowHeaderV3& header) {
+    return GetOpOffset(header.op_count_max, header);
+}
+
 struct CowFooter {
     CowFooterOperation op;
     uint8_t unused[64];
@@ -242,6 +273,8 @@ static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 
 std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+
+std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
 
 int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_size);
