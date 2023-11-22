@@ -54,7 +54,6 @@
 #include <android-base/thread_annotations.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
-#include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
@@ -970,11 +969,6 @@ int SecondStageMain(int argc, char** argv) {
         LOG(ERROR) << "Unable to write " << DEFAULT_OOM_SCORE_ADJUST
                    << " to /proc/1/oom_score_adj: " << result.error();
     }
-
-    // Set up a session keyring that all processes will have access to. It
-    // will hold things like FBE encryption keys. No process should override
-    // its session keyring.
-    keyctl_get_keyring_ID(KEY_SPEC_SESSION_KEYRING, 1);
 
     // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
