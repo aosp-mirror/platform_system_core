@@ -16,7 +16,6 @@
 
 #include <stdint.h>
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -145,6 +144,7 @@ class CowReader final : public ICowReader {
                      size_t ignore_bytes = 0) override;
 
     CowHeader& GetHeader() override { return header_; }
+    const CowHeaderV3& header_v3() const { return header_; }
 
     bool GetRawBytes(const CowOperation* op, void* buffer, size_t len, size_t* read);
     bool GetRawBytes(uint64_t offset, void* buffer, size_t len, size_t* read);
@@ -167,6 +167,12 @@ class CowReader final : public ICowReader {
   private:
     bool ParseV2(android::base::borrowed_fd fd, std::optional<uint64_t> label);
     bool PrepMergeOps();
+    // sequence data is stored as an operation with actual data residing in the data offset.
+    bool GetSequenceDataV2(std::vector<uint32_t>* merge_op_blocks, std::vector<int>* other_ops,
+                           std::unordered_map<uint32_t, int>* block_map);
+    // v3 of the cow writes sequence data within its own separate sequence buffer.
+    bool GetSequenceData(std::vector<uint32_t>* merge_op_blocks, std::vector<int>* other_ops,
+                         std::unordered_map<uint32_t, int>* block_map);
     uint64_t FindNumCopyops();
     uint8_t GetCompressionType();
 
@@ -182,16 +188,14 @@ class CowReader final : public ICowReader {
     uint64_t num_total_data_ops_{};
     uint64_t num_ordered_ops_to_merge_{};
     bool has_seq_ops_{};
-    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> data_loc_;
+    std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> xor_data_loc_;
     ReaderFlags reader_flag_;
     bool is_merge_{};
-    uint8_t compression_type_ = kCowCompressNone;
 };
 
 // Though this function takes in a CowHeaderV3, the struct could be populated as a v1/v2 CowHeader.
 // The extra fields will just be filled as 0. V3 header is strictly a superset of v1/v2 header and
 // contains all of the latter's field
 bool ReadCowHeader(android::base::borrowed_fd fd, CowHeaderV3* header);
-
 }  // namespace snapshot
 }  // namespace android

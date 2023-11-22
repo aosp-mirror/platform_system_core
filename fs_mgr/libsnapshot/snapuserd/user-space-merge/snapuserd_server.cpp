@@ -360,16 +360,15 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
         num_worker_threads = 1;
     }
 
-    bool perform_verification = true;
-    if (android::base::EndsWith(misc_name, "-init") || is_socket_present_) {
-        perform_verification = false;
+    if (android::base::EndsWith(misc_name, "-init") || is_socket_present_ ||
+        (access(kBootSnapshotsWithoutSlotSwitch, F_OK) == 0)) {
+        handlers_->DisableVerification();
     }
 
     auto opener = block_server_factory_->CreateOpener(misc_name);
 
     return handlers_->AddHandler(misc_name, cow_device_path, backing_device, base_path_merge,
-                                 opener, num_worker_threads, io_uring_enabled_,
-                                 perform_verification);
+                                 opener, num_worker_threads, io_uring_enabled_);
 }
 
 bool UserSnapshotServer::WaitForSocket() {

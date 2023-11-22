@@ -94,7 +94,7 @@ constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
     if (sigaction(SIGALRM, &new_sigaction, &old_sigaction) != 0) { \
       err(1, "sigaction failed");                                  \
     }                                                              \
-    alarm(seconds);                                                \
+    alarm(seconds * android::base::HwTimeoutMultiplier());         \
     auto value = expr;                                             \
     int saved_errno = errno;                                       \
     if (sigaction(SIGALRM, &old_sigaction, nullptr) != 0) {        \
@@ -2825,7 +2825,8 @@ TEST_F(CrasherTest, verify_build_id) {
     }
 
     prev_file = match[1];
-    unwindstack::Elf elf(unwindstack::Memory::CreateFileMemory(prev_file, 0).release());
+    auto elf_memory = unwindstack::Memory::CreateFileMemory(prev_file, 0);
+    unwindstack::Elf elf(elf_memory);
     if (!elf.Init() || !elf.valid()) {
       // Skipping invalid elf files.
       continue;

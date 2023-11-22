@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include <future>
+#include <android-base/logging.h>
+
 #include "writer_base.h"
 
 namespace android {
@@ -42,16 +43,28 @@ class CowWriterV3 : public CowWriterBase {
     void SetupHeaders();
     bool ParseOptions();
     bool OpenForWrite();
+    bool OpenForAppend(uint64_t label);
+    bool WriteOperation(const CowOperationV3& op, const void* data = nullptr, size_t size = 0);
+    bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
+                    uint16_t offset, uint8_t type);
+    bool CompressBlocks(size_t num_blocks, const void* data);
 
   private:
     CowHeaderV3 header_{};
     CowCompression compression_;
     // in the case that we are using one thread for compression, we can store and re-use the same
     // compressor
+    std::unique_ptr<ICompressor> compressor_;
+    std::vector<std::unique_ptr<CompressWorker>> compress_threads_;
+    // Resume points contain a laebl + cow_op_index.
+    std::shared_ptr<std::vector<ResumePoint>> resume_points_;
 
     uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
+    std::vector<std::basic_string<uint8_t>> compressed_buf_;
 
+    // in the case that we are using one thread for compression, we can store and re-use the same
+    // compressor
     int num_compress_threads_ = 1;
 };
 

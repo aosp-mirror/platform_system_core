@@ -54,6 +54,9 @@ struct CowOptions {
 
     // Batch write cluster ops
     bool batch_write = false;
+
+    // Size of the cow operation buffer; used in v3 only.
+    uint32_t op_count_max = 0;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
