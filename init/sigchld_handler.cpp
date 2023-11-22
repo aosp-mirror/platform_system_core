@@ -118,8 +118,23 @@ static pid_t ReapOneProcess() {
     return pid;
 }
 
-void ReapAnyOutstandingChildren() {
-    while (ReapOneProcess() != 0) {
+std::set<pid_t> ReapAnyOutstandingChildren() {
+    std::set<pid_t> reaped_pids;
+    for (;;) {
+        const pid_t pid = ReapOneProcess();
+        if (pid <= 0) {
+            return reaped_pids;
+        }
+        reaped_pids.emplace(pid);
+    }
+}
+
+static void ReapAndRemove(std::vector<pid_t>& alive_pids) {
+    for (auto pid : ReapAnyOutstandingChildren()) {
+        const auto it = std::find(alive_pids.begin(), alive_pids.end(), pid);
+        if (it != alive_pids.end()) {
+            alive_pids.erase(it);
+        }
     }
 }
 
@@ -142,13 +157,7 @@ void WaitToBeReaped(int sigchld_fd, const std::vector<pid_t>& pids,
     }
     std::vector<pid_t> alive_pids(pids.begin(), pids.end());
     while (!alive_pids.empty() && t.duration() < timeout) {
-        pid_t pid;
-        while ((pid = ReapOneProcess()) != 0) {
-            auto it = std::find(alive_pids.begin(), alive_pids.end(), pid);
-            if (it != alive_pids.end()) {
-                alive_pids.erase(it);
-            }
-        }
+        ReapAndRemove(alive_pids);
         if (alive_pids.empty()) {
             break;
         }
