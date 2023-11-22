@@ -18,12 +18,13 @@
 #define _INIT_SIGCHLD_HANDLER_H_
 
 #include <chrono>
+#include <set>
 #include <vector>
 
 namespace android {
 namespace init {
 
-void ReapAnyOutstandingChildren();
+std::set<pid_t> ReapAnyOutstandingChildren();
 
 void WaitToBeReaped(int sigchld_fd, const std::vector<pid_t>& pids,
                     std::chrono::milliseconds timeout);
