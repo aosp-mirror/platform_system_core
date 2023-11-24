@@ -42,15 +42,14 @@
 #include <fs_mgr/file_wait.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
-#include <libdm/dm.h>
 #include <libgsi/libgsi.h>
 #include <storage_literals/storage_literals.h>
 
+#include "fs_mgr_overlayfs_control.h"
 #include "fs_mgr_overlayfs_mount.h"
 #include "fs_mgr_priv.h"
 
 using namespace std::literals;
-using namespace android::dm;
 using namespace android::fs_mgr;
 using namespace android::storage_literals;
 
@@ -591,45 +590,6 @@ bool MountScratch(const std::string& device_path, bool readonly) {
         return false;
     }
     return true;
-}
-
-// Note: The scratch partition of DSU is managed by gsid, and should be initialized during
-// first-stage-mount. Just check if the DM device for DSU scratch partition is created or not.
-static std::string GetDsuScratchDevice() {
-    auto& dm = DeviceMapper::Instance();
-    std::string device;
-    if (dm.GetState(android::gsi::kDsuScratch) != DmDeviceState::INVALID &&
-        dm.GetDmDevicePathByName(android::gsi::kDsuScratch, &device)) {
-        return device;
-    }
-    return "";
-}
-
-// This returns the scratch device that was detected during early boot (first-
-// stage init). If the device was created later, for example during setup for
-// the adb remount command, it can return an empty string since it does not
-// query ImageManager. (Note that ImageManager in first-stage init will always
-// use device-mapper, since /data is not available to use loop devices.)
-static std::string GetBootScratchDevice() {
-    // Note: fs_mgr_is_dsu_running() always returns false in recovery or fastbootd.
-    if (fs_mgr_is_dsu_running()) {
-        return GetDsuScratchDevice();
-    }
-
-    auto& dm = DeviceMapper::Instance();
-
-    // If there is a scratch partition allocated in /data or on super, we
-    // automatically prioritize that over super_other or system_other.
-    // Some devices, for example, have a write-protected eMMC and the
-    // super partition cannot be used even if it exists.
-    std::string device;
-    auto partition_name = android::base::Basename(kScratchMountPoint);
-    if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
-        dm.GetDmDevicePathByName(partition_name, &device)) {
-        return device;
-    }
-
-    return "";
 }
 
 // NOTE: OverlayfsSetupAllowed() must be "stricter" than OverlayfsTeardownAllowed().
