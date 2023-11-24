@@ -854,21 +854,6 @@ void MapScratchPartitionIfNeeded(Fstab* fstab,
         return;
     }
 
-    bool want_scratch = false;
-    for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
-        if (fs_mgr_is_verity_enabled(entry)) {
-            continue;
-        }
-        if (fs_mgr_overlayfs_already_mounted(fs_mgr_mount_point(entry.mount_point))) {
-            continue;
-        }
-        want_scratch = true;
-        break;
-    }
-    if (!want_scratch) {
-        return;
-    }
-
     if (ScratchIsOnData()) {
         if (auto images = IImageManager::Open("remount", 0ms)) {
             images->MapAllImages(init);
