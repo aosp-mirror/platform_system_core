@@ -782,6 +782,10 @@ bool ReadAhead::RunThread() {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
+    if (!SetProfiles({"CPUSET_SP_BACKGROUND"})) {
+        SNAP_PLOG(ERROR) << "Failed to assign task profile to readahead thread";
+    }
+
     SNAP_LOG(INFO) << "ReadAhead processing.";
     while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
