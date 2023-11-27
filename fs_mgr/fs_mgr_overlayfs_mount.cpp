@@ -302,6 +302,25 @@ static bool fs_mgr_overlayfs_move_mount(const std::string& source, const std::st
     return true;
 }
 
+static bool fs_mgr_overlayfs_mount(const std::string& mount_point, const std::string& options) {
+    auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
+    for (const auto& opt : android::base::Split(options, ",")) {
+        if (android::base::StartsWith(opt, kUpperdirOption)) {
+            report = report + "," + opt;
+            break;
+        }
+    }
+    report = report + ")=";
+    auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+    } else {
+        LINFO << report << ret;
+    }
+    return !ret;
+}
+
 struct mount_info {
     std::string mount_point;
     bool shared_flag;
@@ -488,25 +507,7 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
         moved_mounts.push_back(std::move(new_entry));
     }
 
-    // hijack __mount() report format to help triage
-    auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
-    const auto opt_list = android::base::Split(options, ",");
-    for (const auto& opt : opt_list) {
-        if (android::base::StartsWith(opt, kUpperdirOption)) {
-            report = report + "," + opt;
-            break;
-        }
-    }
-    report = report + ")=";
-
-    auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
-                     options.c_str());
-    if (ret) {
-        retval = false;
-        PERROR << report << ret;
-    } else {
-        LINFO << report << ret;
-    }
+    retval &= fs_mgr_overlayfs_mount(mount_point, options);
 
     // Move submounts back.
     for (const auto& entry : moved_mounts) {
@@ -814,3 +815,38 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
     }
     return false;
 }
+
+namespace android {
+namespace fs_mgr {
+
+void MountOverlayfs(const FstabEntry& fstab_entry, bool* scratch_can_be_mounted) {
+    if (!OverlayfsSetupAllowed()) {
+        return;
+    }
+    const auto candidates = fs_mgr_overlayfs_candidate_list({fstab_entry});
+    if (candidates.empty()) {
+        return;
+    }
+    const auto& entry = candidates.front();
+    if (fs_mgr_is_verity_enabled(entry)) {
+        return;
+    }
+    const auto mount_point = fs_mgr_mount_point(entry.mount_point);
+    if (fs_mgr_overlayfs_already_mounted(mount_point)) {
+        return;
+    }
+    if (*scratch_can_be_mounted) {
+        *scratch_can_be_mounted = false;
+        if (!fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
+            TryMountScratch();
+        }
+    }
+    const auto options = fs_mgr_get_overlayfs_options(entry);
+    if (options.empty()) {
+        return;
+    }
+    fs_mgr_overlayfs_mount(mount_point, options);
+}
+
+}  // namespace fs_mgr
+}  // namespace android
