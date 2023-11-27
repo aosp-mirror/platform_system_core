@@ -347,33 +347,6 @@ static std::string GetDsuScratchDevice() {
     return "";
 }
 
-// This returns the scratch device that was detected during early boot (first-
-// stage init). If the device was created later, for example during setup for
-// the adb remount command, it can return an empty string since it does not
-// query ImageManager. (Note that ImageManager in first-stage init will always
-// use device-mapper, since /data is not available to use loop devices.)
-static std::string GetBootScratchDevice() {
-    // Note: fs_mgr_is_dsu_running() always returns false in recovery or fastbootd.
-    if (fs_mgr_is_dsu_running()) {
-        return GetDsuScratchDevice();
-    }
-
-    auto& dm = DeviceMapper::Instance();
-
-    // If there is a scratch partition allocated in /data or on super, we
-    // automatically prioritize that over super_other or system_other.
-    // Some devices, for example, have a write-protected eMMC and the
-    // super partition cannot be used even if it exists.
-    std::string device;
-    auto partition_name = android::base::Basename(kScratchMountPoint);
-    if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
-        dm.GetDmDevicePathByName(partition_name, &device)) {
-        return device;
-    }
-
-    return "";
-}
-
 bool MakeScratchFilesystem(const std::string& scratch_device) {
     // Force mkfs by design for overlay support of adb remount, simplify and
     // thus do not rely on fsck to correct problems that could creep in.
@@ -920,6 +893,33 @@ void CleanupOldScratchFiles() {
     if (auto images = IImageManager::Open("remount", 0ms)) {
         images->RemoveDisabledImages();
     }
+}
+
+// This returns the scratch device that was detected during early boot (first-
+// stage init). If the device was created later, for example during setup for
+// the adb remount command, it can return an empty string since it does not
+// query ImageManager. (Note that ImageManager in first-stage init will always
+// use device-mapper, since /data is not available to use loop devices.)
+std::string GetBootScratchDevice() {
+    // Note: fs_mgr_is_dsu_running() always returns false in recovery or fastbootd.
+    if (fs_mgr_is_dsu_running()) {
+        return GetDsuScratchDevice();
+    }
+
+    auto& dm = DeviceMapper::Instance();
+
+    // If there is a scratch partition allocated in /data or on super, we
+    // automatically prioritize that over super_other or system_other.
+    // Some devices, for example, have a write-protected eMMC and the
+    // super partition cannot be used even if it exists.
+    std::string device;
+    auto partition_name = android::base::Basename(kScratchMountPoint);
+    if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
+        dm.GetDmDevicePathByName(partition_name, &device)) {
+        return device;
+    }
+
+    return "";
 }
 
 void TeardownAllOverlayForMountPoint(const std::string& mount_point) {
