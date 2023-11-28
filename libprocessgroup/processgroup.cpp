@@ -378,8 +378,11 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         fd.reset(fopen(path.c_str(), "re"));
         if (!fd) {
             if (errno == ENOENT) {
-                // This happens when process is already dead
-                return 0;
+                // This happens when the process is already dead or if, as the result of a bug, it
+                // has been migrated to another cgroup. An example of a bug that can cause migration
+                // to another cgroup is using the JoinCgroup action with a cgroup controller that
+                // has been activated in the v2 cgroup hierarchy.
+                goto kill;
             }
             PLOG(WARNING) << __func__ << " failed to open process cgroup uid " << uid << " pid "
                           << initialPid;
@@ -418,6 +421,7 @@ static int DoKillProcessGroupOnce(const char* cgroup, uid_t uid, int initialPid,
         }
     }
 
+kill:
     // Kill all process groups.
     for (const auto pgid : pgids) {
         LOG(VERBOSE) << "Killing process group " << -pgid << " in uid " << uid
