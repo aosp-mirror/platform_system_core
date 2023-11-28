@@ -49,8 +49,7 @@ class CowParserV3 final : public CowParserBase {
 
   private:
     bool ParseOps(android::base::borrowed_fd fd, const uint32_t op_index);
-    std::optional<uint32_t> FindResumeOp(const uint32_t label);
-    off_t GetDataOffset() const;
+    std::optional<uint32_t> FindResumeOp(const uint64_t label);
     CowHeaderV3 header_ = {};
     std::shared_ptr<std::vector<CowOperationV3>> ops_;
     bool ReadResumeBuffer(android::base::borrowed_fd fd);
