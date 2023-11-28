@@ -17,17 +17,44 @@
 #include "service.h"
 
 #include <algorithm>
+#include <fstream>
 #include <memory>
 #include <type_traits>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
+#include <android-base/strings.h>
+#include <selinux/selinux.h>
+#include <sys/signalfd.h>
 #include "lmkd_service.h"
+#include "reboot.h"
+#include "service.h"
+#include "service_list.h"
+#include "service_parser.h"
 #include "util.h"
+
+using ::android::base::ReadFileToString;
+using ::android::base::StringPrintf;
+using ::android::base::StringReplace;
+using ::android::base::unique_fd;
+using ::android::base::WriteStringToFd;
+using ::android::base::WriteStringToFile;
 
 namespace android {
 namespace init {
+
+static std::string GetSecurityContext() {
+    char* ctx;
+    if (getcon(&ctx) == -1) {
+        ADD_FAILURE() << "Failed to call getcon : " << strerror(errno);
+    }
+    std::string result{ctx};
+    freecon(ctx);
+    return result;
+}
 
 TEST(service, pod_initialized) {
     constexpr auto memory_size = sizeof(Service);
@@ -189,6 +216,65 @@ TEST(service, make_temporary_oneshot_service_with_just_command) {
 TEST(service, make_temporary_oneshot_service_with_just_command_no_dash) {
     Test_make_temporary_oneshot_service(false, false, false, false, false);
 }
+
+// Returns the path in the v2 cgroup hierarchy for a given process in the format /uid_%d/pid_%d.
+static std::string CgroupPath(pid_t pid) {
+    std::string cgroup_path = StringPrintf("/proc/%d/cgroup", pid);
+    std::ifstream is(cgroup_path, std::ios::in);
+    std::string line;
+    while (std::getline(is, line)) {
+        if (line.substr(0, 3) == "0::") {
+            return line.substr(3);
+        }
+    }
+    return {};
+}
+
+class ServiceStopTest : public testing::TestWithParam<bool> {};
+
+// Before November 2023, processes that were migrated to another v2 cgroup were ignored by
+// Service::Stop() if their uid_%d/pid_%d cgroup directory got removed. This test, if run with the
+// parameter set to 'true', verifies that such services are stopped.
+TEST_P(ServiceStopTest, stop) {
+    static constexpr std::string_view kServiceName = "ServiceA";
+    static constexpr std::string_view kScriptTemplate = R"init(
+service $name /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+)init";
+
+    std::string script = StringReplace(StringReplace(kScriptTemplate, "$name", kServiceName, false),
+                                       "$selabel", GetSecurityContext(), false);
+    ServiceList& service_list = ServiceList::GetInstance();
+    Parser parser;
+    parser.AddSectionParser("service",
+                            std::make_unique<ServiceParser>(&service_list, nullptr, std::nullopt));
+
+    TemporaryFile tf;
+    ASSERT_GE(tf.fd, 0);
+    ASSERT_TRUE(WriteStringToFd(script, tf.fd));
+    ASSERT_TRUE(parser.ParseConfig(tf.path));
+
+    Service* const service = ServiceList::GetInstance().FindService(kServiceName);
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    ASSERT_TRUE(service->IsRunning());
+    if (GetParam()) {
+        const pid_t pid = service->pid();
+        const std::string cgroup_path = CgroupPath(pid);
+        EXPECT_NE(cgroup_path, "");
+        EXPECT_NE(cgroup_path, "/");
+        const std::string pid_str = std::to_string(pid);
+        EXPECT_TRUE(WriteStringToFile(pid_str, "/sys/fs/cgroup/cgroup.procs"));
+        EXPECT_EQ(CgroupPath(pid), "/");
+        EXPECT_EQ(rmdir(("/sys/fs/cgroup" + cgroup_path).c_str()), 0);
+    }
+    EXPECT_EQ(0, StopServicesAndLogViolations({service->name()}, 10s, /*terminate=*/true));
+    ServiceList::GetInstance().RemoveService(*service);
+}
+
+INSTANTIATE_TEST_SUITE_P(service, ServiceStopTest, testing::Values(false, true));
 
 }  // namespace init
 }  // namespace android
