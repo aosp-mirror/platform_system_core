@@ -98,6 +98,15 @@ public:
 
     void clear();
 
+    // Releases the ownership of the object managed by this instance of sp, if any.
+    // The caller is now responsible for managing it. That is, the caller must ensure
+    // decStrong() is called when the pointer is no longer used.
+    [[nodiscard]] inline T* release() noexcept {
+        auto ret = m_ptr;
+        m_ptr = nullptr;
+        return ret;
+    }
+
     // Accessors
 
     inline T&       operator* () const     { return *m_ptr; }

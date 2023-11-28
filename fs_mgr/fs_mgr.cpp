@@ -828,7 +828,14 @@ static int __mount(const std::string& source, const std::string& target, const F
                   << ",type=" << entry.fs_type << ", gc_allowance=" << gc_allowance << "%)=" << ret
                   << "(" << save_errno << ")";
         }
-        ret = mount(source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
+
+        // Let's get the raw dm target, if it's a symlink, since some existing applications
+        // rely on /proc/mounts to find the userdata's dm target path. Don't break that assumption.
+        std::string real_source;
+        if (!android::base::Realpath(source, &real_source)) {
+            real_source = source;
+        }
+        ret = mount(real_source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
                     opts.c_str());
         save_errno = errno;
         if (try_f2fs_gc_allowance) gc_allowance += 10;
@@ -1381,6 +1388,8 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         return {FS_MGR_MNTALL_FAIL, userdata_mounted};
     }
 
+    bool scratch_can_be_mounted = true;
+
     // Keep i int to prevent unsigned integer overflow from (i = top_idx - 1),
     // where top_idx is 0. It will give SIGABRT
     for (int i = 0; i < static_cast<int>(fstab->size()); i++) {
@@ -1513,6 +1522,9 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
             if (current_entry.mount_point == "/data") {
                 userdata_mounted = true;
             }
+
+            MountOverlayfs(attempted_entry, &scratch_can_be_mounted);
+
             // Success!  Go get the next one.
             continue;
         }
@@ -1596,10 +1608,6 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
     }
 
     set_type_property(encryptable);
-
-#if ALLOW_ADBD_DISABLE_VERITY == 1  // "userdebug" build
-    fs_mgr_overlayfs_mount_all(fstab);
-#endif
 
     if (error_count) {
         return {FS_MGR_MNTALL_FAIL, userdata_mounted};

@@ -28,8 +28,6 @@
 namespace android {
 namespace init {
 
-extern int sigchld_fd;
-
 Parser CreateParser(ActionManager& action_manager, ServiceList& service_list);
 Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& service_list);
 

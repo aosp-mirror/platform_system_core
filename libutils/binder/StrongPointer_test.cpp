@@ -106,3 +106,17 @@ TYPED_TEST(StrongPointer, AssertStrongRefExists) {
     EXPECT_DEATH(sp<TypeParam>::fromExisting(foo), "");
     delete foo;
 }
+
+TYPED_TEST(StrongPointer, release) {
+    bool isDeleted = false;
+    TypeParam* foo = nullptr;
+    {
+        sp<TypeParam> sp1 = sp<TypeParam>::make(&isDeleted);
+        ASSERT_EQ(1, sp1->getStrongCount());
+        foo = sp1.release();
+    }
+    ASSERT_FALSE(isDeleted) << "release failed, deleted anyway when sp left scope";
+    ASSERT_EQ(1, foo->getStrongCount()) << "release mismanaged refcount";
+    foo->decStrong(nullptr);
+    ASSERT_TRUE(isDeleted) << "foo was leaked!";
+}
