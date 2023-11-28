@@ -19,6 +19,7 @@
 #include <limits>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 
 namespace android {
 namespace snapshot {
@@ -194,11 +195,12 @@ struct CowOperationV2 {
     uint64_t source;
 } __attribute__((packed));
 
+static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
+static constexpr uint64_t kCowOpSourceInfoTypeBit = 60;
+static constexpr uint64_t kCowOpSourceInfoTypeNumBits = 4;
+static constexpr uint64_t kCowOpSourceInfoTypeMask = (1ULL << kCowOpSourceInfoTypeNumBits) - 1;
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
-    // The operation code (see the constants and structures below).
-    CowOperationType type;
-
     // If this operation reads from the data section of the COW, this contains
     // the length.
     uint16_t data_length;
@@ -206,6 +208,10 @@ struct CowOperationV3 {
     // The block of data in the new image that this operation modifies.
     uint32_t new_block;
 
+    // source_info with have the following layout
+    // |---4 bits ---| ---12 bits---| --- 48 bits ---|
+    // |--- type --- | -- unused -- | --- source --- |
+    //
     // The value of |source| depends on the operation code.
     //
     // CopyOp: a 32-bit block location in the source image.
@@ -217,9 +223,26 @@ struct CowOperationV3 {
     // For ops other than Label:
     //  Bits 47-62 are reserved and must be zero.
     // A block is compressed if it’s data is < block_sz
-    uint64_t source_info;
+    uint64_t source_info_;
+    constexpr uint64_t source() const { return source_info_ & kCowOpSourceInfoDataMask; }
+    constexpr void set_source(uint64_t source) {
+        source_info_ |= source & kCowOpSourceInfoDataMask;
+    }
+    constexpr CowOperationType type() const {
+        // this is a mask to grab the first 4 bits of a 64 bit integer
+        const auto type = (source_info_ >> kCowOpSourceInfoTypeBit) & kCowOpSourceInfoTypeMask;
+        return static_cast<CowOperationType>(type);
+    }
+    constexpr void set_type(CowOperationType type) {
+        source_info_ |= (static_cast<uint64_t>(type) & kCowOpSourceInfoTypeMask)
+                        << kCowOpSourceInfoTypeBit;
+    }
 } __attribute__((packed));
 
+// Ensure that getters/setters added to CowOperationV3 does not increases size
+// of CowOperationV3 struct(no virtual method tables added).
+static_assert(std::is_trivially_copyable_v<CowOperationV3>);
+static_assert(std::is_standard_layout_v<CowOperationV3>);
 static_assert(sizeof(CowOperationV2) == sizeof(CowFooterOperation));
 
 enum CowCompressionAlgorithm : uint8_t {
@@ -237,12 +260,6 @@ struct CowCompression {
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
-
-static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
-
-static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
-    return op.source_info & kCowOpSourceInfoDataMask;
-}
 
 static constexpr off_t GetSequenceOffset(const CowHeaderV3& header) {
     return header.prefix.header_size + header.buffer_size;
@@ -284,7 +301,7 @@ static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 
-std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+std::ostream& operator<<(std::ostream& os, CowOperationV3 const& arg);
 
 std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
 
