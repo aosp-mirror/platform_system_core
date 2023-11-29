@@ -230,7 +230,7 @@ bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size
 }
 
 bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
-                             uint64_t old_block, uint16_t offset, uint8_t type) {
+                             uint64_t old_block, uint16_t offset, CowOperationType type) {
     const size_t num_blocks = (size / header_.block_size);
     for (size_t i = 0; i < num_blocks; i++) {
         const uint8_t* const iter =

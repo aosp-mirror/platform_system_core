@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include <limits>
 #include <optional>
 #include <string_view>
 
@@ -119,10 +120,30 @@ struct CowHeaderV3 : public CowHeader {
     uint32_t compression_algorithm;
 } __attribute__((packed));
 
+enum class CowOperationType : uint8_t {
+    kCowCopyOp = 1,
+    kCowReplaceOp = 2,
+    kCowZeroOp = 3,
+    kCowLabelOp = 4,
+    kCowClusterOp = 5,
+    kCowXorOp = 6,
+    kCowSequenceOp = 7,
+    kCowFooterOp = std::numeric_limits<uint8_t>::max(),
+};
+
+static constexpr CowOperationType kCowCopyOp = CowOperationType::kCowCopyOp;
+static constexpr CowOperationType kCowReplaceOp = CowOperationType::kCowReplaceOp;
+static constexpr CowOperationType kCowZeroOp = CowOperationType::kCowZeroOp;
+static constexpr CowOperationType kCowLabelOp = CowOperationType::kCowLabelOp;
+static constexpr CowOperationType kCowClusterOp = CowOperationType::kCowClusterOp;
+static constexpr CowOperationType kCowXorOp = CowOperationType::kCowXorOp;
+static constexpr CowOperationType kCowSequenceOp = CowOperationType::kCowSequenceOp;
+static constexpr CowOperationType kCowFooterOp = CowOperationType::kCowFooterOp;
+
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
 struct CowFooterOperation {
     // The operation code (always kCowFooterOp).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -141,7 +162,7 @@ struct CowFooterOperation {
 // V2 version of COW. On disk format for older devices
 struct CowOperationV2 {
     // The operation code (see the constants and structures below).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -176,7 +197,7 @@ struct CowOperationV2 {
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
     // The operation code (see the constants and structures below).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the length.
@@ -200,15 +221,6 @@ struct CowOperationV3 {
 } __attribute__((packed));
 
 static_assert(sizeof(CowOperationV2) == sizeof(CowFooterOperation));
-
-static constexpr uint8_t kCowCopyOp = 1;
-static constexpr uint8_t kCowReplaceOp = 2;
-static constexpr uint8_t kCowZeroOp = 3;
-static constexpr uint8_t kCowLabelOp = 4;
-static constexpr uint8_t kCowClusterOp = 5;
-static constexpr uint8_t kCowXorOp = 6;
-static constexpr uint8_t kCowSequenceOp = 7;
-static constexpr uint8_t kCowFooterOp = -1;
 
 enum CowCompressionAlgorithm : uint8_t {
     kCowCompressNone = 0,

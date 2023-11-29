@@ -369,7 +369,7 @@ bool CowWriterV2::CompressBlocks(size_t num_blocks, const void* data) {
 }
 
 bool CowWriterV2::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
-                             uint64_t old_block, uint16_t offset, uint8_t type) {
+                             uint64_t old_block, uint16_t offset, CowOperationType type) {
     CHECK(!merge_in_progress_);
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
 

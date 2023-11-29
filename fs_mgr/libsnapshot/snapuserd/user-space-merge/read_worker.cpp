@@ -183,7 +183,8 @@ bool ReadWorker::ProcessCowOp(const CowOperation* cow_op, void* buffer) {
         }
 
         default: {
-            SNAP_LOG(ERROR) << "Unknown operation-type found: " << cow_op->type;
+            SNAP_LOG(ERROR) << "Unknown operation-type found: "
+                            << static_cast<uint8_t>(cow_op->type);
         }
     }
     return false;
