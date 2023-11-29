@@ -30,7 +30,7 @@ namespace snapshot {
 
 using android::base::unique_fd;
 
-std::ostream& EmitCowTypeString(std::ostream& os, uint8_t cow_type) {
+std::ostream& EmitCowTypeString(std::ostream& os, CowOperationType cow_type) {
     switch (cow_type) {
         case kCowCopyOp:
             return os << "kCowCopyOp";

@@ -42,7 +42,7 @@ class CowWriterV2 : public CowWriterBase {
     bool EmitCluster();
     bool EmitClusterIfNeeded();
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
-                    uint16_t offset, uint8_t type);
+                    uint16_t offset, CowOperationType type);
     void SetupHeaders();
     void SetupWriteOptions();
     bool ParseOptions();
