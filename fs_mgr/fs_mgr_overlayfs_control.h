@@ -38,5 +38,7 @@ namespace fs_mgr {
 
 void CleanupOldScratchFiles();
 
+std::string GetBootScratchDevice();
+
 }  // namespace fs_mgr
 }  // namespace android
