@@ -227,8 +227,12 @@ bool MapSnapshots::WriteSnapshotPatch(std::string cow_device, std::string patch)
         if (file_offset >= dev_sz) {
             break;
         }
+
+        if (fsync(cfd.get()) < 0) {
+            PLOG(ERROR) << "Fsync failed at offset: " << file_offset << " size: " << to_read;
+            return false;
+        }
     }
-    fsync(cfd.get());
     return true;
 }
 
