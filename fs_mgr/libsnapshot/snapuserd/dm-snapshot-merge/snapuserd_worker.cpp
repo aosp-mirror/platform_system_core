@@ -191,7 +191,8 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
         }
 
         default: {
-            SNAP_LOG(ERROR) << "Unsupported operation-type found: " << cow_op->type;
+            SNAP_LOG(ERROR) << "Unsupported operation-type found: "
+                            << static_cast<uint8_t>(cow_op->type);
         }
     }
     return false;
