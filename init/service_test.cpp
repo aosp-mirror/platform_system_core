@@ -236,6 +236,11 @@ class ServiceStopTest : public testing::TestWithParam<bool> {};
 // Service::Stop() if their uid_%d/pid_%d cgroup directory got removed. This test, if run with the
 // parameter set to 'true', verifies that such services are stopped.
 TEST_P(ServiceStopTest, stop) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+
     static constexpr std::string_view kServiceName = "ServiceA";
     static constexpr std::string_view kScriptTemplate = R"init(
 service $name /system/bin/yes
