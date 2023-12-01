@@ -17,6 +17,8 @@
 
 #include <liblp/liblp.h>
 
+#include <algorithm>
+
 #include "images.h"
 #include "utility.h"
 #include "writer.h"
