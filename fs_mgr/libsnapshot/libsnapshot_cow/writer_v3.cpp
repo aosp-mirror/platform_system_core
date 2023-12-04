@@ -176,7 +176,7 @@ bool CowWriterV3::OpenForWrite() {
 }
 
 bool CowWriterV3::OpenForAppend(uint64_t label) {
-    CowHeaderV3 header_v3;
+    CowHeaderV3 header_v3{};
     if (!ReadCowHeader(fd_, &header_v3)) {
         LOG(ERROR) << "Couldn't read Cow Header";
         return false;
@@ -208,10 +208,10 @@ bool CowWriterV3::OpenForAppend(uint64_t label) {
 
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
     for (size_t i = 0; i < num_blocks; i++) {
-        CowOperationV3 op = {};
-        op.type = kCowCopyOp;
+        CowOperationV3 op{};
+        op.set_type(kCowCopyOp);
         op.new_block = new_block + i;
-        op.source_info = old_block + i;
+        op.set_source(old_block + i);
         if (!WriteOperation(op)) {
             return false;
         }
@@ -239,11 +239,11 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
         CowOperation op = {};
         op.new_block = new_block_start + i;
 
-        op.type = type;
+        op.set_type(type);
         if (type == kCowXorOp) {
-            op.source_info = (old_block + i) * header_.block_size + offset;
+            op.set_source((old_block + i) * header_.block_size + offset);
         } else {
-            op.source_info = next_data_pos_;
+            op.set_source(next_data_pos_);
         }
         std::basic_string<uint8_t> compressed_data;
         const void* out_data = iter;
@@ -273,11 +273,9 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
 
 bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
     for (uint64_t i = 0; i < num_blocks; i++) {
-        CowOperationV3 op;
-        op.type = kCowZeroOp;
-        op.data_length = 0;
+        CowOperationV3 op{};
+        op.set_type(kCowZeroOp);
         op.new_block = new_block_start + i;
-        op.source_info = 0;
         if (!WriteOperation(op)) {
             return false;
         }
