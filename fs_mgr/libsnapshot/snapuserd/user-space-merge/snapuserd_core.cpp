@@ -199,13 +199,13 @@ bool SnapshotHandler::ReadMetadata() {
     while (!cowop_iter->AtEnd()) {
         const CowOperation* cow_op = cowop_iter->Get();
 
-        if (cow_op->type == kCowCopyOp) {
+        if (cow_op->type() == kCowCopyOp) {
             copy_ops += 1;
-        } else if (cow_op->type == kCowReplaceOp) {
+        } else if (cow_op->type() == kCowReplaceOp) {
             replace_ops += 1;
-        } else if (cow_op->type == kCowZeroOp) {
+        } else if (cow_op->type() == kCowZeroOp) {
             zero_ops += 1;
-        } else if (cow_op->type == kCowXorOp) {
+        } else if (cow_op->type() == kCowXorOp) {
             xor_ops += 1;
         }
 

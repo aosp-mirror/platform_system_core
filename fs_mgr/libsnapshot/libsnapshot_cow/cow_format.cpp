@@ -80,22 +80,21 @@ std::ostream& operator<<(std::ostream& os, CowOperationV2 const& op) {
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
+std::ostream& operator<<(std::ostream& os, CowOperationV3 const& op) {
     os << "CowOperation(";
-    EmitCowTypeString(os, op.type);
-    if (op.type == kCowReplaceOp || op.type == kCowXorOp || op.type == kCowSequenceOp) {
+    EmitCowTypeString(os, op.type());
+    if (op.type() == kCowReplaceOp || op.type() == kCowXorOp || op.type() == kCowSequenceOp) {
         os << ", data_length:" << op.data_length;
     }
-    if (op.type != kCowClusterOp && op.type != kCowSequenceOp && op.type != kCowLabelOp) {
+    if (op.type() != kCowClusterOp && op.type() != kCowSequenceOp && op.type() != kCowLabelOp) {
         os << ", new_block:" << op.new_block;
     }
-    if (op.type == kCowXorOp || op.type == kCowReplaceOp || op.type == kCowCopyOp) {
-        os << ", source:" << (op.source_info & kCowOpSourceInfoDataMask);
-    } else if (op.type == kCowClusterOp) {
-        os << ", cluster_data:" << (op.source_info & kCowOpSourceInfoDataMask);
-    } else {
-        os << ", label:0x" << android::base::StringPrintf("%" PRIx64, op.source_info);
+    if (op.type() == kCowXorOp || op.type() == kCowReplaceOp || op.type() == kCowCopyOp) {
+        os << ", source:" << op.source();
+    } else if (op.type() == kCowClusterOp) {
+        os << ", cluster_data:" << op.source();
     }
+    // V3 op stores resume points in header, so CowOp can never be Label.
     os << ")";
     return os;
 }
@@ -126,7 +125,7 @@ int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_ops) {
 }
 
 bool IsMetadataOp(const CowOperation& op) {
-    switch (op.type) {
+    switch (op.type()) {
         case kCowLabelOp:
         case kCowClusterOp:
         case kCowFooterOp:
@@ -138,7 +137,7 @@ bool IsMetadataOp(const CowOperation& op) {
 }
 
 bool IsOrderedOp(const CowOperation& op) {
-    switch (op.type) {
+    switch (op.type()) {
         case kCowCopyOp:
         case kCowXorOp:
             return true;
