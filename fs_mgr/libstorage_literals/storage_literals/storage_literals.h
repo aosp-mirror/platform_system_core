@@ -37,6 +37,7 @@ using B = Size<0>;
 using KiB = Size<10>;
 using MiB = Size<20>;
 using GiB = Size<30>;
+using TiB = Size<40>;
 
 constexpr B operator""_B(unsigned long long v) {  // NOLINT
     return B{v};
@@ -54,6 +55,10 @@ constexpr GiB operator""_GiB(unsigned long long v) {  // NOLINT
     return GiB{v};
 }
 
+constexpr TiB operator""_TiB(unsigned long long v) {  // NOLINT
+    return TiB{v};
+}
+
 template <typename Dest, typename Src>
 constexpr Dest size_cast(Src src) {
     if (Src::power < Dest::power) {
@@ -69,6 +74,7 @@ static_assert(1_B == 1);
 static_assert(1_KiB == 1 << 10);
 static_assert(1_MiB == 1 << 20);
 static_assert(1_GiB == 1 << 30);
+static_assert(1_TiB == 1ULL << 40);
 static_assert(size_cast<KiB>(1_B).count() == 0);
 static_assert(size_cast<KiB>(1024_B).count() == 1);
 static_assert(size_cast<KiB>(1_MiB).count() == 1024);
