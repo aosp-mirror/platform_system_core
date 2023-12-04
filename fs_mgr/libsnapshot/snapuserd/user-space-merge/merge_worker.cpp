@@ -114,13 +114,13 @@ bool MergeWorker::MergeReplaceZeroOps() {
                 SNAP_LOG(ERROR) << "AcquireBuffer failed in MergeReplaceOps";
                 return false;
             }
-            if (cow_op->type == kCowReplaceOp) {
+            if (cow_op->type() == kCowReplaceOp) {
                 if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
                     SNAP_LOG(ERROR) << "Failed to read COW in merge";
                     return false;
                 }
             } else {
-                CHECK(cow_op->type == kCowZeroOp);
+                CHECK(cow_op->type() == kCowZeroOp);
                 memset(buffer, 0, BLOCK_SZ);
             }
         }
