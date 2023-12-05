@@ -47,6 +47,7 @@
 #include <snapuserd/snapuserd_buffer.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
+#include <system/thread_defs.h>
 #include "snapuserd_readahead.h"
 #include "snapuserd_verify.h"
 
@@ -61,8 +62,6 @@ static constexpr size_t PAYLOAD_BUFFER_SZ = (1UL << 20);
 static_assert(PAYLOAD_BUFFER_SZ >= BLOCK_SZ);
 
 static constexpr int kNumWorkerThreads = 4;
-
-static constexpr int kNiceValueForMergeThreads = -5;
 
 #define SNAP_LOG(level) LOG(level) << misc_name_ << ": "
 #define SNAP_PLOG(level) PLOG(level) << misc_name_ << ": "
@@ -105,7 +104,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
   public:
     SnapshotHandler(std::string misc_name, std::string cow_device, std::string backing_device,
                     std::string base_path_merge, std::shared_ptr<IBlockServerOpener> opener,
-                    int num_workers, bool use_iouring, bool perform_verification);
+                    int num_workers, bool use_iouring, bool perform_verification, bool o_direct);
     bool InitCowDevice();
     bool Start();
 
@@ -247,6 +246,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool perform_verification_ = true;
     bool resume_merge_ = false;
     bool merge_complete_ = false;
+    bool o_direct_ = false;
 
     std::unique_ptr<UpdateVerify> update_verify_;
     std::shared_ptr<IBlockServerOpener> block_server_opener_;
