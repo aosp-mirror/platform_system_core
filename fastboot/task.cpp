@@ -224,7 +224,7 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
     auto remove_if_callback = [&](const auto& task) -> bool {
         if (auto flash_task = task->AsFlashTask()) {
             return helper->WillFlash(flash_task->GetPartitionAndSlot());
-        } else if (auto update_super_task = task->AsUpdateSuperTask()) {
+        } else if (task->AsUpdateSuperTask()) {
             return true;
         } else if (auto reboot_task = task->AsRebootTask()) {
             if (reboot_task->GetTarget() == "fastboot") {
