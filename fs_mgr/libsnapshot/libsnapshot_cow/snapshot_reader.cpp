@@ -147,7 +147,7 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
         op = ops_[chunk];
     }
 
-    if (!op || op->type == kCowCopyOp) {
+    if (!op || op->type() == kCowCopyOp) {
         borrowed_fd fd = GetSourceFd();
         if (fd < 0) {
             // GetSourceFd sets errno.
@@ -169,15 +169,15 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
             // ReadFullyAtOffset sets errno.
             return -1;
         }
-    } else if (op->type == kCowZeroOp) {
+    } else if (op->type() == kCowZeroOp) {
         memset(buffer, 0, bytes_to_read);
-    } else if (op->type == kCowReplaceOp) {
+    } else if (op->type() == kCowReplaceOp) {
         if (cow_->ReadData(op, buffer, bytes_to_read, start_offset) < bytes_to_read) {
             LOG(ERROR) << "CompressedSnapshotReader failed to read replace op";
             errno = EIO;
             return -1;
         }
-    } else if (op->type == kCowXorOp) {
+    } else if (op->type() == kCowXorOp) {
         borrowed_fd fd = GetSourceFd();
         if (fd < 0) {
             // GetSourceFd sets errno.
@@ -208,7 +208,7 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
             ((char*)buffer)[i] ^= data[i];
         }
     } else {
-        LOG(ERROR) << "CompressedSnapshotReader unknown op type: " << uint32_t(op->type);
+        LOG(ERROR) << "CompressedSnapshotReader unknown op type: " << uint32_t(op->type());
         errno = EINVAL;
         return -1;
     }

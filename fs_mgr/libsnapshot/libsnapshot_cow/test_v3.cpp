@@ -128,19 +128,19 @@ TEST_F(CowTestV3, ZeroOp) {
     ASSERT_FALSE(iter->AtEnd());
 
     auto op = iter->Get();
-    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->type(), kCowZeroOp);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 1);
-    ASSERT_EQ(op->source_info, 0);
+    ASSERT_EQ(op->source(), 0);
 
     iter->Next();
     ASSERT_FALSE(iter->AtEnd());
     op = iter->Get();
 
-    ASSERT_EQ(op->type, kCowZeroOp);
+    ASSERT_EQ(op->type(), kCowZeroOp);
     ASSERT_EQ(op->data_length, 0);
     ASSERT_EQ(op->new_block, 2);
-    ASSERT_EQ(op->source_info, 0);
+    ASSERT_EQ(op->source(), 0);
 }
 
 TEST_F(CowTestV3, ReplaceOp) {
@@ -171,7 +171,7 @@ TEST_F(CowTestV3, ReplaceOp) {
     auto op = iter->Get();
     std::string sink(data.size(), '\0');
 
-    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_EQ(op->type(), kCowReplaceOp);
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 5);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
@@ -211,7 +211,7 @@ TEST_F(CowTestV3, ConsecutiveReplaceOp) {
 
     while (!iter->AtEnd()) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowReplaceOp);
+        ASSERT_EQ(op->type(), kCowReplaceOp);
         ASSERT_EQ(op->data_length, options.block_size);
         ASSERT_EQ(op->new_block, 5 + i);
         ASSERT_TRUE(
@@ -249,10 +249,10 @@ TEST_F(CowTestV3, CopyOp) {
     size_t i = 0;
     while (!iter->AtEnd()) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowCopyOp);
+        ASSERT_EQ(op->type(), kCowCopyOp);
         ASSERT_EQ(op->data_length, 0);
         ASSERT_EQ(op->new_block, 10 + i);
-        ASSERT_EQ(GetCowOpSourceInfoData(*op), 1000 + i);
+        ASSERT_EQ(op->source(), 1000 + i);
         iter->Next();
         i += 1;
     }
@@ -285,10 +285,10 @@ TEST_F(CowTestV3, XorOp) {
     auto op = iter->Get();
     std::string sink(data.size(), '\0');
 
-    ASSERT_EQ(op->type, kCowXorOp);
+    ASSERT_EQ(op->type(), kCowXorOp);
     ASSERT_EQ(op->data_length, 4096);
     ASSERT_EQ(op->new_block, 50);
-    ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314);  // 4096 * 24 + 10
+    ASSERT_EQ(op->source(), 98314);  // 4096 * 24 + 10
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
     ASSERT_EQ(sink, data);
 }
@@ -325,10 +325,10 @@ TEST_F(CowTestV3, ConsecutiveXorOp) {
 
     while (!iter->AtEnd()) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowXorOp);
+        ASSERT_EQ(op->type(), kCowXorOp);
         ASSERT_EQ(op->data_length, 4096);
         ASSERT_EQ(op->new_block, 50 + i);
-        ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314 + (i * options.block_size));  // 4096 * 24 + 10
+        ASSERT_EQ(op->source(), 98314 + (i * options.block_size));  // 4096 * 24 + 10
         ASSERT_TRUE(
                 ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
         iter->Next();
@@ -378,7 +378,7 @@ TEST_F(CowTestV3, AllOpsWithCompression) {
 
     while (i < 5) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowZeroOp);
+        ASSERT_EQ(op->type(), kCowZeroOp);
         ASSERT_EQ(op->new_block, 10 + i);
         iter->Next();
         i++;
@@ -386,9 +386,9 @@ TEST_F(CowTestV3, AllOpsWithCompression) {
     i = 0;
     while (i < 5) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowCopyOp);
+        ASSERT_EQ(op->type(), kCowCopyOp);
         ASSERT_EQ(op->new_block, 15 + i);
-        ASSERT_EQ(GetCowOpSourceInfoData(*op), 3 + i);
+        ASSERT_EQ(op->source(), 3 + i);
         iter->Next();
         i++;
     }
@@ -397,7 +397,7 @@ TEST_F(CowTestV3, AllOpsWithCompression) {
 
     while (i < 5) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowReplaceOp);
+        ASSERT_EQ(op->type(), kCowReplaceOp);
         ASSERT_EQ(op->new_block, 18 + i);
         ASSERT_TRUE(
                 ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
@@ -410,9 +410,9 @@ TEST_F(CowTestV3, AllOpsWithCompression) {
     std::fill(sink.begin(), sink.end(), '\0');
     while (i < 5) {
         auto op = iter->Get();
-        ASSERT_EQ(op->type, kCowXorOp);
+        ASSERT_EQ(op->type(), kCowXorOp);
         ASSERT_EQ(op->new_block, 50 + i);
-        ASSERT_EQ(GetCowOpSourceInfoData(*op), 98314 + (i * options.block_size));  // 4096 * 24 + 10
+        ASSERT_EQ(op->source(), 98314 + (i * options.block_size));  // 4096 * 24 + 10
         ASSERT_TRUE(
                 ReadData(reader, op, sink.data() + (i * options.block_size), options.block_size));
         iter->Next();
@@ -448,7 +448,7 @@ TEST_F(CowTestV3, GzCompression) {
 
     std::string sink(data.size(), '\0');
 
-    ASSERT_EQ(op->type, kCowReplaceOp);
+    ASSERT_EQ(op->type(), kCowReplaceOp);
     ASSERT_EQ(op->data_length, 56);  // compressed!
     ASSERT_EQ(op->new_block, 50);
     ASSERT_TRUE(ReadData(reader, op, sink.data(), sink.size()));
