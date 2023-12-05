@@ -31,16 +31,19 @@ using android::base::unique_fd;
 void ReadWorker::CloseFds() {
     block_server_ = {};
     backing_store_fd_ = {};
+    backing_store_direct_fd_ = {};
     Worker::CloseFds();
 }
 
 ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing_device,
                        const std::string& misc_name, const std::string& base_path_merge,
                        std::shared_ptr<SnapshotHandler> snapuserd,
-                       std::shared_ptr<IBlockServerOpener> opener)
+                       std::shared_ptr<IBlockServerOpener> opener, bool direct_read)
     : Worker(cow_device, misc_name, base_path_merge, snapuserd),
       backing_store_device_(backing_device),
-      block_server_opener_(opener) {}
+      direct_read_(direct_read),
+      block_server_opener_(opener),
+      aligned_buffer_(std::unique_ptr<void, decltype(&::free)>(nullptr, &::free)) {}
 
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
@@ -61,6 +64,17 @@ bool ReadWorker::ReadFromSourceDevice(const CowOperation* cow_op, void* buffer) 
     }
     SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
                     << " Op: " << *cow_op;
+
+    if (direct_read_ && IsBlockAligned(offset)) {
+        if (!android::base::ReadFullyAtOffset(backing_store_direct_fd_, aligned_buffer_.get(),
+                                              BLOCK_SZ, offset)) {
+            SNAP_PLOG(ERROR) << "O_DIRECT Read failed at offset: " << offset;
+            return false;
+        }
+        std::memcpy(buffer, aligned_buffer_.get(), BLOCK_SZ);
+        return true;
+    }
+
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
         std::string op;
         if (cow_op->type() == kCowCopyOp)
@@ -201,6 +215,24 @@ bool ReadWorker::Init() {
         return false;
     }
 
+    if (direct_read_) {
+        backing_store_direct_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY | O_DIRECT));
+        if (backing_store_direct_fd_ < 0) {
+            SNAP_PLOG(ERROR) << "Open Failed with O_DIRECT: " << backing_store_direct_fd_;
+            direct_read_ = false;
+        } else {
+            void* aligned_addr;
+            ssize_t page_size = getpagesize();
+            if (posix_memalign(&aligned_addr, page_size, page_size) < 0) {
+                direct_read_ = false;
+                SNAP_PLOG(ERROR) << "posix_memalign failed "
+                                 << " page_size: " << page_size << " read_sz: " << page_size;
+            } else {
+                aligned_buffer_.reset(aligned_addr);
+            }
+        }
+    }
+
     block_server_ = block_server_opener_->Open(this, PAYLOAD_BUFFER_SZ);
     if (!block_server_) {
         SNAP_PLOG(ERROR) << "Unable to open block server";
@@ -214,7 +246,7 @@ bool ReadWorker::Run() {
 
     pthread_setname_np(pthread_self(), "ReadWorker");
 
-    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+    if (!SetThreadPriority(ANDROID_PRIORITY_NORMAL)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
