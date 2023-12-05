@@ -226,6 +226,9 @@ struct CowOperationV3 {
     uint64_t source_info_;
     constexpr uint64_t source() const { return source_info_ & kCowOpSourceInfoDataMask; }
     constexpr void set_source(uint64_t source) {
+        // Clear the first 48 bit first
+        source_info_ &= ~kCowOpSourceInfoDataMask;
+        // Set the actual source field
         source_info_ |= source & kCowOpSourceInfoDataMask;
     }
     constexpr CowOperationType type() const {
@@ -234,6 +237,9 @@ struct CowOperationV3 {
         return static_cast<CowOperationType>(type);
     }
     constexpr void set_type(CowOperationType type) {
+        // Clear the top 4 bits first
+        source_info_ &= ((1ULL << kCowOpSourceInfoTypeBit) - 1);
+        // set the actual type bits
         source_info_ |= (static_cast<uint64_t>(type) & kCowOpSourceInfoTypeMask)
                         << kCowOpSourceInfoTypeBit;
     }
