@@ -346,7 +346,8 @@ void UserSnapshotServer::Interrupt() {
 std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string& misc_name,
                                                               const std::string& cow_device_path,
                                                               const std::string& backing_device,
-                                                              const std::string& base_path_merge) {
+                                                              const std::string& base_path_merge,
+                                                              const bool o_direct) {
     // We will need multiple worker threads only during
     // device boot after OTA. For all other purposes,
     // one thread is sufficient. We don't want to consume
@@ -368,7 +369,7 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
     auto opener = block_server_factory_->CreateOpener(misc_name);
 
     return handlers_->AddHandler(misc_name, cow_device_path, backing_device, base_path_merge,
-                                 opener, num_worker_threads, io_uring_enabled_);
+                                 opener, num_worker_threads, io_uring_enabled_, o_direct);
 }
 
 bool UserSnapshotServer::WaitForSocket() {

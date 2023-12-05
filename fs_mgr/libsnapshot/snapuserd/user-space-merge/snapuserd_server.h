@@ -86,7 +86,8 @@ class UserSnapshotServer {
     std::shared_ptr<HandlerThread> AddHandler(const std::string& misc_name,
                                               const std::string& cow_device_path,
                                               const std::string& backing_device,
-                                              const std::string& base_path_merge);
+                                              const std::string& base_path_merge,
+                                              bool o_direct = false);
     bool StartHandler(const std::string& misc_name);
 
     void SetTerminating() { terminating_ = true; }

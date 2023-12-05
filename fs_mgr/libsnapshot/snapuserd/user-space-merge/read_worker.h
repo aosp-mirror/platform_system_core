@@ -28,7 +28,7 @@ class ReadWorker : public Worker, public IBlockServer::Delegate {
     ReadWorker(const std::string& cow_device, const std::string& backing_device,
                const std::string& misc_name, const std::string& base_path_merge,
                std::shared_ptr<SnapshotHandler> snapuserd,
-               std::shared_ptr<IBlockServerOpener> opener);
+               std::shared_ptr<IBlockServerOpener> opener, bool direct_read = false);
 
     bool Run();
     bool Init() override;
@@ -59,11 +59,14 @@ class ReadWorker : public Worker, public IBlockServer::Delegate {
 
     std::string backing_store_device_;
     unique_fd backing_store_fd_;
+    unique_fd backing_store_direct_fd_;
+    bool direct_read_ = false;
 
     std::shared_ptr<IBlockServerOpener> block_server_opener_;
     std::unique_ptr<IBlockServer> block_server_;
 
     std::basic_string<uint8_t> xor_buffer_;
+    std::unique_ptr<void, decltype(&::free)> aligned_buffer_;
 };
 
 }  // namespace snapshot
