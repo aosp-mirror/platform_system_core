@@ -621,5 +621,42 @@ TEST_F(CowTestV3, ResumeSeqOp) {
     ASSERT_EQ(expected_block, 0);
     ASSERT_TRUE(iter->AtEnd());
 }
+
+TEST_F(CowTestV3, SetSourceManyTimes) {
+    CowOperationV3 op{};
+    op.set_source(1);
+    ASSERT_EQ(op.source(), 1);
+    op.set_source(2);
+    ASSERT_EQ(op.source(), 2);
+    op.set_source(4);
+    ASSERT_EQ(op.source(), 4);
+    op.set_source(8);
+    ASSERT_EQ(op.source(), 8);
+}
+
+TEST_F(CowTestV3, SetTypeManyTimes) {
+    CowOperationV3 op{};
+    op.set_type(kCowCopyOp);
+    ASSERT_EQ(op.type(), kCowCopyOp);
+    op.set_type(kCowReplaceOp);
+    ASSERT_EQ(op.type(), kCowReplaceOp);
+    op.set_type(kCowZeroOp);
+    ASSERT_EQ(op.type(), kCowZeroOp);
+    op.set_type(kCowXorOp);
+    ASSERT_EQ(op.type(), kCowXorOp);
+}
+
+TEST_F(CowTestV3, SetTypeSourceInverleave) {
+    CowOperationV3 op{};
+    op.set_type(kCowCopyOp);
+    ASSERT_EQ(op.type(), kCowCopyOp);
+    op.set_source(0x010203040506);
+    ASSERT_EQ(op.source(), 0x010203040506);
+    ASSERT_EQ(op.type(), kCowCopyOp);
+    op.set_type(kCowReplaceOp);
+    ASSERT_EQ(op.source(), 0x010203040506);
+    ASSERT_EQ(op.type(), kCowReplaceOp);
+}
+
 }  // namespace snapshot
 }  // namespace android
