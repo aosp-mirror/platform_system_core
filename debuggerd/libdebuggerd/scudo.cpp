@@ -78,7 +78,8 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
   }
 
   __scudo_get_error_info(&error_info_, process_info.maybe_tagged_fault_address, stack_depot.get(),
-                         region_info.get(), ring_buffer.get(), memory.get(), memory_tags.get(),
+                         __scudo_get_stack_depot_size(), region_info.get(), ring_buffer.get(),
+                         process_info.scudo_ring_buffer_size, memory.get(), memory_tags.get(),
                          memory_begin, memory_end - memory_begin);
 }
 
