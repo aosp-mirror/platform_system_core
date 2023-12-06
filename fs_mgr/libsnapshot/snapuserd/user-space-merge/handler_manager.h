@@ -57,7 +57,8 @@ class ISnapshotHandlerManager {
                                                       const std::string& backing_device,
                                                       const std::string& base_path_merge,
                                                       std::shared_ptr<IBlockServerOpener> opener,
-                                                      int num_worker_threads, bool use_iouring) = 0;
+                                                      int num_worker_threads, bool use_iouring,
+                                                      bool o_direct) = 0;
 
     // Start serving requests on a snapshot handler.
     virtual bool StartHandler(const std::string& misc_name) = 0;
@@ -96,7 +97,8 @@ class SnapshotHandlerManager final : public ISnapshotHandlerManager {
                                               const std::string& backing_device,
                                               const std::string& base_path_merge,
                                               std::shared_ptr<IBlockServerOpener> opener,
-                                              int num_worker_threads, bool use_iouring) override;
+                                              int num_worker_threads, bool use_iouring,
+                                              bool o_direct) override;
     bool StartHandler(const std::string& misc_name) override;
     bool DeleteHandler(const std::string& misc_name) override;
     bool InitiateMerge(const std::string& misc_name) override;

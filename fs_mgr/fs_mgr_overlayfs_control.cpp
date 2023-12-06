@@ -356,6 +356,8 @@ bool MakeScratchFilesystem(const std::string& scratch_device) {
         fs_type = "f2fs";
         command = kMkF2fs + " -w "s;
         command += std::to_string(getpagesize());
+        command = kMkF2fs + " -b "s;
+        command += std::to_string(getpagesize());
         command += " -f -d1 -l" + android::base::Basename(kScratchMountPoint);
     } else if (!access(kMkExt4, X_OK) && fs_mgr_filesystem_available("ext4")) {
         fs_type = "ext4";
@@ -851,21 +853,6 @@ void MapScratchPartitionIfNeeded(Fstab* fstab,
         return;
     }
     if (GetEntryForMountPoint(fstab, kScratchMountPoint) != nullptr) {
-        return;
-    }
-
-    bool want_scratch = false;
-    for (const auto& entry : fs_mgr_overlayfs_candidate_list(*fstab)) {
-        if (fs_mgr_is_verity_enabled(entry)) {
-            continue;
-        }
-        if (fs_mgr_overlayfs_already_mounted(fs_mgr_mount_point(entry.mount_point))) {
-            continue;
-        }
-        want_scratch = true;
-        break;
-    }
-    if (!want_scratch) {
         return;
     }
 
