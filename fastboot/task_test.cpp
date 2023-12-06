@@ -354,7 +354,7 @@ TEST_F(ParseTest, OptimizedFlashSuperPatternMatchTest) {
                                 const std::vector<std::unique_ptr<Task>>& tasks) {
             bool contains_optimized_task = false;
             for (auto& task : tasks) {
-                if (auto optimized_task = task->AsOptimizedFlashSuperTask()) {
+                if (task->AsOptimizedFlashSuperTask()) {
                     contains_optimized_task = true;
                 }
                 if (auto flash_task = task->AsFlashTask()) {
