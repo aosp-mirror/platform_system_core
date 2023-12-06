@@ -534,7 +534,7 @@ int Looper::removeFd(int fd) {
 
 int Looper::removeSequenceNumberLocked(SequenceNumber seq) {
 #if DEBUG_CALLBACKS
-    ALOGD("%p ~ removeFd - fd=%d, seq=%u", this, fd, seq);
+    ALOGD("%p ~ removeFd - seq=%" PRIu64, this, seq);
 #endif
 
     const auto& request_it = mRequests.find(seq);

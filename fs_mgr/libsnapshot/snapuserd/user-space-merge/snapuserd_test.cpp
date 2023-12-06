@@ -59,10 +59,16 @@ using namespace std;
 using testing::AssertionFailure;
 using testing::AssertionResult;
 using testing::AssertionSuccess;
+using ::testing::TestWithParam;
 
-class SnapuserdTestBase : public ::testing::TestWithParam<bool> {
+struct TestParam {
+    bool io_uring;
+    bool o_direct;
+};
+
+class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
   protected:
-    void SetUp() override;
+    virtual void SetUp() override;
     void TearDown() override;
     void CreateBaseDevice();
     void CreateCowDevice();
@@ -628,9 +634,10 @@ void SnapuserdTest::InitCowDevice() {
     auto factory = harness_->GetBlockServerFactory();
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     handlers_->DisableVerification();
-    auto handler =
-            handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(),
-                                  base_dev_->GetPath(), opener, 1, GetParam());
+    const TestParam params = GetParam();
+    auto handler = handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path,
+                                         base_dev_->GetPath(), base_dev_->GetPath(), opener, 1,
+                                         params.io_uring, params.o_direct);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -898,9 +905,10 @@ void HandlerTest::SetUp() {
     opener_ = factory_.CreateTestOpener(system_device_ctrl_name_);
     ASSERT_NE(opener_, nullptr);
 
+    const TestParam params = GetParam();
     handler_ = std::make_shared<SnapshotHandler>(system_device_ctrl_name_, cow_system_->path,
                                                  base_dev_->GetPath(), base_dev_->GetPath(),
-                                                 opener_, 1, false, false);
+                                                 opener_, 1, false, false, params.o_direct);
     ASSERT_TRUE(handler_->InitCowDevice());
     ASSERT_TRUE(handler_->InitializeWorkers());
 
@@ -990,14 +998,28 @@ std::vector<bool> GetIoUringConfigs() {
     return {false, true};
 }
 
-std::string IoUringConfigName(const testing::TestParamInfo<SnapuserdTest::ParamType>& info) {
-    return info.param ? "io_uring" : "sync";
+std::vector<TestParam> GetTestConfigs() {
+    std::vector<TestParam> testParams;
+    std::vector<bool> uring_configs = GetIoUringConfigs();
+
+    for (bool config : uring_configs) {
+        TestParam param;
+        param.io_uring = config;
+        param.o_direct = false;
+        testParams.push_back(std::move(param));
+    }
+
+    for (bool config : uring_configs) {
+        TestParam param;
+        param.io_uring = config;
+        param.o_direct = true;
+        testParams.push_back(std::move(param));
+    }
+    return testParams;
 }
 
-INSTANTIATE_TEST_SUITE_P(Io, SnapuserdTest, ::testing::ValuesIn(GetIoUringConfigs()),
-                         IoUringConfigName);
-INSTANTIATE_TEST_SUITE_P(Io, HandlerTest, ::testing::ValuesIn(GetIoUringConfigs()),
-                         IoUringConfigName);
+INSTANTIATE_TEST_SUITE_P(Io, SnapuserdTest, ::testing::ValuesIn(GetTestConfigs()));
+INSTANTIATE_TEST_SUITE_P(Io, HandlerTest, ::testing::ValuesIn(GetTestConfigs()));
 
 }  // namespace snapshot
 }  // namespace android

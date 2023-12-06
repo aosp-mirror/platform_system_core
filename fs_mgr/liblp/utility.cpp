@@ -25,6 +25,7 @@
 #include <sys/ioctl.h>
 #endif
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>

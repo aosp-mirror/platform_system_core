@@ -199,7 +199,7 @@ static bool Inspect(const std::string& path) {
 
         if (!FLAGS_silent && FLAGS_show_ops) std::cout << *op << "\n";
 
-        if ((FLAGS_decompress || extract_to >= 0) && op->type == kCowReplaceOp) {
+        if ((FLAGS_decompress || extract_to >= 0) && op->type() == kCowReplaceOp) {
             if (reader.ReadData(op, buffer.data(), buffer.size()) < 0) {
                 std::cerr << "Failed to decompress for :" << *op << "\n";
                 success = false;
@@ -213,12 +213,12 @@ static bool Inspect(const std::string& path) {
                     return false;
                 }
             }
-        } else if (extract_to >= 0 && !IsMetadataOp(*op) && op->type != kCowZeroOp) {
+        } else if (extract_to >= 0 && !IsMetadataOp(*op) && op->type() != kCowZeroOp) {
             PLOG(ERROR) << "Cannot extract op yet: " << *op;
             return false;
         }
 
-        if (op->type == kCowSequenceOp && FLAGS_show_merge_sequence) {
+        if (op->type() == kCowSequenceOp && FLAGS_show_merge_sequence) {
             size_t read;
             std::vector<uint32_t> merge_op_blocks;
             size_t seq_len = op->data_length / sizeof(uint32_t);
@@ -236,13 +236,13 @@ static bool Inspect(const std::string& path) {
             }
         }
 
-        if (op->type == kCowCopyOp) {
+        if (op->type() == kCowCopyOp) {
             copy_ops++;
-        } else if (op->type == kCowReplaceOp) {
+        } else if (op->type() == kCowReplaceOp) {
             replace_ops++;
-        } else if (op->type == kCowZeroOp) {
+        } else if (op->type() == kCowZeroOp) {
             zero_ops++;
-        } else if (op->type == kCowXorOp) {
+        } else if (op->type() == kCowXorOp) {
             xor_ops++;
         }
 
