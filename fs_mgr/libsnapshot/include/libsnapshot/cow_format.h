@@ -34,7 +34,7 @@ static constexpr uint32_t kCowVersionMinor = 0;
 static constexpr uint32_t kCowVersionManifest = 2;
 
 static constexpr uint32_t kMinCowVersion = 1;
-static constexpr uint32_t kMaxCowVersion = 2;
+static constexpr uint32_t kMaxCowVersion = 3;
 
 // Normally, this should be kMaxCowVersion. When a new version is under testing
 // it may be the previous value of kMaxCowVersion.

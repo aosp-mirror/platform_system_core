@@ -778,7 +778,7 @@ bool ReadAhead::RunThread() {
 
     InitializeIouring();
 
-    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+    if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
