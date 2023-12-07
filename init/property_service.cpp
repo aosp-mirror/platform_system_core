@@ -84,6 +84,7 @@ using namespace std::literals;
 
 using android::base::ErrnoError;
 using android::base::Error;
+using android::base::GetIntProperty;
 using android::base::GetProperty;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
@@ -112,7 +113,7 @@ constexpr auto ID_PROP = "ro.build.id";
 constexpr auto LEGACY_ID_PROP = "ro.build.legacy.id";
 constexpr auto VBMETA_DIGEST_PROP = "ro.boot.vbmeta.digest";
 constexpr auto DIGEST_SIZE_USED = 8;
-constexpr auto API_LEVEL_CURRENT = 10000;
+constexpr auto MAX_VENDOR_API_LEVEL = 1000000;
 
 static bool persistent_properties_loaded = false;
 
@@ -1084,15 +1085,16 @@ static void property_initialize_ro_cpu_abilist() {
     }
 }
 
-static int read_api_level_props(const std::vector<std::string>& api_level_props) {
-    int api_level = API_LEVEL_CURRENT;
-    for (const auto& api_level_prop : api_level_props) {
-        api_level = android::base::GetIntProperty(api_level_prop, API_LEVEL_CURRENT);
-        if (api_level != API_LEVEL_CURRENT) {
-            break;
-        }
+static int vendor_api_level_of(int sdk_api_level) {
+    if (sdk_api_level < __ANDROID_API_V__) {
+        return sdk_api_level;
     }
-    return api_level;
+    // In Android V, vendor API level started with version 202404.
+    // The calculation assumes that the SDK api level bumps once a year.
+    if (sdk_api_level < __ANDROID_API_FUTURE__) {
+        return 202404 + ((sdk_api_level - __ANDROID_API_V__) * 100);
+    }
+    return MAX_VENDOR_API_LEVEL;
 }
 
 static void property_initialize_ro_vendor_api_level() {
@@ -1100,20 +1102,27 @@ static void property_initialize_ro_vendor_api_level() {
     // required to support.
     constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
 
-    // Api level properties of the board. The order of the properties must be kept.
-    std::vector<std::string> BOARD_API_LEVEL_PROPS = {"ro.board.api_level",
-                                                      "ro.board.first_api_level"};
-    // Api level properties of the device. The order of the properties must be kept.
-    std::vector<std::string> DEVICE_API_LEVEL_PROPS = {"ro.product.first_api_level",
-                                                       "ro.build.version.sdk"};
+    auto vendor_api_level = GetIntProperty("ro.board.first_api_level", MAX_VENDOR_API_LEVEL);
+    if (vendor_api_level != MAX_VENDOR_API_LEVEL) {
+        // Update the vendor_api_level with "ro.board.api_level" only if both "ro.board.api_level"
+        // and "ro.board.first_api_level" are defined.
+        vendor_api_level = GetIntProperty("ro.board.api_level", vendor_api_level);
+    }
 
-    int api_level = std::min(read_api_level_props(BOARD_API_LEVEL_PROPS),
-                             read_api_level_props(DEVICE_API_LEVEL_PROPS));
+    auto product_first_api_level =
+            GetIntProperty("ro.product.first_api_level", __ANDROID_API_FUTURE__);
+    if (product_first_api_level == __ANDROID_API_FUTURE__) {
+        // Fallback to "ro.build.version.sdk" if the "ro.product.first_api_level" is not defined.
+        product_first_api_level = GetIntProperty("ro.build.version.sdk", __ANDROID_API_FUTURE__);
+    }
+
+    vendor_api_level = std::min(vendor_api_level_of(product_first_api_level), vendor_api_level);
+
     std::string error;
-    auto res = PropertySetNoSocket(VENDOR_API_LEVEL_PROP, std::to_string(api_level), &error);
+    auto res = PropertySetNoSocket(VENDOR_API_LEVEL_PROP, std::to_string(vendor_api_level), &error);
     if (res != PROP_SUCCESS) {
-        LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << api_level << ": "
-                   << error << "(" << res << ")";
+        LOG(ERROR) << "Failed to set " << VENDOR_API_LEVEL_PROP << " with " << vendor_api_level
+                   << ": " << error << "(" << res << ")";
     }
 }
 
