@@ -1244,17 +1244,27 @@ class CheckpointManager {
 };
 
 std::string fs_mgr_find_bow_device(const std::string& block_device) {
-    if (block_device.substr(0, 5) != "/dev/") {
-        LOG(ERROR) << "Expected block device, got " << block_device;
-        return std::string();
+    // handle symlink such as "/dev/block/mapper/userdata"
+    std::string real_path;
+    if (!android::base::Realpath(block_device, &real_path)) {
+        real_path = block_device;
     }
 
-    std::string sys_dir = std::string("/sys/") + block_device.substr(5);
-
+    struct stat st;
+    if (stat(real_path.c_str(), &st) < 0) {
+        PLOG(ERROR) << "stat failed: " << real_path;
+        return std::string();
+    }
+    if (!S_ISBLK(st.st_mode)) {
+        PLOG(ERROR) << real_path << " is not block device";
+        return std::string();
+    }
+    std::string sys_dir = android::base::StringPrintf("/sys/dev/block/%u:%u", major(st.st_rdev),
+                                                      minor(st.st_rdev));
     for (;;) {
         std::string name;
         if (!android::base::ReadFileToString(sys_dir + "/dm/name", &name)) {
-            PLOG(ERROR) << block_device << " is not dm device";
+            PLOG(ERROR) << real_path << " is not dm device";
             return std::string();
         }
 
