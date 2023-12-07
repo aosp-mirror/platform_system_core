@@ -327,7 +327,12 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
 bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, size_t size) {
     if (IsEstimating()) {
         header_.op_count++;
-        header_.op_count_max++;
+        if (header_.op_count > header_.op_count_max) {
+            // If we increment op_count_max, the offset of data section would
+            // change. So need to update |next_data_pos_|
+            next_data_pos_ += (header_.op_count - header_.op_count_max) * sizeof(CowOperationV3);
+            header_.op_count_max = header_.op_count;
+        }
         next_data_pos_ += op.data_length;
         return true;
     }
