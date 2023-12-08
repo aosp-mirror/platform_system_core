@@ -147,6 +147,8 @@ const std::unordered_map<std::string, VariableHandlers> kVariableMap = {
         {FB_VAR_SECURITY_PATCH_LEVEL, {GetSecurityPatchLevel, nullptr}},
         {FB_VAR_TREBLE_ENABLED, {GetTrebleEnabled, nullptr}},
         {FB_VAR_MAX_FETCH_SIZE, {GetMaxFetchSize, nullptr}},
+        {FB_VAR_BATTERY_SERIAL_NUMBER, {GetBatterySerialNumber, nullptr}},
+        {FB_VAR_BATTERY_PART_STATUS, {GetBatteryPartStatus, nullptr}},
 };
 
 static bool GetVarAll(FastbootDevice* device) {
