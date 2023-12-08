@@ -56,7 +56,6 @@ using android::base::WriteStringToFile;
 using namespace std::chrono_literals;
 
 #define PROCESSGROUP_CGROUP_PROCS_FILE "cgroup.procs"
-#define PROCESSGROUP_CGROUP_KILL_FILE "cgroup.kill"
 #define PROCESSGROUP_CGROUP_EVENTS_FILE "cgroup.events"
 
 bool CgroupsAvailable() {
@@ -76,29 +75,6 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     }
 
     return true;
-}
-
-static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
-    return StringPrintf("%s/uid_%u", cgroup, uid);
-}
-
-static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
-    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
-}
-
-static bool CgroupKillAvailable() {
-    static std::once_flag f;
-    static bool cgroup_kill_available = false;
-    std::call_once(f, []() {
-        std::string cg_kill;
-        CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &cg_kill);
-        // cgroup.kill is not on the root cgroup, so check a non-root cgroup that should always
-        // exist
-        cg_kill = ConvertUidToPath(cg_kill.c_str(), AID_ROOT) + '/' + PROCESSGROUP_CGROUP_KILL_FILE;
-        cgroup_kill_available = access(cg_kill.c_str(), F_OK) == 0;
-    });
-
-    return cgroup_kill_available;
 }
 
 static bool CgroupGetMemcgAppsPath(std::string* path) {
@@ -230,6 +206,14 @@ extern "C" bool android_set_process_profiles(uid_t uid, pid_t pid, size_t num_pr
 bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
     return TaskProfiles::GetInstance().SetUserProfiles(uid, std::span<const std::string>(profiles),
                                                        false);
+}
+
+static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
+    return StringPrintf("%s/uid_%u", cgroup, uid);
+}
+
+static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
+    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
 }
 
 static int RemoveCgroup(const char* cgroup, uid_t uid, int pid) {
@@ -378,20 +362,6 @@ bool sendSignalToProcessGroup(uid_t uid, int initialPid, int signal) {
         CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &hierarchy_root_path);
         cgroup_v2_path = ConvertUidPidToPath(hierarchy_root_path.c_str(), uid, initialPid);
 
-        if (signal == SIGKILL && CgroupKillAvailable()) {
-            LOG(VERBOSE) << "Using " << PROCESSGROUP_CGROUP_KILL_FILE << " to SIGKILL "
-                         << cgroup_v2_path;
-            const std::string killfilepath = cgroup_v2_path + '/' + PROCESSGROUP_CGROUP_KILL_FILE;
-            if (WriteStringToFile("1", killfilepath)) {
-                return true;
-            } else {
-                PLOG(ERROR) << "Failed to write 1 to " << killfilepath;
-                // Fallback to cgroup.procs below
-            }
-        }
-
-        // Since cgroup.kill only sends SIGKILLs, we read cgroup.procs to find each process to
-        // signal individually. This is more costly than using cgroup.kill for SIGKILLs.
         LOG(VERBOSE) << "Using " << PROCESSGROUP_CGROUP_PROCS_FILE << " to signal (" << signal
                      << ") " << cgroup_v2_path;
 
