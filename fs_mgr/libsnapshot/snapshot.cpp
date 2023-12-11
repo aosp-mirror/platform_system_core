@@ -3330,7 +3330,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         // Terminate stale daemon if any
         std::unique_ptr<SnapuserdClient> snapuserd_client = std::move(snapuserd_client_);
         if (!snapuserd_client) {
-            snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+            snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
         }
         if (snapuserd_client) {
             snapuserd_client->DetachSnapuserd();
@@ -3661,7 +3661,7 @@ std::unique_ptr<ICowWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
     cow_options.batch_write = status.batched_writes();
-    cow_options.num_compress_threads = status.enable_threading() ? 2 : 0;
+    cow_options.num_compress_threads = status.enable_threading() ? 2 : 1;
     // TODO(b/313962438) Improve op_count estimate. For now, use number of
     // blocks as an upper bound.
     cow_options.op_count_max = status.device_size() / cow_options.block_size;
