@@ -395,6 +395,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
     ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
     ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
+    ASSERT_SAME_OFFSET(scudo_stack_depot_size, scudo_stack_depot_size);
     ASSERT_SAME_OFFSET(recoverable_gwp_asan_crash, recoverable_gwp_asan_crash);
 #undef ASSERT_SAME_OFFSET
 
