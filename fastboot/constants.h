@@ -82,3 +82,5 @@
 #define FB_VAR_TREBLE_ENABLED "treble-enabled"
 #define FB_VAR_MAX_FETCH_SIZE "max-fetch-size"
 #define FB_VAR_DMESG "dmesg"
+#define FB_VAR_BATTERY_SERIAL_NUMBER "battery-serial-number"
+#define FB_VAR_BATTERY_PART_STATUS "battery-part-status"
