@@ -14,7 +14,6 @@
 // limitations under the License.
 //
 
-#include <inttypes.h>
 #include <libsnapshot/cow_format.h>
 #include <sys/types.h>
 #include <unistd.h>
