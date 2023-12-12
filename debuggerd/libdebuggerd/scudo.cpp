@@ -42,7 +42,7 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
   }
 
   auto stack_depot = AllocAndReadFully(process_memory, process_info.scudo_stack_depot,
-                                       __scudo_get_stack_depot_size());
+                                       process_info.scudo_stack_depot_size);
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
   std::unique_ptr<char[]> ring_buffer;
