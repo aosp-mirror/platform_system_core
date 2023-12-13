@@ -3,9 +3,9 @@ package {
 }
 
 cc_defaults {
-    name: "libutils_binder_impl_defaults",
+    name: "libutils_binder_impl_defaults_nodeps",
     defaults: [
-        "libutils_defaults",
+        "libutils_defaults_nodeps",
         "apex-lowest-min-sdk-version",
     ],
     native_bridge_supported: true,
@@ -30,9 +30,31 @@ cc_defaults {
     afdo: true,
 }
 
+cc_defaults {
+    name: "libutils_binder_impl_defaults",
+    defaults: [
+        "libutils_defaults",
+        "libutils_binder_impl_defaults_nodeps",
+    ],
+}
+
 cc_library {
     name: "libutils_binder",
     defaults: ["libutils_binder_impl_defaults"],
+}
+
+cc_library_shared {
+    name: "libutils_binder_sdk",
+    defaults: ["libutils_binder_impl_defaults_nodeps"],
+
+    header_libs: [
+        "liblog_stub",
+    ],
+
+    cflags: [
+        "-DANDROID_LOG_STUB_WEAK_PRINT",
+        "-DANDROID_UTILS_CALLSTACK_ENABLED=0",
+    ],
 }
 
 cc_library {
