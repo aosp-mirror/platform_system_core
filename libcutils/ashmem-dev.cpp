@@ -349,6 +349,12 @@ static int memfd_create_region(const char* name, size_t size) {
         return -1;
     }
 
+    // forbid size changes to match ashmem behaviour
+    if (fcntl(fd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK) == -1) {
+        ALOGE("memfd_create(%s, %zd) F_ADD_SEALS failed: %m", name, size);
+        return -1;
+    }
+
     if (debug_log) {
         ALOGE("memfd_create(%s, %zd) success. fd=%d\n", name, size, fd.get());
     }
@@ -400,14 +406,29 @@ error:
 }
 
 static int memfd_set_prot_region(int fd, int prot) {
-    /* Only proceed if an fd needs to be write-protected */
+    int seals = fcntl(fd, F_GET_SEALS);
+    if (seals == -1) {
+        ALOGE("memfd_set_prot_region(%d, %d): F_GET_SEALS failed: %s\n", fd, prot, strerror(errno));
+        return -1;
+    }
+
     if (prot & PROT_WRITE) {
+        /* Now we want the buffer to be read-write, let's check if the buffer
+         * has been previously marked as read-only before, if so return error
+         */
+        if (seals & F_SEAL_FUTURE_WRITE) {
+            ALOGE("memfd_set_prot_region(%d, %d): region is write protected\n", fd, prot);
+            errno = EINVAL;  // inline with ashmem error code, if already in
+                             // read-only mode
+            return -1;
+        }
         return 0;
     }
 
-    if (fcntl(fd, F_ADD_SEALS, F_SEAL_FUTURE_WRITE) == -1) {
-        ALOGE("memfd_set_prot_region(%d, %d): F_SEAL_FUTURE_WRITE seal failed: %s\n", fd, prot,
-              strerror(errno));
+    /* We would only allow read-only for any future file operations */
+    if (fcntl(fd, F_ADD_SEALS, F_SEAL_FUTURE_WRITE | F_SEAL_SEAL) == -1) {
+        ALOGE("memfd_set_prot_region(%d, %d): F_SEAL_FUTURE_WRITE | F_SEAL_SEAL seal failed: %s\n",
+              fd, prot, strerror(errno));
         return -1;
     }
 
