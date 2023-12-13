@@ -15,6 +15,7 @@
 #pragma once
 
 #include <android-base/logging.h>
+#include <string_view>
 
 #include "writer_base.h"
 
@@ -44,6 +45,8 @@ class CowWriterV3 : public CowWriterBase {
     bool ParseOptions();
     bool OpenForWrite();
     bool OpenForAppend(uint64_t label);
+    bool WriteOperation(std::basic_string_view<CowOperationV3> op,
+                        std::basic_string_view<uint8_t> data);
     bool WriteOperation(const CowOperationV3& op, const void* data = nullptr, size_t size = 0);
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
                     uint16_t offset, CowOperationType type);
@@ -59,7 +62,6 @@ class CowWriterV3 : public CowWriterBase {
     // Resume points contain a laebl + cow_op_index.
     std::shared_ptr<std::vector<ResumePoint>> resume_points_;
 
-    uint64_t next_op_pos_ = 0;
     uint64_t next_data_pos_ = 0;
     std::vector<std::basic_string<uint8_t>> compressed_buf_;
 
