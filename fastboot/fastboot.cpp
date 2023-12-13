@@ -402,7 +402,7 @@ static std::unique_ptr<Transport> NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport ? "offline" : "fastboot");
+            PrintDevice(device.c_str(), transport ? "fastboot" : "offline");
         }
 
         if (transport) {

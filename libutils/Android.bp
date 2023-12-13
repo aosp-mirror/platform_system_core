@@ -56,7 +56,7 @@ cc_library_headers {
 }
 
 cc_defaults {
-    name: "libutils_defaults",
+    name: "libutils_defaults_nodeps",
     vendor_available: true,
     product_available: true,
     recovery_available: true,
@@ -69,10 +69,6 @@ cc_defaults {
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
     ],
 
-    shared_libs: [
-        "libcutils",
-        "liblog",
-    ],
     sanitize: {
         misc_undefined: ["integer"],
     },
@@ -115,6 +111,18 @@ cc_defaults {
     fuzz_config: {
        cc: ["smoreland@google.com"],
     },
+}
+
+cc_defaults {
+    name: "libutils_defaults",
+    defaults: [
+        "libutils_defaults_nodeps",
+    ],
+
+    shared_libs: [
+        "libcutils",
+        "liblog",
+    ],
 }
 
 cc_defaults {
