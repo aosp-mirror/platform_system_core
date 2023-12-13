@@ -2362,8 +2362,10 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
 
-    ASSERT_TRUE(init->EnsureSnapuserdConnected());
-    init->set_use_first_stage_snapuserd(true);
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->EnsureSnapuserdConnected());
+        init->set_use_first_stage_snapuserd(true);
+    }
 
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -2374,9 +2376,11 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
-    for (const auto& name : partitions) {
-        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
+        for (const auto& name : partitions) {
+            ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+        }
     }
 
     // Initiate the merge and wait for it to be completed.
