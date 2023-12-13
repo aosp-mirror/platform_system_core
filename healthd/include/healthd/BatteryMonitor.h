@@ -18,6 +18,7 @@
 #define HEALTHD_BATTERYMONITOR_H
 
 #include <memory>
+#include <optional>
 
 #include <batteryservice/BatteryService.h>
 #include <utils/String8.h>
@@ -85,6 +86,8 @@ class BatteryMonitor {
     int setChargingPolicy(int value);
     int getChargingPolicy();
     int getBatteryHealthData(int id);
+
+    status_t getSerialNumber(std::optional<std::string>* out);
 
     static void logValues(const android::hardware::health::V2_1::HealthInfo& health_info,
                           const struct healthd_config& healthd_config);
