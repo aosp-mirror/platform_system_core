@@ -30,6 +30,7 @@
 #include <chrono>
 #include <filesystem>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <android-base/chrono_utils.h>
