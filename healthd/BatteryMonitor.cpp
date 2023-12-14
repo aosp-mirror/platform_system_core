@@ -59,6 +59,7 @@ using aidl::android::hardware::health::BatteryChargingPolicy;
 using aidl::android::hardware::health::BatteryChargingState;
 using aidl::android::hardware::health::BatteryHealth;
 using aidl::android::hardware::health::BatteryHealthData;
+using aidl::android::hardware::health::BatteryPartStatus;
 using aidl::android::hardware::health::BatteryStatus;
 using aidl::android::hardware::health::HealthInfo;
 
@@ -596,6 +597,9 @@ int BatteryMonitor::getBatteryHealthData(int id) {
         if (!mHealthdConfig->batteryStateOfHealthPath.empty())
             return getIntField(mHealthdConfig->batteryStateOfHealthPath);
     }
+    if (id == BATTERY_PROP_PART_STATUS) {
+        return static_cast<int>(BatteryPartStatus::UNSUPPORTED);
+    }
     return 0;
 }
 
@@ -679,11 +683,21 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         ret = OK;
         break;
 
+    case BATTERY_PROP_PART_STATUS:
+        val->valueInt64 = getBatteryHealthData(BATTERY_PROP_PART_STATUS);
+        ret = OK;
+        break;
+
     default:
         break;
     }
 
     return ret;
+}
+
+status_t BatteryMonitor::getSerialNumber(std::optional<std::string>* out) {
+    *out = std::nullopt;
+    return OK;
 }
 
 void BatteryMonitor::dumpState(int fd) {
