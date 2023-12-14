@@ -315,7 +315,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     AssertionResult DeleteDevice(const std::string& device) {
-        if (!dm_.DeleteDeviceIfExists(device)) {
+        if (!sm->DeleteDeviceIfExists(device, 1s)) {
             return AssertionFailure() << "Can't delete " << device;
         }
         return AssertionSuccess();
@@ -2760,7 +2760,7 @@ bool IsDaemonRequired() {
         return true;
     }
 
-    return IsUserspaceSnapshotsEnabled();
+    return IsUserspaceSnapshotsEnabled() && KernelSupportsCompressedSnapshots();
 }
 
 bool ShouldUseCompression() {
@@ -2770,7 +2770,7 @@ bool ShouldUseCompression() {
     if (FLAGS_force_config == "vabc") {
         return true;
     }
-    return IsCompressionEnabled();
+    return IsCompressionEnabled() && KernelSupportsCompressedSnapshots();
 }
 
 }  // namespace snapshot

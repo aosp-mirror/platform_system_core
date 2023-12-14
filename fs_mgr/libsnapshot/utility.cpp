@@ -26,7 +26,9 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/roots.h>
+#include <libdm/dm.h>
 
+using android::dm::DeviceMapper;
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
@@ -206,6 +208,11 @@ std::string GetOtherPartitionName(const std::string& name) {
 
 bool IsDmSnapshotTestingEnabled() {
     return android::base::GetBoolProperty("snapuserd.test.dm.snapshots", false);
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
 }
 
 }  // namespace snapshot
