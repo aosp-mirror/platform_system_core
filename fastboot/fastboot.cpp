@@ -1675,7 +1675,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (FlashTask::IsDynamicParitition(fp->source.get(), flash_task)) {
+            if (FlashTask::IsDynamicPartition(fp->source.get(), flash_task)) {
                 if (!loc) {
                     loc = i;
                 }

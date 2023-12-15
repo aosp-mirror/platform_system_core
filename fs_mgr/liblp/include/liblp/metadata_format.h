@@ -240,6 +240,9 @@ typedef struct LpMetadataHeader {
  */
 #define LP_HEADER_FLAG_VIRTUAL_AB_DEVICE 0x1
 
+/* This device has overlays activated via "adb remount". */
+#define LP_HEADER_FLAG_OVERLAYS_ACTIVE 0x2
+
 /* This struct defines a logical partition entry, similar to what would be
  * present in a GUID Partition Table.
  */
