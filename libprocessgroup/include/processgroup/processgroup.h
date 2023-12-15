@@ -65,9 +65,8 @@ bool UsePerAppMemcg();
 // should be active again. E.g. Zygote specialization for child process.
 void DropTaskProfilesResourceCaching();
 
-// Return 0 and removes the cgroup if there are no longer any processes in it.
-// Returns -1 in the case of an error occurring or if there are processes still running
-// even after retrying for up to 200ms.
+// Return 0 if all processes were killed and the cgroup was successfully removed.
+// Returns -1 in the case of an error occurring or if there are processes still running.
 int killProcessGroup(uid_t uid, int initialPid, int signal);
 
 // Returns the same as killProcessGroup(), however it does not retry, which means
@@ -76,8 +75,9 @@ int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
 
 // Sends the provided signal to all members of a process group, but does not wait for processes to
 // exit, or for the cgroup to be removed. Callers should also ensure that killProcessGroup is called
-// later to ensure the cgroup is fully removed, otherwise system resources may leak.
-int sendSignalToProcessGroup(uid_t uid, int initialPid, int signal);
+// later to ensure the cgroup is fully removed, otherwise system resources will leak.
+// Returns true if no errors are encountered sending signals, otherwise false.
+bool sendSignalToProcessGroup(uid_t uid, int initialPid, int signal);
 
 int createProcessGroup(uid_t uid, int initialPid, bool memControl = false);
 
