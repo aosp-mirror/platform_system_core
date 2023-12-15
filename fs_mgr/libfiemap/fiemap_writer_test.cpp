@@ -22,21 +22,25 @@
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
 #include <string>
+#include <utility>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
+#include <fstab/fstab.h>
 #include <gtest/gtest.h>
 #include <libdm/loop_control.h>
 #include <libfiemap/fiemap_writer.h>
 #include <libfiemap/split_fiemap_writer.h>
 #include <libgsi/libgsi.h>
+#include <storage_literals/storage_literals.h>
 
 #include "utility.h"
 
@@ -46,6 +50,7 @@ namespace fiemap {
 using namespace std;
 using namespace std::string_literals;
 using namespace android::fiemap;
+using namespace android::storage_literals;
 using unique_fd = android::base::unique_fd;
 using LoopDevice = android::dm::LoopDevice;
 
@@ -427,89 +432,122 @@ TEST_F(SplitFiemapTest, WritePastEnd) {
     ASSERT_FALSE(ptr->Write(buffer.get(), kSize));
 }
 
-class VerifyBlockWritesExt4 : public ::testing::Test {
+// Get max file size and free space.
+std::pair<uint64_t, uint64_t> GetBigFileLimit(const std::string& mount_point) {
+    struct statvfs fs;
+    if (statvfs(mount_point.c_str(), &fs) < 0) {
+        PLOG(ERROR) << "statfs failed";
+        return {0, 0};
+    }
+
+    auto fs_limit = static_cast<uint64_t>(fs.f_blocks) * (fs.f_bsize - 1);
+    auto fs_free = static_cast<uint64_t>(fs.f_bfree) * fs.f_bsize;
+
+    LOG(INFO) << "Big file limit: " << fs_limit << ", free space: " << fs_free;
+
+    return {fs_limit, fs_free};
+}
+
+class FsTest : public ::testing::Test {
+  protected:
     // 2GB Filesystem and 4k block size by default
     static constexpr uint64_t block_size = 4096;
-    static constexpr uint64_t fs_size = 2147483648;
+    static constexpr uint64_t fs_size = 64 * 1024 * 1024;
 
-  protected:
-    void SetUp() override {
-        fs_path = std::string(getenv("TMPDIR")) + "/ext4_2G.img";
+    void SetUp() {
+        android::fs_mgr::Fstab fstab;
+        ASSERT_TRUE(android::fs_mgr::ReadFstabFromFile("/proc/mounts", &fstab));
+
+        ASSERT_EQ(access(tmpdir_.path, F_OK), 0);
+        fs_path_ = tmpdir_.path + "/fs_image"s;
+        mntpoint_ = tmpdir_.path + "/mnt_point"s;
+
+        auto entry = android::fs_mgr::GetEntryForMountPoint(&fstab, "/data");
+        ASSERT_NE(entry, nullptr);
+        if (entry->fs_type == "ext4") {
+            SetUpExt4();
+        } else if (entry->fs_type == "f2fs") {
+            SetUpF2fs();
+        } else {
+            FAIL() << "Unrecognized fs_type: " << entry->fs_type;
+        }
+    }
+
+    void SetUpExt4() {
         uint64_t count = fs_size / block_size;
         std::string dd_cmd =
                 ::android::base::StringPrintf("/system/bin/dd if=/dev/zero of=%s bs=%" PRIu64
                                               " count=%" PRIu64 " > /dev/null 2>&1",
-                                              fs_path.c_str(), block_size, count);
+                                              fs_path_.c_str(), block_size, count);
         std::string mkfs_cmd =
-                ::android::base::StringPrintf("/system/bin/mkfs.ext4 -q %s", fs_path.c_str());
+                ::android::base::StringPrintf("/system/bin/mkfs.ext4 -q %s", fs_path_.c_str());
         // create mount point
-        mntpoint = std::string(getenv("TMPDIR")) + "/fiemap_mnt";
-        ASSERT_EQ(mkdir(mntpoint.c_str(), S_IRWXU), 0);
+        ASSERT_EQ(mkdir(mntpoint_.c_str(), S_IRWXU), 0);
         // create file for the file system
         int ret = system(dd_cmd.c_str());
         ASSERT_EQ(ret, 0);
         // Get and attach a loop device to the filesystem we created
-        LoopDevice loop_dev(fs_path, 10s);
+        LoopDevice loop_dev(fs_path_, 10s);
         ASSERT_TRUE(loop_dev.valid());
         // create file system
         ret = system(mkfs_cmd.c_str());
         ASSERT_EQ(ret, 0);
 
         // mount the file system
-        ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint.c_str(), "ext4", 0, nullptr), 0);
+        ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint_.c_str(), "ext4", 0, nullptr), 0);
     }
 
-    void TearDown() override {
-        umount(mntpoint.c_str());
-        rmdir(mntpoint.c_str());
-        unlink(fs_path.c_str());
-    }
-
-    std::string mntpoint;
-    std::string fs_path;
-};
-
-class VerifyBlockWritesF2fs : public ::testing::Test {
-    // 2GB Filesystem and 4k block size by default
-    static constexpr uint64_t block_size = 4096;
-    static constexpr uint64_t fs_size = 2147483648;
-
-  protected:
-    void SetUp() override {
-        fs_path = std::string(getenv("TMPDIR")) + "/f2fs_2G.img";
+    void SetUpF2fs() {
         uint64_t count = fs_size / block_size;
         std::string dd_cmd =
                 ::android::base::StringPrintf("/system/bin/dd if=/dev/zero of=%s bs=%" PRIu64
                                               " count=%" PRIu64 " > /dev/null 2>&1",
-                                              fs_path.c_str(), block_size, count);
+                                              fs_path_.c_str(), block_size, count);
         std::string mkfs_cmd =
-                ::android::base::StringPrintf("/system/bin/make_f2fs -q %s", fs_path.c_str());
+                ::android::base::StringPrintf("/system/bin/make_f2fs -q %s", fs_path_.c_str());
         // create mount point
-        mntpoint = std::string(getenv("TMPDIR")) + "/fiemap_mnt";
-        ASSERT_EQ(mkdir(mntpoint.c_str(), S_IRWXU), 0);
+        ASSERT_EQ(mkdir(mntpoint_.c_str(), S_IRWXU), 0);
         // create file for the file system
         int ret = system(dd_cmd.c_str());
         ASSERT_EQ(ret, 0);
         // Get and attach a loop device to the filesystem we created
-        LoopDevice loop_dev(fs_path, 10s);
+        LoopDevice loop_dev(fs_path_, 10s);
         ASSERT_TRUE(loop_dev.valid());
         // create file system
         ret = system(mkfs_cmd.c_str());
         ASSERT_EQ(ret, 0);
 
         // mount the file system
-        ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint.c_str(), "f2fs", 0, nullptr), 0);
+        ASSERT_EQ(mount(loop_dev.device().c_str(), mntpoint_.c_str(), "f2fs", 0, nullptr), 0);
     }
 
     void TearDown() override {
-        umount(mntpoint.c_str());
-        rmdir(mntpoint.c_str());
-        unlink(fs_path.c_str());
+        umount(mntpoint_.c_str());
+        rmdir(mntpoint_.c_str());
+        unlink(fs_path_.c_str());
     }
 
-    std::string mntpoint;
-    std::string fs_path;
+    TemporaryDir tmpdir_;
+    std::string mntpoint_;
+    std::string fs_path_;
 };
+
+TEST_F(FsTest, LowSpaceError) {
+    auto limits = GetBigFileLimit(mntpoint_);
+    ASSERT_GE(limits.first, 0);
+
+    FiemapUniquePtr ptr;
+
+    auto test_file = mntpoint_ + "/big_file";
+    auto status = FiemapWriter::Open(test_file, limits.first, &ptr);
+    ASSERT_FALSE(status.is_ok());
+    ASSERT_EQ(status.error_code(), FiemapStatus::ErrorCode::NO_SPACE);
+
+    // Also test for EFBIG.
+    status = FiemapWriter::Open(test_file, 16_TiB, &ptr);
+    ASSERT_FALSE(status.is_ok());
+    ASSERT_NE(status.error_code(), FiemapStatus::ErrorCode::NO_SPACE);
+}
 
 bool DetermineBlockSize() {
     struct statfs s;
