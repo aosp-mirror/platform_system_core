@@ -219,6 +219,35 @@ OverlayfsTeardownResult TeardownDataScratch(IImageManager* images,
     return OverlayfsTeardownResult::Ok;
 }
 
+bool GetOverlaysActiveFlag() {
+    auto slot_number = fs_mgr_overlayfs_slot_number();
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
+
+    auto metadata = ReadMetadata(super_device, slot_number);
+    if (!metadata) {
+        return false;
+    }
+    return !!(metadata->header.flags & LP_HEADER_FLAG_OVERLAYS_ACTIVE);
+}
+
+bool SetOverlaysActiveFlag(bool flag) {
+    // Mark overlays as active in the partition table, to detect re-flash.
+    auto slot_number = fs_mgr_overlayfs_slot_number();
+    const auto super_device = kPhysicalDevice + fs_mgr_get_super_partition_name();
+    auto builder = MetadataBuilder::New(super_device, slot_number);
+    if (!builder) {
+        LERROR << "open " << super_device << " metadata";
+        return false;
+    }
+    builder->SetOverlaysActiveFlag(flag);
+    auto metadata = builder->Export();
+    if (!metadata || !UpdatePartitionTable(super_device, *metadata.get(), slot_number)) {
+        LERROR << "update super metadata";
+        return false;
+    }
+    return true;
+}
+
 OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& overlay,
                                                           bool* change) {
     // umount and delete kScratchMountPoint storage if we have logical partitions
@@ -231,6 +260,10 @@ OverlayfsTeardownResult fs_mgr_overlayfs_teardown_scratch(const std::string& ove
         LERROR << "Destroying DSU scratch is not allowed.";
         return OverlayfsTeardownResult::Error;
     }
+
+    // Note: we don't care if SetOverlaysActiveFlag fails, since
+    // the overlays are removed no matter what.
+    SetOverlaysActiveFlag(false);
 
     bool was_mounted = fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false);
     if (was_mounted) {
@@ -448,6 +481,7 @@ static bool CreateDynamicScratch(std::string* scratch_device, bool* partition_ex
             }
         }
     }
+
     // land the update back on to the partition
     if (changed) {
         auto metadata = builder->Export();
@@ -589,6 +623,12 @@ bool fs_mgr_overlayfs_setup_scratch(const Fstab& fstab) {
     bool partition_exists;
     if (!fs_mgr_overlayfs_create_scratch(fstab, &scratch_device, &partition_exists)) {
         LOG(ERROR) << "Failed to create scratch partition";
+        return false;
+    }
+
+    if (!SetOverlaysActiveFlag(true)) {
+        LOG(ERROR) << "Failed to update dynamic partition data";
+        fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, nullptr);
         return false;
     }
 
@@ -856,6 +896,9 @@ void MapScratchPartitionIfNeeded(Fstab* fstab,
         return;
     }
 
+    if (!GetOverlaysActiveFlag()) {
+        return;
+    }
     if (ScratchIsOnData()) {
         if (auto images = IImageManager::Open("remount", 0ms)) {
             images->MapAllImages(init);
@@ -879,6 +922,9 @@ void CleanupOldScratchFiles() {
     }
     if (auto images = IImageManager::Open("remount", 0ms)) {
         images->RemoveDisabledImages();
+        if (!GetOverlaysActiveFlag()) {
+            fs_mgr_overlayfs_teardown_scratch(kScratchMountPoint, nullptr);
+        }
     }
 }
 
