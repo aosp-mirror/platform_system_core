@@ -30,7 +30,7 @@ FlashTask::FlashTask(const std::string& slot, const std::string& pname, const st
                      const bool apply_vbmeta, const FlashingPlan* fp)
     : pname_(pname), fname_(fname), slot_(slot), apply_vbmeta_(apply_vbmeta), fp_(fp) {}
 
-bool FlashTask::IsDynamicParitition(const ImageSource* source, const FlashTask* task) {
+bool FlashTask::IsDynamicPartition(const ImageSource* source, const FlashTask* task) {
     std::vector<char> contents;
     if (!source->ReadFile("super_empty.img", &contents)) {
         return false;
@@ -152,7 +152,7 @@ bool OptimizedFlashSuperTask::CanOptimize(const ImageSource* source,
             continue;
         }
         auto flash_task = tasks[i + 2]->AsFlashTask();
-        if (!FlashTask::IsDynamicParitition(source, flash_task)) {
+        if (!FlashTask::IsDynamicPartition(source, flash_task)) {
             continue;
         }
         return true;
