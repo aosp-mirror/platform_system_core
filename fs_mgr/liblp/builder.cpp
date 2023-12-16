@@ -1211,6 +1211,15 @@ void MetadataBuilder::SetVirtualABDeviceFlag() {
     header_.flags |= LP_HEADER_FLAG_VIRTUAL_AB_DEVICE;
 }
 
+void MetadataBuilder::SetOverlaysActiveFlag(bool flag) {
+    RequireExpandedMetadataHeader();
+    if (flag) {
+        header_.flags |= LP_HEADER_FLAG_OVERLAYS_ACTIVE;
+    } else {
+        header_.flags &= ~LP_HEADER_FLAG_OVERLAYS_ACTIVE;
+    }
+}
+
 bool MetadataBuilder::IsABDevice() {
     return !IPropertyFetcher::GetInstance()->GetProperty("ro.boot.slot_suffix", "").empty();
 }

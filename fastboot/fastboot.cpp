@@ -402,7 +402,7 @@ static std::unique_ptr<Transport> NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport ? "offline" : "fastboot");
+            PrintDevice(device.c_str(), transport ? "fastboot" : "offline");
         }
 
         if (transport) {
@@ -1675,7 +1675,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (FlashTask::IsDynamicParitition(fp->source.get(), flash_task)) {
+            if (FlashTask::IsDynamicPartition(fp->source.get(), flash_task)) {
                 if (!loc) {
                     loc = i;
                 }

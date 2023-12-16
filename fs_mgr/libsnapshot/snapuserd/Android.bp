@@ -147,12 +147,6 @@ cc_defaults {
     // snapuserd, which would lead to deadlock if we had to handle page
     // faults for its code pages.
     static_executable: true,
-
-    // Snapuserd segfaults with ThinLTO
-    // http://b/208565717
-    lto: {
-         never: true,
-    },
 }
 
 cc_binary {

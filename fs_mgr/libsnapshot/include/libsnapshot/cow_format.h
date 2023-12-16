@@ -16,8 +16,10 @@
 
 #include <stdint.h>
 
+#include <limits>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 
 namespace android {
 namespace snapshot {
@@ -32,7 +34,7 @@ static constexpr uint32_t kCowVersionMinor = 0;
 static constexpr uint32_t kCowVersionManifest = 2;
 
 static constexpr uint32_t kMinCowVersion = 1;
-static constexpr uint32_t kMaxCowVersion = 2;
+static constexpr uint32_t kMaxCowVersion = 3;
 
 // Normally, this should be kMaxCowVersion. When a new version is under testing
 // it may be the previous value of kMaxCowVersion.
@@ -105,11 +107,11 @@ struct ResumePoint {
 static constexpr uint8_t kNumResumePoints = 4;
 
 struct CowHeaderV3 : public CowHeader {
-    // Location of sequence buffer in COW.
-    uint64_t sequence_buffer_offset;
-    // number of currently written resume points
+    // Number of sequence data stored (each of which is a 32 byte integer)
+    uint64_t sequence_data_count;
+    // Number of currently written resume points &&
     uint32_t resume_point_count;
-    // Size, in bytes, of the CowResumePoint buffer.
+    // Number of max resume points that can be written
     uint32_t resume_point_max;
     // Number of CowOperationV3 structs in the operation buffer, currently and total
     // region size.
@@ -119,10 +121,30 @@ struct CowHeaderV3 : public CowHeader {
     uint32_t compression_algorithm;
 } __attribute__((packed));
 
+enum class CowOperationType : uint8_t {
+    kCowCopyOp = 1,
+    kCowReplaceOp = 2,
+    kCowZeroOp = 3,
+    kCowLabelOp = 4,
+    kCowClusterOp = 5,
+    kCowXorOp = 6,
+    kCowSequenceOp = 7,
+    kCowFooterOp = std::numeric_limits<uint8_t>::max(),
+};
+
+static constexpr CowOperationType kCowCopyOp = CowOperationType::kCowCopyOp;
+static constexpr CowOperationType kCowReplaceOp = CowOperationType::kCowReplaceOp;
+static constexpr CowOperationType kCowZeroOp = CowOperationType::kCowZeroOp;
+static constexpr CowOperationType kCowLabelOp = CowOperationType::kCowLabelOp;
+static constexpr CowOperationType kCowClusterOp = CowOperationType::kCowClusterOp;
+static constexpr CowOperationType kCowXorOp = CowOperationType::kCowXorOp;
+static constexpr CowOperationType kCowSequenceOp = CowOperationType::kCowSequenceOp;
+static constexpr CowOperationType kCowFooterOp = CowOperationType::kCowFooterOp;
+
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
 struct CowFooterOperation {
     // The operation code (always kCowFooterOp).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -141,7 +163,7 @@ struct CowFooterOperation {
 // V2 version of COW. On disk format for older devices
 struct CowOperationV2 {
     // The operation code (see the constants and structures below).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -173,11 +195,12 @@ struct CowOperationV2 {
     uint64_t source;
 } __attribute__((packed));
 
+static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
+static constexpr uint64_t kCowOpSourceInfoTypeBit = 60;
+static constexpr uint64_t kCowOpSourceInfoTypeNumBits = 4;
+static constexpr uint64_t kCowOpSourceInfoTypeMask = (1ULL << kCowOpSourceInfoTypeNumBits) - 1;
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
-    // The operation code (see the constants and structures below).
-    uint8_t type;
-
     // If this operation reads from the data section of the COW, this contains
     // the length.
     uint16_t data_length;
@@ -185,6 +208,10 @@ struct CowOperationV3 {
     // The block of data in the new image that this operation modifies.
     uint32_t new_block;
 
+    // source_info with have the following layout
+    // |---4 bits ---| ---12 bits---| --- 48 bits ---|
+    // |--- type --- | -- unused -- | --- source --- |
+    //
     // The value of |source| depends on the operation code.
     //
     // CopyOp: a 32-bit block location in the source image.
@@ -196,19 +223,33 @@ struct CowOperationV3 {
     // For ops other than Label:
     //  Bits 47-62 are reserved and must be zero.
     // A block is compressed if it’s data is < block_sz
-    uint64_t source_info;
+    uint64_t source_info_;
+    constexpr uint64_t source() const { return source_info_ & kCowOpSourceInfoDataMask; }
+    constexpr void set_source(uint64_t source) {
+        // Clear the first 48 bit first
+        source_info_ &= ~kCowOpSourceInfoDataMask;
+        // Set the actual source field
+        source_info_ |= source & kCowOpSourceInfoDataMask;
+    }
+    constexpr CowOperationType type() const {
+        // this is a mask to grab the first 4 bits of a 64 bit integer
+        const auto type = (source_info_ >> kCowOpSourceInfoTypeBit) & kCowOpSourceInfoTypeMask;
+        return static_cast<CowOperationType>(type);
+    }
+    constexpr void set_type(CowOperationType type) {
+        // Clear the top 4 bits first
+        source_info_ &= ((1ULL << kCowOpSourceInfoTypeBit) - 1);
+        // set the actual type bits
+        source_info_ |= (static_cast<uint64_t>(type) & kCowOpSourceInfoTypeMask)
+                        << kCowOpSourceInfoTypeBit;
+    }
 } __attribute__((packed));
 
+// Ensure that getters/setters added to CowOperationV3 does not increases size
+// of CowOperationV3 struct(no virtual method tables added).
+static_assert(std::is_trivially_copyable_v<CowOperationV3>);
+static_assert(std::is_standard_layout_v<CowOperationV3>);
 static_assert(sizeof(CowOperationV2) == sizeof(CowFooterOperation));
-
-static constexpr uint8_t kCowCopyOp = 1;
-static constexpr uint8_t kCowReplaceOp = 2;
-static constexpr uint8_t kCowZeroOp = 3;
-static constexpr uint8_t kCowLabelOp = 4;
-static constexpr uint8_t kCowClusterOp = 5;
-static constexpr uint8_t kCowXorOp = 6;
-static constexpr uint8_t kCowSequenceOp = 7;
-static constexpr uint8_t kCowFooterOp = -1;
 
 enum CowCompressionAlgorithm : uint8_t {
     kCowCompressNone = 0,
@@ -226,23 +267,21 @@ static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
 
-static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
-
-static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
-    return op.source_info & kCowOpSourceInfoDataMask;
-}
-
-static constexpr off_t GetOpOffset(uint32_t op_index, const CowHeaderV3 header) {
-    return header.prefix.header_size + header.buffer_size +
-           (header.resume_point_max * sizeof(ResumePoint)) + (op_index * sizeof(CowOperationV3));
-}
-static constexpr off_t GetDataOffset(const CowHeaderV3 header) {
-    return header.prefix.header_size + header.buffer_size +
-           (header.resume_point_max * sizeof(ResumePoint)) +
-           header.op_count_max * sizeof(CowOperation);
-}
-static constexpr off_t GetResumeOffset(const CowHeaderV3 header) {
+static constexpr off_t GetSequenceOffset(const CowHeaderV3& header) {
     return header.prefix.header_size + header.buffer_size;
+}
+
+static constexpr off_t GetResumeOffset(const CowHeaderV3& header) {
+    return GetSequenceOffset(header) + (header.sequence_data_count * sizeof(uint32_t));
+}
+
+static constexpr off_t GetOpOffset(uint32_t op_index, const CowHeaderV3& header) {
+    return GetResumeOffset(header) + (header.resume_point_max * sizeof(ResumePoint)) +
+           (op_index * sizeof(CowOperationV3));
+}
+
+static constexpr off_t GetDataOffset(const CowHeaderV3& header) {
+    return GetOpOffset(header.op_count_max, header);
 }
 
 struct CowFooter {
@@ -268,7 +307,7 @@ static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 
-std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+std::ostream& operator<<(std::ostream& os, CowOperationV3 const& arg);
 
 std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
 
