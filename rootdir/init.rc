@@ -92,6 +92,12 @@ on early-init
     # checker programs.
     mkdir /dev/fscklogs 0770 root system
 
+    # Create tmpfs for use by the shell user.
+    mount tmpfs tmpfs /tmp
+    restorecon /tmp
+    chown shell shell /tmp
+    chmod 0771 /tmp
+
 on init
     sysclktz 0
 
