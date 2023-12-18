@@ -353,13 +353,15 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len,
     if (open_flags & O_CREAT) {
         sync_parent(path, watcher);
     }
-    free(path);
 
     /* at this point rc contains storage file fd */
     msg->result = STORAGE_NO_ERROR;
     resp.handle = insert_fd(open_flags, rc);
     ALOGV("%s: \"%s\": fd = %u: handle = %d\n",
           __func__, path, rc, resp.handle);
+
+    free(path);
+    path = NULL;
 
     /* a backing file has been opened, notify any waiting init steps */
     if (!fs_ready_initialized) {
