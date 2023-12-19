@@ -700,6 +700,29 @@ static void SetReadAheadSize(const std::string& entry_block_device, off64_t size
 }
 
 //
+// Mechanism to allow fsck to be triggered by setting ro.preventative_fsck
+// Introduced to address b/305658663
+// If the property value is not equal to the flag file contents, trigger
+// fsck and store the property value in the flag file
+// If we want to trigger again, simply change the property value
+//
+static bool check_if_preventative_fsck_needed(const FstabEntry& entry) {
+    const char* flag_file = "/metadata/vold/preventative_fsck";
+    if (entry.mount_point != "/data") return false;
+
+    // Don't error check - both default to empty string, which is OK
+    std::string prop = android::base::GetProperty("ro.preventative_fsck", "");
+    std::string flag;
+    android::base::ReadFileToString(flag_file, &flag);
+    if (prop == flag) return false;
+    // fsck is run immediately, so assume it runs or there is some deeper problem
+    if (!android::base::WriteStringToFile(prop, flag_file))
+        PERROR << "Failed to write file " << flag_file;
+    LINFO << "Run preventative fsck on /data";
+    return true;
+}
+
+//
 // Prepare the filesystem on the given block device to be mounted.
 //
 // If the "check" option was given in the fstab record, or it seems that the
@@ -749,7 +772,7 @@ static int prepare_fs_for_mount(const std::string& blk_device, const FstabEntry&
         }
     }
 
-    if (entry.fs_mgr_flags.check ||
+    if (check_if_preventative_fsck_needed(entry) || entry.fs_mgr_flags.check ||
         (fs_stat & (FS_STAT_UNCLEAN_SHUTDOWN | FS_STAT_QUOTA_ENABLED))) {
         check_fs(blk_device, entry.fs_type, mount_point, &fs_stat);
     }
