@@ -216,7 +216,23 @@ bool CowWriterV3::OpenForAppend(uint64_t label) {
     return true;
 }
 
+bool CowWriterV3::CheckOpCount(size_t op_count) {
+    if (IsEstimating()) {
+        return true;
+    }
+    if (header_.op_count + op_count > header_.op_count_max) {
+        LOG(ERROR) << "Current number of ops on disk: " << header_.op_count
+                   << ", number of ops attempting to write: " << op_count
+                   << ", this will exceed max op count " << header_.op_count_max;
+        return false;
+    }
+    return true;
+}
+
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     std::vector<CowOperationV3> ops(num_blocks);
     for (size_t i = 0; i < num_blocks; i++) {
         CowOperationV3& op = ops[i];
@@ -232,11 +248,17 @@ bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_
 }
 
 bool CowWriterV3::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
+    if (!CheckOpCount(size / header_.block_size)) {
+        return false;
+    }
     return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
 }
 
 bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                 uint32_t old_block, uint16_t offset) {
+    if (!CheckOpCount(size / header_.block_size)) {
+        return false;
+    }
     return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
 }
 
@@ -313,8 +335,11 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
 }
 
 bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, const uint64_t num_blocks) {
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     std::vector<CowOperationV3> ops(num_blocks);
-    for (uint64_t i = 0; i < ops.size(); i++) {
+    for (uint64_t i = 0; i < num_blocks; i++) {
         auto& op = ops[i];
         op.set_type(kCowZeroOp);
         op.new_block = new_block_start + i;
