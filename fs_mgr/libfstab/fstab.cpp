@@ -716,7 +716,7 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
     if (!ReadFstabFromFileCommon(path, fstab)) {
         return false;
     }
-    if (path != kProcMountsPath) {
+    if (path != kProcMountsPath && !InRecovery()) {
         if (!access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
             std::string dsu_slot;
             if (!android::gsi::GetActiveDsu(&dsu_slot)) {
