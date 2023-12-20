@@ -688,5 +688,15 @@ TEST_F(CowTestV3, CopyOpMany) {
     }
 }
 
+TEST_F(CowTestV3, CheckOpCount) {
+    CowOptions options;
+    options.op_count_max = 20;
+    options.batch_write = true;
+    options.cluster_ops = 200;
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_TRUE(writer->AddZeroBlocks(0, 19));
+    ASSERT_FALSE(writer->AddZeroBlocks(0, 19));
+}
+
 }  // namespace snapshot
 }  // namespace android
