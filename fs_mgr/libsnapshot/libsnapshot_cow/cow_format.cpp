@@ -52,6 +52,10 @@ std::ostream& EmitCowTypeString(std::ostream& os, CowOperationType cow_type) {
     }
 }
 
+std::ostream& operator<<(std::ostream& os, CowOperationType cow_type) {
+    return EmitCowTypeString(os, cow_type);
+}
+
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& op) {
     os << "CowOperationV2(";
     EmitCowTypeString(os, op.type) << ", ";
