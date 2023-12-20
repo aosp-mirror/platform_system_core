@@ -382,7 +382,20 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     // TODO: size sequence buffer based on options
+    if (header_.op_count > 0) {
+        LOG(ERROR)
+                << "There's " << header_.op_count
+                << " operations written to disk. Writing sequence data is only allowed before all "
+                   "operation writes.";
+        return false;
+    }
     header_.sequence_data_count = num_ops;
+    // In COW format v3, data section is placed after op section and sequence
+    // data section. Therefore, changing the sequence data count has the effect
+    // of moving op section and data section. Therefore we need to reset the
+    // value of |next_data_pos|. This is also the reason why writing sequence
+    // data is only allowed if there's no operation written.
+    next_data_pos_ = GetDataOffset(header_);
     if (!android::base::WriteFullyAtOffset(fd_, data, sizeof(data[0]) * num_ops,
                                            GetSequenceOffset(header_))) {
         PLOG(ERROR) << "writing sequence buffer failed";
