@@ -16,6 +16,7 @@
 
 #include <android-base/logging.h>
 #include <string_view>
+#include <vector>
 
 #include "writer_base.h"
 
@@ -42,20 +43,20 @@ class CowWriterV3 : public CowWriterBase {
 
   private:
     void SetupHeaders();
+    bool NeedsFlush() const;
     bool ParseOptions();
     bool OpenForWrite();
     bool OpenForAppend(uint64_t label);
     bool WriteOperation(std::basic_string_view<CowOperationV3> op,
                         std::basic_string_view<struct iovec> data);
-    bool WriteOperation(std::basic_string_view<CowOperationV3> op, const void* data = nullptr,
-                        size_t size = 0);
-    bool WriteOperation(const CowOperationV3& op, const void* data = nullptr, size_t size = 0);
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
                     uint16_t offset, CowOperationType type);
     bool CompressBlocks(size_t num_blocks, const void* data);
     bool CheckOpCount(size_t op_count);
 
   private:
+    bool ReadBackVerification();
+    bool FlushCacheOps();
     CowHeaderV3 header_{};
     CowCompression compression_;
     // in the case that we are using one thread for compression, we can store and re-use the same
@@ -66,12 +67,14 @@ class CowWriterV3 : public CowWriterBase {
     std::shared_ptr<std::vector<ResumePoint>> resume_points_;
 
     uint64_t next_data_pos_ = 0;
-    std::vector<std::basic_string<uint8_t>> compressed_buf_;
 
     // in the case that we are using one thread for compression, we can store and re-use the same
     // compressor
     int num_compress_threads_ = 1;
-    size_t batch_size_ = 0;
+    size_t batch_size_ = 1;
+    std::vector<CowOperationV3> cached_ops_;
+    std::vector<std::basic_string<uint8_t>> cached_data_;
+    std::vector<struct iovec> data_vec_;
 };
 
 }  // namespace snapshot
