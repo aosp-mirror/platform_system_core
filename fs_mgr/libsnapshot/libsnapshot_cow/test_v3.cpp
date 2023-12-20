@@ -1,10 +1,3 @@
-// Copyright (C) 2023 The Android Open Source Project
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +8,7 @@
 #include <sys/stat.h>
 
 #include <cstdio>
+#include <limits>
 #include <memory>
 
 #include <android-base/file.h>
@@ -513,19 +507,24 @@ TEST_F(CowTestV3, BufferMetadataSyncTest) {
 
 TEST_F(CowTestV3, SequenceTest) {
     CowOptions options;
-    options.op_count_max = std::numeric_limits<uint32_t>::max();
+    constexpr int seq_len = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t) + 1;
+    options.op_count_max = seq_len;
     auto writer = CreateCowWriter(3, options, GetCowFd());
     // sequence data. This just an arbitrary set of integers that specify the merge order. The
     // actual calculation is done by update_engine and passed to writer. All we care about here is
     // writing that data correctly
-    const int seq_len = std::numeric_limits<uint16_t>::max() / sizeof(uint32_t) + 1;
     uint32_t sequence[seq_len];
     for (int i = 0; i < seq_len; i++) {
         sequence[i] = i + 1;
     }
 
     ASSERT_TRUE(writer->AddSequenceData(seq_len, sequence));
-    ASSERT_TRUE(writer->AddZeroBlocks(1, seq_len));
+    ASSERT_TRUE(writer->AddZeroBlocks(1, seq_len - 1));
+    std::vector<uint8_t> data(writer->GetBlockSize());
+    for (size_t i = 0; i < data.size(); i++) {
+        data[i] = static_cast<uint8_t>(i & 0xFF);
+    }
+    ASSERT_TRUE(writer->AddRawBlocks(seq_len, data.data(), data.size()));
     ASSERT_TRUE(writer->Finalize());
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
@@ -539,6 +538,12 @@ TEST_F(CowTestV3, SequenceTest) {
         const auto& op = iter->Get();
 
         ASSERT_EQ(op->new_block, seq_len - i);
+        if (op->new_block == seq_len) {
+            std::vector<uint8_t> read_back(writer->GetBlockSize());
+            ASSERT_EQ(reader.ReadData(op, read_back.data(), read_back.size()),
+                      static_cast<ssize_t>(read_back.size()));
+            ASSERT_EQ(read_back, data);
+        }
 
         iter->Next();
     }
