@@ -1,6 +1,6 @@
 LIBVNDKSUPPORT {
   global:
-    android_is_in_vendor_process; # systemapi
+    android_is_in_vendor_process; # llndk-deprecated=35 systemapi
     android_load_sphal_library; # llndk systemapi
     android_unload_sphal_library; # llndk systemapi
   local:
