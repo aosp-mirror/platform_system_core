@@ -57,6 +57,7 @@ struct FstabEntry {
     uint64_t zram_backingdev_size = 0;
     std::string avb_keys;
     std::string lowerdir;
+    std::string avb_hashtree_digest;
 
     struct FsMgrFlags {
         bool wait : 1;
