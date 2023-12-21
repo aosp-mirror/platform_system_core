@@ -107,7 +107,7 @@ struct ResumePoint {
 static constexpr uint8_t kNumResumePoints = 4;
 
 struct CowHeaderV3 : public CowHeader {
-    // Number of sequence data stored (each of which is a 32 byte integer)
+    // Number of sequence data stored (each of which is a 32 bit integer)
     uint64_t sequence_data_count;
     // Number of currently written resume points &&
     uint32_t resume_point_count;
@@ -310,6 +310,8 @@ std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 std::ostream& operator<<(std::ostream& os, CowOperationV3 const& arg);
 
 std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
+
+std::ostream& operator<<(std::ostream& os, CowOperationType cow_type);
 
 int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_size);
