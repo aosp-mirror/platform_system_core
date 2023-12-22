@@ -732,7 +732,7 @@ bool FirstStageMountVBootV2::GetDmVerityDevices(std::set<std::string>* devices) 
     return true;
 }
 
-bool IsHashtreeDisabled(const AvbHandle& vbmeta, const std::string& mount_point) {
+bool IsHashtreeDisabled(const AvbHandle& vbmeta, std::string mount_point) {
     if (vbmeta.status() == AvbHandleStatus::kHashtreeDisabled ||
         vbmeta.status() == AvbHandleStatus::kVerificationDisabled) {
         LOG(ERROR) << "Top-level vbmeta is disabled, skip Hashtree setup for " << mount_point;
