@@ -42,9 +42,6 @@
       "name": "liblp_test"
     },
     {
-      "name": "vts_libsnapshot_test"
-    },
-    {
       "name": "vab_legacy_tests"
     },
     // TODO(b/279009697):
