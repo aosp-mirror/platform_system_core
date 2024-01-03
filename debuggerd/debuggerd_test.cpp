@@ -2221,28 +2221,10 @@ TEST_F(CrasherTest, unreadable_elf) {
   ASSERT_MATCH(result, match_str);
 }
 
-TEST(tombstoned, proto) {
-  const pid_t self = getpid();
-  unique_fd tombstoned_socket, text_fd, proto_fd;
-  ASSERT_TRUE(
-      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
-
-  tombstoned_notify_completion(tombstoned_socket.get());
-
-  ASSERT_NE(-1, text_fd.get());
-  ASSERT_NE(-1, proto_fd.get());
-
-  struct stat text_st;
-  ASSERT_EQ(0, fstat(text_fd.get(), &text_st));
-
-  // Give tombstoned some time to link the files into place.
-  std::this_thread::sleep_for(100ms * android::base::HwTimeoutMultiplier());
-
-  // Find the tombstone.
-  std::optional<std::string> tombstone_file;
+void CheckForTombstone(const struct stat& text_st, std::optional<std::string>& tombstone_file) {
+  static std::regex tombstone_re("tombstone_\\d+");
   std::unique_ptr<DIR, decltype(&closedir)> dir_h(opendir("/data/tombstones"), closedir);
   ASSERT_TRUE(dir_h != nullptr);
-  std::regex tombstone_re("tombstone_\\d+");
   dirent* entry;
   while ((entry = readdir(dir_h.get())) != nullptr) {
     if (!std::regex_match(entry->d_name, tombstone_re)) {
@@ -2260,8 +2242,38 @@ TEST(tombstoned, proto) {
       break;
     }
   }
+}
 
-  ASSERT_TRUE(tombstone_file);
+TEST(tombstoned, proto) {
+  const pid_t self = getpid();
+  unique_fd tombstoned_socket, text_fd, proto_fd;
+  ASSERT_TRUE(
+      tombstoned_connect(self, &tombstoned_socket, &text_fd, &proto_fd, kDebuggerdTombstoneProto));
+
+  tombstoned_notify_completion(tombstoned_socket.get());
+
+  ASSERT_NE(-1, text_fd.get());
+  ASSERT_NE(-1, proto_fd.get());
+
+  struct stat text_st;
+  ASSERT_EQ(0, fstat(text_fd.get(), &text_st));
+
+  std::optional<std::string> tombstone_file;
+  // Allow up to 5 seconds for the tombstone to be written to the system.
+  const auto max_wait_time = std::chrono::seconds(5) * android::base::HwTimeoutMultiplier();
+  const auto start = std::chrono::high_resolution_clock::now();
+  while (true) {
+    std::this_thread::sleep_for(100ms);
+    CheckForTombstone(text_st, tombstone_file);
+    if (tombstone_file) {
+      break;
+    }
+    if (std::chrono::high_resolution_clock::now() - start > max_wait_time) {
+      break;
+    }
+  }
+
+  ASSERT_TRUE(tombstone_file) << "Timed out trying to find tombstone file.";
   std::string proto_path = tombstone_file.value() + ".pb";
 
   struct stat proto_fd_st;
