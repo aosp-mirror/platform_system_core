@@ -3551,6 +3551,9 @@ Return SnapshotManager::InitializeUpdateSnapshots(
                 options.scratch_space = false;
             }
             options.compression = it->second.compression_algorithm();
+            if (cow_version >= 3) {
+                options.op_count_max = it->second.estimated_ops_buffer_size();
+            }
 
             auto writer = CreateCowWriter(cow_version, options, std::move(fd));
             if (!writer->Finalize()) {
@@ -3662,9 +3665,7 @@ std::unique_ptr<ICowWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
     cow_options.batch_write = status.batched_writes();
     cow_options.num_compress_threads = status.enable_threading() ? 2 : 1;
-    // TODO(b/313962438) Improve op_count estimate. For now, use number of
-    // blocks as an upper bound.
-    cow_options.op_count_max = status.device_size() / cow_options.block_size;
+    cow_options.op_count_max = status.estimated_ops_buffer_size();
     // Disable scratch space for vts tests
     if (device()->IsTestDevice()) {
         cow_options.scratch_space = false;
