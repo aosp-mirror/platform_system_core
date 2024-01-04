@@ -392,7 +392,6 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
-    // TODO: size sequence buffer based on options
     if (header_.op_count > 0 || !cached_ops_.empty()) {
         LOG(ERROR) << "There's " << header_.op_count << " operations written to disk and "
                    << cached_ops_.size()
