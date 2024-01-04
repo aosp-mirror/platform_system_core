@@ -18,6 +18,7 @@
 #include <libsnapshot/cow_format.h>
 #include <libsnapshot/cow_reader.h>
 #include <libsnapshot/cow_writer.h>
+#include <storage_literals/storage_literals.h>
 #include "writer_v2.h"
 #include "writer_v3.h"
 
@@ -28,6 +29,9 @@ using testing::AssertionSuccess;
 
 namespace android {
 namespace snapshot {
+
+using namespace android::storage_literals;
+using ::testing::TestWithParam;
 
 class CowTestV3 : public ::testing::Test {
   protected:
@@ -484,14 +488,14 @@ TEST_F(CowTestV3, BufferMetadataSyncTest) {
     ASSERT_TRUE(reader.Parse(cow_->fd));
 
     auto header = reader.header_v3();
-    ASSERT_EQ(header.sequence_data_count, 0);
+    ASSERT_EQ(header.sequence_data_count, static_cast<uint64_t>(0));
     ASSERT_EQ(header.resume_point_count, 0);
     ASSERT_EQ(header.resume_point_max, 4);
 
     writer->AddLabel(0);
     ASSERT_TRUE(reader.Parse(cow_->fd));
     header = reader.header_v3();
-    ASSERT_EQ(header.sequence_data_count, 0);
+    ASSERT_EQ(header.sequence_data_count, static_cast<uint64_t>(0));
     ASSERT_EQ(header.resume_point_count, 1);
     ASSERT_EQ(header.resume_point_max, 4);
 
@@ -698,6 +702,190 @@ TEST_F(CowTestV3, CheckOpCount) {
     ASSERT_TRUE(writer->AddZeroBlocks(0, 19));
     ASSERT_FALSE(writer->AddZeroBlocks(0, 19));
 }
+
+struct TestParam {
+    std::string compression;
+    int block_size;
+    int num_threads;
+    size_t cluster_ops;
+};
+
+class VariableBlockTest : public ::testing::TestWithParam<TestParam> {
+  protected:
+    virtual void SetUp() override {
+        cow_ = std::make_unique<TemporaryFile>();
+        ASSERT_GE(cow_->fd, 0) << strerror(errno);
+    }
+
+    virtual void TearDown() override { cow_ = nullptr; }
+
+    unique_fd GetCowFd() { return unique_fd{dup(cow_->fd)}; }
+
+    std::unique_ptr<TemporaryFile> cow_;
+};
+
+// Helper to check read sizes.
+static inline void ReadBlockData(CowReader& reader, const CowOperation* op, void* buffer,
+                                 size_t size) {
+    size_t block_size = CowOpCompressionSize(op, 4096);
+    std::string data(block_size, '\0');
+    size_t value = reader.ReadData(op, data.data(), block_size);
+    ASSERT_TRUE(value == block_size);
+    std::memcpy(buffer, data.data(), size);
+}
+
+TEST_P(VariableBlockTest, VariableBlockCompressionTest) {
+    const TestParam params = GetParam();
+
+    CowOptions options;
+    options.op_count_max = 100000;
+    options.compression = params.compression;
+    options.num_compress_threads = params.num_threads;
+    options.batch_write = true;
+    options.compression_factor = params.block_size;
+    options.cluster_ops = params.cluster_ops;
+
+    CowWriterV3 writer(options, GetCowFd());
+
+    ASSERT_TRUE(writer.Initialize());
+
+    std::string xor_data = "This is test data-1. Testing xor";
+    xor_data.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddXorBlocks(50, xor_data.data(), xor_data.size(), 24, 10));
+
+    // Large number of blocks
+    std::string data = "This is test data-2. Testing replace ops";
+    data.resize(options.block_size * 2048, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(100, data.data(), data.size()));
+
+    std::string data2 = "This is test data-3. Testing replace ops";
+    data2.resize(options.block_size * 259, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(6000, data2.data(), data2.size()));
+
+    // Test data size is smaller than block size
+
+    // 4k block
+    std::string data3 = "This is test data-4. Testing replace ops";
+    data3.resize(options.block_size, '\0');
+    ASSERT_TRUE(writer.AddRawBlocks(9000, data3.data(), data3.size()));
+
+    // 8k block
+    std::string data4;
+    data4.resize(options.block_size * 2, '\0');
+    for (size_t i = 0; i < data4.size(); i++) {
+        data4[i] = static_cast<char>('A' + i / options.block_size);
+    }
+    ASSERT_TRUE(writer.AddRawBlocks(10000, data4.data(), data4.size()));
+
+    // 16k block
+    std::string data5;
+    data.resize(options.block_size * 4, '\0');
+    for (int i = 0; i < data5.size(); i++) {
+        data5[i] = static_cast<char>('C' + i / options.block_size);
+    }
+    ASSERT_TRUE(writer.AddRawBlocks(11000, data5.data(), data5.size()));
+
+    // 64k Random buffer which cannot be compressed
+    unique_fd rnd_fd(open("/dev/random", O_RDONLY));
+    ASSERT_GE(rnd_fd, 0);
+    std::string random_buffer;
+    random_buffer.resize(65536, '\0');
+    ASSERT_EQ(android::base::ReadFullyAtOffset(rnd_fd, random_buffer.data(), 65536, 0), true);
+    ASSERT_TRUE(writer.AddRawBlocks(12000, random_buffer.data(), 65536));
+
+    ASSERT_TRUE(writer.Finalize());
+
+    ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
+
+        if (op->type() == kCowXorOp) {
+            std::string sink(xor_data.size(), '\0');
+            ASSERT_EQ(op->new_block, 50);
+            ASSERT_EQ(op->source(), 98314);  // 4096 * 24 + 10
+            ReadBlockData(reader, op, sink.data(), sink.size());
+            ASSERT_EQ(sink, xor_data);
+        }
+        if (op->type() == kCowReplaceOp) {
+            if (op->new_block == 100) {
+                data.resize(options.block_size);
+                std::string sink(data.size(), '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink.size(), data.size());
+                ASSERT_EQ(sink, data);
+            }
+            if (op->new_block == 6000) {
+                data2.resize(options.block_size);
+                std::string sink(data2.size(), '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink, data2);
+            }
+            if (op->new_block == 9000) {
+                std::string sink(data3.size(), '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink, data3);
+            }
+            if (op->new_block == 10000) {
+                data4.resize(options.block_size);
+                std::string sink(options.block_size, '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink, data4);
+            }
+            if (op->new_block == 11000) {
+                data5.resize(options.block_size);
+                std::string sink(options.block_size, '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink, data5);
+            }
+            if (op->new_block == 12000) {
+                random_buffer.resize(options.block_size);
+                std::string sink(options.block_size, '\0');
+                ReadBlockData(reader, op, sink.data(), sink.size());
+                ASSERT_EQ(sink, random_buffer);
+            }
+        }
+
+        iter->Next();
+    }
+}
+
+std::vector<TestParam> GetTestConfigs() {
+    std::vector<TestParam> testParams;
+
+    std::vector<int> block_sizes = {4_KiB, 8_KiB, 16_KiB, 32_KiB, 64_KiB, 128_KiB, 256_KiB};
+    std::vector<std::string> compression_algo = {"none", "lz4", "zstd", "gz"};
+    std::vector<int> threads = {1, 2};
+    // This will also test batch size
+    std::vector<size_t> cluster_ops = {1, 256};
+
+    // This should test 112 combination
+    for (auto block : block_sizes) {
+        for (auto compression : compression_algo) {
+            for (auto thread : threads) {
+                for (auto cluster : cluster_ops) {
+                    TestParam param;
+                    param.block_size = block;
+                    param.compression = compression;
+                    param.num_threads = thread;
+                    param.cluster_ops = cluster;
+                    testParams.push_back(std::move(param));
+                }
+            }
+        }
+    }
+
+    return testParams;
+}
+
+INSTANTIATE_TEST_SUITE_P(CompressorsWithVariableBlocks, VariableBlockTest,
+                         ::testing::ValuesIn(GetTestConfigs()));
 
 }  // namespace snapshot
 }  // namespace android

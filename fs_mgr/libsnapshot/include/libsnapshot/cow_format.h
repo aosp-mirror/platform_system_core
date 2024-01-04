@@ -201,6 +201,12 @@ static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
 static constexpr uint64_t kCowOpSourceInfoTypeBit = 60;
 static constexpr uint64_t kCowOpSourceInfoTypeNumBits = 4;
 static constexpr uint64_t kCowOpSourceInfoTypeMask = (1ULL << kCowOpSourceInfoTypeNumBits) - 1;
+
+static constexpr uint64_t kCowOpSourceInfoCompressionBit = 57;
+static constexpr uint64_t kCowOpSourceInfoCompressionNumBits = 3;
+static constexpr uint64_t kCowOpSourceInfoCompressionMask =
+        ((1ULL << kCowOpSourceInfoCompressionNumBits) - 1);
+
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
     // If this operation reads from the data section of the COW, this contains
@@ -211,8 +217,8 @@ struct CowOperationV3 {
     uint32_t new_block;
 
     // source_info with have the following layout
-    // |---4 bits ---| ---12 bits---| --- 48 bits ---|
-    // |--- type --- | -- unused -- | --- source --- |
+    // |--- 4 bits -- | --------- 3 bits ------ | --- 9 bits --- | --- 48 bits ---|
+    // |--- type ---  | -- compression factor --| --- unused --- | --- source --- |
     //
     // The value of |source| depends on the operation code.
     //
@@ -225,6 +231,17 @@ struct CowOperationV3 {
     // For ops other than Label:
     //  Bits 47-62 are reserved and must be zero.
     // A block is compressed if it’s data is < block_sz
+    //
+    // Bits [57-59] represents the compression factor.
+    //
+    //       Compression - factor
+    // ==========================
+    // 000 -  4k
+    // 001 -  8k
+    // 010 -  16k
+    // ...
+    // 110 -  256k
+    //
     uint64_t source_info_;
     constexpr uint64_t source() const { return source_info_ & kCowOpSourceInfoDataMask; }
     constexpr void set_source(uint64_t source) {
@@ -244,6 +261,20 @@ struct CowOperationV3 {
         // set the actual type bits
         source_info_ |= (static_cast<uint64_t>(type) & kCowOpSourceInfoTypeMask)
                         << kCowOpSourceInfoTypeBit;
+    }
+    constexpr void set_compression_bits(uint8_t compression_factor) {
+        // Clear the 3 bits from bit 57 - [57-59]
+        source_info_ &= ~(kCowOpSourceInfoCompressionMask << kCowOpSourceInfoCompressionBit);
+        // Set the actual compression factor
+        source_info_ |=
+                (static_cast<uint64_t>(compression_factor) & kCowOpSourceInfoCompressionMask)
+                << kCowOpSourceInfoCompressionBit;
+    }
+    constexpr uint8_t compression_bits() const {
+        // Grab the 3 bits from [57-59]
+        const auto compression_factor =
+                (source_info_ >> kCowOpSourceInfoCompressionBit) & kCowOpSourceInfoCompressionMask;
+        return static_cast<uint8_t>(compression_factor);
     }
 } __attribute__((packed));
 
@@ -326,5 +357,7 @@ bool IsOrderedOp(const CowOperation& op);
 // Convert compression name to internal value.
 std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::string_view name);
 
+// Return block size used for compression
+size_t CowOpCompressionSize(const CowOperation* op, size_t block_size);
 }  // namespace snapshot
 }  // namespace android

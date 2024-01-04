@@ -108,7 +108,7 @@ cc_library_static {
     ],
     srcs: [":libsnapshot_sources"],
     static_libs: [
-        "libfs_mgr_binder"
+        "libfs_mgr_binder",
     ],
 }
 
@@ -128,12 +128,12 @@ cc_library {
     static_libs: [
         "libc++fs",
         "libsnapshot_cow",
-    ]
+    ],
 }
 
 cc_library_static {
     name: "libsnapshot_init",
-    native_coverage : true,
+    native_coverage: true,
     defaults: ["libsnapshot_defaults"],
     srcs: [":libsnapshot_sources"],
     ramdisk_available: true,
@@ -204,6 +204,10 @@ cc_library_static {
         "libsnapshot_cow/writer_v2.cpp",
         "libsnapshot_cow/writer_v3.cpp",
     ],
+
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
     export_include_dirs: ["include"],
     host_supported: true,
     recovery_available: true,
@@ -243,7 +247,10 @@ cc_library_static {
 
 cc_defaults {
     name: "libsnapshot_test_defaults",
-    defaults: ["libsnapshot_defaults", "libsnapshot_cow_defaults"],
+    defaults: [
+        "libsnapshot_defaults",
+        "libsnapshot_cow_defaults",
+    ],
     srcs: [
         "partition_cow_creator_test.cpp",
         "snapshot_metadata_updater_test.cpp",
@@ -283,10 +290,13 @@ cc_defaults {
 
 cc_test {
     name: "vts_libsnapshot_test",
-    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    defaults: [
+        "libsnapshot_test_defaults",
+        "libsnapshot_hal_deps",
+    ],
     test_suites: [
         "vts",
-        "device-tests"
+        "device-tests",
     ],
     test_options: {
         min_shipping_api_level: 30,
@@ -295,12 +305,15 @@ cc_test {
 
 cc_test {
     name: "vab_legacy_tests",
-    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    defaults: [
+        "libsnapshot_test_defaults",
+        "libsnapshot_hal_deps",
+    ],
     cppflags: [
         "-DLIBSNAPSHOT_TEST_VAB_LEGACY",
     ],
     test_suites: [
-        "device-tests"
+        "device-tests",
     ],
     test_options: {
         // Legacy VAB launched in Android R.
@@ -310,12 +323,15 @@ cc_test {
 
 cc_test {
     name: "vabc_legacy_tests",
-    defaults: ["libsnapshot_test_defaults", "libsnapshot_hal_deps"],
+    defaults: [
+        "libsnapshot_test_defaults",
+        "libsnapshot_hal_deps",
+    ],
     cppflags: [
         "-DLIBSNAPSHOT_TEST_VABC_LEGACY",
     ],
     test_suites: [
-        "device-tests"
+        "device-tests",
     ],
     test_options: {
         // Legacy VABC launched in Android S.
@@ -343,7 +359,10 @@ cc_test {
 
 cc_binary {
     name: "snapshotctl",
-    defaults: ["libsnapshot_cow_defaults", "libsnapshot_hal_deps"],
+    defaults: [
+        "libsnapshot_cow_defaults",
+        "libsnapshot_hal_deps",
+    ],
     srcs: [
         "snapshotctl.cpp",
     ],
@@ -412,8 +431,11 @@ cc_test {
         "libgtest",
         "libsnapshot_cow",
     ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
     test_suites: [
-        "device-tests"
+        "device-tests",
     ],
     test_options: {
         min_shipping_api_level: 30,
