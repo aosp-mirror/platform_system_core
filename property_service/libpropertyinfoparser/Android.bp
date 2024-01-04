@@ -25,4 +25,8 @@ cc_library_static {
         },
     },
     export_include_dirs: ["include"],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.runtime",
+    ],
 }
