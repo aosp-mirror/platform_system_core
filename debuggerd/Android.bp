@@ -32,9 +32,10 @@ cc_library_headers {
     recovery_available: true,
     vendor_ramdisk_available: true,
     apex_available: [
+        "com.android.runtime",
         "com.android.virt",
         "//apex_available:platform",
-   ],
+    ],
 }
 
 cc_library_shared {
@@ -110,6 +111,9 @@ cc_library_static {
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["include"],
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 // Implementation with a no-op fallback.
@@ -311,6 +315,9 @@ cc_library_static {
             header_libs: ["scudo_headers"],
         },
     },
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 cc_binary {
