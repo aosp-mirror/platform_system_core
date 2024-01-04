@@ -188,7 +188,6 @@ libinit_cc_defaults {
         "libfs_mgr",
         "libgsi",
         "libhidl-gen-utils",
-        "libkeyutils",
         "liblog",
         "liblogwrap",
         "liblp",
