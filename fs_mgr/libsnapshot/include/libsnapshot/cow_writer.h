@@ -33,7 +33,10 @@
 
 namespace android {
 namespace snapshot {
-
+struct CowSizeInfo {
+    uint64_t cow_size;
+    uint64_t op_count_max;
+};
 struct CowOptions {
     uint32_t block_size = 4096;
     std::string compression;
@@ -92,8 +95,9 @@ class ICowWriter {
     // to ensure that the correct headers and footers are written.
     virtual bool Finalize() = 0;
 
-    // Return number of bytes the cow image occupies on disk.
-    virtual uint64_t GetCowSize() = 0;
+    // Return number of bytes the cow image occupies on disk + the size of sequence && ops buffer
+    // The latter two fields are used in v3 cow format and left as 0 for v2 cow format
+    virtual CowSizeInfo GetCowSizeInfo() const = 0;
 
     virtual uint32_t GetBlockSize() const = 0;
     virtual std::optional<uint32_t> GetMaxBlocks() const = 0;
