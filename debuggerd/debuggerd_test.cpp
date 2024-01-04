@@ -2236,7 +2236,7 @@ TEST(tombstoned, proto) {
   ASSERT_EQ(0, fstat(text_fd.get(), &text_st));
 
   // Give tombstoned some time to link the files into place.
-  std::this_thread::sleep_for(100ms);
+  std::this_thread::sleep_for(100ms * android::base::HwTimeoutMultiplier());
 
   // Find the tombstone.
   std::optional<std::string> tombstone_file;
