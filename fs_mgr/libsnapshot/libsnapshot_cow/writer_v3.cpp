@@ -399,8 +399,14 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
                       "operation writes.";
         return false;
     }
+
     header_.sequence_data_count = num_ops;
+
+    // Ensure next_data_pos_ is updated as previously initialized + the newly added sequence buffer.
+    CHECK_EQ(next_data_pos_ + header_.sequence_data_count * sizeof(uint32_t),
+             GetDataOffset(header_));
     next_data_pos_ = GetDataOffset(header_);
+
     if (!android::base::WriteFullyAtOffset(fd_, data, sizeof(data[0]) * num_ops,
                                            GetSequenceOffset(header_))) {
         PLOG(ERROR) << "writing sequence buffer failed";
