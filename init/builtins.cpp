@@ -592,9 +592,6 @@ static Result<void> queue_fs_event(int code) {
     } else if (code == FS_MGR_MNTALL_DEV_FILE_ENCRYPTED ||
                code == FS_MGR_MNTALL_DEV_IS_METADATA_ENCRYPTED ||
                code == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
-        if (!FscryptInstallKeyring()) {
-            return Error() << "FscryptInstallKeyring() failed";
-        }
         SetProperty("ro.crypto.state", "encrypted");
 
         // Although encrypted, vold has already set the device up, so we do not need to
