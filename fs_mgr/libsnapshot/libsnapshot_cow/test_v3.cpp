@@ -658,14 +658,14 @@ TEST_F(CowTestV3, CowSizeEstimate) {
     options.compression = "none";
     auto estimator = android::snapshot::CreateCowEstimator(3, options);
     ASSERT_TRUE(estimator->AddZeroBlocks(0, 1024 * 1024));
-    const auto cow_size = estimator->GetCowSize();
+    const auto cow_size = estimator->GetCowSizeInfo().cow_size;
     options.op_count_max = 1024 * 1024;
     options.max_blocks = 1024 * 1024;
     CowWriterV3 writer(options, GetCowFd());
     ASSERT_TRUE(writer.Initialize());
     ASSERT_TRUE(writer.AddZeroBlocks(0, 1024 * 1024));
 
-    ASSERT_LE(writer.GetCowSize(), cow_size);
+    ASSERT_LE(writer.GetCowSizeInfo().cow_size, cow_size);
 }
 
 TEST_F(CowTestV3, CopyOpMany) {
