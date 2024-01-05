@@ -392,7 +392,6 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
-    // TODO: size sequence buffer based on options
     if (header_.op_count > 0 || !cached_ops_.empty()) {
         LOG(ERROR) << "There's " << header_.op_count << " operations written to disk and "
                    << cached_ops_.size()
@@ -400,8 +399,14 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
                       "operation writes.";
         return false;
     }
+
     header_.sequence_data_count = num_ops;
+
+    // Ensure next_data_pos_ is updated as previously initialized + the newly added sequence buffer.
+    CHECK_EQ(next_data_pos_ + header_.sequence_data_count * sizeof(uint32_t),
+             GetDataOffset(header_));
     next_data_pos_ = GetDataOffset(header_);
+
     if (!android::base::WriteFullyAtOffset(fd_, data, sizeof(data[0]) * num_ops,
                                            GetSequenceOffset(header_))) {
         PLOG(ERROR) << "writing sequence buffer failed";
@@ -491,8 +496,11 @@ bool CowWriterV3::Finalize() {
     return Sync();
 }
 
-uint64_t CowWriterV3::GetCowSize() {
-    return next_data_pos_;
+CowSizeInfo CowWriterV3::GetCowSizeInfo() const {
+    CowSizeInfo info;
+    info.cow_size = next_data_pos_;
+    info.op_count_max = header_.op_count_max;
+    return info;
 }
 
 }  // namespace snapshot

@@ -576,12 +576,14 @@ bool CowWriterV2::Finalize() {
     return Sync();
 }
 
-uint64_t CowWriterV2::GetCowSize() {
+CowSizeInfo CowWriterV2::GetCowSizeInfo() const {
+    CowSizeInfo info;
     if (current_data_size_ > 0) {
-        return next_data_pos_ + sizeof(footer_);
+        info.cow_size = next_data_pos_ + sizeof(footer_);
     } else {
-        return next_op_pos_ + sizeof(footer_);
+        info.cow_size = next_op_pos_ + sizeof(footer_);
     }
+    return info;
 }
 
 bool CowWriterV2::GetDataPos(uint64_t* pos) {
