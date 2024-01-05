@@ -16,6 +16,7 @@
 
 #include <android-base/logging.h>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "writer_base.h"
@@ -51,12 +52,14 @@ class CowWriterV3 : public CowWriterBase {
                         std::basic_string_view<struct iovec> data);
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
                     uint16_t offset, CowOperationType type);
-    bool CompressBlocks(size_t num_blocks, const void* data);
     bool CheckOpCount(size_t op_count);
 
   private:
+    std::vector<std::basic_string<uint8_t>> CompressBlocks(const size_t num_blocks,
+                                                           const void* data);
     bool ReadBackVerification();
     bool FlushCacheOps();
+    void InitWorkers();
     CowHeaderV3 header_{};
     CowCompression compression_;
     // in the case that we are using one thread for compression, we can store and re-use the same
@@ -75,6 +78,8 @@ class CowWriterV3 : public CowWriterBase {
     std::vector<CowOperationV3> cached_ops_;
     std::vector<std::basic_string<uint8_t>> cached_data_;
     std::vector<struct iovec> data_vec_;
+
+    std::vector<std::thread> threads_;
 };
 
 }  // namespace snapshot
