@@ -16,7 +16,6 @@
 
 #include "fs_mgr.h"
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -819,9 +818,13 @@ bool fs_mgr_is_device_unlocked() {
 // __mount(): wrapper around the mount() system call which also
 // sets the underlying block device to read-only if the mount is read-only.
 // See "man 2 mount" for return values.
-static int __mount(const std::string& source, const std::string& target, const FstabEntry& entry) {
+static int __mount(const std::string& source, const std::string& target, const FstabEntry& entry,
+                   bool read_only = false) {
     errno = 0;
     unsigned long mountflags = entry.flags;
+    if (read_only) {
+        mountflags |= MS_RDONLY;
+    }
     int ret = 0;
     int save_errno = 0;
     int gc_allowance = 0;
@@ -915,6 +918,10 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
     return true;
 }
 
+static bool should_use_metadata_encryption(const FstabEntry& entry) {
+    return !entry.metadata_key_dir.empty() && entry.fs_mgr_flags.file_encryption;
+}
+
 // Tries to mount any of the consecutive fstab entries that match
 // the mountpoint of the one given by fstab[start_idx].
 //
@@ -922,8 +929,7 @@ static bool fs_match(const std::string& in1, const std::string& in2) {
 // attempted_idx: On return, will indicate which fstab entry
 //     succeeded. In case of failure, it will be the start_idx.
 // Sets errno to match the 1st mount failure on failure.
-static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
-                                    int* attempted_idx) {
+static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx, int* attempted_idx) {
     unsigned long i;
     int mount_errno = 0;
     bool mounted = false;
@@ -961,8 +967,15 @@ static bool mount_with_alternatives(Fstab& fstab, int start_idx, int* end_idx,
         }
 
         int retry_count = 2;
+        const auto read_only = should_use_metadata_encryption(fstab[i]);
+        if (read_only) {
+            LOG(INFO) << "Mount point " << fstab[i].blk_device << " @ " << fstab[i].mount_point
+                      << " uses metadata encryption, which means we need to unmount it later and "
+                         "call encryptFstab/encrypt_inplace. To avoid file operations before "
+                         "encryption, we will mount it as read-only first";
+        }
         while (retry_count-- > 0) {
-            if (!__mount(fstab[i].blk_device, fstab[i].mount_point, fstab[i])) {
+            if (!__mount(fstab[i].blk_device, fstab[i].mount_point, fstab[i], read_only)) {
                 *attempted_idx = i;
                 mounted = true;
                 if (i != start_idx) {
@@ -1052,10 +1065,6 @@ static bool TranslateExtLabels(FstabEntry* entry) {
     }
 
     return false;
-}
-
-static bool should_use_metadata_encryption(const FstabEntry& entry) {
-    return !entry.metadata_key_dir.empty() && entry.fs_mgr_flags.file_encryption;
 }
 
 // Check to see if a mountable volume has encryption requirements
@@ -1978,6 +1987,8 @@ int fs_mgr_do_mount(Fstab* fstab, const std::string& n_name, const std::string& 
                 if (retry_count <= 0) break;  // run check_fs only once
                 if (!first_mount_errno) first_mount_errno = errno;
                 mount_errors++;
+                PERROR << "Cannot mount filesystem on " << n_blk_device << " at " << mount_point
+                       << " with fstype " << fstab_entry.fs_type;
                 fs_stat |= FS_STAT_FULL_MOUNT_FAILED;
                 // try again after fsck
                 check_fs(n_blk_device, fstab_entry.fs_type, mount_point, &fs_stat);
