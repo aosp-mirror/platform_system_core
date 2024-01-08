@@ -359,5 +359,9 @@ std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::strin
 
 // Return block size used for compression
 size_t CowOpCompressionSize(const CowOperation* op, size_t block_size);
+
+// Return the relative offset of the I/O block which the CowOperation
+// multi-block compression
+bool GetBlockOffset(const CowOperation* op, uint64_t io_block, size_t block_size, off_t* offset);
 }  // namespace snapshot
 }  // namespace android

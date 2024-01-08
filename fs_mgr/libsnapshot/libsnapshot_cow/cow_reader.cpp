@@ -164,6 +164,21 @@ bool CowReader::Parse(android::base::borrowed_fd fd, std::optional<uint64_t> lab
     return PrepMergeOps();
 }
 
+uint32_t CowReader::GetMaxCompressionSize() {
+    switch (header_.prefix.major_version) {
+        case 1:
+        case 2:
+            // Old versions supports only 4KB compression.
+            return header_.block_size;
+            ;
+        case 3:
+            return header_.max_compression_size;
+        default:
+            LOG(ERROR) << "Unknown version: " << header_.prefix.major_version;
+            return 0;
+    }
+}
+
 //
 // This sets up the data needed for MergeOpIter. MergeOpIter presents
 // data in the order we intend to merge in.

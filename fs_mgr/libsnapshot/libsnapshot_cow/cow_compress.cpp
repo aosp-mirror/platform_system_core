@@ -223,7 +223,7 @@ bool CompressWorker::CompressBlocks(ICompressor* compressor, size_t block_size, 
             PLOG(ERROR) << "CompressBlocks: Compression failed";
             return false;
         }
-        if (data.size() > std::numeric_limits<uint16_t>::max()) {
+        if (data.size() > std::numeric_limits<uint32_t>::max()) {
             LOG(ERROR) << "Compressed block is too large: " << data.size();
             return false;
         }
