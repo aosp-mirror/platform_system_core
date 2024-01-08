@@ -380,8 +380,8 @@ bool RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& entry) {
 
     // Now remount!
     for (const auto& mnt_point : {mount_point, entry.mount_point}) {
-        if (::mount(blk_device.c_str(), mnt_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                    nullptr) == 0) {
+        if (::mount(blk_device.c_str(), mnt_point.c_str(), entry.fs_type.c_str(),
+                    MS_REMOUNT | MS_NOATIME, nullptr) == 0) {
             LOG(INFO) << "Remounted " << mnt_point << " as RW";
             return true;
         }
