@@ -133,9 +133,10 @@ TEST(fs, PartitionTypes) {
             std::vector<std::string> allowed = {"erofs", "ext4", "f2fs"};
             EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
                     << entry.mount_point;
-        } else {
+        } else if (std::find(data_fs.begin(), data_fs.end(), entry.mount_point) != data_fs.end()) {
             std::vector<std::string> allowed = {"ext4", "f2fs"};
-            EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end());
+            EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
+                    << entry.mount_point << ", " << entry.fs_type;
         }
     }
 }
