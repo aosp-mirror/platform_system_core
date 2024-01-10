@@ -86,10 +86,15 @@ cc_library_static {
         "libext4_utils",
         "libsnapshot_cow",
         "liburing",
+        "libprocessgroup",
+        "libjsoncpp",
+        "libcgrouprc",
+        "libcgrouprc_format",
     ],
     include_dirs: ["bionic/libc/kernel"],
     export_include_dirs: ["include"],
     header_libs: [
+        "libcutils_headers",
         "libstorage_literals_headers",
     ],
     ramdisk_available: true,
@@ -126,6 +131,10 @@ cc_defaults {
         "liblog",
         "libsnapshot_cow",
         "libsnapuserd",
+        "libprocessgroup",
+        "libjsoncpp",
+        "libcgrouprc",
+        "libcgrouprc_format",
         "libsnapuserd_client",
         "libz",
         "liblz4",
@@ -135,6 +144,7 @@ cc_defaults {
     ],
 
     header_libs: [
+        "libcutils_headers",
         "libstorage_literals_headers",
     ],
 
@@ -251,6 +261,10 @@ cc_defaults {
         "libgtest",
         "libsnapshot_cow",
         "libsnapuserd",
+        "libprocessgroup",
+        "libjsoncpp",
+        "libcgrouprc",
+        "libcgrouprc_format",
         "liburing",
         "libz",
     ],
@@ -261,6 +275,7 @@ cc_defaults {
     header_libs: [
         "libstorage_literals_headers",
         "libfiemap_headers",
+        "libcutils_headers",
     ],
     test_options: {
         min_shipping_api_level: 30,
@@ -320,6 +335,10 @@ cc_binary_host {
         "libgflags",
         "libsnapshot_cow",
         "libsnapuserd",
+        "libprocessgroup",
+        "libjsoncpp",
+        "libcgrouprc",
+        "libcgrouprc_format",
         "liburing",
         "libz",
     ],
@@ -330,5 +349,6 @@ cc_binary_host {
     header_libs: [
         "libstorage_literals_headers",
         "libfiemap_headers",
+        "libcutils_headers",
     ],
 }
