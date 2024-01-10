@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Android Open Source Project
+// Copyright (C) 2024 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
 
-#include <initializer_list>
-#include <string_view>
+cc_test {
+    name: "libvendorsupport-tests",
+    srcs: [
+        "version_props_test.cpp",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    shared_libs: [
+        "libvendorsupport",
+    ],
+    test_suites: ["general-tests"],
+}
 
-namespace android {
-namespace snapshot {
-
-bool SetThreadPriority(int priority);
-bool SetProfiles(std::initializer_list<std::string_view> profiles);
-bool KernelSupportsIoUring();
-
-}  // namespace snapshot
-}  // namespace android

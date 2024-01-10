@@ -601,14 +601,14 @@ TEST_F(CowTest, GetSize) {
     ASSERT_TRUE(writer.AddCopy(10, 20));
     ASSERT_TRUE(writer.AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer.AddZeroBlocks(51, 2));
-    auto size_before = writer.GetCowSize();
+    auto size_before = writer.GetCowSizeInfo().cow_size;
     ASSERT_TRUE(writer.Finalize());
-    auto size_after = writer.GetCowSize();
+    auto size_after = writer.GetCowSizeInfo().cow_size;
     ASSERT_EQ(size_before, size_after);
     struct stat buf;
 
     ASSERT_GE(fstat(cow_->fd, &buf), 0) << strerror(errno);
-    ASSERT_EQ(buf.st_size, writer.GetCowSize());
+    ASSERT_EQ(buf.st_size, writer.GetCowSizeInfo().cow_size);
 }
 
 TEST_F(CowTest, AppendLabelSmall) {
@@ -637,7 +637,7 @@ TEST_F(CowTest, AppendLabelSmall) {
 
     struct stat buf;
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
-    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+    ASSERT_EQ(buf.st_size, writer->GetCowSizeInfo().cow_size);
 
     // Read back both operations, and label.
     CowReader reader;
@@ -690,7 +690,7 @@ TEST_F(CowTest, AppendLabelMissing) {
     ASSERT_TRUE(writer->AddRawBlocks(50, data.data(), data.size()));
     ASSERT_TRUE(writer->AddLabel(1));
     // Drop the tail end of the last op header, corrupting it.
-    ftruncate(cow_->fd, writer->GetCowSize() - sizeof(CowFooter) - 3);
+    ftruncate(cow_->fd, writer->GetCowSizeInfo().cow_size - sizeof(CowFooter) - 3);
 
     ASSERT_EQ(lseek(cow_->fd, 0, SEEK_SET), 0);
 
@@ -705,7 +705,7 @@ TEST_F(CowTest, AppendLabelMissing) {
 
     struct stat buf;
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
-    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+    ASSERT_EQ(buf.st_size, writer->GetCowSizeInfo().cow_size);
 
     // Read back both operations.
     CowReader reader;
@@ -763,7 +763,7 @@ TEST_F(CowTest, AppendExtendedCorrupted) {
 
     struct stat buf;
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
-    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+    ASSERT_EQ(buf.st_size, writer->GetCowSizeInfo().cow_size);
 
     // Read back all valid operations
     CowReader reader;
@@ -812,7 +812,7 @@ TEST_F(CowTest, AppendbyLabel) {
 
     struct stat buf;
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
-    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+    ASSERT_EQ(buf.st_size, writer->GetCowSizeInfo().cow_size);
 
     // Read back all ops
     CowReader reader;
@@ -989,7 +989,7 @@ TEST_F(CowTest, ClusterAppendTest) {
 
     struct stat buf;
     ASSERT_EQ(fstat(cow_->fd, &buf), 0);
-    ASSERT_EQ(buf.st_size, writer->GetCowSize());
+    ASSERT_EQ(buf.st_size, writer->GetCowSizeInfo().cow_size);
 
     // Read back both operations, plus cluster op at end
     CowReader reader;

@@ -80,16 +80,16 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
 }
 
 bool MergeWorker::MergeReplaceZeroOps() {
-    // Flush after merging 2MB. Since all ops are independent and there is no
+    // Flush after merging 1MB. Since all ops are independent and there is no
     // dependency between COW ops, we will flush the data and the number
     // of ops merged in COW block device. If there is a crash, we will
     // end up replaying some of the COW ops which were already merged. That is
     // ok.
     //
-    // Although increasing this greater than 2MB may help in improving merge
+    // Although increasing this greater than 1MB may help in improving merge
     // times; however, on devices with low memory, this can be problematic
     // when there are multiple merge threads in parallel.
-    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ) * 2;
+    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ);
     int num_ops_merged = 0;
 
     SNAP_LOG(INFO) << "MergeReplaceZeroOps started....";
@@ -559,6 +559,10 @@ bool MergeWorker::Run() {
 
     if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
+    }
+
+    if (!SetProfiles({"CPUSET_SP_BACKGROUND"})) {
+        SNAP_PLOG(ERROR) << "Failed to assign task profile to Mergeworker thread";
     }
 
     SNAP_LOG(INFO) << "Merge starting..";
