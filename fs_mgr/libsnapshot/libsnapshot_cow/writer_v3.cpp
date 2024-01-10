@@ -114,7 +114,7 @@ void CowWriterV3::SetupHeaders() {
 }
 
 bool CowWriterV3::ParseOptions() {
-    num_compress_threads_ = std::max(options_.num_compress_threads, 1);
+    num_compress_threads_ = std::max(int(options_.num_compress_threads), 1);
     auto parts = android::base::Split(options_.compression, ",");
     if (parts.size() > 2) {
         LOG(ERROR) << "failed to parse compression parameters: invalid argument count: "
