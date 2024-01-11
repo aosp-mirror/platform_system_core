@@ -64,6 +64,8 @@
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
+#include <vendorsupport/api_level.h>
+
 #include "debug_ramdisk.h"
 #include "epoll.h"
 #include "init.h"
@@ -113,7 +115,6 @@ constexpr auto ID_PROP = "ro.build.id";
 constexpr auto LEGACY_ID_PROP = "ro.build.legacy.id";
 constexpr auto VBMETA_DIGEST_PROP = "ro.boot.vbmeta.digest";
 constexpr auto DIGEST_SIZE_USED = 8;
-constexpr auto MAX_VENDOR_API_LEVEL = 1000000;
 
 static bool persistent_properties_loaded = false;
 
@@ -1094,25 +1095,13 @@ static void property_initialize_ro_cpu_abilist() {
     }
 }
 
-static int vendor_api_level_of(int sdk_api_level) {
-    if (sdk_api_level < __ANDROID_API_V__) {
-        return sdk_api_level;
-    }
-    // In Android V, vendor API level started with version 202404.
-    // The calculation assumes that the SDK api level bumps once a year.
-    if (sdk_api_level < __ANDROID_API_FUTURE__) {
-        return 202404 + ((sdk_api_level - __ANDROID_API_V__) * 100);
-    }
-    return MAX_VENDOR_API_LEVEL;
-}
-
 static void property_initialize_ro_vendor_api_level() {
     // ro.vendor.api_level shows the api_level that the vendor images (vendor, odm, ...) are
     // required to support.
     constexpr auto VENDOR_API_LEVEL_PROP = "ro.vendor.api_level";
 
-    auto vendor_api_level = GetIntProperty("ro.board.first_api_level", MAX_VENDOR_API_LEVEL);
-    if (vendor_api_level != MAX_VENDOR_API_LEVEL) {
+    auto vendor_api_level = GetIntProperty("ro.board.first_api_level", __ANDROID_VENDOR_API_MAX__);
+    if (vendor_api_level != __ANDROID_VENDOR_API_MAX__) {
         // Update the vendor_api_level with "ro.board.api_level" only if both "ro.board.api_level"
         // and "ro.board.first_api_level" are defined.
         vendor_api_level = GetIntProperty("ro.board.api_level", vendor_api_level);
@@ -1126,6 +1115,12 @@ static void property_initialize_ro_vendor_api_level() {
     }
 
     vendor_api_level = std::min(vendor_api_level_of(product_first_api_level), vendor_api_level);
+
+    if (vendor_api_level < 0) {
+        LOG(ERROR) << "Unexpected vendor api level for " << VENDOR_API_LEVEL_PROP << ". Check "
+                   << "ro.product.first_api_level and ro.build.version.sdk.";
+        vendor_api_level = __ANDROID_VENDOR_API_MAX__;
+    }
 
     std::string error;
     auto res = PropertySetNoSocket(VENDOR_API_LEVEL_PROP, std::to_string(vendor_api_level), &error);
