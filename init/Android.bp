@@ -196,6 +196,7 @@ libinit_cc_defaults {
         "libselinux",
         "libunwindstack",
         "libutils",
+        "libvendorsupport",
     ],
     header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,

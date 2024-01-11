@@ -1550,6 +1550,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 }
                 encryptable = status;
                 if (status == FS_MGR_MNTALL_DEV_NEEDS_METADATA_ENCRYPTION) {
+                    fs_mgr_set_blk_ro(attempted_entry.blk_device, false);
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
                                    attempted_entry.mount_point, wiped ? "true" : "false",
                                    attempted_entry.fs_type, attempted_entry.zoned_device},

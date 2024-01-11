@@ -19,6 +19,7 @@ package {
 cc_library {
     name: "libvendorsupport",
     native_bridge_supported: true,
+    recovery_available: true,
     llndk: {
         symbol_file: "libvendorsupport.map.txt",
     },
