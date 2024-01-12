@@ -191,6 +191,7 @@ cc_library {
     target: {
         product: {
             header_abi_checker: {
+                enabled: true,
                 // AFDO affects weak symbols.
                 diff_flags: ["-allow-adding-removing-weak-symbols"],
                 ref_dump_dirs: ["abi-dumps"],
@@ -198,6 +199,7 @@ cc_library {
         },
         vendor: {
             header_abi_checker: {
+                enabled: true,
                 // AFDO affects weak symbols.
                 diff_flags: ["-allow-adding-removing-weak-symbols"],
                 ref_dump_dirs: ["abi-dumps"],
