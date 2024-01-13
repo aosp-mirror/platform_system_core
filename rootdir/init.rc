@@ -778,6 +778,7 @@ on post-fs-data
     mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/emergencynumberdb 0770 system radio
     mkdir /data/misc/network_watchlist 0774 system system
+    mkdir /data/misc/telephonyconfig 0770 system radio
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
