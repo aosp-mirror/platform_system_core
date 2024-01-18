@@ -35,8 +35,16 @@ else
     LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.trusty
 endif
 
+# TODO(b/306364873): move this to be flag-controlled?
+ifeq ($(SECRETKEEPER_ENABLED),)
+    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE :=
+else
+    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE := android.hardware.security.secretkeeper.trusty
+endif
+
 PRODUCT_PACKAGES += \
 	$(LOCAL_KEYMINT_PRODUCT_PACKAGE) \
+	$(LOCAL_SECRETKEEPER_PRODUCT_PACKAGE) \
 	android.hardware.gatekeeper-service.trusty \
 	trusty_apploader \
 
