@@ -40,3 +40,57 @@ rust_binary {
     ],
     prefer_rlib: true,
 }
+
+cc_defaults {
+    name: "trusty_secretkeeper_fuzz_defaults",
+    srcs: [":trusty_tipc_fuzzer"],
+    fuzz_config: {
+        cc: [
+            "alanstokes@google.com",
+            "drysdale@google.com",
+            "shikhapanwar@google.com",
+        ],
+        componentid: 867125,
+        // TODO: add Secretkeeper hotlist
+        // hotlists: [""],
+    },
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_sk_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_ag_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper.authgraph\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_bl_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper.bootloader\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}
