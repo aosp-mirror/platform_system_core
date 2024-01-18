@@ -98,7 +98,12 @@ std::string GetEncodedBaseDirForMountPoint(const std::string& mount_point) {
     if (mount_point.empty() || !android::base::Realpath(mount_point, &normalized_path)) {
         return "";
     }
-    return android::base::StringReplace(normalized_path, "/", "@", true);
+    std::string_view sv(normalized_path);
+    if (sv != "/") {
+        android::base::ConsumePrefix(&sv, "/");
+        android::base::ConsumeSuffix(&sv, "/");
+    }
+    return android::base::StringReplace(sv, "/", "@", true);
 }
 
 static bool fs_mgr_is_dir(const std::string& path) {
