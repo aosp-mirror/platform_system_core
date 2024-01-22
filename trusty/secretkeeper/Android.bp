@@ -28,12 +28,13 @@ rust_binary {
     ],
     rustlibs: [
         "libandroid_logger",
-        "libbinder_rs",
         "libauthgraph_hal",
-        "libtrusty-rs",
+        "libauthgraph_wire",
+        "libbinder_rs",
         "liblibc",
         "liblog_rust",
         "libsecretkeeper_hal",
+        "libtrusty-rs",
     ],
     defaults: [
         "secretkeeper_use_latest_hal_aidl_rust",
