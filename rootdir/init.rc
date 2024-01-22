@@ -92,6 +92,12 @@ on early-init
     # checker programs.
     mkdir /dev/fscklogs 0770 root system
 
+    # Create tmpfs for use by the shell user.
+    mount tmpfs tmpfs /tmp
+    restorecon /tmp
+    chown shell shell /tmp
+    chmod 0771 /tmp
+
 on init
     sysclktz 0
 
@@ -776,7 +782,6 @@ on post-fs-data
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
     mkdir /data/misc/systemkeys 0700 system system
-    mkdir /data/misc/threadnetwork 0770 thread_network thread_network
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
@@ -808,6 +813,7 @@ on post-fs-data
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
     mkdir /data/misc/appcompat/ 0700 system system
+    mkdir /data/misc/uprobestats-configs/ 0777 uprobestats uprobestats
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system

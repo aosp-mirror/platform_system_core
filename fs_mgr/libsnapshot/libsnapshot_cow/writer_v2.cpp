@@ -369,7 +369,7 @@ bool CowWriterV2::CompressBlocks(size_t num_blocks, const void* data) {
 }
 
 bool CowWriterV2::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
-                             uint64_t old_block, uint16_t offset, uint8_t type) {
+                             uint64_t old_block, uint16_t offset, CowOperationType type) {
     CHECK(!merge_in_progress_);
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
 
@@ -576,12 +576,14 @@ bool CowWriterV2::Finalize() {
     return Sync();
 }
 
-uint64_t CowWriterV2::GetCowSize() {
+CowSizeInfo CowWriterV2::GetCowSizeInfo() const {
+    CowSizeInfo info;
     if (current_data_size_ > 0) {
-        return next_data_pos_ + sizeof(footer_);
+        info.cow_size = next_data_pos_ + sizeof(footer_);
     } else {
-        return next_op_pos_ + sizeof(footer_);
+        info.cow_size = next_op_pos_ + sizeof(footer_);
     }
+    return info;
 }
 
 bool CowWriterV2::GetDataPos(uint64_t* pos) {

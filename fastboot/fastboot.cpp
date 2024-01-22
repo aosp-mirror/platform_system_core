@@ -402,7 +402,7 @@ static std::unique_ptr<Transport> NetworkDeviceConnected(bool print = false) {
         transport = open_device(device.c_str(), false, false);
 
         if (print) {
-            PrintDevice(device.c_str(), transport ? "offline" : "fastboot");
+            PrintDevice(device.c_str(), transport ? "fastboot" : "offline");
         }
 
         if (transport) {
@@ -571,7 +571,8 @@ static int show_help() {
             "                            Format a flash partition.\n"
             " set_active SLOT            Set the active slot.\n"
             " oem [COMMAND...]           Execute OEM-specific command.\n"
-            " gsi wipe|disable           Wipe or disable a GSI installation (fastbootd only).\n"
+            " gsi wipe|disable|status    Wipe, disable or show status of a GSI installation\n"
+            "                            (fastbootd only).\n"
             " wipe-super [SUPER_EMPTY]   Wipe the super partition. This will reset it to\n"
             "                            contain an empty set of default dynamic partitions.\n"
             " create-logical-partition NAME SIZE\n"
@@ -1675,7 +1676,7 @@ bool AddResizeTasks(const FlashingPlan* fp, std::vector<std::unique_ptr<Task>>* 
     }
     for (size_t i = 0; i < tasks->size(); i++) {
         if (auto flash_task = tasks->at(i)->AsFlashTask()) {
-            if (FlashTask::IsDynamicParitition(fp->source.get(), flash_task)) {
+            if (FlashTask::IsDynamicPartition(fp->source.get(), flash_task)) {
                 if (!loc) {
                     loc = i;
                 }
