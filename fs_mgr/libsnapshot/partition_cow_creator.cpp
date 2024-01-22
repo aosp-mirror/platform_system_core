@@ -217,6 +217,7 @@ std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {
 
     if (update && update->has_estimate_cow_size()) {
         ret.snapshot_status.set_estimated_cow_size(update->estimate_cow_size());
+        ret.snapshot_status.set_estimated_ops_buffer_size(update->estimate_op_count_max());
     }
 
     if (ret.snapshot_status.snapshot_size() == 0) {

@@ -36,7 +36,7 @@ using android::base::unique_fd;
 SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
                                  std::string backing_device, std::string base_path_merge,
                                  std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads,
-                                 bool use_iouring, bool perform_verification) {
+                                 bool use_iouring, bool perform_verification, bool o_direct) {
     misc_name_ = std::move(misc_name);
     cow_device_ = std::move(cow_device);
     backing_store_device_ = std::move(backing_device);
@@ -45,13 +45,14 @@ SnapshotHandler::SnapshotHandler(std::string misc_name, std::string cow_device,
     num_worker_threads_ = num_worker_threads;
     is_io_uring_enabled_ = use_iouring;
     perform_verification_ = perform_verification;
+    o_direct_ = o_direct;
 }
 
 bool SnapshotHandler::InitializeWorkers() {
     for (int i = 0; i < num_worker_threads_; i++) {
         auto wt = std::make_unique<ReadWorker>(cow_device_, backing_store_device_, misc_name_,
                                                base_path_merge_, GetSharedPtr(),
-                                               block_server_opener_);
+                                               block_server_opener_, o_direct_);
         if (!wt->Init()) {
             SNAP_LOG(ERROR) << "Thread initialization failed";
             return false;
@@ -199,13 +200,13 @@ bool SnapshotHandler::ReadMetadata() {
     while (!cowop_iter->AtEnd()) {
         const CowOperation* cow_op = cowop_iter->Get();
 
-        if (cow_op->type == kCowCopyOp) {
+        if (cow_op->type() == kCowCopyOp) {
             copy_ops += 1;
-        } else if (cow_op->type == kCowReplaceOp) {
+        } else if (cow_op->type() == kCowReplaceOp) {
             replace_ops += 1;
-        } else if (cow_op->type == kCowZeroOp) {
+        } else if (cow_op->type() == kCowZeroOp) {
             zero_ops += 1;
-        } else if (cow_op->type == kCowXorOp) {
+        } else if (cow_op->type() == kCowXorOp) {
             xor_ops += 1;
         }
 

@@ -48,10 +48,27 @@ class UpdateVerify {
     std::mutex m_lock_;
     std::condition_variable m_cv_;
 
+    /*
+     * Scanning of partitions is an expensive operation both in terms of memory
+     * and CPU usage. The goal here is to scan the partitions fast enough without
+     * significant increase in the boot time.
+     *
+     * Partitions such as system, product which may be huge and may need multiple
+     * threads to speed up the verification process. Using multiple threads for
+     * all partitions may increase CPU usage significantly. Hence, limit that to
+     * 1 thread per partition.
+     *
+     * These numbers were derived by monitoring the memory and CPU pressure
+     * (/proc/pressure/{cpu,memory}; and monitoring the Inactive(file) and
+     * Active(file) pages from /proc/meminfo.
+     *
+     * Additionally, for low memory devices, it is advisible to use O_DIRECT
+     * fucntionality for source block device.
+     */
     int kMinThreadsToVerify = 1;
-    int kMaxThreadsToVerify = 4;
-    uint64_t kThresholdSize = 512_MiB;
-    uint64_t kBlockSizeVerify = 1_MiB;
+    int kMaxThreadsToVerify = 3;
+    uint64_t kThresholdSize = 750_MiB;
+    uint64_t kBlockSizeVerify = 2_MiB;
 
     bool IsBlockAligned(uint64_t read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
     void UpdatePartitionVerificationState(UpdateVerifyState state);

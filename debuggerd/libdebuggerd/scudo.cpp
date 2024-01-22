@@ -41,8 +41,6 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
     return;
   }
 
-  auto stack_depot = AllocAndReadFully(process_memory, process_info.scudo_stack_depot,
-                                       __scudo_get_stack_depot_size());
   auto region_info = AllocAndReadFully(process_memory, process_info.scudo_region_info,
                                        __scudo_get_region_info_size());
   std::unique_ptr<char[]> ring_buffer;
@@ -50,7 +48,12 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
     ring_buffer = AllocAndReadFully(process_memory, process_info.scudo_ring_buffer,
                                     process_info.scudo_ring_buffer_size);
   }
-  if (!stack_depot || !region_info) {
+  std::unique_ptr<char[]> stack_depot;
+  if (process_info.scudo_stack_depot_size != 0) {
+    stack_depot = AllocAndReadFully(process_memory, process_info.scudo_stack_depot,
+                                    process_info.scudo_stack_depot_size);
+  }
+  if (!region_info) {
     return;
   }
 
@@ -78,7 +81,8 @@ ScudoCrashData::ScudoCrashData(unwindstack::Memory* process_memory,
   }
 
   __scudo_get_error_info(&error_info_, process_info.maybe_tagged_fault_address, stack_depot.get(),
-                         region_info.get(), ring_buffer.get(), memory.get(), memory_tags.get(),
+                         process_info.scudo_stack_depot_size, region_info.get(), ring_buffer.get(),
+                         process_info.scudo_ring_buffer_size, memory.get(), memory_tags.get(),
                          memory_begin, memory_end - memory_begin);
 }
 

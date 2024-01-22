@@ -286,6 +286,10 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             }
         } else if (StartsWith(flag, "avb_keys=")) {  // must before the following "avb"
             entry->avb_keys = arg;
+        } else if (StartsWith(flag, "avb_hashtree_digest=")) {
+            // "avb_hashtree_digest" must before the following "avb"
+            // The path where hex-encoded hashtree descriptor root digest is located.
+            entry->avb_hashtree_digest = arg;
         } else if (StartsWith(flag, "avb")) {
             entry->fs_mgr_flags.avb = true;
             entry->vbmeta_partition = arg;
@@ -716,7 +720,7 @@ bool ReadFstabFromFile(const std::string& path, Fstab* fstab) {
     if (!ReadFstabFromFileCommon(path, fstab)) {
         return false;
     }
-    if (path != kProcMountsPath) {
+    if (path != kProcMountsPath && !InRecovery()) {
         if (!access(android::gsi::kGsiBootedIndicatorFile, F_OK)) {
             std::string dsu_slot;
             if (!android::gsi::GetActiveDsu(&dsu_slot)) {

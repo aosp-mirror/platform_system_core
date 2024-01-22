@@ -580,9 +580,18 @@ TEST_F(DmTest, DeleteDeviceWithTimeout) {
     ASSERT_TRUE(dm.GetDmDevicePathByName("libdm-test-dm-linear", &path));
     ASSERT_EQ(0, access(path.c_str(), F_OK));
 
+    std::string unique_path;
+    ASSERT_TRUE(dm.GetDeviceUniquePath("libdm-test-dm-linear", &unique_path));
+    ASSERT_EQ(0, access(unique_path.c_str(), F_OK));
+
     ASSERT_TRUE(dm.DeleteDevice("libdm-test-dm-linear", 5s));
     ASSERT_EQ(DmDeviceState::INVALID, dm.GetState("libdm-test-dm-linear"));
-    ASSERT_NE(0, access(path.c_str(), F_OK));
+    // Check that unique path of this device has been deleteted.
+    // Previously this test case used to check that dev node (i.e. /dev/block/dm-XX) has been
+    // deleted. However, this introduces a race condition, ueventd will remove the unique symlink
+    // (i.e. /dev/block/mapper/by-uuid/...) **before** removing the device node, while DeleteDevice
+    // API synchronizes on the unique symlink being deleted.
+    ASSERT_NE(0, access(unique_path.c_str(), F_OK));
     ASSERT_EQ(ENOENT, errno);
 }
 

@@ -51,10 +51,11 @@ SnapshotHandlerManager::SnapshotHandlerManager() {
 std::shared_ptr<HandlerThread> SnapshotHandlerManager::AddHandler(
         const std::string& misc_name, const std::string& cow_device_path,
         const std::string& backing_device, const std::string& base_path_merge,
-        std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads, bool use_iouring) {
-    auto snapuserd = std::make_shared<SnapshotHandler>(misc_name, cow_device_path, backing_device,
-                                                       base_path_merge, opener, num_worker_threads,
-                                                       use_iouring, perform_verification_);
+        std::shared_ptr<IBlockServerOpener> opener, int num_worker_threads, bool use_iouring,
+        bool o_direct) {
+    auto snapuserd = std::make_shared<SnapshotHandler>(
+            misc_name, cow_device_path, backing_device, base_path_merge, opener, num_worker_threads,
+            use_iouring, perform_verification_, o_direct);
     if (!snapuserd->InitCowDevice()) {
         LOG(ERROR) << "Failed to initialize Snapuserd";
         return nullptr;

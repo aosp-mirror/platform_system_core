@@ -29,6 +29,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <bionic/macros.h>
+#include <sys/prctl.h>
 
 #include "tombstone.pb.h"
 
@@ -39,6 +40,42 @@ using android::base::StringPrintf;
 #define CBL(...) CB(true, __VA_ARGS__)
 #define CBS(...) CB(false, __VA_ARGS__)
 using CallbackType = std::function<void(const std::string& line, bool should_log)>;
+
+#define DESCRIBE_FLAG(flag) \
+  if (value & flag) {       \
+    desc += ", ";           \
+    desc += #flag;          \
+    value &= ~flag;         \
+  }
+
+static std::string describe_end(long value, std::string& desc) {
+  if (value) {
+    desc += StringPrintf(", unknown 0x%lx", value);
+  }
+  return desc.empty() ? "" : " (" + desc.substr(2) + ")";
+}
+
+static std::string describe_tagged_addr_ctrl(long value) {
+  std::string desc;
+  DESCRIBE_FLAG(PR_TAGGED_ADDR_ENABLE);
+  DESCRIBE_FLAG(PR_MTE_TCF_SYNC);
+  DESCRIBE_FLAG(PR_MTE_TCF_ASYNC);
+  if (value & PR_MTE_TAG_MASK) {
+    desc += StringPrintf(", mask 0x%04lx", (value & PR_MTE_TAG_MASK) >> PR_MTE_TAG_SHIFT);
+    value &= ~PR_MTE_TAG_MASK;
+  }
+  return describe_end(value, desc);
+}
+
+static std::string describe_pac_enabled_keys(long value) {
+  std::string desc;
+  DESCRIBE_FLAG(PR_PAC_APIAKEY);
+  DESCRIBE_FLAG(PR_PAC_APIBKEY);
+  DESCRIBE_FLAG(PR_PAC_APDAKEY);
+  DESCRIBE_FLAG(PR_PAC_APDBKEY);
+  DESCRIBE_FLAG(PR_PAC_APGAKEY);
+  return describe_end(value, desc);
+}
 
 static const char* abi_string(const Tombstone& tombstone) {
   switch (tombstone.arch()) {
