@@ -185,7 +185,7 @@ class WriteFileAction : public ProfileAction {
     mutable std::mutex fd_mutex_;
 
     bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, uid_t uid,
-                          int pid, bool logfailures) const;
+                          pid_t pid, bool logfailures) const;
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, const std::string& value) const;
 };
 

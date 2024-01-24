@@ -67,25 +67,25 @@ void DropTaskProfilesResourceCaching();
 
 // Return 0 if all processes were killed and the cgroup was successfully removed.
 // Returns -1 in the case of an error occurring or if there are processes still running.
-int killProcessGroup(uid_t uid, int initialPid, int signal);
+int killProcessGroup(uid_t uid, pid_t initialPid, int signal);
 
 // Returns the same as killProcessGroup(), however it does not retry, which means
 // that it only returns 0 in the case that the cgroup exists and it contains no processes.
-int killProcessGroupOnce(uid_t uid, int initialPid, int signal);
+int killProcessGroupOnce(uid_t uid, pid_t initialPid, int signal);
 
 // Sends the provided signal to all members of a process group, but does not wait for processes to
 // exit, or for the cgroup to be removed. Callers should also ensure that killProcessGroup is called
 // later to ensure the cgroup is fully removed, otherwise system resources will leak.
 // Returns true if no errors are encountered sending signals, otherwise false.
-bool sendSignalToProcessGroup(uid_t uid, int initialPid, int signal);
+bool sendSignalToProcessGroup(uid_t uid, pid_t initialPid, int signal);
 
-int createProcessGroup(uid_t uid, int initialPid, bool memControl = false);
+int createProcessGroup(uid_t uid, pid_t initialPid, bool memControl = false);
 
 // Set various properties of a process group. For these functions to work, the process group must
 // have been created by passing memControl=true to createProcessGroup.
-bool setProcessGroupSwappiness(uid_t uid, int initialPid, int swappiness);
-bool setProcessGroupSoftLimit(uid_t uid, int initialPid, int64_t softLimitInBytes);
-bool setProcessGroupLimit(uid_t uid, int initialPid, int64_t limitInBytes);
+bool setProcessGroupSwappiness(uid_t uid, pid_t initialPid, int swappiness);
+bool setProcessGroupSoftLimit(uid_t uid, pid_t initialPid, int64_t softLimitInBytes);
+bool setProcessGroupLimit(uid_t uid, pid_t initialPid, int64_t limitInBytes);
 
 void removeAllEmptyProcessGroups(void);
 
@@ -95,7 +95,7 @@ bool getAttributePathForTask(const std::string& attr_name, int tid, std::string*
 
 // Check if a profile can be applied without failing.
 // Returns true if it can be applied without failing, false otherwise
-bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, int pid);
+bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, pid_t pid);
 
 #endif // __ANDROID_VNDK__
 

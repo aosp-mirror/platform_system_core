@@ -82,7 +82,7 @@ static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
     return StringPrintf("%s/uid_%u", cgroup, uid);
 }
 
-static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, int pid) {
+static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, pid_t pid) {
     return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
 }
 
@@ -232,7 +232,7 @@ bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
                                                        false);
 }
 
-static int RemoveCgroup(const char* cgroup, uid_t uid, int pid) {
+static int RemoveCgroup(const char* cgroup, uid_t uid, pid_t pid) {
     auto path = ConvertUidPidToPath(cgroup, uid, pid);
     int ret = TEMP_FAILURE_RETRY(rmdir(path.c_str()));
 
@@ -370,7 +370,7 @@ err:
     return false;
 }
 
-bool sendSignalToProcessGroup(uid_t uid, int initialPid, int signal) {
+bool sendSignalToProcessGroup(uid_t uid, pid_t initialPid, int signal) {
     std::set<pid_t> pgids, pids;
 
     if (CgroupsAvailable()) {
@@ -525,7 +525,7 @@ static populated_status cgroupIsPopulated(int events_fd) {
 // implementation of this function. The default retry value was 40 for killing and 400 for cgroup
 // removal with 5ms sleeps between each retry.
 static int KillProcessGroup(
-        uid_t uid, int initialPid, int signal, bool once = false,
+        uid_t uid, pid_t initialPid, int signal, bool once = false,
         std::chrono::steady_clock::time_point until = std::chrono::steady_clock::now() + 2200ms) {
     CHECK_GE(uid, 0);
     CHECK_GT(initialPid, 0);
@@ -632,15 +632,15 @@ static int KillProcessGroup(
     return ret;
 }
 
-int killProcessGroup(uid_t uid, int initialPid, int signal) {
+int killProcessGroup(uid_t uid, pid_t initialPid, int signal) {
     return KillProcessGroup(uid, initialPid, signal);
 }
 
-int killProcessGroupOnce(uid_t uid, int initialPid, int signal) {
+int killProcessGroupOnce(uid_t uid, pid_t initialPid, int signal) {
     return KillProcessGroup(uid, initialPid, signal, true);
 }
 
-static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgroup,
+static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string cgroup,
                                       bool activate_controllers) {
     auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
 
@@ -687,7 +687,7 @@ static int createProcessGroupInternal(uid_t uid, int initialPid, std::string cgr
     return ret;
 }
 
-int createProcessGroup(uid_t uid, int initialPid, bool memControl) {
+int createProcessGroup(uid_t uid, pid_t initialPid, bool memControl) {
     CHECK_GE(uid, 0);
     CHECK_GT(initialPid, 0);
 
@@ -731,15 +731,15 @@ static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t 
     return true;
 }
 
-bool setProcessGroupSwappiness(uid_t, int pid, int swappiness) {
+bool setProcessGroupSwappiness(uid_t, pid_t pid, int swappiness) {
     return SetProcessGroupValue(pid, "MemSwappiness", swappiness);
 }
 
-bool setProcessGroupSoftLimit(uid_t, int pid, int64_t soft_limit_in_bytes) {
+bool setProcessGroupSoftLimit(uid_t, pid_t pid, int64_t soft_limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemSoftLimit", soft_limit_in_bytes);
 }
 
-bool setProcessGroupLimit(uid_t, int pid, int64_t limit_in_bytes) {
+bool setProcessGroupLimit(uid_t, pid_t pid, int64_t limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemLimit", limit_in_bytes);
 }
 
@@ -747,7 +747,7 @@ bool getAttributePathForTask(const std::string& attr_name, int tid, std::string*
     return CgroupGetAttributePathForTask(attr_name, tid, path);
 }
 
-bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, int pid) {
+bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, pid_t pid) {
     const TaskProfile* tp = TaskProfiles::GetInstance().GetProfile(profile_name);
 
     if (tp == nullptr) {
