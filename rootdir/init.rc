@@ -109,6 +109,9 @@ on init
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
 
+    # Create socket dir for ot-daemon
+    mkdir /dev/socket/ot-daemon 0770 thread_network thread_network
+
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
     mkdir /dev/stune/background
