@@ -71,3 +71,33 @@ prebuilt_root {
     src: "adb_debug.prop",
     debug_ramdisk: true,
 }
+
+prebuilt_etc {
+    name: "init.zygote64.rc",
+    src: "init.zygote64.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote32.rc",
+    src: "init.zygote32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote64_32.rc",
+    src: "init.zygote64_32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.rc",
+    src: "init.usb.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.configfs.rc",
+    src: "init.usb.configfs.rc",
+    sub_dir: "init/hw",
+}
