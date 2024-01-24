@@ -95,7 +95,7 @@ bool getAttributePathForTask(const std::string& attr_name, int tid, std::string*
 
 // Check if a profile can be applied without failing.
 // Returns true if it can be applied without failing, false otherwise
-bool isProfileValidForProcess(const std::string& profile_name, int uid, int pid);
+bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, int pid);
 
 #endif // __ANDROID_VNDK__
 

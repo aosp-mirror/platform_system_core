@@ -184,8 +184,8 @@ class WriteFileAction : public ProfileAction {
     android::base::unique_fd fd_[ProfileAction::RCT_COUNT];
     mutable std::mutex fd_mutex_;
 
-    bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, int uid, int pid,
-                          bool logfailures) const;
+    bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, uid_t uid,
+                          int pid, bool logfailures) const;
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, const std::string& value) const;
 };
 

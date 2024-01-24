@@ -747,7 +747,7 @@ bool getAttributePathForTask(const std::string& attr_name, int tid, std::string*
     return CgroupGetAttributePathForTask(attr_name, tid, path);
 }
 
-bool isProfileValidForProcess(const std::string& profile_name, int uid, int pid) {
+bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, int pid) {
     const TaskProfile* tp = TaskProfiles::GetInstance().GetProfile(profile_name);
 
     if (tp == nullptr) {
