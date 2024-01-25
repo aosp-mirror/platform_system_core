@@ -136,7 +136,7 @@ bool ProfileAttribute::GetPathForProcess(uid_t uid, pid_t pid, std::string* path
     return GetPathForTask(pid, path);
 }
 
-bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
+bool ProfileAttribute::GetPathForTask(pid_t tid, std::string* path) const {
     std::string subgroup;
     if (!controller()->GetTaskGroup(tid, &subgroup)) {
         return false;
@@ -179,13 +179,13 @@ bool SetClampsAction::ExecuteForTask(int) const {
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 
-bool SetTimerSlackAction::IsTimerSlackSupported(int tid) {
+bool SetTimerSlackAction::IsTimerSlackSupported(pid_t tid) {
     auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
 
     return (access(file.c_str(), W_OK) == 0);
 }
 
-bool SetTimerSlackAction::ExecuteForTask(int tid) const {
+bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
     static bool sys_supports_timerslack = IsTimerSlackSupported(tid);
 
     // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
@@ -250,7 +250,7 @@ bool SetAttributeAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return WriteValueToFile(path);
 }
 
-bool SetAttributeAction::ExecuteForTask(int tid) const {
+bool SetAttributeAction::ExecuteForTask(pid_t tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
@@ -288,7 +288,7 @@ bool SetAttributeAction::IsValidForProcess(uid_t, pid_t pid) const {
     return IsValidForTask(pid);
 }
 
-bool SetAttributeAction::IsValidForTask(int tid) const {
+bool SetAttributeAction::IsValidForTask(pid_t tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
@@ -316,7 +316,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p
     FdCacheHelper::Init(controller_.GetProcsFilePath(path_, 0, 0), fd_[ProfileAction::RCT_PROCESS]);
 }
 
-bool SetCgroupAction::AddTidToCgroup(int tid, int fd, ResourceCacheType cache_type) const {
+bool SetCgroupAction::AddTidToCgroup(pid_t tid, int fd, ResourceCacheType cache_type) const {
     if (tid <= 0) {
         return true;
     }
@@ -401,7 +401,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool SetCgroupAction::ExecuteForTask(int tid) const {
+bool SetCgroupAction::ExecuteForTask(pid_t tid) const {
     CacheUseResult result = UseCachedFd(ProfileAction::RCT_TASK, tid);
     if (result != ProfileAction::UNUSED) {
         return result == ProfileAction::SUCCESS;
@@ -590,7 +590,7 @@ bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool WriteFileAction::ExecuteForTask(int tid) const {
+bool WriteFileAction::ExecuteForTask(pid_t tid) const {
     return WriteValueToFile(value_, ProfileAction::RCT_TASK, getuid(), tid, logfailures_);
 }
 
@@ -655,7 +655,7 @@ bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool ApplyProfileAction::ExecuteForTask(int tid) const {
+bool ApplyProfileAction::ExecuteForTask(pid_t tid) const {
     for (const auto& profile : profiles_) {
         profile->ExecuteForTask(tid);
     }
@@ -683,7 +683,7 @@ bool ApplyProfileAction::IsValidForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool ApplyProfileAction::IsValidForTask(int tid) const {
+bool ApplyProfileAction::IsValidForTask(pid_t tid) const {
     for (const auto& profile : profiles_) {
         if (!profile->IsValidForTask(tid)) {
             return false;
@@ -707,7 +707,7 @@ bool TaskProfile::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool TaskProfile::ExecuteForTask(int tid) const {
+bool TaskProfile::ExecuteForTask(pid_t tid) const {
     if (tid == 0) {
         tid = GetThreadId();
     }
@@ -761,7 +761,7 @@ bool TaskProfile::IsValidForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool TaskProfile::IsValidForTask(int tid) const {
+bool TaskProfile::IsValidForTask(pid_t tid) const {
     for (const auto& element : elements_) {
         if (!element->IsValidForTask(tid)) return false;
     }
@@ -1043,7 +1043,7 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> p
 }
 
 template <typename T>
-bool TaskProfiles::SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache) {
+bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const T> profiles, bool use_fd_cache) {
     bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
@@ -1069,9 +1069,9 @@ template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
 template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
                                                std::span<const std::string_view> profiles,
                                                bool use_fd_cache);
-template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string> profiles,
+template bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const std::string> profiles,
                                             bool use_fd_cache);
-template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+template bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const std::string_view> profiles,
                                             bool use_fd_cache);
 template bool TaskProfiles::SetUserProfiles(uid_t uid, std::span<const std::string> profiles,
                                             bool use_fd_cache);

@@ -33,19 +33,20 @@ bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
-bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
+bool CgroupGetAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
 
-bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache = false);
+bool SetTaskProfiles(pid_t tid, const std::vector<std::string>& profiles,
+                     bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles);
 
 __END_DECLS
 
-bool SetTaskProfiles(int tid, std::initializer_list<std::string_view> profiles,
+bool SetTaskProfiles(pid_t tid, std::initializer_list<std::string_view> profiles,
                      bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, std::initializer_list<std::string_view> profiles);
 #if _LIBCPP_STD_VER > 17
-bool SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+bool SetTaskProfiles(pid_t tid, std::span<const std::string_view> profiles,
                      bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const std::string_view> profiles);
 #endif
@@ -91,7 +92,7 @@ void removeAllEmptyProcessGroups(void);
 
 // Provides the path for an attribute in a specific process group
 // Returns false in case of error, true in case of success
-bool getAttributePathForTask(const std::string& attr_name, int tid, std::string* path);
+bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
 
 // Check if a profile can be applied without failing.
 // Returns true if it can be applied without failing, false otherwise

@@ -147,7 +147,7 @@ bool CgroupGetAttributePath(const std::string& attr_name, std::string* path) {
     return true;
 }
 
-bool CgroupGetAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
+bool CgroupGetAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path) {
     const TaskProfiles& tp = TaskProfiles::GetInstance();
     const IProfileAttribute* attr = tp.GetAttribute(attr_name);
 
@@ -198,17 +198,18 @@ bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::strin
             uid, pid, std::span<const std::string>(profiles), true);
 }
 
-bool SetTaskProfiles(int tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
+bool SetTaskProfiles(pid_t tid, const std::vector<std::string>& profiles, bool use_fd_cache) {
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, std::span<const std::string>(profiles),
                                                        use_fd_cache);
 }
 
-bool SetTaskProfiles(int tid, std::initializer_list<std::string_view> profiles, bool use_fd_cache) {
+bool SetTaskProfiles(pid_t tid, std::initializer_list<std::string_view> profiles,
+                     bool use_fd_cache) {
     return TaskProfiles::GetInstance().SetTaskProfiles(
             tid, std::span<const std::string_view>(profiles), use_fd_cache);
 }
 
-bool SetTaskProfiles(int tid, std::span<const std::string_view> profiles, bool use_fd_cache) {
+bool SetTaskProfiles(pid_t tid, std::span<const std::string_view> profiles, bool use_fd_cache) {
     return TaskProfiles::GetInstance().SetTaskProfiles(tid, profiles, use_fd_cache);
 }
 
@@ -712,7 +713,7 @@ int createProcessGroup(uid_t uid, pid_t initialPid, bool memControl) {
     return createProcessGroupInternal(uid, initialPid, cgroup, true);
 }
 
-static bool SetProcessGroupValue(int tid, const std::string& attr_name, int64_t value) {
+static bool SetProcessGroupValue(pid_t tid, const std::string& attr_name, int64_t value) {
     if (!isMemoryCgroupSupported()) {
         LOG(ERROR) << "Memcg is not mounted.";
         return false;
@@ -743,7 +744,7 @@ bool setProcessGroupLimit(uid_t, pid_t pid, int64_t limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemLimit", limit_in_bytes);
 }
 
-bool getAttributePathForTask(const std::string& attr_name, int tid, std::string* path) {
+bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path) {
     return CgroupGetAttributePathForTask(attr_name, tid, path);
 }
 
