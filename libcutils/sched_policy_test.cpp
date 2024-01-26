@@ -75,9 +75,11 @@ TEST(SchedPolicy, set_sched_policy) {
     }
 
     ASSERT_EQ(0, set_sched_policy(0, SP_BACKGROUND));
+    ASSERT_EQ(0, set_cpuset_policy(0, SP_BACKGROUND));
     AssertPolicy(SP_BACKGROUND);
 
     ASSERT_EQ(0, set_sched_policy(0, SP_FOREGROUND));
+    ASSERT_EQ(0, set_cpuset_policy(0, SP_FOREGROUND));
     AssertPolicy(SP_FOREGROUND);
 }
 
