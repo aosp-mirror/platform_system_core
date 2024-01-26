@@ -41,9 +41,6 @@ cc_library {
         "utils.cpp",
     ],
     export_include_dirs: ["include"],
-    static_libs: [
-        "libFuzzer",
-    ],
     shared_libs: [
         "libtrusty_coverage",
         "libbase",
