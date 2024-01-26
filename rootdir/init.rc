@@ -228,6 +228,26 @@ on init
     write /dev/stune/nnapi-hal/schedtune.boost 1
     write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
+    # Create blkio group and apply initial settings.
+    # This feature needs kernel to support it, and the
+    # device's init.rc must actually set the correct values.
+    mkdir /dev/blkio/background
+    chown system system /dev/blkio
+    chown system system /dev/blkio/background
+    chown system system /dev/blkio/tasks
+    chown system system /dev/blkio/background/tasks
+    chown system system /dev/blkio/cgroup.procs
+    chown system system /dev/blkio/background/cgroup.procs
+    chmod 0664 /dev/blkio/tasks
+    chmod 0664 /dev/blkio/background/tasks
+    chmod 0664 /dev/blkio/cgroup.procs
+    chmod 0664 /dev/blkio/background/cgroup.procs
+    write /dev/blkio/blkio.weight 1000
+    write /dev/blkio/background/blkio.weight 200
+    write /dev/blkio/background/blkio.bfq.weight 10
+    write /dev/blkio/blkio.group_idle 0
+    write /dev/blkio/background/blkio.group_idle 0
+
     restorecon_recursive /mnt
 
     mount configfs none /config nodev noexec nosuid
