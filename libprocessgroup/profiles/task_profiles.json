@@ -91,11 +91,6 @@
       "Name": "CfqWeight",
       "Controller": "io",
       "File": "io.weight"
-    },
-    {
-      "Name": "IoPrioClass",
-      "Controller": "io",
-      "File": "io.prio.class"
     }
   ],
 
@@ -484,15 +479,6 @@
             "Value": "200",
             "Optional": "true"
           }
-        },
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "IoPrioClass",
-            "Value": "restrict-to-be",
-            "Optional": "true"
-          }
         }
       ]
     },
@@ -523,15 +509,6 @@
           {
             "Name": "CfqWeight",
             "Value": "1000",
-            "Optional": "true"
-          }
-        },
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "IoPrioClass",
-            "Value": "restrict-to-be",
             "Optional": "true"
           }
         }
@@ -566,15 +543,6 @@
             "Value": "1000",
             "Optional": "true"
           }
-        },
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "IoPrioClass",
-            "Value": "promote-to-rt",
-            "Optional": "true"
-          }
         }
       ]
     },
@@ -605,15 +573,6 @@
           {
             "Name": "CfqWeight",
             "Value": "1000",
-            "Optional": "true"
-          }
-        },
-        {
-          "Name": "SetAttribute",
-          "Params":
-          {
-            "Name": "IoPrioClass",
-            "Value": "promote-to-rt",
             "Optional": "true"
           }
         }
