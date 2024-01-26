@@ -532,6 +532,30 @@ int Looper::removeFd(int fd) {
     return removeSequenceNumberLocked(it->second);
 }
 
+int Looper::repoll(int fd) {
+    AutoMutex _l(mLock);
+    const auto& it = mSequenceNumberByFd.find(fd);
+    if (it == mSequenceNumberByFd.end()) {
+        return 0;
+    }
+
+    const auto& request_it = mRequests.find(it->second);
+    if (request_it == mRequests.end()) {
+        return 0;
+    }
+    const auto& [seq, request] = *request_it;
+
+    LOG_ALWAYS_FATAL_IF(
+            fd != request.fd,
+            "Looper has inconsistent data structure. When looking up FD %d found FD %d.", fd,
+            request_it->second.fd);
+
+    epoll_event eventItem = createEpollEvent(request.getEpollEvents(), seq);
+    if (epoll_ctl(mEpollFd.get(), EPOLL_CTL_MOD, fd, &eventItem) == -1) return 0;
+
+    return 1;  // success
+}
+
 int Looper::removeSequenceNumberLocked(SequenceNumber seq) {
 #if DEBUG_CALLBACKS
     ALOGD("%p ~ removeFd - seq=%" PRIu64, this, seq);
