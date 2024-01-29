@@ -43,7 +43,8 @@ class CgroupController {
 
     std::string GetTasksFilePath(const std::string& path) const;
     std::string GetProcsFilePath(const std::string& path, uid_t uid, pid_t pid) const;
-    bool GetTaskGroup(int tid, std::string* group) const;
+    bool GetTaskGroup(pid_t tid, std::string* group) const;
+
   private:
     enum ControllerState {
         UNKNOWN = 0,
