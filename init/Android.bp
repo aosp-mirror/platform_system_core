@@ -474,6 +474,7 @@ phony {
 // ------------------------------------------------------------------------------
 
 cc_test {
+    // Note: This is NOT a CTS test. See b/320800872
     name: "CtsInitTestCases",
     defaults: ["init_defaults"],
     require_root: true,
@@ -506,7 +507,6 @@ cc_test {
     ],
 
     test_suites: [
-        "cts",
         "device-tests",
     ],
 }
