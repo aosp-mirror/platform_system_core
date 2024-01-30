@@ -300,17 +300,11 @@ bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_
 }
 
 bool CowWriterV3::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
-    if (!CheckOpCount(size / header_.block_size)) {
-        return false;
-    }
     return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
 }
 
 bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                 uint32_t old_block, uint16_t offset) {
-    if (!CheckOpCount(size / header_.block_size)) {
-        return false;
-    }
     return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
 }
 
@@ -330,7 +324,9 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
     }
     const auto bytes = reinterpret_cast<const uint8_t*>(data);
     const size_t num_blocks = (size / header_.block_size);
-
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     for (size_t i = 0; i < num_blocks;) {
         const auto blocks_to_write =
                 std::min<size_t>(batch_size_ - cached_data_.size(), num_blocks - i);
