@@ -36,10 +36,10 @@ else
 endif
 
 # TODO(b/306364873): move this to be flag-controlled?
-ifeq ($(SECRETKEEPER_ENABLED),)
-    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE :=
-else
+ifeq ($(SECRETKEEPER_ENABLED),true)
     LOCAL_SECRETKEEPER_PRODUCT_PACKAGE := android.hardware.security.secretkeeper.trusty
+else
+    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE :=
 endif
 
 PRODUCT_PACKAGES += \
