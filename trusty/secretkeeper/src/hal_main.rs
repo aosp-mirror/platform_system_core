@@ -14,7 +14,8 @@
 // limitations under the License.
 
 //! This module implements the HAL service for Secretkeeper in Trusty.
-use authgraph_hal::{channel::SerializedChannel};
+use authgraph_hal::channel::SerializedChannel;
+use authgraph_wire::fragmentation::{Fragmenter, Reassembler};
 use secretkeeper_hal::SecretkeeperService;
 use android_hardware_security_secretkeeper::aidl::android::hardware::security::secretkeeper::ISecretkeeper::{
     ISecretkeeper, BpSecretkeeper,
@@ -22,6 +23,7 @@ use android_hardware_security_secretkeeper::aidl::android::hardware::security::s
 use log::{error, info};
 use std::{
     ffi::CString,
+    fmt::Debug,
     panic,
     sync::{Arc, Mutex},
 };
@@ -29,6 +31,7 @@ use trusty::DEFAULT_DEVICE;
 
 const SK_TIPC_SERVICE_PORT: &str = "com.android.trusty.secretkeeper";
 const AG_TIPC_SERVICE_PORT: &str = "com.android.trusty.secretkeeper.authgraph";
+const TIPC_MAX_SIZE: usize = 4000;
 
 static SERVICE_INSTANCE: &str = "default";
 
@@ -47,38 +50,43 @@ impl TipcChannel {
     }
 }
 
+fn binderr<E: Debug>(msg: &str, e: E) -> binder::Status {
+    binder::Status::new_exception(
+        binder::ExceptionCode::TRANSACTION_FAILED,
+        Some(&CString::new(format!("Failed to {msg} via tipc channel: {e:?}",)).unwrap()),
+    )
+}
+
 impl SerializedChannel for TipcChannel {
-    const MAX_SIZE: usize = 4000;
+    // No maximum size for messages passed to `execute()` because it performs fragmentation
+    // and reassembly internally.
+    const MAX_SIZE: usize = usize::MAX;
+
     fn execute(&self, req_data: &[u8]) -> binder::Result<Vec<u8>> {
         // Hold lock across both request and response.
         let mut channel = self.channel.lock().unwrap();
-        channel.send(req_data).map_err(|e| {
-            binder::Status::new_exception(
-                binder::ExceptionCode::TRANSACTION_FAILED,
-                Some(
-                    &CString::new(format!(
-                        "Failed to send the request via tipc channel because of {:?}",
-                        e
-                    ))
-                    .unwrap(),
-                ),
-            )
-        })?;
-        // TODO: cope with fragmentation and reassembly
-        let mut rsp_data = Vec::new();
-        channel.recv(&mut rsp_data).map_err(|e| {
-            binder::Status::new_exception(
-                binder::ExceptionCode::TRANSACTION_FAILED,
-                Some(
-                    &CString::new(format!(
-                        "Failed to receive the response via tipc channel because of {:?}",
-                        e
-                    ))
-                    .unwrap(),
-                ),
-            )
-        })?;
-        Ok(rsp_data)
+        let mut pending_rsp = Reassembler::default();
+
+        // Break request message into fragments to send.
+        for req_frag in Fragmenter::new(req_data, TIPC_MAX_SIZE) {
+            channel.send(&req_frag).map_err(|e| binderr("send request", e))?;
+
+            // Every request gets a response.
+            let mut rsp_frag = Vec::new();
+            channel.recv(&mut rsp_frag).map_err(|e| binderr("receive response", e))?;
+
+            if let Some(full_rsp) = pending_rsp.accumulate(&rsp_frag) {
+                return Ok(full_rsp.to_vec());
+            }
+        }
+        // There may be additional response fragments to receive.
+        loop {
+            let mut rsp_frag = Vec::new();
+            channel.recv(&mut rsp_frag).map_err(|e| binderr("receive response", e))?;
+            if let Some(full_rsp) = pending_rsp.accumulate(&rsp_frag) {
+                return Ok(full_rsp.to_vec());
+            }
+        }
     }
 }
 
