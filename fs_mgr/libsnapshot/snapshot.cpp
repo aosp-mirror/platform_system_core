@@ -1142,8 +1142,8 @@ auto SnapshotManager::CheckMergeState(const std::function<bool()>& before_cancel
     return result;
 }
 
-auto SnapshotManager::CheckMergeState(LockedFile* lock,
-                                      const std::function<bool()>& before_cancel) -> MergeResult {
+auto SnapshotManager::CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel)
+        -> MergeResult {
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
     switch (update_status.state()) {
         case UpdateState::None:
@@ -1218,8 +1218,8 @@ auto SnapshotManager::CheckMergeState(LockedFile* lock,
                 wrong_phase = true;
                 break;
             default:
-                LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": " << "\""
-                           << result.state << "\"";
+                LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": "
+                           << "\"" << result.state << "\"";
                 if (failure_code == MergeFailureCode::Ok) {
                     failure_code = MergeFailureCode::UnexpectedMergeState;
                 }
@@ -2797,8 +2797,8 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
     return true;
 }
 
-auto SnapshotManager::OpenFile(const std::string& file,
-                               int lock_flags) -> std::unique_ptr<LockedFile> {
+auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
+        -> std::unique_ptr<LockedFile> {
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
@@ -4344,7 +4344,8 @@ bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
         }
     }
 
-    LOG(ERROR) << "Device-mapper device " << name << "(" << full_path << ")" << " still in use."
+    LOG(ERROR) << "Device-mapper device " << name << "(" << full_path << ")"
+               << " still in use."
                << "  Probably a file descriptor was leaked or held open, or a loop device is"
                << " attached.";
     return false;
