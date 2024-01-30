@@ -60,6 +60,9 @@ struct CowOptions {
 
     // Size of the cow operation buffer; used in v3 only.
     uint64_t op_count_max = 0;
+
+    // Compression factor
+    uint64_t compression_factor = 4096;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
