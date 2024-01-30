@@ -53,7 +53,7 @@ struct CowOptions {
     uint64_t num_merge_ops = 0;
 
     // Number of threads for compression
-    int num_compress_threads = 0;
+    uint16_t num_compress_threads = 0;
 
     // Batch write cluster ops
     bool batch_write = false;
