@@ -110,6 +110,7 @@ void CowWriterV3::SetupHeaders() {
     header_.op_count = 0;
     header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
+    header_.max_compression_size = options_.compression_factor;
     return;
 }
 
