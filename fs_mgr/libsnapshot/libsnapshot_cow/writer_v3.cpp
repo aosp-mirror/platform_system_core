@@ -114,7 +114,7 @@ void CowWriterV3::SetupHeaders() {
 }
 
 bool CowWriterV3::ParseOptions() {
-    num_compress_threads_ = std::max(options_.num_compress_threads, 1);
+    num_compress_threads_ = std::max(int(options_.num_compress_threads), 1);
     auto parts = android::base::Split(options_.compression, ",");
     if (parts.size() > 2) {
         LOG(ERROR) << "failed to parse compression parameters: invalid argument count: "
@@ -128,6 +128,18 @@ bool CowWriterV3::ParseOptions() {
     }
     header_.compression_algorithm = *algorithm;
     header_.op_count_max = options_.op_count_max;
+
+    if (!IsEstimating() && header_.op_count_max == 0) {
+        if (!options_.max_blocks.has_value()) {
+            LOG(ERROR) << "can't size op buffer size since op_count_max is 0 and max_blocks is not "
+                          "set.";
+            return false;
+        }
+        LOG(INFO) << "op count max is read in as 0. Setting to "
+                     "num blocks in partition "
+                  << options_.max_blocks.value();
+        header_.op_count_max = options_.max_blocks.value();
+    }
 
     if (parts.size() > 1) {
         if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
@@ -300,17 +312,11 @@ bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_
 }
 
 bool CowWriterV3::EmitRawBlocks(uint64_t new_block_start, const void* data, size_t size) {
-    if (!CheckOpCount(size / header_.block_size)) {
-        return false;
-    }
     return EmitBlocks(new_block_start, data, size, 0, 0, kCowReplaceOp);
 }
 
 bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size_t size,
                                 uint32_t old_block, uint16_t offset) {
-    if (!CheckOpCount(size / header_.block_size)) {
-        return false;
-    }
     return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
 }
 
@@ -330,7 +336,9 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
     }
     const auto bytes = reinterpret_cast<const uint8_t*>(data);
     const size_t num_blocks = (size / header_.block_size);
-
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     for (size_t i = 0; i < num_blocks;) {
         const auto blocks_to_write =
                 std::min<size_t>(batch_size_ - cached_data_.size(), num_blocks - i);

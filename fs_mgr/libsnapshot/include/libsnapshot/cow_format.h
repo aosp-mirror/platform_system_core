@@ -101,7 +101,7 @@ struct ResumePoint {
     // monotonically increasing value used by update_engine
     uint64_t label;
     // Index of last CowOperation guaranteed to be resumable
-    uint32_t op_index;
+    uint64_t op_index;
 } __attribute__((packed));
 
 static constexpr uint8_t kNumResumePoints = 4;
@@ -115,10 +115,12 @@ struct CowHeaderV3 : public CowHeader {
     uint32_t resume_point_max;
     // Number of CowOperationV3 structs in the operation buffer, currently and total
     // region size.
-    uint32_t op_count;
-    uint32_t op_count_max;
+    uint64_t op_count;
+    uint64_t op_count_max;
     // Compression Algorithm
     uint32_t compression_algorithm;
+    // Max compression size supported
+    uint32_t max_compression_size;
 } __attribute__((packed));
 
 enum class CowOperationType : uint8_t {
@@ -203,7 +205,7 @@ static constexpr uint64_t kCowOpSourceInfoTypeMask = (1ULL << kCowOpSourceInfoTy
 struct CowOperationV3 {
     // If this operation reads from the data section of the COW, this contains
     // the length.
-    uint16_t data_length;
+    uint32_t data_length;
 
     // The block of data in the new image that this operation modifies.
     uint32_t new_block;
