@@ -72,6 +72,7 @@ TEST_F(CowTestV3, CowHeaderV2Test) {
 
 TEST_F(CowTestV3, Header) {
     CowOptions options;
+    options.op_count_max = 15;
     auto writer = CreateCowWriter(3, options, GetCowFd());
     ASSERT_TRUE(writer->Finalize());
 

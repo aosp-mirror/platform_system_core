@@ -103,7 +103,7 @@ message SnapshotStatus {
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
 
-    // Compression algorithm (none, gz, or brotli).
+    // Compression algorithm (none, gz, lz4, zstd, or brotli).
     string compression_algorithm = 11;
 
     // Estimated COW size from OTA manifest.
@@ -117,6 +117,9 @@ message SnapshotStatus {
 
     // Size of v3 operation buffer. Needs to be determined during writer initialization
     uint64 estimated_ops_buffer_size = 15;
+
+    // Max bytes to be compressed at once (4k, 8k, 16k, 32k, 64k, 128k)
+    uint64 compression_factor = 16;
 }
 
 // Next: 8
