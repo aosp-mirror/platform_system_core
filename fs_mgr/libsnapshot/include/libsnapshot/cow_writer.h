@@ -53,13 +53,16 @@ struct CowOptions {
     uint64_t num_merge_ops = 0;
 
     // Number of threads for compression
-    int num_compress_threads = 0;
+    uint16_t num_compress_threads = 0;
 
     // Batch write cluster ops
     bool batch_write = false;
 
     // Size of the cow operation buffer; used in v3 only.
     uint64_t op_count_max = 0;
+
+    // Compression factor
+    uint64_t compression_factor = 4096;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
