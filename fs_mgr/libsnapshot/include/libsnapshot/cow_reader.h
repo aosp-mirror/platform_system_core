@@ -162,6 +162,9 @@ class CowReader final : public ICowReader {
     // Creates a clone of the current CowReader without the file handlers
     std::unique_ptr<CowReader> CloneCowReader();
 
+    // Get the max compression size
+    uint32_t GetMaxCompressionSize();
+
     void UpdateMergeOpsCompleted(int num_merge_ops) { header_.num_merge_ops += num_merge_ops; }
 
   private:

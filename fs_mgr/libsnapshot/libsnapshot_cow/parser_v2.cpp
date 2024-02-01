@@ -206,6 +206,8 @@ bool CowParserV2::Translate(TranslatedCowOps* out) {
 
         auto& new_op = out->ops->at(i);
         new_op.set_type(v2_op.type);
+        // v2 ops always have 4k compression
+        new_op.set_compression_bits(0);
         new_op.data_length = v2_op.data_length;
 
         if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {

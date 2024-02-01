@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#include "read_worker.h"
-
+#include <libsnapshot/cow_format.h>
 #include <pthread.h>
 
+#include "read_worker.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -48,9 +48,10 @@ ReadWorker::ReadWorker(const std::string& cow_device, const std::string& backing
 // Start the replace operation. This will read the
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
-bool ReadWorker::ProcessReplaceOp(const CowOperation* cow_op, void* buffer) {
-    if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
-        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
+bool ReadWorker::ProcessReplaceOp(const CowOperation* cow_op, void* buffer, size_t buffer_size) {
+    if (!reader_->ReadData(cow_op, buffer, buffer_size)) {
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block
+                        << " buffer_size: " << buffer_size;
         return false;
     }
     return true;
@@ -183,7 +184,13 @@ bool ReadWorker::ProcessCowOp(const CowOperation* cow_op, void* buffer) {
 
     switch (cow_op->type()) {
         case kCowReplaceOp: {
-            return ProcessReplaceOp(cow_op, buffer);
+            size_t buffer_size = CowOpCompressionSize(cow_op, BLOCK_SZ);
+            uint8_t chunk[buffer_size];
+            if (!ProcessReplaceOp(cow_op, chunk, buffer_size)) {
+                return false;
+            }
+            std::memcpy(buffer, chunk, BLOCK_SZ);
+            return true;
         }
 
         case kCowZeroOp: {
@@ -208,6 +215,13 @@ bool ReadWorker::Init() {
     if (!Worker::Init()) {
         return false;
     }
+
+    const size_t compression_factor = reader_->GetMaxCompressionSize();
+    if (!compression_factor) {
+        SNAP_LOG(ERROR) << "Compression factor is set to 0 which is invalid.";
+        return false;
+    }
+    decompressed_buffer_ = std::make_unique<uint8_t[]>(compression_factor);
 
     backing_store_fd_.reset(open(backing_store_device_.c_str(), O_RDONLY));
     if (backing_store_fd_ < 0) {
@@ -276,6 +290,20 @@ bool ReadWorker::ReadDataFromBaseDevice(sector_t sector, void* buffer, size_t re
     return true;
 }
 
+bool ReadWorker::GetCowOpBlockOffset(const CowOperation* cow_op, uint64_t io_block,
+                                     off_t* block_offset) {
+    // If this is a replace op, get the block offset of this I/O
+    // block. Multi-block compression is supported only for
+    // Replace ops.
+    //
+    // Note: This can be extended when we support COPY and XOR ops down the
+    // line as the blocks are mostly contiguous.
+    if (cow_op && cow_op->type() == kCowReplaceOp) {
+        return GetBlockOffset(cow_op, io_block, BLOCK_SZ, block_offset);
+    }
+    return false;
+}
+
 bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
     size_t remaining_size = sz;
     std::vector<std::pair<sector_t, const CowOperation*>>& chunk_vec = snapuserd_->GetChunkVec();
@@ -286,7 +314,7 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
         size_t read_size = std::min(PAYLOAD_BUFFER_SZ, remaining_size);
 
         size_t total_bytes_read = 0;
-
+        const CowOperation* prev_op = nullptr;
         while (read_size) {
             // We need to check every 4k block to verify if it is
             // present in the mapping.
@@ -294,7 +322,7 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
 
             auto it = std::lower_bound(chunk_vec.begin(), chunk_vec.end(),
                                        std::make_pair(sector, nullptr), SnapshotHandler::compare);
-            bool not_found = (it == chunk_vec.end() || it->first != sector);
+            const bool sector_not_found = (it == chunk_vec.end() || it->first != sector);
 
             void* buffer = block_server_->GetResponseBuffer(BLOCK_SZ, size);
             if (!buffer) {
@@ -302,15 +330,88 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
                 return false;
             }
 
-            if (not_found) {
-                // Block not found in map - which means this block was not
-                // changed as per the OTA. Just route the I/O to the base
-                // device.
-                if (!ReadDataFromBaseDevice(sector, buffer, size)) {
-                    SNAP_LOG(ERROR) << "ReadDataFromBaseDevice failed";
-                    return false;
+            if (sector_not_found) {
+                // Find the 4k block
+                uint64_t io_block = SectorToChunk(sector);
+                // Get the previous iterator. Since the vector is sorted, the
+                // lookup of this sector can fall in a range of blocks if
+                // CowOperation has compressed multiple blocks.
+                if (it != chunk_vec.begin()) {
+                    std::advance(it, -1);
                 }
 
+                bool is_mapping_present = true;
+
+                // Vector itself is empty. This can happen if the block was not
+                // changed per the OTA or if the merge was already complete but
+                // snapshot table was not yet collapsed.
+                if (it == chunk_vec.end()) {
+                    is_mapping_present = false;
+                }
+
+                const CowOperation* cow_op = nullptr;
+                // Relative offset within the compressed multiple blocks
+                off_t block_offset = 0;
+                if (is_mapping_present) {
+                    // Get the nearest operation found in the vector
+                    cow_op = it->second;
+                    is_mapping_present = GetCowOpBlockOffset(cow_op, io_block, &block_offset);
+                }
+
+                // Thus, we have a case wherein sector was not found in the sorted
+                // vector; however, we indeed have a mapping of this sector
+                // embedded in one of the CowOperation which spans multiple
+                // block size.
+                if (is_mapping_present) {
+                    // block_offset = 0 would mean that the CowOperation should
+                    // already be in the sorted vector. Hence, lookup should
+                    // have already found it. If not, this is a bug.
+                    if (block_offset == 0) {
+                        SNAP_LOG(ERROR)
+                                << "GetBlockOffset returned offset 0 for io_block: " << io_block;
+                        return false;
+                    }
+
+                    // Get the CowOperation actual compression size
+                    size_t compression_size = CowOpCompressionSize(cow_op, BLOCK_SZ);
+                    // Offset cannot be greater than the compression size
+                    if (block_offset > compression_size) {
+                        SNAP_LOG(ERROR) << "Invalid I/O block found. io_block: " << io_block
+                                        << " CowOperation-new-block: " << cow_op->new_block
+                                        << " compression-size: " << compression_size;
+                        return false;
+                    }
+
+                    // Cached copy of the previous iteration. Just retrieve the
+                    // data
+                    if (prev_op && prev_op->new_block == cow_op->new_block) {
+                        std::memcpy(buffer, (char*)decompressed_buffer_.get() + block_offset, size);
+                    } else {
+                        // Get the data from the disk based on the compression
+                        // size
+                        if (!ProcessReplaceOp(cow_op, decompressed_buffer_.get(),
+                                              compression_size)) {
+                            return false;
+                        }
+                        // Copy the data from the decompressed buffer relative
+                        // to the i/o block offset.
+                        std::memcpy(buffer, (char*)decompressed_buffer_.get() + block_offset, size);
+                        // Cache this CowOperation pointer for successive I/O
+                        // operation. Since the request is sequential and the
+                        // block is already decompressed, subsequest I/O blocks
+                        // can fetch the data directly from this decompressed
+                        // buffer.
+                        prev_op = cow_op;
+                    }
+                } else {
+                    // Block not found in map - which means this block was not
+                    // changed as per the OTA. Just route the I/O to the base
+                    // device.
+                    if (!ReadDataFromBaseDevice(sector, buffer, size)) {
+                        SNAP_LOG(ERROR) << "ReadDataFromBaseDevice failed";
+                        return false;
+                    }
+                }
                 ret = size;
             } else {
                 // We found the sector in mapping. Check the type of COW OP and
@@ -341,11 +442,49 @@ bool ReadWorker::ReadAlignedSector(sector_t sector, size_t sz) {
     return true;
 }
 
+bool ReadWorker::IsMappingPresent(const CowOperation* cow_op, loff_t requested_offset,
+                                  loff_t cow_op_offset) {
+    const bool replace_op = (cow_op->type() == kCowReplaceOp);
+    if (replace_op) {
+        size_t max_compressed_size = CowOpCompressionSize(cow_op, BLOCK_SZ);
+        if ((requested_offset >= cow_op_offset) &&
+            (requested_offset < (cow_op_offset + max_compressed_size))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int ReadWorker::ReadUnalignedSector(
         sector_t sector, size_t size,
         std::vector<std::pair<sector_t, const CowOperation*>>::iterator& it) {
     SNAP_LOG(DEBUG) << "ReadUnalignedSector: sector " << sector << " size: " << size
                     << " Aligned sector: " << it->first;
+
+    loff_t requested_offset = sector << SECTOR_SHIFT;
+    loff_t final_offset = (it->first) << SECTOR_SHIFT;
+
+    const CowOperation* cow_op = it->second;
+    if (IsMappingPresent(cow_op, requested_offset, final_offset)) {
+        size_t buffer_size = CowOpCompressionSize(cow_op, BLOCK_SZ);
+        uint8_t chunk[buffer_size];
+        // Read the entire decompressed buffer based on the block-size
+        if (!ProcessReplaceOp(cow_op, chunk, buffer_size)) {
+            return -1;
+        }
+        size_t skip_offset = (requested_offset - final_offset);
+        size_t write_sz = std::min(size, buffer_size - skip_offset);
+
+        auto buffer =
+                reinterpret_cast<uint8_t*>(block_server_->GetResponseBuffer(BLOCK_SZ, write_sz));
+        if (!buffer) {
+            SNAP_LOG(ERROR) << "ReadUnalignedSector failed to allocate buffer";
+            return -1;
+        }
+
+        std::memcpy(buffer, (char*)chunk + skip_offset, write_sz);
+        return write_sz;
+    }
 
     int num_sectors_skip = sector - it->first;
     size_t skip_size = num_sectors_skip << SECTOR_SHIFT;
@@ -445,8 +584,11 @@ bool ReadWorker::ReadUnalignedSector(sector_t sector, size_t size) {
 
     size_t remaining_size = size;
     int ret = 0;
+
+    const CowOperation* cow_op = it->second;
     if (!merge_complete && (requested_offset >= final_offset) &&
-        (requested_offset - final_offset) < BLOCK_SZ) {
+        (((requested_offset - final_offset) < BLOCK_SZ) ||
+         IsMappingPresent(cow_op, requested_offset, final_offset))) {
         // Read the partial un-aligned data
         ret = ReadUnalignedSector(sector, remaining_size, it);
         if (ret < 0) {
