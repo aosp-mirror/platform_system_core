@@ -21,6 +21,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <libsnapshot/cow_format.h>
+#include <storage_literals/storage_literals.h>
 #include "writer_v2.h"
 #include "writer_v3.h"
 
@@ -28,6 +29,7 @@ namespace android {
 namespace snapshot {
 
 using android::base::unique_fd;
+using namespace android::storage_literals;
 
 std::ostream& EmitCowTypeString(std::ostream& os, CowOperationType cow_type) {
     switch (cow_type) {
@@ -172,6 +174,37 @@ std::unique_ptr<ICowWriter> CreateCowWriter(uint32_t version, const CowOptions& 
 
 std::unique_ptr<ICowWriter> CreateCowEstimator(uint32_t version, const CowOptions& options) {
     return CreateCowWriter(version, options, unique_fd{-1}, std::nullopt);
+}
+
+size_t CowOpCompressionSize(const CowOperation* op, size_t block_size) {
+    uint8_t compression_bits = op->compression_bits();
+    return (block_size << compression_bits);
+}
+
+bool GetBlockOffset(const CowOperation* op, uint64_t io_block, size_t block_size, off_t* offset) {
+    const uint64_t new_block = op->new_block;
+
+    if (op->type() != kCowReplaceOp || io_block < new_block) {
+        LOG(VERBOSE) << "Invalid IO request for block: " << io_block
+                     << " CowOperation: new_block: " << new_block;
+        return false;
+    }
+
+    // Get the actual compression size
+    const size_t compression_size = CowOpCompressionSize(op, block_size);
+    // Find the number of blocks spanned
+    const size_t num_blocks = compression_size / block_size;
+    // Find the distance of the I/O block which this
+    // CowOperation encompasses
+    const size_t block_distance = io_block - new_block;
+    // Check if this block is within this range;
+    // if so, return the relative offset
+    if (block_distance < num_blocks) {
+        *offset = block_distance * block_size;
+        return true;
+    }
+
+    return false;
 }
 
 }  // namespace snapshot
