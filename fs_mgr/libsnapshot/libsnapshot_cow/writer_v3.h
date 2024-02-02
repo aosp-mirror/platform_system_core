@@ -19,10 +19,14 @@
 #include <thread>
 #include <vector>
 
+#include <libsnapshot/cow_format.h>
+#include <storage_literals/storage_literals.h>
 #include "writer_base.h"
 
 namespace android {
 namespace snapshot {
+
+using namespace android::storage_literals;
 
 class CowWriterV3 : public CowWriterBase {
   public:
@@ -43,6 +47,10 @@ class CowWriterV3 : public CowWriterBase {
     virtual bool EmitSequenceData(size_t num_ops, const uint32_t* data) override;
 
   private:
+    struct CompressedBuffer {
+        size_t compression_factor;
+        std::basic_string<uint8_t> compressed_data;
+    };
     void SetupHeaders();
     bool NeedsFlush() const;
     bool ParseOptions();
@@ -52,11 +60,38 @@ class CowWriterV3 : public CowWriterBase {
                         std::basic_string_view<struct iovec> data);
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
                     uint16_t offset, CowOperationType type);
+    bool ConstructCowOpCompressedBuffers(uint64_t new_block_start, const void* data,
+                                         uint64_t old_block, uint16_t offset, CowOperationType type,
+                                         size_t blocks_to_write);
     bool CheckOpCount(size_t op_count);
 
   private:
-    std::vector<std::basic_string<uint8_t>> CompressBlocks(const size_t num_blocks,
-                                                           const void* data);
+    std::vector<CompressedBuffer> ProcessBlocksWithNoCompression(const size_t num_blocks,
+                                                                 const void* data,
+                                                                 CowOperationType type);
+    std::vector<CompressedBuffer> ProcessBlocksWithCompression(const size_t num_blocks,
+                                                               const void* data,
+                                                               CowOperationType type);
+    std::vector<CompressedBuffer> ProcessBlocksWithThreadedCompression(const size_t num_blocks,
+                                                                       const void* data,
+                                                                       CowOperationType type);
+    std::vector<CompressedBuffer> CompressBlocks(const size_t num_blocks, const void* data,
+                                                 CowOperationType type);
+    size_t GetCompressionFactor(const size_t blocks_to_compress, CowOperationType type) const;
+
+    constexpr bool IsBlockAligned(const size_t size) {
+        // These are the only block size supported. Block size beyond 256k
+        // may impact random read performance post OTA boot.
+        const size_t values[] = {4_KiB, 8_KiB, 16_KiB, 32_KiB, 64_KiB, 128_KiB, 256_KiB};
+
+        auto it = std::lower_bound(std::begin(values), std::end(values), size);
+
+        if (it != std::end(values) && *it == size) {
+            return true;
+        }
+        return false;
+    }
+
     bool ReadBackVerification();
     bool FlushCacheOps();
     void InitWorkers();
