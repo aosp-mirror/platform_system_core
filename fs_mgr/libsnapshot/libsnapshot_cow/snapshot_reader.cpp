@@ -42,10 +42,21 @@ CompressedSnapshotReader::CompressedSnapshotReader(std::unique_ptr<ICowReader>&&
             op_iter_->Next();
             continue;
         }
-        if (op->new_block >= ops_.size()) {
-            ops_.resize(op->new_block + 1, nullptr);
+
+        size_t num_blocks = 1;
+        if (op->type() == kCowReplaceOp) {
+            num_blocks = (CowOpCompressionSize(op, block_size_) / block_size_);
         }
-        ops_[op->new_block] = op;
+        if (op->new_block >= ops_.size()) {
+            ops_.resize(op->new_block + num_blocks, nullptr);
+        }
+
+        size_t vec_index = op->new_block;
+        while (num_blocks) {
+            ops_[vec_index] = op;
+            num_blocks -= 1;
+            vec_index += 1;
+        }
         op_iter_->Next();
     }
 }
@@ -172,11 +183,20 @@ ssize_t CompressedSnapshotReader::ReadBlock(uint64_t chunk, size_t start_offset,
     } else if (op->type() == kCowZeroOp) {
         memset(buffer, 0, bytes_to_read);
     } else if (op->type() == kCowReplaceOp) {
-        if (cow_->ReadData(op, buffer, bytes_to_read, start_offset) < bytes_to_read) {
-            LOG(ERROR) << "CompressedSnapshotReader failed to read replace op";
+        size_t buffer_size = CowOpCompressionSize(op, block_size_);
+        uint8_t temp_buffer[buffer_size];
+        if (cow_->ReadData(op, temp_buffer, buffer_size, 0) < buffer_size) {
+            LOG(ERROR) << "CompressedSnapshotReader failed to read replace op: buffer_size: "
+                       << buffer_size << "start_offset: " << start_offset;
             errno = EIO;
             return -1;
         }
+        off_t block_offset{};
+        if (!GetBlockOffset(op, chunk, block_size_, &block_offset)) {
+            LOG(ERROR) << "GetBlockOffset failed";
+            return -1;
+        }
+        std::memcpy(buffer, (char*)temp_buffer + block_offset + start_offset, bytes_to_read);
     } else if (op->type() == kCowXorOp) {
         borrowed_fd fd = GetSourceFd();
         if (fd < 0) {
