@@ -72,6 +72,11 @@ ifneq ($(filter hwaddress,$(SANITIZE_TARGET)),)
   endif
 endif
 
+EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE :=
+ifneq ($(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE),)
+  EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE := export SCUDO_ALLOCATION_RING_BUFFER_SIZE $(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE)
+endif
+
 EXPORT_GLOBAL_GCOV_OPTIONS :=
 ifeq ($(NATIVE_COVERAGE),true)
   EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
@@ -92,7 +97,7 @@ endif
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
     dev proc sys system data data_mirror odm oem acct config storage mnt apex bootstrap-apex debug_ramdisk \
-    linkerconfig second_stage_resources postinstall $(BOARD_ROOT_EXTRA_FOLDERS)); \
+    linkerconfig second_stage_resources postinstall tmp $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
@@ -216,6 +221,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
 
 # Append PLATFORM_VNDK_VERSION to base name.
 define append_vndk_version

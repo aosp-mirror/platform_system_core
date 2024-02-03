@@ -38,7 +38,7 @@ static inline SchedPolicy _policy(SchedPolicy p) {
 
 #if defined(__ANDROID__)
 
-int set_cpuset_policy(int tid, SchedPolicy policy) {
+int set_cpuset_policy(pid_t tid, SchedPolicy policy) {
     if (tid == 0) {
         tid = GetThreadId();
     }
@@ -64,7 +64,7 @@ int set_cpuset_policy(int tid, SchedPolicy policy) {
     return 0;
 }
 
-int set_sched_policy(int tid, SchedPolicy policy) {
+int set_sched_policy(pid_t tid, SchedPolicy policy) {
     if (tid == 0) {
         tid = GetThreadId();
     }
@@ -154,7 +154,7 @@ bool schedboost_enabled() {
     return enabled;
 }
 
-static int getCGroupSubsys(int tid, const char* subsys, std::string& subgroup) {
+static int getCGroupSubsys(pid_t tid, const char* subsys, std::string& subgroup) {
     auto controller = CgroupMap::GetInstance().FindController(subsys);
 
     if (!controller.IsUsable()) return -1;
@@ -185,7 +185,7 @@ static int get_sched_policy_from_group(const std::string& group, SchedPolicy* po
     return 0;
 }
 
-int get_sched_policy(int tid, SchedPolicy* policy) {
+int get_sched_policy(pid_t tid, SchedPolicy* policy) {
     if (tid == 0) {
         tid = GetThreadId();
     }

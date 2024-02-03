@@ -42,15 +42,14 @@
 #include <fs_mgr/file_wait.h>
 #include <fs_mgr_overlayfs.h>
 #include <fstab/fstab.h>
-#include <libdm/dm.h>
 #include <libgsi/libgsi.h>
 #include <storage_literals/storage_literals.h>
 
+#include "fs_mgr_overlayfs_control.h"
 #include "fs_mgr_overlayfs_mount.h"
 #include "fs_mgr_priv.h"
 
 using namespace std::literals;
-using namespace android::dm;
 using namespace android::fs_mgr;
 using namespace android::storage_literals;
 
@@ -99,7 +98,12 @@ std::string GetEncodedBaseDirForMountPoint(const std::string& mount_point) {
     if (mount_point.empty() || !android::base::Realpath(mount_point, &normalized_path)) {
         return "";
     }
-    return android::base::StringReplace(normalized_path, "/", "@", true);
+    std::string_view sv(normalized_path);
+    if (sv != "/") {
+        android::base::ConsumePrefix(&sv, "/");
+        android::base::ConsumeSuffix(&sv, "/");
+    }
+    return android::base::StringReplace(sv, "/", "@", true);
 }
 
 static bool fs_mgr_is_dir(const std::string& path) {
@@ -302,6 +306,25 @@ static bool fs_mgr_overlayfs_move_mount(const std::string& source, const std::st
     return true;
 }
 
+static bool fs_mgr_overlayfs_mount(const std::string& mount_point, const std::string& options) {
+    auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
+    for (const auto& opt : android::base::Split(options, ",")) {
+        if (android::base::StartsWith(opt, kUpperdirOption)) {
+            report = report + "," + opt;
+            break;
+        }
+    }
+    report = report + ")=";
+    auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
+                     options.c_str());
+    if (ret) {
+        PERROR << report << ret;
+    } else {
+        LINFO << report << ret;
+    }
+    return !ret;
+}
+
 struct mount_info {
     std::string mount_point;
     bool shared_flag;
@@ -488,25 +511,7 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
         moved_mounts.push_back(std::move(new_entry));
     }
 
-    // hijack __mount() report format to help triage
-    auto report = "__mount(source=overlay,target="s + mount_point + ",type=overlay";
-    const auto opt_list = android::base::Split(options, ",");
-    for (const auto& opt : opt_list) {
-        if (android::base::StartsWith(opt, kUpperdirOption)) {
-            report = report + "," + opt;
-            break;
-        }
-    }
-    report = report + ")=";
-
-    auto ret = mount("overlay", mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
-                     options.c_str());
-    if (ret) {
-        retval = false;
-        PERROR << report << ret;
-    } else {
-        LINFO << report << ret;
-    }
+    retval &= fs_mgr_overlayfs_mount(mount_point, options);
 
     // Move submounts back.
     for (const auto& entry : moved_mounts) {
@@ -590,45 +595,6 @@ bool MountScratch(const std::string& device_path, bool readonly) {
         return false;
     }
     return true;
-}
-
-// Note: The scratch partition of DSU is managed by gsid, and should be initialized during
-// first-stage-mount. Just check if the DM device for DSU scratch partition is created or not.
-static std::string GetDsuScratchDevice() {
-    auto& dm = DeviceMapper::Instance();
-    std::string device;
-    if (dm.GetState(android::gsi::kDsuScratch) != DmDeviceState::INVALID &&
-        dm.GetDmDevicePathByName(android::gsi::kDsuScratch, &device)) {
-        return device;
-    }
-    return "";
-}
-
-// This returns the scratch device that was detected during early boot (first-
-// stage init). If the device was created later, for example during setup for
-// the adb remount command, it can return an empty string since it does not
-// query ImageManager. (Note that ImageManager in first-stage init will always
-// use device-mapper, since /data is not available to use loop devices.)
-static std::string GetBootScratchDevice() {
-    // Note: fs_mgr_is_dsu_running() always returns false in recovery or fastbootd.
-    if (fs_mgr_is_dsu_running()) {
-        return GetDsuScratchDevice();
-    }
-
-    auto& dm = DeviceMapper::Instance();
-
-    // If there is a scratch partition allocated in /data or on super, we
-    // automatically prioritize that over super_other or system_other.
-    // Some devices, for example, have a write-protected eMMC and the
-    // super partition cannot be used even if it exists.
-    std::string device;
-    auto partition_name = android::base::Basename(kScratchMountPoint);
-    if (dm.GetState(partition_name) != DmDeviceState::INVALID &&
-        dm.GetDmDevicePathByName(partition_name, &device)) {
-        return device;
-    }
-
-    return "";
 }
 
 // NOTE: OverlayfsSetupAllowed() must be "stricter" than OverlayfsTeardownAllowed().
@@ -814,3 +780,38 @@ bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overl
     }
     return false;
 }
+
+namespace android {
+namespace fs_mgr {
+
+void MountOverlayfs(const FstabEntry& fstab_entry, bool* scratch_can_be_mounted) {
+    if (!OverlayfsSetupAllowed()) {
+        return;
+    }
+    const auto candidates = fs_mgr_overlayfs_candidate_list({fstab_entry});
+    if (candidates.empty()) {
+        return;
+    }
+    const auto& entry = candidates.front();
+    if (fs_mgr_is_verity_enabled(entry)) {
+        return;
+    }
+    const auto mount_point = fs_mgr_mount_point(entry.mount_point);
+    if (fs_mgr_overlayfs_already_mounted(mount_point)) {
+        return;
+    }
+    if (*scratch_can_be_mounted) {
+        *scratch_can_be_mounted = false;
+        if (!fs_mgr_overlayfs_already_mounted(kScratchMountPoint, false)) {
+            TryMountScratch();
+        }
+    }
+    const auto options = fs_mgr_get_overlayfs_options(entry);
+    if (options.empty()) {
+        return;
+    }
+    fs_mgr_overlayfs_mount(mount_point, options);
+}
+
+}  // namespace fs_mgr
+}  // namespace android

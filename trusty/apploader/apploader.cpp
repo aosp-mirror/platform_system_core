@@ -107,7 +107,11 @@ static unique_fd read_file(const char* file_name, off64_t* out_file_size) {
         return {};
     }
 
-    assert(st.st_size >= 0);
+    if (st.st_size == 0) {
+        LOG(ERROR) << "Zero length file '" << file_name << "'";
+        return {};
+    }
+
     file_size = st.st_size;
 
     /* The dmabuf size needs to be a multiple of the page size */
@@ -123,7 +127,8 @@ static unique_fd read_file(const char* file_name, off64_t* out_file_size) {
     BufferAllocator alloc;
     unique_fd dmabuf_fd(alloc.Alloc(kDmabufSystemHeapName, file_page_size));
     if (!dmabuf_fd.ok()) {
-        LOG(ERROR) << "Error creating dmabuf: " << dmabuf_fd.get();
+        LOG(ERROR) << "Error creating dmabuf for " << file_page_size
+                   << " bytes: " << dmabuf_fd.get();
         return dmabuf_fd;
     }
 

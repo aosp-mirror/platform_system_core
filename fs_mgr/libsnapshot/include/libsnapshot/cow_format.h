@@ -16,8 +16,10 @@
 
 #include <stdint.h>
 
+#include <limits>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 
 namespace android {
 namespace snapshot {
@@ -32,7 +34,7 @@ static constexpr uint32_t kCowVersionMinor = 0;
 static constexpr uint32_t kCowVersionManifest = 2;
 
 static constexpr uint32_t kMinCowVersion = 1;
-static constexpr uint32_t kMaxCowVersion = 2;
+static constexpr uint32_t kMaxCowVersion = 3;
 
 // Normally, this should be kMaxCowVersion. When a new version is under testing
 // it may be the previous value of kMaxCowVersion.
@@ -99,13 +101,13 @@ struct ResumePoint {
     // monotonically increasing value used by update_engine
     uint64_t label;
     // Index of last CowOperation guaranteed to be resumable
-    uint32_t op_index;
+    uint64_t op_index;
 } __attribute__((packed));
 
 static constexpr uint8_t kNumResumePoints = 4;
 
 struct CowHeaderV3 : public CowHeader {
-    // Number of sequence data stored (each of which is a 32 byte integer)
+    // Number of sequence data stored (each of which is a 32 bit integer)
     uint64_t sequence_data_count;
     // Number of currently written resume points &&
     uint32_t resume_point_count;
@@ -113,16 +115,38 @@ struct CowHeaderV3 : public CowHeader {
     uint32_t resume_point_max;
     // Number of CowOperationV3 structs in the operation buffer, currently and total
     // region size.
-    uint32_t op_count;
-    uint32_t op_count_max;
+    uint64_t op_count;
+    uint64_t op_count_max;
     // Compression Algorithm
     uint32_t compression_algorithm;
+    // Max compression size supported
+    uint32_t max_compression_size;
 } __attribute__((packed));
+
+enum class CowOperationType : uint8_t {
+    kCowCopyOp = 1,
+    kCowReplaceOp = 2,
+    kCowZeroOp = 3,
+    kCowLabelOp = 4,
+    kCowClusterOp = 5,
+    kCowXorOp = 6,
+    kCowSequenceOp = 7,
+    kCowFooterOp = std::numeric_limits<uint8_t>::max(),
+};
+
+static constexpr CowOperationType kCowCopyOp = CowOperationType::kCowCopyOp;
+static constexpr CowOperationType kCowReplaceOp = CowOperationType::kCowReplaceOp;
+static constexpr CowOperationType kCowZeroOp = CowOperationType::kCowZeroOp;
+static constexpr CowOperationType kCowLabelOp = CowOperationType::kCowLabelOp;
+static constexpr CowOperationType kCowClusterOp = CowOperationType::kCowClusterOp;
+static constexpr CowOperationType kCowXorOp = CowOperationType::kCowXorOp;
+static constexpr CowOperationType kCowSequenceOp = CowOperationType::kCowSequenceOp;
+static constexpr CowOperationType kCowFooterOp = CowOperationType::kCowFooterOp;
 
 // This structure is the same size of a normal Operation, but is repurposed for the footer.
 struct CowFooterOperation {
     // The operation code (always kCowFooterOp).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -141,7 +165,7 @@ struct CowFooterOperation {
 // V2 version of COW. On disk format for older devices
 struct CowOperationV2 {
     // The operation code (see the constants and structures below).
-    uint8_t type;
+    CowOperationType type;
 
     // If this operation reads from the data section of the COW, this contains
     // the compression type of that data (see constants below).
@@ -173,18 +197,29 @@ struct CowOperationV2 {
     uint64_t source;
 } __attribute__((packed));
 
+static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
+static constexpr uint64_t kCowOpSourceInfoTypeBit = 60;
+static constexpr uint64_t kCowOpSourceInfoTypeNumBits = 4;
+static constexpr uint64_t kCowOpSourceInfoTypeMask = (1ULL << kCowOpSourceInfoTypeNumBits) - 1;
+
+static constexpr uint64_t kCowOpSourceInfoCompressionBit = 57;
+static constexpr uint64_t kCowOpSourceInfoCompressionNumBits = 3;
+static constexpr uint64_t kCowOpSourceInfoCompressionMask =
+        ((1ULL << kCowOpSourceInfoCompressionNumBits) - 1);
+
 // The on disk format of cow (currently ==  CowOperation)
 struct CowOperationV3 {
-    // The operation code (see the constants and structures below).
-    uint8_t type;
-
     // If this operation reads from the data section of the COW, this contains
     // the length.
-    uint16_t data_length;
+    uint32_t data_length;
 
     // The block of data in the new image that this operation modifies.
     uint32_t new_block;
 
+    // source_info with have the following layout
+    // |--- 4 bits -- | --------- 3 bits ------ | --- 9 bits --- | --- 48 bits ---|
+    // |--- type ---  | -- compression factor --| --- unused --- | --- source --- |
+    //
     // The value of |source| depends on the operation code.
     //
     // CopyOp: a 32-bit block location in the source image.
@@ -196,19 +231,58 @@ struct CowOperationV3 {
     // For ops other than Label:
     //  Bits 47-62 are reserved and must be zero.
     // A block is compressed if it’s data is < block_sz
-    uint64_t source_info;
+    //
+    // Bits [57-59] represents the compression factor.
+    //
+    //       Compression - factor
+    // ==========================
+    // 000 -  4k
+    // 001 -  8k
+    // 010 -  16k
+    // ...
+    // 110 -  256k
+    //
+    uint64_t source_info_;
+    constexpr uint64_t source() const { return source_info_ & kCowOpSourceInfoDataMask; }
+    constexpr void set_source(uint64_t source) {
+        // Clear the first 48 bit first
+        source_info_ &= ~kCowOpSourceInfoDataMask;
+        // Set the actual source field
+        source_info_ |= source & kCowOpSourceInfoDataMask;
+    }
+    constexpr CowOperationType type() const {
+        // this is a mask to grab the first 4 bits of a 64 bit integer
+        const auto type = (source_info_ >> kCowOpSourceInfoTypeBit) & kCowOpSourceInfoTypeMask;
+        return static_cast<CowOperationType>(type);
+    }
+    constexpr void set_type(CowOperationType type) {
+        // Clear the top 4 bits first
+        source_info_ &= ((1ULL << kCowOpSourceInfoTypeBit) - 1);
+        // set the actual type bits
+        source_info_ |= (static_cast<uint64_t>(type) & kCowOpSourceInfoTypeMask)
+                        << kCowOpSourceInfoTypeBit;
+    }
+    constexpr void set_compression_bits(uint8_t compression_factor) {
+        // Clear the 3 bits from bit 57 - [57-59]
+        source_info_ &= ~(kCowOpSourceInfoCompressionMask << kCowOpSourceInfoCompressionBit);
+        // Set the actual compression factor
+        source_info_ |=
+                (static_cast<uint64_t>(compression_factor) & kCowOpSourceInfoCompressionMask)
+                << kCowOpSourceInfoCompressionBit;
+    }
+    constexpr uint8_t compression_bits() const {
+        // Grab the 3 bits from [57-59]
+        const auto compression_factor =
+                (source_info_ >> kCowOpSourceInfoCompressionBit) & kCowOpSourceInfoCompressionMask;
+        return static_cast<uint8_t>(compression_factor);
+    }
 } __attribute__((packed));
 
+// Ensure that getters/setters added to CowOperationV3 does not increases size
+// of CowOperationV3 struct(no virtual method tables added).
+static_assert(std::is_trivially_copyable_v<CowOperationV3>);
+static_assert(std::is_standard_layout_v<CowOperationV3>);
 static_assert(sizeof(CowOperationV2) == sizeof(CowFooterOperation));
-
-static constexpr uint8_t kCowCopyOp = 1;
-static constexpr uint8_t kCowReplaceOp = 2;
-static constexpr uint8_t kCowZeroOp = 3;
-static constexpr uint8_t kCowLabelOp = 4;
-static constexpr uint8_t kCowClusterOp = 5;
-static constexpr uint8_t kCowXorOp = 6;
-static constexpr uint8_t kCowSequenceOp = 7;
-static constexpr uint8_t kCowFooterOp = -1;
 
 enum CowCompressionAlgorithm : uint8_t {
     kCowCompressNone = 0,
@@ -225,12 +299,6 @@ struct CowCompression {
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
 static constexpr uint8_t kCowReadAheadInProgress = 1;
 static constexpr uint8_t kCowReadAheadDone = 2;
-
-static constexpr uint64_t kCowOpSourceInfoDataMask = (1ULL << 48) - 1;
-
-static inline uint64_t GetCowOpSourceInfoData(const CowOperation& op) {
-    return op.source_info & kCowOpSourceInfoDataMask;
-}
 
 static constexpr off_t GetSequenceOffset(const CowHeaderV3& header) {
     return header.prefix.header_size + header.buffer_size;
@@ -272,9 +340,11 @@ static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& arg);
 
-std::ostream& operator<<(std::ostream& os, CowOperation const& arg);
+std::ostream& operator<<(std::ostream& os, CowOperationV3 const& arg);
 
 std::ostream& operator<<(std::ostream& os, ResumePoint const& arg);
+
+std::ostream& operator<<(std::ostream& os, CowOperationType cow_type);
 
 int64_t GetNextOpOffset(const CowOperationV2& op, uint32_t cluster_size);
 int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_size);
@@ -287,5 +357,11 @@ bool IsOrderedOp(const CowOperation& op);
 // Convert compression name to internal value.
 std::optional<CowCompressionAlgorithm> CompressionAlgorithmFromString(std::string_view name);
 
+// Return block size used for compression
+size_t CowOpCompressionSize(const CowOperation* op, size_t block_size);
+
+// Return the relative offset of the I/O block which the CowOperation
+// multi-block compression
+bool GetBlockOffset(const CowOperation* op, uint64_t io_block, size_t block_size, off_t* offset);
 }  // namespace snapshot
 }  // namespace android

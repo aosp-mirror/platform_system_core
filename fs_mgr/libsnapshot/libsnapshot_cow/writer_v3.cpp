@@ -34,10 +34,13 @@
 #include <zlib.h>
 
 #include <fcntl.h>
+#include <libsnapshot/cow_compress.h>
 #include <libsnapshot_cow/parser_v3.h>
 #include <linux/fs.h>
+#include <storage_literals/storage_literals.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <numeric>
 
 // The info messages here are spammy, but as useful for update_engine. Disable
 // them when running on the host.
@@ -52,11 +55,36 @@ namespace snapshot {
 
 static_assert(sizeof(off_t) == sizeof(uint64_t));
 
+using namespace android::storage_literals;
 using android::base::unique_fd;
 
+// Divide |x| by |y| and round up to the nearest integer.
+constexpr uint64_t DivRoundUp(uint64_t x, uint64_t y) {
+    return (x + y - 1) / y;
+}
+
 CowWriterV3::CowWriterV3(const CowOptions& options, unique_fd&& fd)
-    : CowWriterBase(options, std::move(fd)) {
+    : CowWriterBase(options, std::move(fd)), batch_size_(std::max<size_t>(options.cluster_ops, 1)) {
     SetupHeaders();
+}
+
+void CowWriterV3::InitWorkers() {
+    if (num_compress_threads_ <= 1) {
+        LOG_INFO << "Not creating new threads for compression.";
+        return;
+    }
+    compress_threads_.reserve(num_compress_threads_);
+    compress_threads_.clear();
+    threads_.reserve(num_compress_threads_);
+    threads_.clear();
+    for (size_t i = 0; i < num_compress_threads_; i++) {
+        std::unique_ptr<ICompressor> compressor =
+                ICompressor::Create(compression_, header_.max_compression_size);
+        auto&& wt = compress_threads_.emplace_back(
+                std::make_unique<CompressWorker>(std::move(compressor)));
+        threads_.emplace_back(std::thread([wt = wt.get()]() { wt->RunThread(); }));
+    }
+    LOG(INFO) << num_compress_threads_ << " thread used for compression";
 }
 
 void CowWriterV3::SetupHeaders() {
@@ -78,16 +106,23 @@ void CowWriterV3::SetupHeaders() {
     // WIP: not quite sure how some of these are calculated yet, assuming buffer_size is determined
     // during COW size estimation
     header_.sequence_data_count = 0;
+
     header_.resume_point_count = 0;
     header_.resume_point_max = kNumResumePoints;
     header_.op_count = 0;
     header_.op_count_max = 0;
     header_.compression_algorithm = kCowCompressNone;
-    return;
+    header_.max_compression_size = options_.compression_factor;
 }
 
 bool CowWriterV3::ParseOptions() {
-    num_compress_threads_ = std::max(options_.num_compress_threads, 1);
+    if (!header_.max_compression_size || !IsBlockAligned(header_.max_compression_size)) {
+        LOG(ERROR) << "Invalid compression factor: " << header_.max_compression_size;
+        return false;
+    }
+
+    LOG(INFO) << "Compression factor: " << header_.max_compression_size;
+    num_compress_threads_ = std::max(int(options_.num_compress_threads), 1);
     auto parts = android::base::Split(options_.compression, ",");
     if (parts.size() > 2) {
         LOG(ERROR) << "failed to parse compression parameters: invalid argument count: "
@@ -102,6 +137,18 @@ bool CowWriterV3::ParseOptions() {
     header_.compression_algorithm = *algorithm;
     header_.op_count_max = options_.op_count_max;
 
+    if (!IsEstimating() && header_.op_count_max == 0) {
+        if (!options_.max_blocks.has_value()) {
+            LOG(ERROR) << "can't size op buffer size since op_count_max is 0 and max_blocks is not "
+                          "set.";
+            return false;
+        }
+        LOG(INFO) << "op count max is read in as 0. Setting to "
+                     "num blocks in partition "
+                  << options_.max_blocks.value();
+        header_.op_count_max = options_.max_blocks.value();
+    }
+
     if (parts.size() > 1) {
         if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
             LOG(ERROR) << "failed to parse compression level invalid type: " << parts[1];
@@ -113,11 +160,47 @@ bool CowWriterV3::ParseOptions() {
     }
 
     compression_.algorithm = *algorithm;
-    compressor_ = ICompressor::Create(compression_, header_.block_size);
+    if (compression_.algorithm != kCowCompressNone) {
+        compressor_ = ICompressor::Create(compression_, header_.max_compression_size);
+        if (compressor_ == nullptr) {
+            LOG(ERROR) << "Failed to create compressor for " << compression_.algorithm;
+            return false;
+        }
+    }
+
+    if (options_.cluster_ops &&
+        (android::base::GetBoolProperty("ro.virtual_ab.batch_writes", false) ||
+         options_.batch_write)) {
+        batch_size_ = std::max<size_t>(options_.cluster_ops, 1);
+        data_vec_.reserve(batch_size_);
+        cached_data_.reserve(batch_size_);
+        cached_ops_.reserve(batch_size_);
+    }
+
+    if (batch_size_ > 1) {
+        LOG(INFO) << "Batch writes: enabled with batch size " << batch_size_;
+    } else {
+        LOG(INFO) << "Batch writes: disabled";
+    }
+    if (android::base::GetBoolProperty("ro.virtual_ab.compression.threads", false) &&
+        options_.num_compress_threads) {
+        num_compress_threads_ = options_.num_compress_threads;
+    }
+    InitWorkers();
+
     return true;
 }
 
-CowWriterV3::~CowWriterV3() {}
+CowWriterV3::~CowWriterV3() {
+    for (const auto& t : compress_threads_) {
+        t->Finalize();
+    }
+    for (auto& t : threads_) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+}
 
 bool CowWriterV3::Initialize(std::optional<uint64_t> label) {
     if (!InitFd() || !ParseOptions()) {
@@ -131,6 +214,14 @@ bool CowWriterV3::Initialize(std::optional<uint64_t> label) {
         if (!OpenForAppend(*label)) {
             return false;
         }
+    }
+
+    // TODO: b/322279333
+    // Set compression factor to 4k during estimation.
+    // Once COW estimator is ready to support variable
+    // block size, this check has to be removed.
+    if (IsEstimating()) {
+        header_.max_compression_size = header_.block_size;
     }
 
     return true;
@@ -176,7 +267,7 @@ bool CowWriterV3::OpenForWrite() {
 }
 
 bool CowWriterV3::OpenForAppend(uint64_t label) {
-    CowHeaderV3 header_v3;
+    CowHeaderV3 header_v3{};
     if (!ReadCowHeader(fd_, &header_v3)) {
         LOG(ERROR) << "Couldn't read Cow Header";
         return false;
@@ -206,17 +297,36 @@ bool CowWriterV3::OpenForAppend(uint64_t label) {
     return true;
 }
 
+bool CowWriterV3::CheckOpCount(size_t op_count) {
+    if (IsEstimating()) {
+        return true;
+    }
+    if (header_.op_count + cached_ops_.size() + op_count > header_.op_count_max) {
+        LOG(ERROR) << "Current number of ops on disk: " << header_.op_count
+                   << ", number of ops cached in memory: " << cached_ops_.size()
+                   << ", number of ops attempting to write: " << op_count
+                   << ", this will exceed max op count " << header_.op_count_max;
+        return false;
+    }
+    return true;
+}
+
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     for (size_t i = 0; i < num_blocks; i++) {
-        CowOperationV3 op = {};
-        op.type = kCowCopyOp;
+        CowOperationV3& op = cached_ops_.emplace_back();
+        op.set_type(kCowCopyOp);
         op.new_block = new_block + i;
-        op.source_info = old_block + i;
-        if (!WriteOperation(op)) {
+        op.set_source(old_block + i);
+    }
+
+    if (NeedsFlush()) {
+        if (!FlushCacheOps()) {
             return false;
         }
     }
-
     return true;
 }
 
@@ -229,56 +339,98 @@ bool CowWriterV3::EmitXorBlocks(uint32_t new_block_start, const void* data, size
     return EmitBlocks(new_block_start, data, size, old_block, offset, kCowXorOp);
 }
 
-bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
-                             uint64_t old_block, uint16_t offset, uint8_t type) {
-    const size_t num_blocks = (size / header_.block_size);
-    for (size_t i = 0; i < num_blocks; i++) {
-        const uint8_t* const iter =
-                reinterpret_cast<const uint8_t*>(data) + (header_.block_size * i);
+bool CowWriterV3::NeedsFlush() const {
+    // Allow bigger batch sizes for ops without data. A single CowOperationV3
+    // struct uses 14 bytes of memory, even if we cache 200 * 16 ops in memory,
+    // it's only ~44K.
+    return cached_data_.size() >= batch_size_ || cached_ops_.size() >= batch_size_ * 16;
+}
 
-        CowOperation op = {};
-        op.new_block = new_block_start + i;
+bool CowWriterV3::ConstructCowOpCompressedBuffers(uint64_t new_block_start, const void* data,
+                                                  uint64_t old_block, uint16_t offset,
+                                                  CowOperationType type, size_t blocks_to_write) {
+    size_t compressed_bytes = 0;
+    auto&& blocks = CompressBlocks(blocks_to_write, data, type);
+    if (blocks.empty()) {
+        LOG(ERROR) << "Failed to compress blocks " << new_block_start << ", " << blocks_to_write
+                   << ", actual number of blocks received from compressor " << blocks.size();
+        return false;
+    }
+    size_t blocks_written = 0;
+    for (size_t blk_index = 0; blk_index < blocks.size(); blk_index++) {
+        CowOperation& op = cached_ops_.emplace_back();
+        auto& vec = data_vec_.emplace_back();
+        CompressedBuffer buffer = std::move(blocks[blk_index]);
+        auto& compressed_data = cached_data_.emplace_back(std::move(buffer.compressed_data));
+        op.new_block = new_block_start + blocks_written;
 
-        op.type = type;
+        op.set_type(type);
+        op.set_compression_bits(std::log2(buffer.compression_factor / header_.block_size));
+
         if (type == kCowXorOp) {
-            op.source_info = (old_block + i) * header_.block_size + offset;
+            op.set_source((old_block + blocks_written) * header_.block_size + offset);
         } else {
-            op.source_info = next_data_pos_;
+            op.set_source(next_data_pos_ + compressed_bytes);
         }
-        std::basic_string<uint8_t> compressed_data;
-        const void* out_data = iter;
 
-        op.data_length = header_.block_size;
+        vec = {.iov_base = compressed_data.data(), .iov_len = compressed_data.size()};
+        op.data_length = vec.iov_len;
+        compressed_bytes += op.data_length;
+        blocks_written += (buffer.compression_factor / header_.block_size);
+    }
+    if (blocks_written != blocks_to_write) {
+        LOG(ERROR) << "Total compressed blocks: " << blocks_written
+                   << " Expected: " << blocks_to_write;
+        return false;
+    }
+    return true;
+}
 
-        if (compression_.algorithm) {
-            if (!compressor_) {
-                PLOG(ERROR) << "Compressor not initialized";
-                return false;
-            }
-            compressed_data = compressor_->Compress(out_data, header_.block_size);
-            if (compressed_data.size() < op.data_length) {
-                out_data = compressed_data.data();
-                op.data_length = compressed_data.size();
-            }
-        }
-        if (!WriteOperation(op, out_data, op.data_length)) {
-            PLOG(ERROR) << "AddRawBlocks with compression: write failed. new block: "
-                        << new_block_start << " compression: " << compression_.algorithm;
+bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t size,
+                             uint64_t old_block, uint16_t offset, CowOperationType type) {
+    if (compression_.algorithm != kCowCompressNone && compressor_ == nullptr) {
+        LOG(ERROR) << "Compression algorithm is " << compression_.algorithm
+                   << " but compressor is uninitialized.";
+        return false;
+    }
+    const auto bytes = reinterpret_cast<const uint8_t*>(data);
+    const size_t num_blocks = (size / header_.block_size);
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
+    for (size_t i = 0; i < num_blocks;) {
+        const size_t blocks_to_write =
+                std::min<size_t>(batch_size_ - cached_data_.size(), num_blocks - i);
+
+        if (!ConstructCowOpCompressedBuffers(new_block_start + i, bytes + header_.block_size * i,
+                                             old_block + i, offset, type, blocks_to_write)) {
             return false;
         }
+
+        if (NeedsFlush() && !FlushCacheOps()) {
+            LOG(ERROR) << "EmitBlocks with compression: write failed. new block: "
+                       << new_block_start << " compression: " << compression_.algorithm
+                       << ", op type: " << type;
+            return false;
+        }
+
+        i += blocks_to_write;
     }
 
     return true;
 }
 
-bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, uint64_t num_blocks) {
+bool CowWriterV3::EmitZeroBlocks(uint64_t new_block_start, const uint64_t num_blocks) {
+    if (!CheckOpCount(num_blocks)) {
+        return false;
+    }
     for (uint64_t i = 0; i < num_blocks; i++) {
-        CowOperationV3 op;
-        op.type = kCowZeroOp;
-        op.data_length = 0;
+        auto& op = cached_ops_.emplace_back();
+        op.set_type(kCowZeroOp);
         op.new_block = new_block_start + i;
-        op.source_info = 0;
-        if (!WriteOperation(op)) {
+    }
+    if (NeedsFlush()) {
+        if (!FlushCacheOps()) {
             return false;
         }
     }
@@ -289,6 +441,10 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
     // remove all labels greater than this current one. we want to avoid the situation of adding
     // in
     // duplicate labels with differing op values
+    if (!FlushCacheOps()) {
+        LOG(ERROR) << "Failed to flush cached ops before emitting label " << label;
+        return false;
+    }
     auto remove_if_callback = [&](const auto& resume_point) -> bool {
         if (resume_point.label >= label) return true;
         return false;
@@ -316,8 +472,21 @@ bool CowWriterV3::EmitLabel(uint64_t label) {
 }
 
 bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
-    // TODO: size sequence buffer based on options
+    if (header_.op_count > 0 || !cached_ops_.empty()) {
+        LOG(ERROR) << "There's " << header_.op_count << " operations written to disk and "
+                   << cached_ops_.size()
+                   << " ops cached in memory. Writing sequence data is only allowed before all "
+                      "operation writes.";
+        return false;
+    }
+
     header_.sequence_data_count = num_ops;
+
+    // Ensure next_data_pos_ is updated as previously initialized + the newly added sequence buffer.
+    CHECK_EQ(next_data_pos_ + header_.sequence_data_count * sizeof(uint32_t),
+             GetDataOffset(header_));
+    next_data_pos_ = GetDataOffset(header_);
+
     if (!android::base::WriteFullyAtOffset(fd_, data, sizeof(data[0]) * num_ops,
                                            GetSequenceOffset(header_))) {
         PLOG(ERROR) << "writing sequence buffer failed";
@@ -326,34 +495,232 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
     return true;
 }
 
-bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, size_t size) {
+bool CowWriterV3::FlushCacheOps() {
+    if (cached_ops_.empty()) {
+        if (!data_vec_.empty()) {
+            LOG(ERROR) << "Cached ops is empty, but data iovec has size: " << data_vec_.size()
+                       << " this is definitely a bug.";
+            return false;
+        }
+        return true;
+    }
+    size_t bytes_written = 0;
+
+    for (auto& op : cached_ops_) {
+        if (op.type() == kCowReplaceOp) {
+            op.set_source(next_data_pos_ + bytes_written);
+        }
+        bytes_written += op.data_length;
+    }
+    if (!WriteOperation({cached_ops_.data(), cached_ops_.size()},
+                        {data_vec_.data(), data_vec_.size()})) {
+        LOG(ERROR) << "Failed to flush " << cached_ops_.size() << " ops to disk";
+        return false;
+    }
+    cached_ops_.clear();
+    cached_data_.clear();
+    data_vec_.clear();
+    return true;
+}
+
+size_t CowWriterV3::GetCompressionFactor(const size_t blocks_to_compress,
+                                         CowOperationType type) const {
+    // For XOR ops, we don't support bigger block size compression yet.
+    // For bigger block size support, snapshot-merge also has to changed. We
+    // aren't there yet; hence, just stick to 4k for now until
+    // snapshot-merge is ready for XOR operation.
+    if (type == kCowXorOp) {
+        return header_.block_size;
+    }
+
+    size_t compression_factor = header_.max_compression_size;
+    while (compression_factor > header_.block_size) {
+        size_t num_blocks = compression_factor / header_.block_size;
+        if (blocks_to_compress >= num_blocks) {
+            return compression_factor;
+        }
+        compression_factor >>= 1;
+    }
+    return header_.block_size;
+}
+
+std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::ProcessBlocksWithNoCompression(
+        const size_t num_blocks, const void* data, CowOperationType type) {
+    size_t blocks_to_compress = num_blocks;
+    const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
+    std::vector<CompressedBuffer> compressed_vec;
+
+    while (blocks_to_compress) {
+        CompressedBuffer buffer;
+
+        const size_t compression_factor = GetCompressionFactor(blocks_to_compress, type);
+        size_t num_blocks = compression_factor / header_.block_size;
+
+        buffer.compression_factor = compression_factor;
+        buffer.compressed_data.resize(compression_factor);
+
+        // No compression. Just copy the data as-is.
+        std::memcpy(buffer.compressed_data.data(), iter, compression_factor);
+
+        compressed_vec.push_back(std::move(buffer));
+        blocks_to_compress -= num_blocks;
+        iter += compression_factor;
+    }
+    return compressed_vec;
+}
+
+std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::ProcessBlocksWithCompression(
+        const size_t num_blocks, const void* data, CowOperationType type) {
+    size_t blocks_to_compress = num_blocks;
+    const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
+    std::vector<CompressedBuffer> compressed_vec;
+
+    while (blocks_to_compress) {
+        CompressedBuffer buffer;
+
+        const size_t compression_factor = GetCompressionFactor(blocks_to_compress, type);
+        size_t num_blocks = compression_factor / header_.block_size;
+
+        buffer.compression_factor = compression_factor;
+        // Compress the blocks
+        buffer.compressed_data = compressor_->Compress(iter, compression_factor);
+        if (buffer.compressed_data.empty()) {
+            PLOG(ERROR) << "Compression failed";
+            return {};
+        }
+
+        // Check if the buffer was indeed compressed
+        if (buffer.compressed_data.size() >= compression_factor) {
+            buffer.compressed_data.resize(compression_factor);
+            std::memcpy(buffer.compressed_data.data(), iter, compression_factor);
+        }
+
+        compressed_vec.push_back(std::move(buffer));
+        blocks_to_compress -= num_blocks;
+        iter += compression_factor;
+    }
+    return compressed_vec;
+}
+
+std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::ProcessBlocksWithThreadedCompression(
+        const size_t num_blocks, const void* data, CowOperationType type) {
+    const size_t num_threads = num_compress_threads_;
+    const size_t blocks_per_thread = DivRoundUp(num_blocks, num_threads);
+    const uint8_t* iter = reinterpret_cast<const uint8_t*>(data);
+
+    std::vector<CompressedBuffer> compressed_vec;
+    // Submit the blocks per thread. The retrieval of
+    // compressed buffers has to be done in the same order.
+    // We should not poll for completed buffers in a different order as the
+    // buffers are tightly coupled with block ordering.
+    for (size_t i = 0; i < num_threads; i++) {
+        CompressWorker* worker = compress_threads_[i].get();
+        auto blocks_in_batch = std::min(num_blocks - i * blocks_per_thread, blocks_per_thread);
+        // Enqueue the blocks to be compressed for each thread.
+        while (blocks_in_batch) {
+            CompressedBuffer buffer;
+
+            const size_t compression_factor = GetCompressionFactor(blocks_in_batch, type);
+            size_t num_blocks = compression_factor / header_.block_size;
+
+            buffer.compression_factor = compression_factor;
+            worker->EnqueueCompressBlocks(iter, compression_factor, 1);
+            compressed_vec.push_back(std::move(buffer));
+            blocks_in_batch -= num_blocks;
+            iter += compression_factor;
+        }
+    }
+
+    // Fetch compressed buffers from the threads
+    std::vector<std::basic_string<uint8_t>> compressed_buf;
+    compressed_buf.clear();
+    for (size_t i = 0; i < num_threads; i++) {
+        CompressWorker* worker = compress_threads_[i].get();
+        if (!worker->GetCompressedBuffers(&compressed_buf)) {
+            return {};
+        }
+    }
+
+    if (compressed_vec.size() != compressed_buf.size()) {
+        LOG(ERROR) << "Compressed buffer size: " << compressed_buf.size()
+                   << " - Expected: " << compressed_vec.size();
+        return {};
+    }
+
+    iter = reinterpret_cast<const uint8_t*>(data);
+    // Walk through all the compressed buffers
+    for (size_t i = 0; i < compressed_buf.size(); i++) {
+        auto& buffer = compressed_vec[i];
+        auto& block = compressed_buf[i];
+        size_t block_size = buffer.compression_factor;
+        // Check if the blocks was indeed compressed
+        if (block.size() >= block_size) {
+            buffer.compressed_data.resize(block_size);
+            std::memcpy(buffer.compressed_data.data(), iter, block_size);
+        } else {
+            // Compressed block
+            buffer.compressed_data.resize(block.size());
+            std::memcpy(buffer.compressed_data.data(), block.data(), block.size());
+        }
+        iter += block_size;
+    }
+    return compressed_vec;
+}
+
+std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::CompressBlocks(const size_t num_blocks,
+                                                                       const void* data,
+                                                                       CowOperationType type) {
+    if (compression_.algorithm == kCowCompressNone) {
+        return ProcessBlocksWithNoCompression(num_blocks, data, type);
+    }
+
+    const size_t num_threads = (num_blocks == 1) ? 1 : num_compress_threads_;
+
+    // If no threads are required, just compress the blocks inline.
+    if (num_threads <= 1) {
+        return ProcessBlocksWithCompression(num_blocks, data, type);
+    }
+
+    return ProcessBlocksWithThreadedCompression(num_blocks, data, type);
+}
+
+bool CowWriterV3::WriteOperation(std::basic_string_view<CowOperationV3> ops,
+                                 std::basic_string_view<struct iovec> data) {
+    const auto total_data_size =
+            std::transform_reduce(data.begin(), data.end(), 0, std::plus<size_t>{},
+                                  [](const struct iovec& a) { return a.iov_len; });
     if (IsEstimating()) {
-        header_.op_count++;
-        header_.op_count_max++;
-        next_data_pos_ += op.data_length;
+        header_.op_count += ops.size();
+        if (header_.op_count > header_.op_count_max) {
+            // If we increment op_count_max, the offset of data section would
+            // change. So need to update |next_data_pos_|
+            next_data_pos_ += (header_.op_count - header_.op_count_max) * sizeof(CowOperationV3);
+            header_.op_count_max = header_.op_count;
+        }
+        next_data_pos_ += total_data_size;
         return true;
     }
 
-    if (header_.op_count + 1 > header_.op_count_max) {
-        LOG(ERROR) << "Maximum number of ops reached: " << header_.op_count_max;
+    if (header_.op_count + ops.size() > header_.op_count_max) {
+        LOG(ERROR) << "Current op count " << header_.op_count << ", attempting to write "
+                   << ops.size() << " ops will exceed the max of " << header_.op_count_max;
         return false;
     }
-
     const off_t offset = GetOpOffset(header_.op_count, header_);
-    if (!android::base::WriteFullyAtOffset(fd_, &op, sizeof(op), offset)) {
-        PLOG(ERROR) << "write failed for " << op << " at " << offset;
+    if (!android::base::WriteFullyAtOffset(fd_, ops.data(), ops.size() * sizeof(ops[0]), offset)) {
+        PLOG(ERROR) << "Write failed for " << ops.size() << " ops at " << offset;
         return false;
     }
-    if (data && size > 0) {
-        if (!android::base::WriteFullyAtOffset(fd_, data, size, next_data_pos_)) {
-            PLOG(ERROR) << "write failed for data of size: " << size
-                        << " at offset: " << next_data_pos_;
+    if (!data.empty()) {
+        const auto ret = pwritev(fd_, data.data(), data.size(), next_data_pos_);
+        if (ret != total_data_size) {
+            PLOG(ERROR) << "write failed for data of size: " << data.size()
+                        << " at offset: " << next_data_pos_ << " " << ret;
             return false;
         }
     }
-    header_.op_count++;
-    next_data_pos_ += op.data_length;
-    next_op_pos_ += sizeof(CowOperationV3);
+    header_.op_count += ops.size();
+    next_data_pos_ += total_data_size;
 
     return true;
 }
@@ -361,14 +728,20 @@ bool CowWriterV3::WriteOperation(const CowOperationV3& op, const void* data, siz
 bool CowWriterV3::Finalize() {
     CHECK_GE(header_.prefix.header_size, sizeof(CowHeaderV3));
     CHECK_LE(header_.prefix.header_size, sizeof(header_));
+    if (!FlushCacheOps()) {
+        return false;
+    }
     if (!android::base::WriteFullyAtOffset(fd_, &header_, header_.prefix.header_size, 0)) {
         return false;
     }
     return Sync();
 }
 
-uint64_t CowWriterV3::GetCowSize() {
-    return next_data_pos_;
+CowSizeInfo CowWriterV3::GetCowSizeInfo() const {
+    CowSizeInfo info;
+    info.cow_size = next_data_pos_;
+    info.op_count_max = header_.op_count_max;
+    return info;
 }
 
 }  // namespace snapshot

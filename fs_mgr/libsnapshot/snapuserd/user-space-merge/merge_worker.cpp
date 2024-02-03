@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "merge_worker.h"
 
+#include <libsnapshot/cow_format.h>
 #include <pthread.h>
 
+#include "merge_worker.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -37,6 +38,7 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
     int num_ops = *pending_ops;
     int nr_consecutive = 0;
     bool checkOrderedOp = (replace_zero_vec == nullptr);
+    size_t num_blocks = 1;
 
     do {
         if (!cowop_iter_->AtEnd() && num_ops) {
@@ -48,11 +50,15 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
             *source_offset = cow_op->new_block * BLOCK_SZ;
             if (!checkOrderedOp) {
                 replace_zero_vec->push_back(cow_op);
+                if (cow_op->type() == kCowReplaceOp) {
+                    // Get the number of blocks this op has compressed
+                    num_blocks = (CowOpCompressionSize(cow_op, BLOCK_SZ) / BLOCK_SZ);
+                }
             }
 
             cowop_iter_->Next();
-            num_ops -= 1;
-            nr_consecutive = 1;
+            num_ops -= num_blocks;
+            nr_consecutive = num_blocks;
 
             while (!cowop_iter_->AtEnd() && num_ops) {
                 const CowOperation* op = cowop_iter_->Get();
@@ -66,11 +72,20 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
                 }
 
                 if (!checkOrderedOp) {
+                    if (op->type() == kCowReplaceOp) {
+                        num_blocks = (CowOpCompressionSize(op, BLOCK_SZ) / BLOCK_SZ);
+                        if (num_ops < num_blocks) {
+                            break;
+                        }
+                    } else {
+                        // zero op
+                        num_blocks = 1;
+                    }
                     replace_zero_vec->push_back(op);
                 }
 
-                nr_consecutive += 1;
-                num_ops -= 1;
+                nr_consecutive += num_blocks;
+                num_ops -= num_blocks;
                 cowop_iter_->Next();
             }
         }
@@ -80,16 +95,16 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
 }
 
 bool MergeWorker::MergeReplaceZeroOps() {
-    // Flush after merging 2MB. Since all ops are independent and there is no
+    // Flush after merging 1MB. Since all ops are independent and there is no
     // dependency between COW ops, we will flush the data and the number
     // of ops merged in COW block device. If there is a crash, we will
     // end up replaying some of the COW ops which were already merged. That is
     // ok.
     //
-    // Although increasing this greater than 2MB may help in improving merge
+    // Although increasing this greater than 1MB may help in improving merge
     // times; however, on devices with low memory, this can be problematic
     // when there are multiple merge threads in parallel.
-    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ) * 2;
+    int total_ops_merged_per_commit = (PAYLOAD_BUFFER_SZ / BLOCK_SZ);
     int num_ops_merged = 0;
 
     SNAP_LOG(INFO) << "MergeReplaceZeroOps started....";
@@ -108,19 +123,25 @@ bool MergeWorker::MergeReplaceZeroOps() {
 
         for (size_t i = 0; i < replace_zero_vec.size(); i++) {
             const CowOperation* cow_op = replace_zero_vec[i];
-
-            void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ);
-            if (!buffer) {
-                SNAP_LOG(ERROR) << "AcquireBuffer failed in MergeReplaceOps";
-                return false;
-            }
-            if (cow_op->type == kCowReplaceOp) {
-                if (!reader_->ReadData(cow_op, buffer, BLOCK_SZ)) {
+            if (cow_op->type() == kCowReplaceOp) {
+                size_t buffer_size = CowOpCompressionSize(cow_op, BLOCK_SZ);
+                void* buffer = bufsink_.AcquireBuffer(buffer_size);
+                if (!buffer) {
+                    SNAP_LOG(ERROR) << "AcquireBuffer failed in MergeReplaceOps";
+                    return false;
+                }
+                // Read the entire compressed buffer spanning multiple blocks
+                if (!reader_->ReadData(cow_op, buffer, buffer_size)) {
                     SNAP_LOG(ERROR) << "Failed to read COW in merge";
                     return false;
                 }
             } else {
-                CHECK(cow_op->type == kCowZeroOp);
+                void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ);
+                if (!buffer) {
+                    SNAP_LOG(ERROR) << "AcquireBuffer failed in MergeReplaceOps";
+                    return false;
+                }
+                CHECK(cow_op->type() == kCowZeroOp);
                 memset(buffer, 0, BLOCK_SZ);
             }
         }
@@ -137,7 +158,7 @@ bool MergeWorker::MergeReplaceZeroOps() {
             return false;
         }
 
-        num_ops_merged += linear_blocks;
+        num_ops_merged += replace_zero_vec.size();
 
         if (num_ops_merged >= total_ops_merged_per_commit) {
             // Flush the data
@@ -557,8 +578,12 @@ bool MergeWorker::Run() {
         return true;
     }
 
-    if (!SetThreadPriority(kNiceValueForMergeThreads)) {
+    if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
+    }
+
+    if (!SetProfiles({"CPUSET_SP_BACKGROUND"})) {
+        SNAP_PLOG(ERROR) << "Failed to assign task profile to Mergeworker thread";
     }
 
     SNAP_LOG(INFO) << "Merge starting..";

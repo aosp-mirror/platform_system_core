@@ -52,7 +52,7 @@ class FlashTask : public Task {
               const bool apply_vbmeta, const FlashingPlan* fp);
     virtual FlashTask* AsFlashTask() override { return this; }
 
-    static bool IsDynamicParitition(const ImageSource* source, const FlashTask* task);
+    static bool IsDynamicPartition(const ImageSource* source, const FlashTask* task);
     void Run() override;
     std::string ToString() const override;
     std::string GetPartition() const { return pname_; }
