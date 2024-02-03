@@ -30,6 +30,7 @@
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
+#include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <cutils/sockets.h>
@@ -82,12 +83,28 @@ using RepeatedPtrField = google::protobuf::RepeatedPtrField<T>;
 using std::chrono::duration_cast;
 using namespace std::chrono_literals;
 using namespace std::string_literals;
+using android::base::Realpath;
+using android::base::StringPrintf;
 
 static constexpr char kBootSnapshotsWithoutSlotSwitch[] =
         "/metadata/ota/snapshot-boot-without-slot-switch";
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
 static constexpr auto kUpdateStateCheckInterval = 2s;
+/*
+ * The readahead size is set to 32kb so that
+ * there is no significant memory pressure (/proc/pressure/memory) during boot.
+ * After OTA, during boot, partitions are scanned before marking slot as successful.
+ * This scan will trigger readahead both on source and COW block device thereby
+ * leading to Inactive(file) pages to be very high.
+ *
+ * A lower value may help reduce memory pressure further, however, that will
+ * increase the boot time. Thus, for device which don't care about OTA boot
+ * time, they could use O_DIRECT functionality wherein the I/O to the source
+ * block device will be O_DIRECT.
+ */
+static constexpr auto kCowReadAheadSizeKb = 32;
+static constexpr auto kSourceReadAheadSizeKb = 32;
 
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -403,6 +420,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_metadata_sectors(0);
     status->set_using_snapuserd(cow_creator->using_snapuserd);
     status->set_compression_algorithm(cow_creator->compression_algorithm);
+    status->set_compression_factor(cow_creator->compression_factor);
     if (cow_creator->enable_threading) {
         status->set_enable_threading(cow_creator->enable_threading);
     }
@@ -1747,6 +1765,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
                                base_path_merge;
                 snapuserd_argv->emplace_back(std::move(message));
             }
+
+            SetReadAheadSize(cow_image_device, kCowReadAheadSizeKb);
+            SetReadAheadSize(source_device, kSourceReadAheadSizeKb);
 
             // Do not attempt to connect to the new snapuserd yet, it hasn't
             // been started. We do however want to wait for the misc device
@@ -3213,8 +3234,10 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     }
 
     std::string compression_algorithm;
+    uint64_t compression_factor{};
     if (using_snapuserd) {
         compression_algorithm = dap_metadata.vabc_compression_param();
+        compression_factor = dap_metadata.compression_factor();
         if (compression_algorithm.empty()) {
             // Older OTAs don't set an explicit compression type, so default to gz.
             compression_algorithm = "gz";
@@ -3231,7 +3254,9 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             .extra_extents = {},
             .using_snapuserd = using_snapuserd,
             .compression_algorithm = compression_algorithm,
+            .compression_factor = compression_factor,
     };
+
     if (dap_metadata.vabc_feature_set().has_threaded()) {
         cow_creator.enable_threading = dap_metadata.vabc_feature_set().threaded();
     }
@@ -3310,7 +3335,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         // Terminate stale daemon if any
         std::unique_ptr<SnapuserdClient> snapuserd_client = std::move(snapuserd_client_);
         if (!snapuserd_client) {
-            snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
+            snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
         }
         if (snapuserd_client) {
             snapuserd_client->DetachSnapuserd();
@@ -3531,6 +3556,10 @@ Return SnapshotManager::InitializeUpdateSnapshots(
                 options.scratch_space = false;
             }
             options.compression = it->second.compression_algorithm();
+            if (cow_version >= 3) {
+                options.op_count_max = it->second.estimated_ops_buffer_size();
+                options.max_blocks = {it->second.device_size() / options.block_size};
+            }
 
             auto writer = CreateCowWriter(cow_version, options, std::move(fd));
             if (!writer->Finalize()) {
@@ -3641,7 +3670,9 @@ std::unique_ptr<ICowWriter> SnapshotManager::OpenCompressedSnapshotWriter(
     cow_options.compression = status.compression_algorithm();
     cow_options.max_blocks = {status.device_size() / cow_options.block_size};
     cow_options.batch_write = status.batched_writes();
-    cow_options.num_compress_threads = status.enable_threading() ? 2 : 0;
+    cow_options.num_compress_threads = status.enable_threading() ? 2 : 1;
+    cow_options.op_count_max = status.estimated_ops_buffer_size();
+    cow_options.compression_factor = status.compression_factor();
     // Disable scratch space for vts tests
     if (device()->IsTestDevice()) {
         cow_options.scratch_space = false;
@@ -3769,6 +3800,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
         ss << "    allocated sectors: " << status.sectors_allocated() << std::endl;
         ss << "    metadata sectors: " << status.metadata_sectors() << std::endl;
         ss << "    compression: " << status.compression_algorithm() << std::endl;
+        ss << "    compression factor: " << status.compression_factor() << std::endl;
         ss << "    merge phase: " << DecideMergePhase(status) << std::endl;
     }
     os << ss.rdbuf();
@@ -4402,6 +4434,32 @@ bool SnapshotManager::PrepareDeviceToBootWithoutSnapshot() {
         return false;
     }
     return true;
+}
+
+void SnapshotManager::SetReadAheadSize(const std::string& entry_block_device, off64_t size_kb) {
+    std::string block_device;
+    if (!Realpath(entry_block_device, &block_device)) {
+        PLOG(ERROR) << "Failed to realpath " << entry_block_device;
+        return;
+    }
+
+    static constexpr std::string_view kDevBlockPrefix("/dev/block/");
+    if (!android::base::StartsWith(block_device, kDevBlockPrefix)) {
+        LOG(ERROR) << block_device << " is not a block device";
+        return;
+    }
+
+    std::string block_name = block_device.substr(kDevBlockPrefix.length());
+    std::string sys_partition =
+            android::base::StringPrintf("/sys/class/block/%s/partition", block_name.c_str());
+    struct stat info;
+    if (lstat(sys_partition.c_str(), &info) == 0) {
+        block_name += "/..";
+    }
+    std::string sys_ra = android::base::StringPrintf("/sys/class/block/%s/queue/read_ahead_kb",
+                                                     block_name.c_str());
+    std::string size = std::to_string(size_kb);
+    android::base::WriteStringToFile(size, sys_ra.c_str());
 }
 
 }  // namespace snapshot

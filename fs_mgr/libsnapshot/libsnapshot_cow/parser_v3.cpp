@@ -112,8 +112,14 @@ bool CowParserV3::ParseOps(borrowed_fd fd, const uint32_t op_index) {
     xor_data_loc_ = std::make_shared<std::unordered_map<uint64_t, uint64_t>>();
 
     for (auto op : *ops_) {
-        if (op.type == kCowXorOp) {
+        if (op.type() == kCowXorOp) {
             xor_data_loc_->insert({op.new_block, data_pos});
+        } else if (op.type() == kCowReplaceOp) {
+            if (data_pos != op.source()) {
+                LOG(ERROR) << "Invalid data location for operation " << op
+                           << ", expected: " << data_pos;
+                return false;
+            }
         }
         data_pos += op.data_length;
     }

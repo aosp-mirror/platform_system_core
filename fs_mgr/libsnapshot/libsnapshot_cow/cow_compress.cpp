@@ -208,9 +208,9 @@ class ZstdCompressor final : public ICompressor {
     std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> zstd_context_;
 };
 
-bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks,
+bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks, size_t block_size,
                                     std::vector<std::basic_string<uint8_t>>* compressed_data) {
-    return CompressBlocks(compressor_.get(), block_size_, buffer, num_blocks, compressed_data);
+    return CompressBlocks(compressor_.get(), block_size, buffer, num_blocks, compressed_data);
 }
 
 bool CompressWorker::CompressBlocks(ICompressor* compressor, size_t block_size, const void* buffer,
@@ -223,7 +223,7 @@ bool CompressWorker::CompressBlocks(ICompressor* compressor, size_t block_size, 
             PLOG(ERROR) << "CompressBlocks: Compression failed";
             return false;
         }
-        if (data.size() > std::numeric_limits<uint16_t>::max()) {
+        if (data.size() > std::numeric_limits<uint32_t>::max()) {
             LOG(ERROR) << "Compressed block is too large: " << data.size();
             return false;
         }
@@ -254,7 +254,8 @@ bool CompressWorker::RunThread() {
         }
 
         // Compress blocks
-        bool ret = CompressBlocks(blocks.buffer, blocks.num_blocks, &blocks.compressed_data);
+        bool ret = CompressBlocks(blocks.buffer, blocks.num_blocks, blocks.block_size,
+                                  &blocks.compressed_data);
         blocks.compression_status = ret;
         {
             std::lock_guard<std::mutex> lock(lock_);
@@ -273,35 +274,31 @@ bool CompressWorker::RunThread() {
     return true;
 }
 
-void CompressWorker::EnqueueCompressBlocks(const void* buffer, size_t num_blocks) {
+void CompressWorker::EnqueueCompressBlocks(const void* buffer, size_t block_size,
+                                           size_t num_blocks) {
     {
         std::lock_guard<std::mutex> lock(lock_);
 
         CompressWork blocks = {};
         blocks.buffer = buffer;
+        blocks.block_size = block_size;
         blocks.num_blocks = num_blocks;
         work_queue_.push(std::move(blocks));
+        total_submitted_ += 1;
     }
     cv_.notify_all();
 }
 
 bool CompressWorker::GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf) {
-    {
+    while (true) {
         std::unique_lock<std::mutex> lock(lock_);
-        while (compressed_queue_.empty() && !stopped_) {
+        while ((total_submitted_ != total_processed_) && compressed_queue_.empty() && !stopped_) {
             cv_.wait(lock);
         }
-
-        if (stopped_) {
-            return true;
-        }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(lock_);
         while (compressed_queue_.size() > 0) {
             CompressWork blocks = std::move(compressed_queue_.front());
             compressed_queue_.pop();
+            total_processed_ += 1;
 
             if (blocks.compression_status) {
                 compressed_buf->insert(compressed_buf->end(),
@@ -312,9 +309,12 @@ bool CompressWorker::GetCompressedBuffers(std::vector<std::basic_string<uint8_t>
                 return false;
             }
         }
+        if ((total_submitted_ == total_processed_) || stopped_) {
+            total_submitted_ = 0;
+            total_processed_ = 0;
+            return true;
+        }
     }
-
-    return true;
 }
 
 std::unique_ptr<ICompressor> ICompressor::Brotli(uint32_t compression_level,
@@ -344,8 +344,8 @@ void CompressWorker::Finalize() {
     cv_.notify_all();
 }
 
-CompressWorker::CompressWorker(std::unique_ptr<ICompressor>&& compressor, uint32_t block_size)
-    : compressor_(std::move(compressor)), block_size_(block_size) {}
+CompressWorker::CompressWorker(std::unique_ptr<ICompressor>&& compressor)
+    : compressor_(std::move(compressor)) {}
 
 }  // namespace snapshot
 }  // namespace android

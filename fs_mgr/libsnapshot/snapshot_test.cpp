@@ -2362,8 +2362,10 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
 
-    ASSERT_TRUE(init->EnsureSnapuserdConnected());
-    init->set_use_first_stage_snapuserd(true);
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->EnsureSnapuserdConnected());
+        init->set_use_first_stage_snapuserd(true);
+    }
 
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -2374,9 +2376,11 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
-    for (const auto& name : partitions) {
-        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
+        for (const auto& name : partitions) {
+            ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+        }
     }
 
     // Initiate the merge and wait for it to be completed.
@@ -2860,15 +2864,23 @@ void SnapshotTestEnvironment::TearDown() {
 }
 
 void KillSnapuserd() {
-    auto status = android::base::GetProperty("init.svc.snapuserd", "stopped");
-    if (status == "stopped") {
-        return;
+    // Detach the daemon if it's alive
+    auto snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
+    if (snapuserd_client) {
+        snapuserd_client->DetachSnapuserd();
     }
-    auto snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
-    if (!snapuserd_client) {
-        return;
+
+    // Now stop the service - Init will send a SIGKILL to the daemon. However,
+    // process state will move from "running" to "stopping". Only after the
+    // process is reaped by init, the service state is moved to "stopped".
+    //
+    // Since the tests involve starting the daemon immediately, wait for the
+    // process to completely stop (aka. wait until init reaps the terminated
+    // process).
+    android::base::SetProperty("ctl.stop", "snapuserd");
+    if (!android::base::WaitForProperty("init.svc.snapuserd", "stopped", 10s)) {
+        LOG(ERROR) << "Timed out waiting for snapuserd to stop.";
     }
-    snapuserd_client->DetachSnapuserd();
 }
 
 }  // namespace snapshot

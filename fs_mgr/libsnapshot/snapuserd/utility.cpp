@@ -19,6 +19,9 @@
 #include <unistd.h>
 
 #include <android-base/file.h>
+#include <processgroup/processgroup.h>
+
+#include <private/android_filesystem_config.h>
 
 namespace android {
 namespace snapshot {
@@ -28,6 +31,17 @@ using android::base::unique_fd;
 bool SetThreadPriority([[maybe_unused]] int priority) {
 #ifdef __ANDROID__
     return setpriority(PRIO_PROCESS, gettid(), priority) != -1;
+#else
+    return true;
+#endif
+}
+
+bool SetProfiles([[maybe_unused]] std::initializer_list<std::string_view> profiles) {
+#ifdef __ANDROID__
+    if (setgid(AID_SYSTEM)) {
+        return false;
+    }
+    return SetTaskProfiles(gettid(), profiles);
 #else
     return true;
 #endif

@@ -33,7 +33,10 @@
 
 namespace android {
 namespace snapshot {
-
+struct CowSizeInfo {
+    uint64_t cow_size;
+    uint64_t op_count_max;
+};
 struct CowOptions {
     uint32_t block_size = 4096;
     std::string compression;
@@ -50,13 +53,16 @@ struct CowOptions {
     uint64_t num_merge_ops = 0;
 
     // Number of threads for compression
-    int num_compress_threads = 0;
+    uint16_t num_compress_threads = 0;
 
     // Batch write cluster ops
     bool batch_write = false;
 
     // Size of the cow operation buffer; used in v3 only.
-    uint32_t op_count_max = 0;
+    uint64_t op_count_max = 0;
+
+    // Compression factor
+    uint64_t compression_factor = 4096;
 };
 
 // Interface for writing to a snapuserd COW. All operations are ordered; merges
@@ -92,8 +98,9 @@ class ICowWriter {
     // to ensure that the correct headers and footers are written.
     virtual bool Finalize() = 0;
 
-    // Return number of bytes the cow image occupies on disk.
-    virtual uint64_t GetCowSize() = 0;
+    // Return number of bytes the cow image occupies on disk + the size of sequence && ops buffer
+    // The latter two fields are used in v3 cow format and left as 0 for v2 cow format
+    virtual CowSizeInfo GetCowSizeInfo() const = 0;
 
     virtual uint32_t GetBlockSize() const = 0;
     virtual std::optional<uint32_t> GetMaxBlocks() const = 0;
@@ -112,9 +119,9 @@ class ICowWriter {
 
 class CompressWorker {
   public:
-    CompressWorker(std::unique_ptr<ICompressor>&& compressor, uint32_t block_size);
+    CompressWorker(std::unique_ptr<ICompressor>&& compressor);
     bool RunThread();
-    void EnqueueCompressBlocks(const void* buffer, size_t num_blocks);
+    void EnqueueCompressBlocks(const void* buffer, size_t block_size, size_t num_blocks);
     bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
     void Finalize();
     static uint32_t GetDefaultCompressionLevel(CowCompressionAlgorithm compression);
@@ -127,20 +134,22 @@ class CompressWorker {
     struct CompressWork {
         const void* buffer;
         size_t num_blocks;
+        size_t block_size;
         bool compression_status = false;
         std::vector<std::basic_string<uint8_t>> compressed_data;
     };
 
     std::unique_ptr<ICompressor> compressor_;
-    uint32_t block_size_;
 
     std::queue<CompressWork> work_queue_;
     std::queue<CompressWork> compressed_queue_;
     std::mutex lock_;
     std::condition_variable cv_;
     bool stopped_ = false;
+    size_t total_submitted_ = 0;
+    size_t total_processed_ = 0;
 
-    bool CompressBlocks(const void* buffer, size_t num_blocks,
+    bool CompressBlocks(const void* buffer, size_t num_blocks, size_t block_size,
                         std::vector<std::basic_string<uint8_t>>* compressed_data);
 };
 

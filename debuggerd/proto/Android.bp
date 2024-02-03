@@ -39,3 +39,17 @@ cc_library_static {
     recovery_available: true,
     vendor_ramdisk_available: true,
 }
+
+java_library_static {
+    name: "libtombstone_proto_java",
+    proto: {
+        type: "lite",
+    },
+    srcs: [
+        "tombstone.proto",
+    ],
+    jarjar_rules: "jarjar-rules.txt",
+    sdk_version: "current",
+    static_libs: ["libprotobuf-java-lite"],
+}
+

@@ -205,7 +205,9 @@ bool CowParserV2::Translate(TranslatedCowOps* out) {
         const auto& v2_op = v2_ops_->at(i);
 
         auto& new_op = out->ops->at(i);
-        new_op.type = v2_op.type;
+        new_op.set_type(v2_op.type);
+        // v2 ops always have 4k compression
+        new_op.set_compression_bits(0);
         new_op.data_length = v2_op.data_length;
 
         if (v2_op.new_block > std::numeric_limits<uint32_t>::max()) {
@@ -215,7 +217,7 @@ bool CowParserV2::Translate(TranslatedCowOps* out) {
         new_op.new_block = v2_op.new_block;
 
         uint64_t source_info = v2_op.source;
-        if (new_op.type != kCowLabelOp) {
+        if (new_op.type() != kCowLabelOp) {
             source_info &= kCowOpSourceInfoDataMask;
             if (source_info != v2_op.source) {
                 LOG(ERROR) << "Out-of-range source value in COW op: " << v2_op;
@@ -232,7 +234,7 @@ bool CowParserV2::Translate(TranslatedCowOps* out) {
                 return false;
             }
         }
-        new_op.source_info = source_info;
+        new_op.set_source(source_info);
     }
 
     out->header = header_;

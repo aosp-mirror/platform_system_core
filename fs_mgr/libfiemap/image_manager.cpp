@@ -531,11 +531,16 @@ bool ImageManager::MapImageDevice(const std::string& name,
     // If there is no intermediate device-mapper node, then partitions cannot be
     // opened writable due to sepolicy and exclusivity of having a mounted
     // filesystem. This should only happen on devices with no encryption, or
-    // devices with FBE and no metadata encryption. For these cases it suffices
-    // to perform normal file writes to /data/gsi (which is unencrypted).
+    // devices with FBE and no metadata encryption. For these cases we COULD
+    // perform normal writes to /data/gsi (which is unencrypted), but given that
+    // metadata encryption has been mandated since Android R, we don't actually
+    // support or test this.
     //
-    // Note: this is not gated on DeviceInfo, because the recovery-specific path
-    // must only be used in actual recovery.
+    // So, we validate here that /data is backed by device-mapper. This code
+    // isn't needed in recovery since there is no /data.
+    //
+    // If this logic sticks for a release, we can remove MapWithLoopDevice, as
+    // well as WrapUserdataIfNeeded in fs_mgr.
     std::string block_device;
     bool can_use_devicemapper;
     if (!FiemapWriter::GetBlockDeviceForFile(image_header, &block_device, &can_use_devicemapper)) {
@@ -543,20 +548,15 @@ bool ImageManager::MapImageDevice(const std::string& name,
         return false;
     }
 
-    if (can_use_devicemapper) {
-        if (!MapWithDmLinear(*partition_opener_.get(), name, timeout_ms, path)) {
-            return false;
-        }
-    } else if (!MapWithLoopDevice(name, timeout_ms, path)) {
-        return false;
-    }
-#else
-    // In recovery, we can *only* use device-mapper, since partitions aren't
-    // mounted. That also means we cannot call GetBlockDeviceForFile.
-    if (!MapWithDmLinear(*partition_opener_.get(), name, timeout_ms, path)) {
+    if (!can_use_devicemapper) {
+        LOG(ERROR) << "Cannot map image: /data must be mounted on top of device-mapper.";
         return false;
     }
 #endif
+
+    if (!MapWithDmLinear(*partition_opener_.get(), name, timeout_ms, path)) {
+        return false;
+    }
 
     // Set a property so we remember this is mapped.
     auto prop_name = GetStatusPropertyName(name);

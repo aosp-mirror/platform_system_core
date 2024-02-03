@@ -32,9 +32,10 @@ cc_library_headers {
     recovery_available: true,
     vendor_ramdisk_available: true,
     apex_available: [
+        "com.android.runtime",
         "com.android.virt",
         "//apex_available:platform",
-   ],
+    ],
 }
 
 cc_library_shared {
@@ -85,6 +86,7 @@ cc_library_static {
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["tombstoned/include"],
+    apex_available: ["com.android.runtime"],
 }
 
 // Core implementation, linked into libdebuggerd_handler and the dynamic linker.
@@ -110,6 +112,9 @@ cc_library_static {
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["include"],
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 // Implementation with a no-op fallback.
@@ -186,6 +191,41 @@ cc_library {
     export_include_dirs: ["include"],
 }
 
+cc_library {
+    name: "libdebuggerd_tombstone_proto_to_text",
+    defaults: ["debuggerd_defaults"],
+    ramdisk_available: true,
+    recovery_available: true,
+    vendor_ramdisk_available: true,
+
+    local_include_dirs: ["libdebuggerd/include"],
+    export_include_dirs: ["libdebuggerd/include"],
+
+    srcs: [
+        "libdebuggerd/tombstone_proto_to_text.cpp",
+    ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
+    ],
+
+    static_libs: [
+        "libbase",
+        "liblog_for_runtime_apex",
+        "libunwindstack",
+    ],
+
+    whole_static_libs: [
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
+    ],
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.runtime",
+    ],
+}
+
 cc_library_static {
     name: "libdebuggerd",
     defaults: ["debuggerd_defaults"],
@@ -199,7 +239,6 @@ cc_library_static {
         "libdebuggerd/open_files_list.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/tombstone_proto.cpp",
-        "libdebuggerd/tombstone_proto_to_text.cpp",
         "libdebuggerd/utility.cpp",
     ],
 
@@ -225,6 +264,7 @@ cc_library_static {
     ],
 
     whole_static_libs: [
+        "libdebuggerd_tombstone_proto_to_text",
         "libasync_safe",
         "gwp_asan_crash_handler",
         "libtombstone_proto",
@@ -276,6 +316,9 @@ cc_library_static {
             header_libs: ["scudo_headers"],
         },
     },
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 cc_binary {
@@ -309,7 +352,7 @@ cc_test {
         "libdebuggerd/test/elf_fake.cpp",
         "libdebuggerd/test/log_fake.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
-        "libdebuggerd/test/utility_test.cpp",
+        "libdebuggerd/test/tombstone_proto_to_text_test.cpp",
     ],
 
     target: {

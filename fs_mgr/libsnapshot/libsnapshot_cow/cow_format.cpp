@@ -14,7 +14,6 @@
 // limitations under the License.
 //
 
-#include <inttypes.h>
 #include <libsnapshot/cow_format.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -22,6 +21,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <libsnapshot/cow_format.h>
+#include <storage_literals/storage_literals.h>
 #include "writer_v2.h"
 #include "writer_v3.h"
 
@@ -29,8 +29,9 @@ namespace android {
 namespace snapshot {
 
 using android::base::unique_fd;
+using namespace android::storage_literals;
 
-std::ostream& EmitCowTypeString(std::ostream& os, uint8_t cow_type) {
+std::ostream& EmitCowTypeString(std::ostream& os, CowOperationType cow_type) {
     switch (cow_type) {
         case kCowCopyOp:
             return os << "kCowCopyOp";
@@ -51,6 +52,10 @@ std::ostream& EmitCowTypeString(std::ostream& os, uint8_t cow_type) {
         default:
             return os << (int)cow_type << "unknown";
     }
+}
+
+std::ostream& operator<<(std::ostream& os, CowOperationType cow_type) {
+    return EmitCowTypeString(os, cow_type);
 }
 
 std::ostream& operator<<(std::ostream& os, CowOperationV2 const& op) {
@@ -80,22 +85,21 @@ std::ostream& operator<<(std::ostream& os, CowOperationV2 const& op) {
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, CowOperation const& op) {
+std::ostream& operator<<(std::ostream& os, CowOperationV3 const& op) {
     os << "CowOperation(";
-    EmitCowTypeString(os, op.type);
-    if (op.type == kCowReplaceOp || op.type == kCowXorOp || op.type == kCowSequenceOp) {
+    EmitCowTypeString(os, op.type());
+    if (op.type() == kCowReplaceOp || op.type() == kCowXorOp || op.type() == kCowSequenceOp) {
         os << ", data_length:" << op.data_length;
     }
-    if (op.type != kCowClusterOp && op.type != kCowSequenceOp && op.type != kCowLabelOp) {
+    if (op.type() != kCowClusterOp && op.type() != kCowSequenceOp && op.type() != kCowLabelOp) {
         os << ", new_block:" << op.new_block;
     }
-    if (op.type == kCowXorOp || op.type == kCowReplaceOp || op.type == kCowCopyOp) {
-        os << ", source:" << (op.source_info & kCowOpSourceInfoDataMask);
-    } else if (op.type == kCowClusterOp) {
-        os << ", cluster_data:" << (op.source_info & kCowOpSourceInfoDataMask);
-    } else {
-        os << ", label:0x" << android::base::StringPrintf("%" PRIx64, op.source_info);
+    if (op.type() == kCowXorOp || op.type() == kCowReplaceOp || op.type() == kCowCopyOp) {
+        os << ", source:" << op.source();
+    } else if (op.type() == kCowClusterOp) {
+        os << ", cluster_data:" << op.source();
     }
+    // V3 op stores resume points in header, so CowOp can never be Label.
     os << ")";
     return os;
 }
@@ -126,7 +130,7 @@ int64_t GetNextDataOffset(const CowOperationV2& op, uint32_t cluster_ops) {
 }
 
 bool IsMetadataOp(const CowOperation& op) {
-    switch (op.type) {
+    switch (op.type()) {
         case kCowLabelOp:
         case kCowClusterOp:
         case kCowFooterOp:
@@ -138,7 +142,7 @@ bool IsMetadataOp(const CowOperation& op) {
 }
 
 bool IsOrderedOp(const CowOperation& op) {
-    switch (op.type) {
+    switch (op.type()) {
         case kCowCopyOp:
         case kCowXorOp:
             return true;
@@ -170,6 +174,37 @@ std::unique_ptr<ICowWriter> CreateCowWriter(uint32_t version, const CowOptions& 
 
 std::unique_ptr<ICowWriter> CreateCowEstimator(uint32_t version, const CowOptions& options) {
     return CreateCowWriter(version, options, unique_fd{-1}, std::nullopt);
+}
+
+size_t CowOpCompressionSize(const CowOperation* op, size_t block_size) {
+    uint8_t compression_bits = op->compression_bits();
+    return (block_size << compression_bits);
+}
+
+bool GetBlockOffset(const CowOperation* op, uint64_t io_block, size_t block_size, off_t* offset) {
+    const uint64_t new_block = op->new_block;
+
+    if (op->type() != kCowReplaceOp || io_block < new_block) {
+        LOG(VERBOSE) << "Invalid IO request for block: " << io_block
+                     << " CowOperation: new_block: " << new_block;
+        return false;
+    }
+
+    // Get the actual compression size
+    const size_t compression_size = CowOpCompressionSize(op, block_size);
+    // Find the number of blocks spanned
+    const size_t num_blocks = compression_size / block_size;
+    // Find the distance of the I/O block which this
+    // CowOperation encompasses
+    const size_t block_distance = io_block - new_block;
+    // Check if this block is within this range;
+    // if so, return the relative offset
+    if (block_distance < num_blocks) {
+        *offset = block_distance * block_size;
+        return true;
+    }
+
+    return false;
 }
 
 }  // namespace snapshot
