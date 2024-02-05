@@ -42,6 +42,7 @@
 #include <fstab/fstab.h>
 #include <libavb_user/libavb_user.h>
 #include <libgsi/libgsid.h>
+#include <private/android_filesystem_config.h>
 
 #include "fs_mgr_overlayfs_control.h"
 #include "fs_mgr_overlayfs_mount.h"
@@ -608,7 +609,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Make sure we are root.
-    if (::getuid() != 0) {
+    if (const auto uid = ::getuid(); uid != AID_ROOT) {
+        // If requesting auto reboot, also try to auto gain root.
+        if (auto_reboot && uid == AID_SHELL && access("/system/xbin/su", F_OK) == 0) {
+            std::vector<char*> args{const_cast<char*>("/system/xbin/su"),
+                                    const_cast<char*>("root")};
+            for (int i = 0; i < argc; ++i) {
+                args.push_back(argv[i]);
+            }
+            args.push_back(nullptr);
+            LOG(INFO) << "Attempting to gain root with \"su root\"";
+            execv(args[0], args.data());
+            PLOG(ERROR) << "Failed to execute \"su root\"";
+        }
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
         return EXIT_FAILURE;
     }
