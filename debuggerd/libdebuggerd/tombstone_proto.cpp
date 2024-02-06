@@ -94,6 +94,11 @@ static Architecture get_arch() {
 
 static std::optional<std::string> get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
                                                            unwindstack::Maps* maps) {
+  // Under stack MTE the stack pointer and/or the fault address can be tagged.
+  // In order to calculate deltas between them, strip off the tags off both
+  // addresses.
+  fault_addr = untag_address(fault_addr);
+  sp = untag_address(sp);
   static constexpr uint64_t kMaxDifferenceBytes = 256;
   uint64_t difference;
   if (sp >= fault_addr) {
