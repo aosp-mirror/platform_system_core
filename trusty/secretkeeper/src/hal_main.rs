@@ -101,8 +101,8 @@ fn inner_main() -> Result<(), HalServiceError> {
     android_logger::init_once(
         android_logger::Config::default()
             .with_tag("secretkeeper-hal-trusty")
-            .with_min_level(log::Level::Info)
-            .with_log_id(android_logger::LogId::System),
+            .with_max_level(log::LevelFilter::Info)
+            .with_log_buffer(android_logger::LogId::System),
     );
     // Redirect panic messages to logcat.
     panic::set_hook(Box::new(|panic_info| {

@@ -185,7 +185,7 @@ void CowWriterV2::InitWorkers() {
     for (int i = 0; i < num_compress_threads_; i++) {
         std::unique_ptr<ICompressor> compressor =
                 ICompressor::Create(compression_, header_.block_size);
-        auto wt = std::make_unique<CompressWorker>(std::move(compressor), header_.block_size);
+        auto wt = std::make_unique<CompressWorker>(std::move(compressor));
         threads_.emplace_back(std::async(std::launch::async, &CompressWorker::RunThread, wt.get()));
         compress_threads_.push_back(std::move(wt));
     }
@@ -353,7 +353,7 @@ bool CowWriterV2::CompressBlocks(size_t num_blocks, const void* data) {
         if (i == num_threads - 1) {
             num_blocks_per_thread = num_blocks;
         }
-        worker->EnqueueCompressBlocks(iter, num_blocks_per_thread);
+        worker->EnqueueCompressBlocks(iter, header_.block_size, num_blocks_per_thread);
         iter += (num_blocks_per_thread * header_.block_size);
         num_blocks -= num_blocks_per_thread;
     }
