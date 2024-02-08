@@ -269,6 +269,9 @@ static int filter_usb_device(char* sysfs_name,
         auto path = android::base::StringPrintf("/sys/bus/usb/devices/%s/%s:1.%d/interface",
                                                 sysfs_name, sysfs_name, ifc->bInterfaceNumber);
         if (android::base::ReadFileToString(path, &interface)) {
+            if (!interface.empty() && interface.back() == '\n') {
+                interface.pop_back();
+            }
             snprintf(info.interface, sizeof(info.interface), "%s", interface.c_str());
         }
 
