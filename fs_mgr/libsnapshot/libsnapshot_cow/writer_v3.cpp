@@ -214,15 +214,6 @@ bool CowWriterV3::Initialize(std::optional<uint64_t> label) {
             return false;
         }
     }
-
-    // TODO: b/322279333
-    // Set compression factor to 4k during estimation.
-    // Once COW estimator is ready to support variable
-    // block size, this check has to be removed.
-    if (IsEstimating()) {
-        header_.max_compression_size = header_.block_size;
-    }
-
     return true;
 }
 
