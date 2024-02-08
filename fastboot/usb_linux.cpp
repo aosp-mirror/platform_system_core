@@ -404,34 +404,84 @@ ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
 {
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
-    struct usbdevfs_bulktransfer bulk;
-    int n;
+    struct usbdevfs_urb urb[2] = {};
+    bool pending[2] = {};
 
     if (handle_->ep_out == 0 || handle_->desc == -1) {
         return -1;
     }
 
-    do {
-        int xfer;
-        xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
+    auto submit_urb = [&](size_t i) {
+        int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
-        bulk.ep = handle_->ep_out;
-        bulk.len = xfer;
-        bulk.data = data;
-        bulk.timeout = ms_timeout_;
+        urb[i].type = USBDEVFS_URB_TYPE_BULK;
+        urb[i].endpoint = handle_->ep_out;
+        urb[i].buffer_length = xfer;
+        urb[i].buffer = data;
+        urb[i].usercontext = (void *)i;
 
-        n = ioctl(handle_->desc, USBDEVFS_BULK, &bulk);
-        if(n != xfer) {
-            DBG("ERROR: n = %d, errno = %d (%s)\n",
-                n, errno, strerror(errno));
-            return -1;
+        int n = ioctl(handle_->desc, USBDEVFS_SUBMITURB, &urb[i]);
+        if (n != 0) {
+            DBG("ioctl(USBDEVFS_SUBMITURB) failed\n");
+            return false;
         }
 
+        pending[i] = true;
         count += xfer;
         len -= xfer;
         data += xfer;
-    } while(len > 0);
 
+        return true;
+    };
+
+    auto reap_urb = [&](size_t i) {
+        while (pending[i]) {
+            struct usbdevfs_urb *urbp;
+            int res = ioctl(handle_->desc, USBDEVFS_REAPURB, &urbp);
+            if (res != 0) {
+                DBG("ioctl(USBDEVFS_REAPURB) failed\n");
+                return false;
+            }
+            size_t done = (size_t)urbp->usercontext;
+            if (done >= 2 || !pending[done]) {
+                DBG("unexpected urb\n");
+                return false;
+            }
+            if (urbp->status != 0 || urbp->actual_length != urbp->buffer_length) {
+                DBG("urb returned error\n");
+                return false;
+            }
+            pending[done] = false;
+        }
+        return true;
+    };
+
+    if (!submit_urb(0)) {
+        return -1;
+    }
+    while (len > 0) {
+        if (!submit_urb(1)) {
+            return -1;
+        }
+        if (!reap_urb(0)) {
+            return -1;
+        }
+        if (len <= 0) {
+            if (!reap_urb(1)) {
+                return -1;
+            }
+            return count;
+        }
+        if (!submit_urb(0)) {
+            return -1;
+        }
+        if (!reap_urb(1)) {
+            return -1;
+        }
+    }
+    if (!reap_urb(0)) {
+        return -1;
+    }
     return count;
 }
 
