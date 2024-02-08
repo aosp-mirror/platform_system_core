@@ -45,6 +45,7 @@ enum MethodIndex {
     k_AStatsEvent_writeBool,
     k_AStatsEvent_writeByteArray,
     k_AStatsEvent_writeString,
+    k_AStatsEvent_writeStringArray,
     k_AStatsEvent_writeAttributionChain,
     k_AStatsEvent_addBoolAnnotation,
     k_AStatsEvent_addInt32Annotation,
@@ -104,6 +105,7 @@ static void InitializeOnce() {
     BIND_SYMBOL(AStatsEvent_writeBool);
     BIND_SYMBOL(AStatsEvent_writeByteArray);
     BIND_SYMBOL(AStatsEvent_writeString);
+    BIND_SYMBOL(AStatsEvent_writeStringArray);
     BIND_SYMBOL(AStatsEvent_writeAttributionChain);
     BIND_SYMBOL(AStatsEvent_addBoolAnnotation);
     BIND_SYMBOL(AStatsEvent_addInt32Annotation);
@@ -177,6 +179,11 @@ void AStatsEvent_writeByteArray(AStatsEvent* event, const uint8_t* buf, size_t n
 
 void AStatsEvent_writeString(AStatsEvent* event, const char* value) {
     INVOKE_METHOD(AStatsEvent_writeString, event, value);
+}
+
+void AStatsEvent_writeStringArray(AStatsEvent* event, const char* const* elements,
+                                  size_t numElements) {
+    INVOKE_METHOD(AStatsEvent_writeStringArray, event, elements, numElements);
 }
 
 void AStatsEvent_writeAttributionChain(AStatsEvent* event, const uint32_t* uids,
