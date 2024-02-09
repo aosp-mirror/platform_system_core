@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <queue>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -103,9 +104,9 @@ class GzCompressor final : public ICompressor {
     GzCompressor(uint32_t compression_level, const uint32_t block_size)
         : ICompressor(compression_level, block_size){};
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length) const override {
+    std::vector<uint8_t> Compress(const void* data, size_t length) const override {
         const auto bound = compressBound(length);
-        std::basic_string<uint8_t> buffer(bound, '\0');
+        std::vector<uint8_t> buffer(bound, '\0');
 
         uLongf dest_len = bound;
         auto rv = compress2(buffer.data(), &dest_len, reinterpret_cast<const Bytef*>(data), length,
@@ -124,13 +125,13 @@ class Lz4Compressor final : public ICompressor {
     Lz4Compressor(uint32_t compression_level, const uint32_t block_size)
         : ICompressor(compression_level, block_size){};
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length) const override {
+    std::vector<uint8_t> Compress(const void* data, size_t length) const override {
         const auto bound = LZ4_compressBound(length);
         if (!bound) {
             LOG(ERROR) << "LZ4_compressBound returned 0";
             return {};
         }
-        std::basic_string<uint8_t> buffer(bound, '\0');
+        std::vector<uint8_t> buffer(bound, '\0');
 
         const auto compressed_size =
                 LZ4_compress_default(static_cast<const char*>(data),
@@ -156,13 +157,13 @@ class BrotliCompressor final : public ICompressor {
     BrotliCompressor(uint32_t compression_level, const uint32_t block_size)
         : ICompressor(compression_level, block_size){};
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length) const override {
+    std::vector<uint8_t> Compress(const void* data, size_t length) const override {
         const auto bound = BrotliEncoderMaxCompressedSize(length);
         if (!bound) {
             LOG(ERROR) << "BrotliEncoderMaxCompressedSize returned 0";
             return {};
         }
-        std::basic_string<uint8_t> buffer(bound, '\0');
+        std::vector<uint8_t> buffer(bound, '\0');
 
         size_t encoded_size = bound;
         auto rv = BrotliEncoderCompress(
@@ -186,8 +187,8 @@ class ZstdCompressor final : public ICompressor {
         ZSTD_CCtx_setParameter(zstd_context_.get(), ZSTD_c_windowLog, log2(GetBlockSize()));
     };
 
-    std::basic_string<uint8_t> Compress(const void* data, size_t length) const override {
-        std::basic_string<uint8_t> buffer(ZSTD_compressBound(length), '\0');
+    std::vector<uint8_t> Compress(const void* data, size_t length) const override {
+        std::vector<uint8_t> buffer(ZSTD_compressBound(length), '\0');
         const auto compressed_size =
                 ZSTD_compress2(zstd_context_.get(), buffer.data(), buffer.size(), data, length);
         if (compressed_size <= 0) {
@@ -209,13 +210,13 @@ class ZstdCompressor final : public ICompressor {
 };
 
 bool CompressWorker::CompressBlocks(const void* buffer, size_t num_blocks, size_t block_size,
-                                    std::vector<std::basic_string<uint8_t>>* compressed_data) {
+                                    std::vector<std::vector<uint8_t>>* compressed_data) {
     return CompressBlocks(compressor_.get(), block_size, buffer, num_blocks, compressed_data);
 }
 
 bool CompressWorker::CompressBlocks(ICompressor* compressor, size_t block_size, const void* buffer,
                                     size_t num_blocks,
-                                    std::vector<std::basic_string<uint8_t>>* compressed_data) {
+                                    std::vector<std::vector<uint8_t>>* compressed_data) {
     const uint8_t* iter = reinterpret_cast<const uint8_t*>(buffer);
     while (num_blocks) {
         auto data = compressor->Compress(iter, block_size);
@@ -289,7 +290,7 @@ void CompressWorker::EnqueueCompressBlocks(const void* buffer, size_t block_size
     cv_.notify_all();
 }
 
-bool CompressWorker::GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf) {
+bool CompressWorker::GetCompressedBuffers(std::vector<std::vector<uint8_t>>* compressed_buf) {
     while (true) {
         std::unique_lock<std::mutex> lock(lock_);
         while ((total_submitted_ != total_processed_) && compressed_queue_.empty() && !stopped_) {
