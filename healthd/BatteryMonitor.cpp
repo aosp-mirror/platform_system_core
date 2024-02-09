@@ -530,7 +530,7 @@ static void doLogValues(const HealthInfo& props, const struct healthd_config& he
              props.chargerAcOnline ? "a" : "", props.chargerUsbOnline ? "u" : "",
              props.chargerWirelessOnline ? "w" : "", props.chargerDockOnline ? "d" : "");
 
-    KLOG_WARNING(LOG_TAG, "%s\n", dmesgline);
+    KLOG_DEBUG(LOG_TAG, "%s\n", dmesgline);
 }
 
 void BatteryMonitor::logValues(const HealthInfo_2_1& health_info,
