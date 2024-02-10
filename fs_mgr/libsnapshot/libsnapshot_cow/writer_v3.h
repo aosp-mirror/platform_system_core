@@ -15,6 +15,7 @@
 #pragma once
 
 #include <android-base/logging.h>
+#include <span>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -49,15 +50,14 @@ class CowWriterV3 : public CowWriterBase {
   private:
     struct CompressedBuffer {
         size_t compression_factor;
-        std::basic_string<uint8_t> compressed_data;
+        std::vector<uint8_t> compressed_data;
     };
     void SetupHeaders();
     bool NeedsFlush() const;
     bool ParseOptions();
     bool OpenForWrite();
     bool OpenForAppend(uint64_t label);
-    bool WriteOperation(std::basic_string_view<CowOperationV3> op,
-                        std::basic_string_view<struct iovec> data);
+    bool WriteOperation(std::span<const CowOperationV3> op, std::span<const struct iovec> data);
     bool EmitBlocks(uint64_t new_block_start, const void* data, size_t size, uint64_t old_block,
                     uint16_t offset, CowOperationType type);
     bool ConstructCowOpCompressedBuffers(uint64_t new_block_start, const void* data,
@@ -111,7 +111,7 @@ class CowWriterV3 : public CowWriterBase {
     int num_compress_threads_ = 1;
     size_t batch_size_ = 1;
     std::vector<CowOperationV3> cached_ops_;
-    std::vector<std::basic_string<uint8_t>> cached_data_;
+    std::vector<std::vector<uint8_t>> cached_data_;
     std::vector<struct iovec> data_vec_;
 
     std::vector<std::thread> threads_;
