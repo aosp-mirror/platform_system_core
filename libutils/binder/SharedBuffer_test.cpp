@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define __STDC_LIMIT_MACROS
-
 #include <gtest/gtest.h>
 
 #include <memory>
