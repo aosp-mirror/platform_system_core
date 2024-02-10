@@ -122,13 +122,13 @@ class CompressWorker {
     CompressWorker(std::unique_ptr<ICompressor>&& compressor);
     bool RunThread();
     void EnqueueCompressBlocks(const void* buffer, size_t block_size, size_t num_blocks);
-    bool GetCompressedBuffers(std::vector<std::basic_string<uint8_t>>* compressed_buf);
+    bool GetCompressedBuffers(std::vector<std::vector<uint8_t>>* compressed_buf);
     void Finalize();
     static uint32_t GetDefaultCompressionLevel(CowCompressionAlgorithm compression);
 
     static bool CompressBlocks(ICompressor* compressor, size_t block_size, const void* buffer,
                                size_t num_blocks,
-                               std::vector<std::basic_string<uint8_t>>* compressed_data);
+                               std::vector<std::vector<uint8_t>>* compressed_data);
 
   private:
     struct CompressWork {
@@ -136,7 +136,7 @@ class CompressWorker {
         size_t num_blocks;
         size_t block_size;
         bool compression_status = false;
-        std::vector<std::basic_string<uint8_t>> compressed_data;
+        std::vector<std::vector<uint8_t>> compressed_data;
     };
 
     std::unique_ptr<ICompressor> compressor_;
@@ -150,7 +150,7 @@ class CompressWorker {
     size_t total_processed_ = 0;
 
     bool CompressBlocks(const void* buffer, size_t num_blocks, size_t block_size,
-                        std::vector<std::basic_string<uint8_t>>* compressed_data);
+                        std::vector<std::vector<uint8_t>>* compressed_data);
 };
 
 // Create an ICowWriter not backed by any file. This is useful for estimating
