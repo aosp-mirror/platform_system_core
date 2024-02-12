@@ -69,9 +69,8 @@ static void RunScript() {
     LOG(INFO) << "Attempting to run /first_stage.sh...";
     pid_t pid = fork();
     if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(INFO) << "/first_stage.sh exited with status " << status;
+        wait(NULL);
+        LOG(INFO) << "/first_stage.sh exited";
         return;
     }
     const char* path = "/system/bin/sh";
@@ -94,9 +93,8 @@ void StartConsole(const std::string& cmdline) {
     sigaction(SIGCHLD, &chld_act, nullptr);
     pid_t pid = fork();
     if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(ERROR) << "console shell exited with status " << status;
+        wait(NULL);
+        LOG(ERROR) << "console shell exited";
         return;
     }
 
