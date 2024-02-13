@@ -967,6 +967,52 @@ TEST_F(CrasherTest, crash_detail_single) {
   ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'crash_detail_value')");
 }
 
+TEST_F(CrasherTest, crash_detail_replace_data) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    auto *cd = android_register_crash_detail_strs("CRASH_DETAIL_NAME", "original_data");
+    android_replace_crash_detail_data(cd, "new_data", strlen("new_data"));
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'new_data')");
+  // Ensure the old one no longer shows up, i.e. that we actually replaced
+  // it, not added a new one.
+  ASSERT_NOT_MATCH(result, R"(CRASH_DETAIL_NAME: 'original_data')");
+}
+
+TEST_F(CrasherTest, crash_detail_replace_name) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    auto *cd = android_register_crash_detail_strs("old_name", g_crash_detail_value);
+    android_replace_crash_detail_name(cd, "new_name", strlen("new_name"));
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(new_name: 'crash_detail_value')");
+  // Ensure the old one no longer shows up, i.e. that we actually replaced
+  // it, not added a new one.
+  ASSERT_NOT_MATCH(result, R"(old_name: 'crash_detail_value')");
+}
+
 TEST_F(CrasherTest, crash_detail_single_byte_name) {
   int intercept_result;
   unique_fd output_fd;
