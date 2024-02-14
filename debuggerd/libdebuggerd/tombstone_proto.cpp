@@ -51,7 +51,7 @@
 #include <android/set_abort_message.h>
 #include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
-#include <bionic/set_abort_message_internal.h>
+#include <bionic/crash_detail_internal.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>

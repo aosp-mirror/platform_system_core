@@ -37,6 +37,7 @@
 #include <string>
 #include <thread>
 
+#include <android/crash_detail.h>
 #include <android/dlext.h>
 #include <android/fdsan.h>
 #include <android/set_abort_message.h>
@@ -945,7 +946,7 @@ static char g_crash_detail_value2[] = "crash_detail_value2";
 
 inline crash_detail_t* _Nullable android_register_crash_detail_strs(const char* _Nonnull name,
                                                                     const char* _Nonnull data) {
-  return android_register_crash_detail(name, strlen(name), data, strlen(data));
+  return android_crash_detail_register(name, strlen(name), data, strlen(data));
 }
 
 TEST_F(CrasherTest, crash_detail_single) {
@@ -972,7 +973,7 @@ TEST_F(CrasherTest, crash_detail_replace_data) {
   unique_fd output_fd;
   StartProcess([]() {
     auto *cd = android_register_crash_detail_strs("CRASH_DETAIL_NAME", "original_data");
-    android_replace_crash_detail_data(cd, "new_data", strlen("new_data"));
+    android_crash_detail_replace_data(cd, "new_data", strlen("new_data"));
     abort();
   });
   StartIntercept(&output_fd);
@@ -995,7 +996,7 @@ TEST_F(CrasherTest, crash_detail_replace_name) {
   unique_fd output_fd;
   StartProcess([]() {
     auto *cd = android_register_crash_detail_strs("old_name", g_crash_detail_value);
-    android_replace_crash_detail_name(cd, "new_name", strlen("new_name"));
+    android_crash_detail_replace_name(cd, "new_name", strlen("new_name"));
     abort();
   });
   StartIntercept(&output_fd);
@@ -1037,7 +1038,7 @@ TEST_F(CrasherTest, crash_detail_single_bytes) {
   int intercept_result;
   unique_fd output_fd;
   StartProcess([]() {
-    android_register_crash_detail("CRASH_DETAIL_NAME", strlen("CRASH_DETAIL_NAME"), "\1",
+    android_crash_detail_register("CRASH_DETAIL_NAME", strlen("CRASH_DETAIL_NAME"), "\1",
                                   sizeof("\1"));
     abort();
   });
@@ -1081,7 +1082,7 @@ TEST_F(CrasherTest, crash_detail_many) {
       std::string name = "CRASH_DETAIL_NAME" + std::to_string(i);
       std::string value = "CRASH_DETAIL_VALUE" + std::to_string(i);
       auto* h = android_register_crash_detail_strs(name.data(), value.data());
-      android_unregister_crash_detail(h);
+      android_crash_detail_unregister(h);
     }
 
     android_register_crash_detail_strs("FINAL_NAME", "FINAL_VALUE");
@@ -1149,7 +1150,7 @@ TEST_F(CrasherTest, crash_detail_remove) {
   unique_fd output_fd;
   StartProcess([]() {
     auto* detail1 = android_register_crash_detail_strs("CRASH_DETAIL_NAME", g_crash_detail_value);
-    android_unregister_crash_detail(detail1);
+    android_crash_detail_unregister(detail1);
     android_register_crash_detail_strs("CRASH_DETAIL_NAME2", g_crash_detail_value2);
     abort();
   });
