@@ -81,8 +81,8 @@ class CowWriterV2 : public CowWriterBase {
     int num_compress_threads_ = 1;
     std::vector<std::unique_ptr<CompressWorker>> compress_threads_;
     std::vector<std::future<bool>> threads_;
-    std::vector<std::basic_string<uint8_t>> compressed_buf_;
-    std::vector<std::basic_string<uint8_t>>::iterator buf_iter_;
+    std::vector<std::vector<uint8_t>> compressed_buf_;
+    std::vector<std::vector<uint8_t>>::iterator buf_iter_;
 
     std::vector<std::unique_ptr<CowOperationV2>> opbuffer_vec_;
     std::vector<std::unique_ptr<uint8_t[]>> databuffer_vec_;

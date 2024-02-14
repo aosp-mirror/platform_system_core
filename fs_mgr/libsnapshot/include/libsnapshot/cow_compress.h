@@ -17,6 +17,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 #include "libsnapshot/cow_format.h"
 
 namespace android {
@@ -40,8 +41,7 @@ class ICompressor {
 
     uint32_t GetCompressionLevel() const { return compression_level_; }
     uint32_t GetBlockSize() const { return block_size_; }
-    [[nodiscard]] virtual std::basic_string<uint8_t> Compress(const void* data,
-                                                              size_t length) const = 0;
+    [[nodiscard]] virtual std::vector<uint8_t> Compress(const void* data, size_t length) const = 0;
 
   private:
     uint32_t compression_level_;

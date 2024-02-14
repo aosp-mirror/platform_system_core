@@ -18,6 +18,7 @@
 #include <iostream>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -429,7 +430,7 @@ TEST_P(CompressionTest, NoBatchWrites) {
 template <typename T>
 class HorribleStream : public IByteStream {
   public:
-    HorribleStream(const std::basic_string<T>& input) : input_(input) {}
+    HorribleStream(const std::vector<T>& input) : input_(input) {}
 
     ssize_t Read(void* buffer, size_t length) override {
         if (pos_ >= input_.size()) {
@@ -444,16 +445,17 @@ class HorribleStream : public IByteStream {
     size_t Size() const override { return input_.size(); }
 
   private:
-    std::basic_string<T> input_;
+    std::vector<T> input_;
     size_t pos_ = 0;
 };
 
 TEST(HorribleStream, ReadFully) {
-    std::string expected = "this is some data";
+    std::string expected_str = "this is some data";
+    std::vector<char> expected{expected_str.begin(), expected_str.end()};
 
     HorribleStream<char> stream(expected);
 
-    std::string buffer(expected.size(), '\0');
+    std::vector<char> buffer(expected.size(), '\0');
     ASSERT_TRUE(stream.ReadFully(buffer.data(), buffer.size()));
     ASSERT_EQ(buffer, expected);
 }
