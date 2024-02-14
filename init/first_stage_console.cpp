@@ -86,7 +86,9 @@ namespace init {
 void StartConsole(const std::string& cmdline) {
     bool console = KernelConsolePresent(cmdline);
     // Use a simple sigchld handler -- first_stage_console doesn't need to track or log zombies
-    const struct sigaction chld_act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDWAIT };
+    const struct sigaction chld_act {
+        .sa_flags = SA_NOCLDWAIT, .sa_handler = SIG_DFL
+    };
 
     sigaction(SIGCHLD, &chld_act, nullptr);
     pid_t pid = fork();
