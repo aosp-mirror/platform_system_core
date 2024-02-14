@@ -37,7 +37,9 @@
 # endif // !WEAKS_AVAILABLE
 #endif // CALLSTACK_WEAK predefined
 
-#define ALWAYS_INLINE __attribute__((always_inline))
+#ifndef CALLSTACK_ALWAYS_INLINE
+#define CALLSTACK_ALWAYS_INLINE __attribute__((always_inline))
+#endif  // CALLSTACK_ALWAYS_INLINE predefined
 
 namespace android {
 
@@ -102,7 +104,7 @@ public:
 
     // Return current call stack if possible, nullptr otherwise.
 #ifdef WEAKS_AVAILABLE
-    static CallStackUPtr ALWAYS_INLINE getCurrent(int32_t ignoreDepth = 1) {
+    static CallStackUPtr CALLSTACK_ALWAYS_INLINE getCurrent(int32_t ignoreDepth = 1) {
         if (reinterpret_cast<uintptr_t>(getCurrentInternal) == 0) {
             ALOGW("CallStack::getCurrentInternal not linked, returning null");
             return CallStackUPtr(nullptr);
@@ -111,14 +113,15 @@ public:
         }
     }
 #else // !WEAKS_AVAILABLE
-    static CallStackUPtr ALWAYS_INLINE getCurrent(int32_t = 1) {
+    static CallStackUPtr CALLSTACK_ALWAYS_INLINE getCurrent(int32_t = 1) {
         return CallStackUPtr(nullptr);
     }
 #endif // !WEAKS_AVAILABLE
 
 #ifdef WEAKS_AVAILABLE
-    static void ALWAYS_INLINE logStack(const char* logtag, CallStack* stack = getCurrent().get(),
-                                       android_LogPriority priority = ANDROID_LOG_DEBUG) {
+    static void CALLSTACK_ALWAYS_INLINE logStack(const char* logtag,
+                                                 CallStack* stack = getCurrent().get(),
+                                                 android_LogPriority priority = ANDROID_LOG_DEBUG) {
         if (reinterpret_cast<uintptr_t>(logStackInternal) != 0 && stack != nullptr) {
             logStackInternal(logtag, stack, priority);
         } else {
@@ -127,15 +130,16 @@ public:
     }
 
 #else
-    static void ALWAYS_INLINE logStack(const char* logtag, CallStack* = getCurrent().get(),
-                                       android_LogPriority = ANDROID_LOG_DEBUG) {
+    static void CALLSTACK_ALWAYS_INLINE logStack(const char* logtag,
+                                                 CallStack* = getCurrent().get(),
+                                                 android_LogPriority = ANDROID_LOG_DEBUG) {
         ALOG(LOG_WARN, logtag, "CallStack::logStackInternal not linked");
     }
 #endif // !WEAKS_AVAILABLE
 
 #ifdef WEAKS_AVAILABLE
-    static String8 ALWAYS_INLINE stackToString(const char* prefix = nullptr,
-                                               const CallStack* stack = getCurrent().get()) {
+    static String8 CALLSTACK_ALWAYS_INLINE
+    stackToString(const char* prefix = nullptr, const CallStack* stack = getCurrent().get()) {
         if (reinterpret_cast<uintptr_t>(stackToStringInternal) != 0 && stack != nullptr) {
             return stackToStringInternal(prefix, stack);
         } else {
@@ -143,8 +147,8 @@ public:
         }
     }
 #else // !WEAKS_AVAILABLE
-    static String8 ALWAYS_INLINE stackToString(const char* prefix = nullptr,
-                                               const CallStack* = getCurrent().get()) {
+    static String8 CALLSTACK_ALWAYS_INLINE stackToString(const char* prefix = nullptr,
+                                                         const CallStack* = getCurrent().get()) {
         return String8::format("%s<CallStack package not linked>", (prefix ? prefix : ""));
     }
 #endif // !WEAKS_AVAILABLE
@@ -164,5 +168,7 @@ public:
 };
 
 }  // namespace android
+
+#undef CALLSTACK_ALWAYS_INLINE
 
 #endif // ANDROID_CALLSTACK_H
