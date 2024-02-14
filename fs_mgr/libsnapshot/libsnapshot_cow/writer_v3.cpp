@@ -512,8 +512,7 @@ bool CowWriterV3::FlushCacheOps() {
         }
         bytes_written += op.data_length;
     }
-    if (!WriteOperation({cached_ops_.data(), cached_ops_.size()},
-                        {data_vec_.data(), data_vec_.size()})) {
+    if (!WriteOperation(cached_ops_, data_vec_)) {
         LOG(ERROR) << "Failed to flush " << cached_ops_.size() << " ops to disk";
         return false;
     }
@@ -632,7 +631,7 @@ std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::ProcessBlocksWithThreade
     }
 
     // Fetch compressed buffers from the threads
-    std::vector<std::basic_string<uint8_t>> compressed_buf;
+    std::vector<std::vector<uint8_t>> compressed_buf;
     compressed_buf.clear();
     for (size_t i = 0; i < num_threads; i++) {
         CompressWorker* worker = compress_threads_[i].get();
@@ -684,8 +683,8 @@ std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::CompressBlocks(const siz
     return ProcessBlocksWithThreadedCompression(num_blocks, data, type);
 }
 
-bool CowWriterV3::WriteOperation(std::basic_string_view<CowOperationV3> ops,
-                                 std::basic_string_view<struct iovec> data) {
+bool CowWriterV3::WriteOperation(std::span<const CowOperationV3> ops,
+                                 std::span<const struct iovec> data) {
     const auto total_data_size =
             std::transform_reduce(data.begin(), data.end(), 0, std::plus<size_t>{},
                                   [](const struct iovec& a) { return a.iov_len; });

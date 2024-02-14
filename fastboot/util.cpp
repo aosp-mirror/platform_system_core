@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/time.h>
+#include <time.h>
 
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
@@ -43,9 +43,9 @@ using android::base::borrowed_fd;
 static bool g_verbose = false;
 
 double now() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000;
 }
 
 void die(const char* fmt, ...) {

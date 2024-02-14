@@ -78,7 +78,7 @@ void OneShotCompressionTest() {
 
     for (size_t i = 0; i < compressors.size(); i++) {
         const auto start = std::chrono::steady_clock::now();
-        std::basic_string<uint8_t> compressed_data =
+        std::vector<uint8_t> compressed_data =
                 compressors[i]->Compress(buffer.data(), buffer.size());
         const auto end = std::chrono::steady_clock::now();
         const auto latency =
@@ -141,13 +141,13 @@ void IncrementalCompressionTest() {
     std::vector<std::pair<double, std::string>> ratios;
 
     for (size_t i = 0; i < compressors.size(); i++) {
-        std::vector<std::basic_string<uint8_t>> compressed_data_vec;
+        std::vector<std::vector<uint8_t>> compressed_data_vec;
         int num_blocks = buffer.size() / BLOCK_SZ;
         const uint8_t* iter = reinterpret_cast<const uint8_t*>(buffer.data());
 
         const auto start = std::chrono::steady_clock::now();
         while (num_blocks > 0) {
-            std::basic_string<uint8_t> compressed_data = compressors[i]->Compress(iter, BLOCK_SZ);
+            std::vector<uint8_t> compressed_data = compressors[i]->Compress(iter, BLOCK_SZ);
             compressed_data_vec.emplace_back(compressed_data);
             num_blocks--;
             iter += BLOCK_SZ;
