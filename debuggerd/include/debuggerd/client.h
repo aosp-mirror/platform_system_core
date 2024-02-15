@@ -26,7 +26,7 @@
 
 // Trigger a dump of specified process to output_fd.
 // output_fd is consumed, timeout of 0 will wait forever.
-bool debuggerd_trigger_dump(pid_t pid, enum DebuggerdDumpType dump_type, unsigned int timeout_ms,
+bool debuggerd_trigger_dump(pid_t tid, enum DebuggerdDumpType dump_type, unsigned int timeout_ms,
                             android::base::unique_fd output_fd);
 
 int dump_backtrace_to_file(pid_t tid, enum DebuggerdDumpType dump_type, int output_fd);

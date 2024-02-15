@@ -91,9 +91,12 @@ struct metrics_resp {
  * struct metrics_report_crash_req - arguments of %METRICS_CMD_REPORT_CRASH
  *                                   requests
  * @app_id_len: length of app ID that follows this structure
+ * @crash_reason: architecture-specific code representing the reason for the
+ *                crash
  */
 struct metrics_report_crash_req {
     uint32_t app_id_len;
+    uint32_t crash_reason;
 } __attribute__((__packed__));
 
 #define METRICS_MAX_APP_ID_LEN 256
