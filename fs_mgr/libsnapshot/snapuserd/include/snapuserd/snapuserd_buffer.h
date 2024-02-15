@@ -25,37 +25,37 @@
 namespace android {
 namespace snapshot {
 
-class BufferSink : public IByteSink {
+class BufferSink final {
   public:
     void Initialize(size_t size);
     void* GetBufPtr() { return buffer_.get(); }
     void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
     void* GetPayloadBuffer(size_t size);
-    void* GetBuffer(size_t requested, size_t* actual) override;
+    void* GetBuffer(size_t requested, size_t* actual);
     void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
     struct dm_user_header* GetHeaderPtr();
-    bool ReturnData(void*, size_t) override { return true; }
     void ResetBufferOffset() { buffer_offset_ = 0; }
     void* GetPayloadBufPtr();
+    loff_t GetPayloadBytesWritten() { return buffer_offset_; }
+
+    // Same as calling GetPayloadBuffer and then UpdateBufferOffset.
+    //
+    // This is preferred over GetPayloadBuffer as it does not require a
+    // separate call to UpdateBufferOffset.
+    void* AcquireBuffer(size_t size) { return AcquireBuffer(size, size); }
+
+    // Same as AcquireBuffer, but separates the requested size from the buffer
+    // offset. This is useful for a situation where a full run of data will be
+    // read, but only a partial amount will be returned.
+    //
+    // If size != to_write, the excess bytes may be reallocated by the next
+    // call to AcquireBuffer.
+    void* AcquireBuffer(size_t size, size_t to_write);
 
   private:
     std::unique_ptr<uint8_t[]> buffer_;
     loff_t buffer_offset_;
     size_t buffer_size_;
-};
-
-class XorSink : public IByteSink {
-  public:
-    void Initialize(BufferSink* sink, size_t size);
-    void Reset();
-    void* GetBuffer(size_t requested, size_t* actual) override;
-    bool ReturnData(void* buffer, size_t len) override;
-
-  private:
-    BufferSink* bufsink_;
-    std::unique_ptr<uint8_t[]> buffer_;
-    size_t buffer_size_;
-    size_t returned_;
 };
 
 }  // namespace snapshot

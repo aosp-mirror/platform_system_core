@@ -26,6 +26,7 @@ faccessat: 1
 recvmsg: 1
 recvfrom: 1
 sysinfo: 1
+setsockopt: 1
 
 process_vm_readv: 1
 

@@ -170,7 +170,7 @@ cc_binary {
         "android.hardware.fastboot@1.1",
         "android.hardware.fastboot-V1-ndk",
         "android.hardware.health@2.0",
-        "android.hardware.health-V2-ndk",
+        "android.hardware.health-V3-ndk",
         "libasyncio",
         "libbase",
         "libbinder_ndk",
@@ -196,6 +196,7 @@ cc_binary {
         "libfastbootshim",
         "libsnapshot_cow",
         "liblz4",
+        "libzstd",
         "libsnapshot_nobinder",
         "update_metadata-protos",
         "liburing",
@@ -444,4 +445,15 @@ cc_library_headers {
     name: "fastboot_headers",
     host_supported: true,
     export_include_dirs: ["."],
+}
+
+python_test_host {
+    name: "fastboot_integration_test",
+    main: "test_fastboot.py",
+    srcs: ["test_fastboot.py"],
+    data: [":fastboot"],
+    test_config: "fastboot_integration_test.xml",
+    test_options: {
+        unit_test: false,
+    },
 }

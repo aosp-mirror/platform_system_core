@@ -395,6 +395,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_region_info, scudo_region_info);
     ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
     ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
+    ASSERT_SAME_OFFSET(scudo_stack_depot_size, scudo_stack_depot_size);
     ASSERT_SAME_OFFSET(recoverable_gwp_asan_crash, recoverable_gwp_asan_crash);
 #undef ASSERT_SAME_OFFSET
 
@@ -552,8 +553,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   debugger_process_info process_info = {};
+  if (g_callbacks.get_process_info) {
+    process_info = g_callbacks.get_process_info();
+  }
   uintptr_t si_val = reinterpret_cast<uintptr_t>(info->si_ptr);
   if (signal_number == BIONIC_SIGNAL_DEBUGGER) {
+    // Applications can set abort messages via android_set_abort_message without
+    // actually aborting; ignore those messages in non-fatal dumps.
+    process_info.abort_msg = nullptr;
     if (info->si_code == SI_QUEUE && info->si_pid == __getpid()) {
       // Allow for the abort message to be explicitly specified via the sigqueue value.
       // Keep the bottom bit intact for representing whether we want a backtrace or a tombstone.
@@ -562,8 +569,6 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
         info->si_ptr = reinterpret_cast<void*>(si_val & 1);
       }
     }
-  } else if (g_callbacks.get_process_info) {
-    process_info = g_callbacks.get_process_info();
   }
 
   gwp_asan_callbacks_t gwp_asan_callbacks = {};
@@ -721,19 +726,19 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
   }
 
   size_t thread_stack_pages = 8;
-  void* thread_stack_allocation = mmap(nullptr, PAGE_SIZE * (thread_stack_pages + 2), PROT_NONE,
+  void* thread_stack_allocation = mmap(nullptr, getpagesize() * (thread_stack_pages + 2), PROT_NONE,
                                        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   if (thread_stack_allocation == MAP_FAILED) {
     fatal_errno("failed to allocate debuggerd thread stack");
   }
 
-  char* stack = static_cast<char*>(thread_stack_allocation) + PAGE_SIZE;
-  if (mprotect(stack, PAGE_SIZE * thread_stack_pages, PROT_READ | PROT_WRITE) != 0) {
+  char* stack = static_cast<char*>(thread_stack_allocation) + getpagesize();
+  if (mprotect(stack, getpagesize() * thread_stack_pages, PROT_READ | PROT_WRITE) != 0) {
     fatal_errno("failed to mprotect debuggerd thread stack");
   }
 
   // Stack grows negatively, set it to the last byte in the page...
-  stack = (stack + thread_stack_pages * PAGE_SIZE - 1);
+  stack = (stack + thread_stack_pages * getpagesize() - 1);
   // and align it.
   stack -= 15;
   pseudothread_stack = stack;

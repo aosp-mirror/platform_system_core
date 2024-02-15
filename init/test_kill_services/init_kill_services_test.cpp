@@ -16,14 +16,26 @@
 
 #include <gtest/gtest.h>
 
+#include <android-base/logging.h>
 #include <android-base/properties.h>
 
 #include <iostream>
 
 using ::android::base::GetProperty;
 using ::android::base::SetProperty;
+using ::android::base::WaitForProperty;
+using std::literals::chrono_literals::operator""s;
 
 void ExpectKillingServiceRecovers(const std::string& service_name) {
+    LOG(INFO) << "before we say hi to " << service_name << ", I can't have apexd around!";
+
+    // b/280514080 - servicemanager will restart apexd, and apexd will restart the
+    // system when crashed. This is fine as the device recovers, but it causes
+    // flakes in this test.
+    ASSERT_TRUE(WaitForProperty("init.svc.apexd", "stopped", 120s))
+            << (system("cat /dev/binderfs/binder_logs/state"), "apexd won't stop");
+
+    LOG(INFO) << "hello " << service_name << "!";
     const std::string status_prop = "init.svc." + service_name;
     const std::string pid_prop = "init.svc_debug_pid." + service_name;
 
@@ -32,6 +44,7 @@ void ExpectKillingServiceRecovers(const std::string& service_name) {
     ASSERT_EQ("running", GetProperty(status_prop, "")) << status_prop;
     ASSERT_NE("", initial_pid) << pid_prop;
 
+    LOG(INFO) << "okay, now goodbye " << service_name;
     EXPECT_EQ(0, system(("kill -9 " + initial_pid).c_str()));
 
     constexpr size_t kMaxWaitMilliseconds = 10000;
@@ -42,11 +55,16 @@ void ExpectKillingServiceRecovers(const std::string& service_name) {
     for (size_t retry = 0; retry < kRetryTimes; retry++) {
         const std::string& pid = GetProperty(pid_prop, "");
         if (pid != initial_pid && pid != "") break;
+        LOG(INFO) << "I said goodbye " << service_name << "!";
         usleep(kRetryWaitMilliseconds * 1000);
     }
 
+    LOG(INFO) << "are you still there " << service_name << "?";
+
     // svc_debug_pid is set after svc property
     EXPECT_EQ("running", GetProperty(status_prop, ""));
+
+    LOG(INFO) << "I'm done with " << service_name;
 }
 
 class InitKillServicesTest : public ::testing::TestWithParam<std::string> {};

@@ -11,9 +11,6 @@
     "libsigchain.so",
     // TODO(b/122876336): Remove libpac.so once it's migrated to Webview
     "libpac.so",
-    // TODO(b/184872979): Remove libbinder_rpc_unstable.so once stablized and
-    // added to libbinder_ndk.
-    "libbinder_rpc_unstable.so",
     // TODO(b/120786417 or b/134659294): libicuuc.so
     // and libicui18n.so are kept for app compat.
     "libicui18n.so",

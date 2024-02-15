@@ -59,6 +59,7 @@ struct PartitionCowCreator {
     // True if snapuserd COWs are enabled.
     bool using_snapuserd = false;
     std::string compression_algorithm;
+    uint64_t compression_factor;
 
     // True if multi-threaded compression should be enabled
     bool enable_threading;

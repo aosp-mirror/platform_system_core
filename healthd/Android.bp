@@ -76,7 +76,7 @@ cc_library_static {
     defaults: ["libbatterymonitor_defaults"],
     srcs: ["BatteryMonitor.cpp"],
     static_libs: [
-        "android.hardware.health-V2-ndk",
+        "android.hardware.health-V3-ndk",
     ],
     whole_static_libs: [
         // Need to translate HIDL to AIDL to support legacy APIs in
@@ -97,44 +97,6 @@ cc_library_static {
         // Need to translate HIDL to AIDL to support legacy APIs in
         // BatteryMonitor.
         "android.hardware.health-translate-V1-ndk",
-    ],
-}
-
-cc_defaults {
-    name: "android.hardware.health@2.0-service_defaults",
-
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-
-    static_libs: [
-        "android.hardware.health@2.0-impl",
-        "android.hardware.health@1.0-convert",
-        "libhealthservice",
-        "libhealthstoragedefault",
-        "libbatterymonitor",
-    ],
-
-    shared_libs: [
-        "libbase",
-        "libcutils",
-        "libhidlbase",
-        "liblog",
-        "libutils",
-        "android.hardware.health@2.0",
-    ],
-}
-
-cc_binary {
-    name: "android.hardware.health@2.0-service",
-    defaults: ["android.hardware.health@2.0-service_defaults"],
-
-    vendor: true,
-    relative_install_path: "hw",
-    init_rc: ["android.hardware.health@2.0-service.rc"],
-    srcs: [
-        "HealthServiceDefault.cpp",
     ],
 }
 
@@ -203,12 +165,12 @@ cc_library_static {
     defaults: ["libhealthd_charger_ui_defaults"],
 
     static_libs: [
-        "android.hardware.health-V2-ndk",
+        "android.hardware.health-V3-ndk",
         "android.hardware.health-translate-ndk",
     ],
 
     export_static_lib_headers: [
-        "android.hardware.health-V2-ndk",
+        "android.hardware.health-V3-ndk",
     ],
 }
 
@@ -280,7 +242,7 @@ cc_defaults {
     static_libs: [
         // common
         "android.hardware.health@1.0-convert",
-        "android.hardware.health-V2-ndk",
+        "android.hardware.health-V3-ndk",
         "libbatterymonitor",
         "libcharger_sysprop",
         "libhealthd_charger_nops",

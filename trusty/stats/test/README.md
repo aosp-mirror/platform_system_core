@@ -1,8 +1,8 @@
 # Development Notes
 
-*    First get [repo_pull.py and gerrit.py](https://android.googlesource.com/platform/development/+/master/tools/repo_pull/) from aosp.
+*    First get [repo_pull.py and gerrit.py](https://android.googlesource.com/platform/development/+/main/tools/repo_pull/) from aosp.
 
-*    Although this repo is not currently in Trusty’s manifest, it’s sufficient to copy these two python scripts to the root of the Trusty project and run them from there. Make sure to follow the [repo_pull installation](https://android.googlesource.com/platform/development/+/master/tools/repo_pull/#installation) steps if necessary.
+*    Although this repo is not currently in Trusty’s manifest, it’s sufficient to copy these two python scripts to the root of the Trusty project and run them from there. Make sure to follow the [repo_pull installation](https://android.googlesource.com/platform/development/+/main/tools/repo_pull/#installation) steps if necessary.
 
 ## Build
 

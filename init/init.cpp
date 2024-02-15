@@ -54,7 +54,6 @@
 #include <android-base/thread_annotations.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr_vendor_overlay.h>
-#include <keyutils.h>
 #include <libavb/libavb.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
@@ -108,6 +107,7 @@ using android::base::SetProperty;
 using android::base::StringPrintf;
 using android::base::Timer;
 using android::base::Trim;
+using android::base::unique_fd;
 using android::fs_mgr::AvbHandle;
 using android::snapshot::SnapshotManager;
 
@@ -116,7 +116,7 @@ namespace init {
 
 static int property_triggers_enabled = 0;
 
-static int signal_fd = -1;
+static int sigterm_fd = -1;
 static int property_fd = -1;
 
 struct PendingControlMessage {
@@ -487,7 +487,7 @@ static Result<void> UpdateApexLinkerConfig(const std::string& apex_name) {
 }
 
 static Result<void> DoLoadApex(const std::string& apex_name) {
-    if (auto result = ParseApexConfigs(apex_name); !result.ok()) {
+    if (auto result = ParseRcScriptsFromApex(apex_name); !result.ok()) {
         return result.error();
     }
 
@@ -713,8 +713,9 @@ static void HandleSigtermSignal(const signalfd_siginfo& siginfo) {
     HandlePowerctlMessage("shutdown,container");
 }
 
-static void HandleSignalFd() {
+static void HandleSignalFd(int signal) {
     signalfd_siginfo siginfo;
+    const int signal_fd = signal == SIGCHLD ? Service::GetSigchldFd() : sigterm_fd;
     ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
     if (bytes_read != sizeof(siginfo)) {
         PLOG(ERROR) << "Failed to read siginfo from signal_fd";
@@ -748,25 +749,33 @@ static void UnblockSignals() {
     }
 }
 
+static Result<void> RegisterSignalFd(Epoll* epoll, int signal, int fd) {
+    return epoll->RegisterHandler(
+            fd, [signal]() { HandleSignalFd(signal); }, EPOLLIN | EPOLLPRI);
+}
+
+static Result<int> CreateAndRegisterSignalFd(Epoll* epoll, int signal) {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, signal);
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        return ErrnoError() << "failed to block signal " << signal;
+    }
+
+    unique_fd signal_fd(signalfd(-1, &mask, SFD_CLOEXEC));
+    if (signal_fd.get() < 0) {
+        return ErrnoError() << "failed to create signalfd for signal " << signal;
+    }
+    OR_RETURN(RegisterSignalFd(epoll, signal, signal_fd.get()));
+
+    return signal_fd.release();
+}
+
 static void InstallSignalFdHandler(Epoll* epoll) {
     // Applying SA_NOCLDSTOP to a defaulted SIGCHLD handler prevents the signalfd from receiving
     // SIGCHLD when a child process stops or continues (b/77867680#comment9).
-    const struct sigaction act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDSTOP };
+    const struct sigaction act { .sa_flags = SA_NOCLDSTOP, .sa_handler = SIG_DFL };
     sigaction(SIGCHLD, &act, nullptr);
-
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGCHLD);
-
-    if (!IsRebootCapable()) {
-        // If init does not have the CAP_SYS_BOOT capability, it is running in a container.
-        // In that case, receiving SIGTERM will cause the system to shut down.
-        sigaddset(&mask, SIGTERM);
-    }
-
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        PLOG(FATAL) << "failed to block signals";
-    }
 
     // Register a handler to unblock signals in the child processes.
     const int result = pthread_atfork(nullptr, nullptr, &UnblockSignals);
@@ -774,14 +783,17 @@ static void InstallSignalFdHandler(Epoll* epoll) {
         LOG(FATAL) << "Failed to register a fork handler: " << strerror(result);
     }
 
-    signal_fd = signalfd(-1, &mask, SFD_CLOEXEC);
-    if (signal_fd == -1) {
-        PLOG(FATAL) << "failed to create signalfd";
+    Result<void> cs_result = RegisterSignalFd(epoll, SIGCHLD, Service::GetSigchldFd());
+    if (!cs_result.ok()) {
+        PLOG(FATAL) << cs_result.error();
     }
 
-    constexpr int flags = EPOLLIN | EPOLLPRI;
-    if (auto result = epoll->RegisterHandler(signal_fd, HandleSignalFd, flags); !result.ok()) {
-        LOG(FATAL) << result.error();
+    if (!IsRebootCapable()) {
+        Result<int> cs_result = CreateAndRegisterSignalFd(epoll, SIGTERM);
+        if (!cs_result.ok()) {
+            PLOG(FATAL) << cs_result.error();
+        }
+        sigterm_fd = cs_result.value();
     }
 }
 
@@ -831,6 +843,12 @@ static void MountExtraFilesystems() {
     // /apex is used to mount APEXes
     CHECKCALL(mount("tmpfs", "/apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
+
+    if (NeedsTwoMountNamespaces()) {
+        // /bootstrap-apex is used to mount "bootstrap" APEXes.
+        CHECKCALL(mount("tmpfs", "/bootstrap-apex", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                        "mode=0755,uid=0,gid=0"));
+    }
 
     // /linkerconfig is used to keep generated linker configuration
     CHECKCALL(mount("tmpfs", "/linkerconfig", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
@@ -952,11 +970,6 @@ int SecondStageMain(int argc, char** argv) {
                    << " to /proc/1/oom_score_adj: " << result.error();
     }
 
-    // Set up a session keyring that all processes will have access to. It
-    // will hold things like FBE encryption keys. No process should override
-    // its session keyring.
-    keyctl_get_keyring_ID(KEY_SPEC_SESSION_KEYRING, 1);
-
     // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
@@ -1043,12 +1056,18 @@ int SecondStageMain(int argc, char** argv) {
     SetProperty(gsi::kGsiBootedProp, is_running);
     auto is_installed = android::gsi::IsGsiInstalled() ? "1" : "0";
     SetProperty(gsi::kGsiInstalledProp, is_installed);
+    if (android::gsi::IsGsiRunning()) {
+        std::string dsu_slot;
+        if (android::gsi::GetActiveDsu(&dsu_slot)) {
+            SetProperty(gsi::kDsuSlotProp, dsu_slot);
+        }
+    }
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");
     am.QueueBuiltinAction(TestPerfEventSelinuxAction, "TestPerfEventSelinux");
-    am.QueueBuiltinAction(ConnectEarlyStageSnapuserdAction, "ConnectEarlyStageSnapuserd");
     am.QueueEventTrigger("early-init");
+    am.QueueBuiltinAction(ConnectEarlyStageSnapuserdAction, "ConnectEarlyStageSnapuserd");
 
     // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     am.QueueBuiltinAction(wait_for_coldboot_done_action, "wait_for_coldboot_done");

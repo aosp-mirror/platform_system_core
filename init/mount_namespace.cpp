@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-#include <ApexProperties.sysprop.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -29,16 +28,6 @@
 #include <android-base/unique_fd.h>
 
 #include "util.h"
-
-#ifndef RECOVERY
-#define ACTIVATE_FLATTENED_APEX 1
-#endif
-
-#ifdef ACTIVATE_FLATTENED_APEX
-#include <apex_manifest.pb.h>
-#include <com_android_apex.h>
-#include <selinux/android.h>
-#endif  // ACTIVATE_FLATTENED_APEX
 
 namespace android {
 namespace init {
@@ -77,21 +66,6 @@ static std::string GetMountNamespaceId() {
     return ret;
 }
 
-static bool IsApexUpdatable() {
-    static bool updatable = android::sysprop::ApexProperties::updatable().value_or(false);
-    return updatable;
-}
-
-// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
-// namespaces.
-static bool NeedsTwoMountNamespaces() {
-    if (!IsApexUpdatable()) return false;
-    if (IsRecoveryMode()) return false;
-    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
-    if (IsMicrodroid()) return false;
-    return true;
-}
-
 static android::base::unique_fd bootstrap_ns_fd;
 static android::base::unique_fd default_ns_fd;
 
@@ -99,6 +73,15 @@ static std::string bootstrap_ns_id;
 static std::string default_ns_id;
 
 }  // namespace
+
+// In case we have two sets of APEXes (non-updatable, updatable), we need two separate mount
+// namespaces.
+bool NeedsTwoMountNamespaces() {
+    if (IsRecoveryMode()) return false;
+    // In microdroid, there's only one set of APEXes in built-in directories include block devices.
+    if (IsMicrodroid()) return false;
+    return true;
+}
 
 bool SetupMountNamespaces() {
     // Set the propagation type of / as shared so that any mounting event (e.g.
@@ -180,6 +163,23 @@ bool SetupMountNamespaces() {
             PLOG(ERROR) << "Cannot switch back to bootstrap mount namespace";
             return false;
         }
+
+        // Some components (e.g. servicemanager) need to access bootstrap
+        // APEXes from the default mount namespace. To achieve that, we bind-mount
+        // /apex to /bootstrap-apex in the bootstrap mount namespace. Since /bootstrap-apex
+        // is "shared", the mounts are visible in the default mount namespace as well.
+        //
+        // The end result will look like:
+        //   in the bootstrap mount namespace:
+        //     /apex  (== /bootstrap-apex)
+        //       {bootstrap APEXes from the read-only partition}
+        //
+        //   in the default mount namespace:
+        //     /bootstrap-apex
+        //       {bootstrap APEXes from the read-only partition}
+        //     /apex
+        //       {APEXes, can be from /data partition}
+        if (!(BindMount("/bootstrap-apex", "/apex"))) return false;
     } else {
         // Otherwise, default == bootstrap
         default_ns_fd.reset(OpenMountNamespace());
@@ -193,7 +193,7 @@ bool SetupMountNamespaces() {
 // Switch the mount namespace of the current process from bootstrap to default OR from default to
 // bootstrap. If the current mount namespace is neither bootstrap nor default, keep it that way.
 Result<void> SwitchToMountNamespaceIfNeeded(MountNamespace target_mount_namespace) {
-    if (IsRecoveryMode() || !IsApexUpdatable()) {
+    if (IsRecoveryMode()) {
         // we don't have multiple namespaces in recovery mode or if apex is not updatable
         return {};
     }

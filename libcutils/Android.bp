@@ -162,7 +162,6 @@ cc_library {
         "properties.cpp",
         "record_stream.cpp",
         "strlcpy.c",
-        "threads.cpp",
     ],
 
     target: {
@@ -172,11 +171,15 @@ cc_library {
                 "libasync_safe",
             ],
         },
+        linux: {
+            srcs: [
+                "canned_fs_config.cpp",
+                "fs_config.cpp",
+            ],
+        },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
                 "ashmem-host.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "trace-host.cpp",
             ],
         },
@@ -202,8 +205,6 @@ cc_library {
             srcs: libcutils_nonwindows_sources + [
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "klog.cpp",
                 "partition_utils.cpp",
                 "qtaguid.cpp",
@@ -219,11 +220,19 @@ cc_library {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
         product: {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
     },
 

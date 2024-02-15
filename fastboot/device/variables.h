@@ -63,8 +63,14 @@ bool GetOffModeChargeState(FastbootDevice* device, const std::vector<std::string
                            std::string* message);
 bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& args,
                        std::string* message);
+bool GetBatterySoC(FastbootDevice* device, const std::vector<std::string>& args,
+                   std::string* message);
 bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& args,
                      std::string* message);
+bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::string>& args,
+                            std::string* message);
+bool GetBatteryPartStatus(FastbootDevice* device, const std::vector<std::string>& args,
+                          std::string* message);
 bool GetSuperPartitionName(FastbootDevice* device, const std::vector<std::string>& args,
                            std::string* message);
 bool GetSnapshotUpdateStatus(FastbootDevice* device, const std::vector<std::string>& args,

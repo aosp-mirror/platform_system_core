@@ -16,17 +16,36 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/unique_fd.h>
+#include <gflags/gflags.h>
 #include <libsnapshot/cow_reader.h>
+#include "parser_v2.h"
+
+DEFINE_bool(silent, false, "Run silently");
+DEFINE_bool(decompress, false, "Attempt to decompress data ops");
+DEFINE_bool(show_bad_data, false, "If an op fails to decompress, show its daw data");
+DEFINE_bool(show_ops, false, "Print all opcode information");
+DEFINE_string(order, "", "If show_ops is true, change the order (either merge or reverse-merge)");
+DEFINE_bool(show_merged, false,
+            "If show_ops is true, and order is merge or reverse-merge, include merged ops");
+DEFINE_bool(verify_merge_sequence, false, "Verify merge order sequencing");
+DEFINE_bool(show_merge_sequence, false, "Show merge order sequence");
+DEFINE_bool(show_raw_ops, false, "Show raw ops directly from the underlying parser");
+DEFINE_string(extract_to, "", "Extract the COW contents to the given file");
 
 namespace android {
 namespace snapshot {
+
+using android::base::borrowed_fd;
+using android::base::unique_fd;
 
 void MyLogger(android::base::LogId, android::base::LogSeverity severity, const char*, const char*,
               unsigned int, const char* message) {
@@ -37,107 +56,109 @@ void MyLogger(android::base::LogId, android::base::LogSeverity severity, const c
     }
 }
 
-static void usage(void) {
-    LOG(ERROR) << "Usage: inspect_cow [-sd] <COW_FILE>";
-    LOG(ERROR) << "\t -s Run Silent";
-    LOG(ERROR) << "\t -d Attempt to decompress";
-    LOG(ERROR) << "\t -b Show data for failed decompress";
-    LOG(ERROR) << "\t -l Show ops";
-    LOG(ERROR) << "\t -m Show ops in reverse merge order";
-    LOG(ERROR) << "\t -n Show ops in merge order";
-    LOG(ERROR) << "\t -a Include merged ops in any merge order listing";
-    LOG(ERROR) << "\t -o Shows sequence op block order";
-    LOG(ERROR) << "\t -v Verifies merge order has no conflicts\n";
-}
-
-enum OpIter { Normal, RevMerge, Merge };
-
-struct Options {
-    bool silent;
-    bool decompress;
-    bool show_ops;
-    bool show_bad;
-    bool show_seq;
-    bool verify_sequence;
-    OpIter iter_type;
-    bool include_merged;
-};
-
-// Sink that always appends to the end of a string.
-class StringSink : public IByteSink {
-  public:
-    void* GetBuffer(size_t requested, size_t* actual) override {
-        size_t old_size = stream_.size();
-        stream_.resize(old_size + requested, '\0');
-        *actual = requested;
-        return stream_.data() + old_size;
-    }
-    bool ReturnData(void*, size_t) override { return true; }
-    void Reset() { stream_.clear(); }
-
-    std::string& stream() { return stream_; }
-
-  private:
-    std::string stream_;
-};
-
-static void ShowBad(CowReader& reader, const struct CowOperation& op) {
+static void ShowBad(CowReader& reader, const CowOperation* op) {
     size_t count;
-    auto buffer = std::make_unique<uint8_t[]>(op.data_length);
+    auto buffer = std::make_unique<uint8_t[]>(op->data_length);
 
-    if (!reader.GetRawBytes(op.source, buffer.get(), op.data_length, &count)) {
+    if (!reader.GetRawBytes(op, buffer.get(), op->data_length, &count)) {
         std::cerr << "Failed to read at all!\n";
     } else {
         std::cout << "The Block data is:\n";
-        for (int i = 0; i < op.data_length; i++) {
+        for (int i = 0; i < op->data_length; i++) {
             std::cout << std::hex << (int)buffer[i];
         }
         std::cout << std::dec << "\n\n";
-        if (op.data_length >= sizeof(CowOperation)) {
+        if (op->data_length >= sizeof(CowOperation)) {
             std::cout << "The start, as an op, would be " << *(CowOperation*)buffer.get() << "\n";
         }
     }
 }
 
-static bool Inspect(const std::string& path, Options opt) {
-    android::base::unique_fd fd(open(path.c_str(), O_RDONLY));
+static bool ShowRawOpStreamV2(borrowed_fd fd, const CowHeaderV3& header) {
+    CowParserV2 parser;
+    if (!parser.Parse(fd, header)) {
+        LOG(ERROR) << "v2 parser failed";
+        return false;
+    }
+    for (const auto& op : *parser.get_v2ops()) {
+        std::cout << op << "\n";
+        if (auto iter = parser.xor_data_loc()->find(op.new_block);
+            iter != parser.xor_data_loc()->end()) {
+            std::cout << "    data loc: " << iter->second << "\n";
+        }
+    }
+    return true;
+}
+
+static bool ShowRawOpStream(borrowed_fd fd) {
+    CowHeaderV3 header;
+    if (!ReadCowHeader(fd, &header)) {
+        LOG(ERROR) << "parse header failed";
+        return false;
+    }
+
+    switch (header.prefix.major_version) {
+        case 1:
+        case 2:
+            return ShowRawOpStreamV2(fd, header);
+        default:
+            LOG(ERROR) << "unknown COW version: " << header.prefix.major_version;
+            return false;
+    }
+}
+
+static bool Inspect(const std::string& path) {
+    unique_fd fd(open(path.c_str(), O_RDONLY));
     if (fd < 0) {
         PLOG(ERROR) << "open failed: " << path;
         return false;
     }
 
+    unique_fd extract_to;
+    if (!FLAGS_extract_to.empty()) {
+        extract_to.reset(open(FLAGS_extract_to.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0664));
+        if (extract_to < 0) {
+            PLOG(ERROR) << "could not open " << FLAGS_extract_to << " for writing";
+            return false;
+        }
+    }
+
     CowReader reader;
+
+    auto start_time = std::chrono::steady_clock::now();
     if (!reader.Parse(fd)) {
         LOG(ERROR) << "parse failed: " << path;
         return false;
     }
+    std::chrono::duration<double> parse_time = std::chrono::steady_clock::now() - start_time;
 
-    CowHeader header;
-    if (!reader.GetHeader(&header)) {
-        LOG(ERROR) << "could not get header: " << path;
-        return false;
-    }
+    const CowHeader& header = reader.GetHeader();
     CowFooter footer;
     bool has_footer = false;
     if (reader.GetFooter(&footer)) has_footer = true;
 
-    if (!opt.silent) {
-        std::cout << "Major version: " << header.major_version << "\n";
-        std::cout << "Minor version: " << header.minor_version << "\n";
-        std::cout << "Header size: " << header.header_size << "\n";
+    if (!FLAGS_silent) {
+        std::cout << "Version: " << header.prefix.major_version << "."
+                  << header.prefix.minor_version << "\n";
+        std::cout << "Header size: " << header.prefix.header_size << "\n";
         std::cout << "Footer size: " << header.footer_size << "\n";
         std::cout << "Block size: " << header.block_size << "\n";
-        std::cout << "Num merge ops: " << header.num_merge_ops << "\n";
-        std::cout << "RA buffer size: " << header.buffer_size << "\n";
-        std::cout << "\n";
+        std::cout << "Merge ops: " << header.num_merge_ops << "\n";
+        std::cout << "Readahead buffer: " << header.buffer_size << " bytes\n";
         if (has_footer) {
-            std::cout << "Total Ops size: " << footer.op.ops_size << "\n";
-            std::cout << "Number of Ops: " << footer.op.num_ops << "\n";
-            std::cout << "\n";
+            std::cout << "Footer: ops usage: " << footer.op.ops_size << " bytes\n";
+            std::cout << "Footer: op count: " << footer.op.num_ops << "\n";
+        } else {
+            std::cout << "Footer: none\n";
         }
     }
 
-    if (opt.verify_sequence) {
+    if (!FLAGS_silent) {
+        std::cout << "Parse time: " << (parse_time.count() * 1000) << "ms\n";
+    }
+
+    if (FLAGS_verify_merge_sequence) {
+        std::cout << "\n";
         if (reader.VerifyMergeOps()) {
             std::cout << "\nMerge sequence is consistent.\n";
         } else {
@@ -146,41 +167,68 @@ static bool Inspect(const std::string& path, Options opt) {
     }
 
     std::unique_ptr<ICowOpIter> iter;
-    if (opt.iter_type == Normal) {
+    if (FLAGS_order.empty()) {
         iter = reader.GetOpIter();
-    } else if (opt.iter_type == RevMerge) {
-        iter = reader.GetRevMergeOpIter(opt.include_merged);
-    } else if (opt.iter_type == Merge) {
-        iter = reader.GetMergeOpIter(opt.include_merged);
+    } else if (FLAGS_order == "reverse-merge") {
+        iter = reader.GetRevMergeOpIter(FLAGS_show_merged);
+    } else if (FLAGS_order == "merge") {
+        iter = reader.GetMergeOpIter(FLAGS_show_merged);
     }
-    StringSink sink;
+
+    std::string buffer(header.block_size, '\0');
+
+    if (!FLAGS_silent && FLAGS_show_raw_ops) {
+        std::cout << "\n";
+        std::cout << "Listing raw op stream:\n";
+        std::cout << "----------------------\n";
+        if (!ShowRawOpStream(fd)) {
+            return false;
+        }
+    }
+
+    if (!FLAGS_silent && FLAGS_show_ops) {
+        std::cout << "\n";
+        std::cout << "Listing op stream:\n";
+        std::cout << "------------------\n";
+    }
+
     bool success = true;
     uint64_t xor_ops = 0, copy_ops = 0, replace_ops = 0, zero_ops = 0;
-    while (!iter->Done()) {
-        const CowOperation& op = iter->Get();
+    while (!iter->AtEnd()) {
+        const CowOperation* op = iter->Get();
 
-        if (!opt.silent && opt.show_ops) std::cout << op << "\n";
+        if (!FLAGS_silent && FLAGS_show_ops) std::cout << *op << "\n";
 
-        if (opt.decompress && op.type == kCowReplaceOp && op.compression != kCowCompressNone) {
-            if (!reader.ReadData(op, &sink)) {
-                std::cerr << "Failed to decompress for :" << op << "\n";
+        if ((FLAGS_decompress || extract_to >= 0) && op->type() == kCowReplaceOp) {
+            if (reader.ReadData(op, buffer.data(), buffer.size()) < 0) {
+                std::cerr << "Failed to decompress for :" << *op << "\n";
                 success = false;
-                if (opt.show_bad) ShowBad(reader, op);
+                if (FLAGS_show_bad_data) ShowBad(reader, op);
             }
-            sink.Reset();
+            if (extract_to >= 0) {
+                off_t offset = uint64_t(op->new_block) * header.block_size;
+                if (!android::base::WriteFullyAtOffset(extract_to, buffer.data(), buffer.size(),
+                                                       offset)) {
+                    PLOG(ERROR) << "failed to write block " << op->new_block;
+                    return false;
+                }
+            }
+        } else if (extract_to >= 0 && !IsMetadataOp(*op) && op->type() != kCowZeroOp) {
+            PLOG(ERROR) << "Cannot extract op yet: " << *op;
+            return false;
         }
 
-        if (op.type == kCowSequenceOp && opt.show_seq) {
+        if (op->type() == kCowSequenceOp && FLAGS_show_merge_sequence) {
             size_t read;
             std::vector<uint32_t> merge_op_blocks;
-            size_t seq_len = op.data_length / sizeof(uint32_t);
+            size_t seq_len = op->data_length / sizeof(uint32_t);
             merge_op_blocks.resize(seq_len);
-            if (!reader.GetRawBytes(op.source, merge_op_blocks.data(), op.data_length, &read)) {
+            if (!reader.GetRawBytes(op, merge_op_blocks.data(), op->data_length, &read)) {
                 PLOG(ERROR) << "Failed to read sequence op!";
                 return false;
             }
-            if (!opt.silent) {
-                std::cout << "Sequence for " << op << " is :\n";
+            if (!FLAGS_silent) {
+                std::cout << "Sequence for " << *op << " is :\n";
                 for (size_t i = 0; i < seq_len; i++) {
                     std::cout << std::setfill('0') << std::setw(6) << merge_op_blocks[i] << ", ";
                     if ((i + 1) % 10 == 0 || i + 1 == seq_len) std::cout << "\n";
@@ -188,24 +236,26 @@ static bool Inspect(const std::string& path, Options opt) {
             }
         }
 
-        if (op.type == kCowCopyOp) {
+        if (op->type() == kCowCopyOp) {
             copy_ops++;
-        } else if (op.type == kCowReplaceOp) {
+        } else if (op->type() == kCowReplaceOp) {
             replace_ops++;
-        } else if (op.type == kCowZeroOp) {
+        } else if (op->type() == kCowZeroOp) {
             zero_ops++;
-        } else if (op.type == kCowXorOp) {
+        } else if (op->type() == kCowXorOp) {
             xor_ops++;
         }
 
         iter->Next();
     }
 
-    if (!opt.silent) {
+    if (!FLAGS_silent) {
         auto total_ops = replace_ops + zero_ops + copy_ops + xor_ops;
-        std::cout << "Total-data-ops: " << total_ops << "Replace-ops: " << replace_ops
-                  << " Zero-ops: " << zero_ops << " Copy-ops: " << copy_ops
-                  << " Xor_ops: " << xor_ops << std::endl;
+        std::cout << "Data ops: " << total_ops << "\n";
+        std::cout << "Replace ops: " << replace_ops << "\n";
+        std::cout << "Zero ops: " << zero_ops << "\n";
+        std::cout << "Copy ops: " << copy_ops << "\n";
+        std::cout << "Xor ops: " << xor_ops << "\n";
     }
 
     return success;
@@ -215,55 +265,20 @@ static bool Inspect(const std::string& path, Options opt) {
 }  // namespace android
 
 int main(int argc, char** argv) {
-    int ch;
-    struct android::snapshot::Options opt;
-    opt.silent = false;
-    opt.decompress = false;
-    opt.show_bad = false;
-    opt.iter_type = android::snapshot::Normal;
-    opt.verify_sequence = false;
-    opt.include_merged = false;
-    while ((ch = getopt(argc, argv, "sdbmnolva")) != -1) {
-        switch (ch) {
-            case 's':
-                opt.silent = true;
-                break;
-            case 'd':
-                opt.decompress = true;
-                break;
-            case 'b':
-                opt.show_bad = true;
-                break;
-            case 'm':
-                opt.iter_type = android::snapshot::RevMerge;
-                break;
-            case 'n':
-                opt.iter_type = android::snapshot::Merge;
-                break;
-            case 'o':
-                opt.show_seq = true;
-                break;
-            case 'l':
-                opt.show_ops = true;
-                break;
-            case 'v':
-                opt.verify_sequence = true;
-                break;
-            case 'a':
-                opt.include_merged = true;
-                break;
-            default:
-                android::snapshot::usage();
-        }
-    }
-    android::base::InitLogging(argv, android::snapshot::MyLogger);
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    if (argc < optind + 1) {
-        android::snapshot::usage();
+    if (argc < 2) {
+        gflags::ShowUsageWithFlags(argv[0]);
+        return 1;
+    }
+    if (FLAGS_order != "" && FLAGS_order != "merge" && FLAGS_order != "reverse-merge") {
+        std::cerr << "Order must either be \"merge\" or \"reverse-merge\".\n";
         return 1;
     }
 
-    if (!android::snapshot::Inspect(argv[optind], opt)) {
+    android::base::InitLogging(argv, android::snapshot::MyLogger);
+
+    if (!android::snapshot::Inspect(argv[1])) {
         return 1;
     }
     return 0;

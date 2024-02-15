@@ -18,7 +18,7 @@ package {
 }
 
 cc_defaults {
-    name: "libinit_defaults",
+    name: "libinit_fuzzer_defaults",
     static_libs: [
         "libc++fs",
         "liblmkd_utils",
@@ -32,7 +32,6 @@ cc_defaults {
         "libbase",
         "libfs_mgr",
         "libhidl-gen-utils",
-        "libkeyutils",
         "liblog",
         "libprocessgroup",
         "libselinux",
@@ -53,7 +52,7 @@ cc_fuzz {
     ],
     shared_libs: ["libhidlmetadata",],
     defaults: [
-        "libinit_defaults",
+        "libinit_fuzzer_defaults",
     ],
 }
 
@@ -62,7 +61,7 @@ cc_fuzz {
     srcs: [
         "init_property_fuzzer.cpp",
     ],
-    defaults: ["libinit_defaults"],
+    defaults: ["libinit_fuzzer_defaults"],
 }
 
 cc_fuzz {
@@ -71,6 +70,6 @@ cc_fuzz {
         "init_ueventHandler_fuzzer.cpp",
     ],
     defaults: [
-        "libinit_defaults",
+        "libinit_fuzzer_defaults",
     ],
 }

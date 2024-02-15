@@ -172,17 +172,12 @@ ReadAheadThread::ReadAheadThread(const std::string& cow_device, const std::strin
 }
 
 void ReadAheadThread::CheckOverlap(const CowOperation* cow_op) {
-    uint64_t source_block = cow_op->source;
-    uint64_t source_offset = 0;
-    if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block) ||
-        (source_offset > 0 && source_blocks_.count(source_block + 1))) {
+    uint64_t source_block = cow_op->source();
+    if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block)) {
         overlap_ = true;
     }
 
     dest_blocks_.insert(source_block);
-    if (source_offset > 0) {
-        dest_blocks_.insert(source_block + 1);
-    }
     source_blocks_.insert(cow_op->new_block);
 }
 
@@ -196,8 +191,8 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops
         // Get the first block with offset
         const CowOperation* cow_op = GetRAOpIter();
         CHECK_NE(cow_op, nullptr);
-        *source_offset = cow_op->source;
-        if (cow_op->type == kCowCopyOp) {
+        *source_offset = cow_op->source();
+        if (cow_op->type() == kCowCopyOp) {
             *source_offset *= BLOCK_SZ;
         }
         RAIterNext();
@@ -215,8 +210,8 @@ void ReadAheadThread::PrepareReadAhead(uint64_t* source_offset, int* pending_ops
         while (!RAIterDone() && num_ops) {
             const CowOperation* op = GetRAOpIter();
             CHECK_NE(op, nullptr);
-            uint64_t next_offset = op->source;
-            if (op->type == kCowCopyOp) {
+            uint64_t next_offset = op->source();
+            if (op->type() == kCowCopyOp) {
                 next_offset *= BLOCK_SZ;
             }
             if (next_offset + nr_consecutive * BLOCK_SZ != *source_offset) {

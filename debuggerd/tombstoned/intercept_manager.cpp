@@ -19,7 +19,10 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#include <limits>
+#include <memory>
 #include <unordered_map>
+#include <utility>
 
 #include <event2/event.h>
 #include <event2/listener.h>
@@ -36,8 +39,7 @@ using android::base::ReceiveFileDescriptors;
 using android::base::unique_fd;
 
 static void intercept_close_cb(evutil_socket_t sockfd, short event, void* arg) {
-  auto intercept = reinterpret_cast<Intercept*>(arg);
-  InterceptManager* intercept_manager = intercept->intercept_manager;
+  std::unique_ptr<Intercept> intercept(reinterpret_cast<Intercept*>(arg));
 
   CHECK_EQ(sockfd, intercept->sockfd.get());
 
@@ -46,131 +48,108 @@ static void intercept_close_cb(evutil_socket_t sockfd, short event, void* arg) {
 
   // Ownership of intercept differs based on whether we've registered it with InterceptManager.
   if (!intercept->registered) {
-    delete intercept;
-  } else {
-    auto it = intercept_manager->intercepts.find(intercept->intercept_pid);
-    if (it == intercept_manager->intercepts.end()) {
-      LOG(FATAL) << "intercept close callback called after intercept was already removed?";
-    }
-    if (it->second.get() != intercept) {
-      LOG(FATAL) << "intercept close callback has different Intercept from InterceptManager?";
-    }
-
-    const char* reason;
-    if ((event & EV_TIMEOUT) != 0) {
-      reason = "due to timeout";
-    } else {
-      reason = "due to input";
-    }
-
-    LOG(INFO) << "intercept for pid " << intercept->intercept_pid << " and type "
-              << intercept->dump_type << " terminated: " << reason;
-    intercept_manager->intercepts.erase(it);
+    LOG(WARNING) << "intercept for pid " << intercept->pid << " and type " << intercept->dump_type
+                 << " closed before being registered.";
+    return;
   }
+
+  const char* reason = (event & EV_TIMEOUT) ? "due to timeout" : "due to input";
+  LOG(INFO) << "intercept for pid " << intercept->pid << " and type " << intercept->dump_type
+            << " terminated: " << reason;
 }
 
-static bool is_intercept_request_valid(const InterceptRequest& request) {
-  if (request.pid <= 0 || request.pid > std::numeric_limits<pid_t>::max()) {
-    return false;
+void InterceptManager::Unregister(Intercept* intercept) {
+  CHECK(intercept->registered);
+  auto pid_entry = intercepts.find(intercept->pid);
+  if (pid_entry == intercepts.end()) {
+    LOG(FATAL) << "No intercepts found for pid " << intercept->pid;
+  }
+  auto& dump_type_hash = pid_entry->second;
+  auto dump_type_entry = dump_type_hash.find(intercept->dump_type);
+  if (dump_type_entry == dump_type_hash.end()) {
+    LOG(FATAL) << "Unknown intercept " << intercept->pid << " " << intercept->dump_type;
+  }
+  if (intercept != dump_type_entry->second) {
+    LOG(FATAL) << "Mismatch pointer trying to unregister intercept " << intercept->pid << " "
+               << intercept->dump_type;
   }
 
-  if (request.dump_type < 0 || request.dump_type > kDebuggerdJavaBacktrace) {
-    return false;
+  dump_type_hash.erase(dump_type_entry);
+  if (dump_type_hash.empty()) {
+    intercepts.erase(pid_entry);
   }
-
-  return true;
 }
 
 static void intercept_request_cb(evutil_socket_t sockfd, short ev, void* arg) {
-  auto intercept = reinterpret_cast<Intercept*>(arg);
+  std::unique_ptr<Intercept> intercept(reinterpret_cast<Intercept*>(arg));
   InterceptManager* intercept_manager = intercept->intercept_manager;
 
   CHECK_EQ(sockfd, intercept->sockfd.get());
 
   if ((ev & EV_TIMEOUT) != 0) {
     LOG(WARNING) << "tombstoned didn't receive InterceptRequest before timeout";
-    goto fail;
+    return;
   } else if ((ev & EV_READ) == 0) {
     LOG(WARNING) << "tombstoned received unexpected event on intercept socket";
-    goto fail;
+    return;
   }
 
-  {
-    unique_fd rcv_fd;
-    InterceptRequest intercept_request;
-    ssize_t result =
-        ReceiveFileDescriptors(sockfd, &intercept_request, sizeof(intercept_request), &rcv_fd);
+  unique_fd rcv_fd;
+  InterceptRequest intercept_request;
+  ssize_t result =
+      ReceiveFileDescriptors(sockfd, &intercept_request, sizeof(intercept_request), &rcv_fd);
 
-    if (result == -1) {
-      PLOG(WARNING) << "failed to read from intercept socket";
-      goto fail;
-    } else if (result != sizeof(intercept_request)) {
-      LOG(WARNING) << "intercept socket received short read of length " << result << " (expected "
-                   << sizeof(intercept_request) << ")";
-      goto fail;
-    }
-
-    // Move the received FD to the upper half, in order to more easily notice FD leaks.
-    int moved_fd = fcntl(rcv_fd.get(), F_DUPFD, 512);
-    if (moved_fd == -1) {
-      LOG(WARNING) << "failed to move received fd (" << rcv_fd.get() << ")";
-      goto fail;
-    }
-    rcv_fd.reset(moved_fd);
-
-    // We trust the other side, so only do minimal validity checking.
-    if (!is_intercept_request_valid(intercept_request)) {
-      InterceptResponse response = {};
-      response.status = InterceptStatus::kFailed;
-      snprintf(response.error_message, sizeof(response.error_message), "invalid intercept request");
-      TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
-      goto fail;
-    }
-
-    intercept->intercept_pid = intercept_request.pid;
-    intercept->dump_type = intercept_request.dump_type;
-
-    // Check if it's already registered.
-    if (intercept_manager->intercepts.count(intercept_request.pid) > 0) {
-      InterceptResponse response = {};
-      response.status = InterceptStatus::kFailedAlreadyRegistered;
-      snprintf(response.error_message, sizeof(response.error_message),
-               "pid %" PRId32 " already intercepted, type %d", intercept_request.pid,
-               intercept_request.dump_type);
-      TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
-      LOG(WARNING) << response.error_message;
-      goto fail;
-    }
-
-    // Let the other side know that the intercept has been registered, now that we know we can't
-    // fail. tombstoned is single threaded, so this isn't racy.
-    InterceptResponse response = {};
-    response.status = InterceptStatus::kRegistered;
-    if (TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response))) == -1) {
-      PLOG(WARNING) << "failed to notify interceptor of registration";
-      goto fail;
-    }
-
-    intercept->output_fd = std::move(rcv_fd);
-    intercept_manager->intercepts[intercept_request.pid] = std::unique_ptr<Intercept>(intercept);
-    intercept->registered = true;
-
-    LOG(INFO) << "registered intercept for pid " << intercept_request.pid << " and type "
-              << intercept_request.dump_type;
-
-    // Register a different read event on the socket so that we can remove intercepts if the socket
-    // closes (e.g. if a user CTRL-C's the process that requested the intercept).
-    event_assign(intercept->intercept_event, intercept_manager->base, sockfd, EV_READ | EV_TIMEOUT,
-                 intercept_close_cb, arg);
-
-    struct timeval timeout = {.tv_sec = 10 * android::base::HwTimeoutMultiplier(), .tv_usec = 0};
-    event_add(intercept->intercept_event, &timeout);
+  if (result == -1) {
+    PLOG(WARNING) << "failed to read from intercept socket";
+    return;
+  }
+  if (result != sizeof(intercept_request)) {
+    LOG(WARNING) << "intercept socket received short read of length " << result << " (expected "
+                 << sizeof(intercept_request) << ")";
+    return;
   }
 
-  return;
+  // Move the received FD to the upper half, in order to more easily notice FD leaks.
+  int moved_fd = fcntl(rcv_fd.get(), F_DUPFD, 512);
+  if (moved_fd == -1) {
+    LOG(WARNING) << "failed to move received fd (" << rcv_fd.get() << ")";
+    return;
+  }
+  rcv_fd.reset(moved_fd);
 
-fail:
-  delete intercept;
+  // See if we can properly register the intercept.
+  InterceptResponse response = {};
+  if (!intercept_manager->CanRegister(intercept_request, response)) {
+    TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response)));
+    LOG(WARNING) << response.error_message;
+    return;
+  }
+
+  // Let the other side know that the intercept has been registered, now that we know we can't
+  // fail. tombstoned is single threaded, so this isn't racy.
+  response.status = InterceptStatus::kRegistered;
+  if (TEMP_FAILURE_RETRY(write(sockfd, &response, sizeof(response))) == -1) {
+    PLOG(WARNING) << "failed to notify interceptor of registration";
+    return;
+  }
+
+  intercept->pid = intercept_request.pid;
+  intercept->dump_type = intercept_request.dump_type;
+  intercept->output_fd = std::move(rcv_fd);
+  intercept_manager->Register(intercept.get());
+
+  LOG(INFO) << "registered intercept for pid " << intercept_request.pid << " and type "
+            << intercept_request.dump_type;
+
+  // Register a different read event on the socket so that we can remove intercepts if the socket
+  // closes (e.g. if a user CTRL-C's the process that requested the intercept).
+  event_assign(intercept->intercept_event, intercept_manager->base, sockfd, EV_READ | EV_TIMEOUT,
+               intercept_close_cb, arg);
+
+  // If no request comes in, then this will close the intercept and free the pointer.
+  struct timeval timeout = {.tv_sec = 10 * android::base::HwTimeoutMultiplier(), .tv_usec = 0};
+  event_add(intercept->intercept_event, &timeout);
+  intercept.release();
 }
 
 static void intercept_accept_cb(evconnlistener* listener, evutil_socket_t sockfd, sockaddr*, int,
@@ -187,41 +166,97 @@ static void intercept_accept_cb(evconnlistener* listener, evutil_socket_t sockfd
   event_add(intercept_event, &timeout);
 }
 
+Intercept::~Intercept() {
+  event_free(intercept_event);
+  if (registered) {
+    CHECK(intercept_manager != nullptr);
+    intercept_manager->Unregister(this);
+  }
+}
+
 InterceptManager::InterceptManager(event_base* base, int intercept_socket) : base(base) {
   this->listener = evconnlistener_new(base, intercept_accept_cb, this, LEV_OPT_CLOSE_ON_FREE,
                                       /* backlog */ -1, intercept_socket);
 }
 
-bool dump_types_compatible(DebuggerdDumpType interceptor, DebuggerdDumpType dump) {
-  if (interceptor == dump) {
-    return true;
+static DebuggerdDumpType canonical_dump_type(const DebuggerdDumpType dump_type) {
+  // kDebuggerdTombstone and kDebuggerdTombstoneProto should be treated as
+  // a single dump_type for intercepts (kDebuggerdTombstone).
+  if (dump_type == kDebuggerdTombstoneProto) {
+    return kDebuggerdTombstone;
   }
-
-  if (interceptor == kDebuggerdTombstone && dump == kDebuggerdTombstoneProto) {
-    return true;
-  }
-
-  return false;
+  return dump_type;
 }
 
-bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
-                                    android::base::unique_fd* out_fd) {
-  auto it = this->intercepts.find(pid);
-  if (it == this->intercepts.end()) {
+Intercept* InterceptManager::Get(const pid_t pid, const DebuggerdDumpType dump_type) {
+  auto pid_entry = intercepts.find(pid);
+  if (pid_entry == intercepts.end()) {
+    return nullptr;
+  }
+
+  const auto& dump_type_hash = pid_entry->second;
+  auto dump_type_entry = dump_type_hash.find(canonical_dump_type(dump_type));
+  if (dump_type_entry == dump_type_hash.end()) {
+    if (dump_type != kDebuggerdAnyIntercept) {
+      return nullptr;
+    }
+    // If doing a dump with an any intercept, only allow an any to match
+    // a single intercept. If there are multiple dump types with intercepts
+    // then there would be no way to figure out which to use.
+    if (dump_type_hash.size() != 1) {
+      LOG(WARNING) << "Cannot intercept using kDebuggerdAnyIntercept: there is more than one "
+                      "intercept registered for pid "
+                   << pid;
+      return nullptr;
+    }
+    dump_type_entry = dump_type_hash.begin();
+  }
+  return dump_type_entry->second;
+}
+
+bool InterceptManager::CanRegister(const InterceptRequest& request, InterceptResponse& response) {
+  if (request.pid <= 0 || request.pid > std::numeric_limits<pid_t>::max()) {
+    response.status = InterceptStatus::kFailed;
+    snprintf(response.error_message, sizeof(response.error_message),
+             "invalid intercept request: bad pid %" PRId32, request.pid);
+    return false;
+  }
+  if (request.dump_type < 0 || request.dump_type > kDebuggerdJavaBacktrace) {
+    response.status = InterceptStatus::kFailed;
+    snprintf(response.error_message, sizeof(response.error_message),
+             "invalid intercept request: bad dump type %s", get_dump_type_name(request.dump_type));
     return false;
   }
 
-  if (dump_type == kDebuggerdAnyIntercept) {
-    LOG(INFO) << "found registered intercept of type " << it->second->dump_type
-              << " for requested type kDebuggerdAnyIntercept";
-  } else if (!dump_types_compatible(it->second->dump_type, dump_type)) {
-    LOG(WARNING) << "found non-matching intercept of type " << it->second->dump_type
-                 << " for requested type: " << dump_type;
+  if (Get(request.pid, request.dump_type) != nullptr) {
+    response.status = InterceptStatus::kFailedAlreadyRegistered;
+    snprintf(response.error_message, sizeof(response.error_message),
+             "pid %" PRId32 " already registered, type %s", request.pid,
+             get_dump_type_name(request.dump_type));
     return false;
   }
 
-  auto intercept = std::move(it->second);
-  this->intercepts.erase(it);
+  return true;
+}
+
+void InterceptManager::Register(Intercept* intercept) {
+  CHECK(!intercept->registered);
+  auto& dump_type_hash = intercepts[intercept->pid];
+  dump_type_hash[canonical_dump_type(intercept->dump_type)] = intercept;
+  intercept->registered = true;
+}
+
+bool InterceptManager::FindIntercept(pid_t pid, DebuggerdDumpType dump_type,
+                                     android::base::unique_fd* out_fd) {
+  Intercept* intercept = Get(pid, dump_type);
+  if (intercept == nullptr) {
+    return false;
+  }
+
+  if (dump_type != intercept->dump_type) {
+    LOG(INFO) << "found registered intercept of type " << intercept->dump_type
+              << " for requested type " << dump_type;
+  }
 
   LOG(INFO) << "found intercept fd " << intercept->output_fd.get() << " for pid " << pid
             << " and type " << intercept->dump_type;
@@ -229,6 +264,9 @@ bool InterceptManager::GetIntercept(pid_t pid, DebuggerdDumpType dump_type,
   response.status = InterceptStatus::kStarted;
   TEMP_FAILURE_RETRY(write(intercept->sockfd, &response, sizeof(response)));
   *out_fd = std::move(intercept->output_fd);
+
+  // Delete the intercept data, which will unregister the intercept and remove the timeout event.
+  delete intercept;
 
   return true;
 }

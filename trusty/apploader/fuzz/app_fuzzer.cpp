@@ -43,10 +43,6 @@ static struct uuid apploader_uuid = {
         {0xb5, 0xe8, 0xa7, 0xe9, 0xef, 0x17, 0x3a, 0x97},
 };
 
-static inline uintptr_t RoundPageUp(uintptr_t val) {
-    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
-}
-
 static bool SendLoadMsg(int chan, int dma_buf, size_t dma_buf_size) {
     apploader_header hdr = {
             .cmd = APPLOADER_CMD_LOAD_APPLICATION,
@@ -107,7 +103,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         android::trusty::fuzz::Abort();
     }
 
-    uint64_t shm_len = size ? RoundPageUp(size) : PAGE_SIZE;
+    uint64_t shm_len = size ? size : 4096;
     BufferAllocator alloc;
     unique_fd dma_buf(alloc.Alloc(kDmabufSystemHeapName, shm_len));
     if (dma_buf < 0) {

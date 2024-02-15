@@ -32,6 +32,7 @@
 #include <selinux/android.h>
 #include <selinux/label.h>
 #include <selinux/selinux.h>
+#include <string>
 
 #include "fs_mgr_priv.h"
 
@@ -68,6 +69,13 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
 
     /* Format the partition using the calculated length */
 
+    // EXT4 supports 4K block size on 16K page sizes. A 4K block
+    // size formatted EXT4 partition will mount fine on both 4K and 16K page
+    // size kernels.
+    // However, EXT4 does not support 16K block size on 4K systems.
+    // If we want the same userspace code to work on both 4k/16k kernels,
+    // using a hardcoded 4096 block size is a simple solution. Using
+    // getpagesize() here would work as well, but 4096 is simpler.
     std::string size_str = std::to_string(dev_sz / 4096);
 
     std::vector<const char*> mke2fs_args = {"/system/bin/mke2fs", "-t", "ext4", "-b", "4096"};
@@ -127,7 +135,8 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs
 
     /* Format the partition using the calculated length */
 
-    std::string size_str = std::to_string(dev_sz / 4096);
+    const auto size_str = std::to_string(dev_sz / getpagesize());
+    std::string block_size = std::to_string(getpagesize());
 
     std::vector<const char*> args = {"/system/bin/make_f2fs", "-g", "android"};
     if (needs_projid) {
@@ -146,6 +155,10 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs
         args.push_back("-O");
         args.push_back("extra_attr");
     }
+    args.push_back("-w");
+    args.push_back(block_size.c_str());
+    args.push_back("-b");
+    args.push_back(block_size.c_str());
     if (!zoned_device.empty()) {
         args.push_back("-c");
         args.push_back(zoned_device.c_str());

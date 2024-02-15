@@ -28,6 +28,9 @@ cc_library {
         "libbase",
     ],
     target: {
+        darwin: {
+            enabled: true,
+        },
         windows: {
             enabled: true,
         },
@@ -38,9 +41,8 @@ cc_library {
     ],
 }
 
-cc_binary {
+cc_binary_host {
     name: "simg2img",
-    host_supported: true,
     srcs: [
         "simg2img.cpp",
         "sparse_crc32.cpp",
@@ -52,11 +54,15 @@ cc_binary {
     ],
 
     cflags: ["-Werror"],
+    target: {
+        darwin: {
+            enabled: true,
+        },
+    },
 }
 
-cc_binary {
+cc_binary_host {
     name: "img2simg",
-    host_supported: true,
     srcs: ["img2simg.cpp"],
     static_libs: [
         "libsparse",

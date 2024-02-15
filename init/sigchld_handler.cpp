@@ -18,6 +18,7 @@
 
 #include <signal.h>
 #include <string.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -31,6 +32,7 @@
 
 #include <thread>
 
+#include "epoll.h"
 #include "init.h"
 #include "service.h"
 #include "service_list.h"
@@ -116,33 +118,76 @@ static pid_t ReapOneProcess() {
     return pid;
 }
 
-void ReapAnyOutstandingChildren() {
-    while (ReapOneProcess() != 0) {
+std::set<pid_t> ReapAnyOutstandingChildren() {
+    std::set<pid_t> reaped_pids;
+    for (;;) {
+        const pid_t pid = ReapOneProcess();
+        if (pid <= 0) {
+            return reaped_pids;
+        }
+        reaped_pids.emplace(pid);
     }
 }
 
-void WaitToBeReaped(const std::vector<pid_t>& pids, std::chrono::milliseconds timeout) {
+static void ReapAndRemove(std::vector<pid_t>& alive_pids) {
+    for (auto pid : ReapAnyOutstandingChildren()) {
+        const auto it = std::find(alive_pids.begin(), alive_pids.end(), pid);
+        if (it != alive_pids.end()) {
+            alive_pids.erase(it);
+        }
+    }
+}
+
+static void HandleSignal(int signal_fd) {
+    signalfd_siginfo siginfo;
+    ssize_t bytes_read = TEMP_FAILURE_RETRY(read(signal_fd, &siginfo, sizeof(siginfo)));
+    if (bytes_read != sizeof(siginfo)) {
+        LOG(WARNING) << "Unexpected: " << __func__ << " read " << bytes_read << " bytes instead of "
+                     << sizeof(siginfo);
+    }
+}
+
+void WaitToBeReaped(int sigchld_fd, const std::vector<pid_t>& pids,
+                    std::chrono::milliseconds timeout) {
     Timer t;
-    std::vector<pid_t> alive_pids(pids.begin(), pids.end());
+    Epoll epoll;
+    if (sigchld_fd >= 0) {
+        if (auto result = epoll.Open(); result.ok()) {
+            result =
+                    epoll.RegisterHandler(sigchld_fd, [sigchld_fd]() { HandleSignal(sigchld_fd); });
+            if (!result.ok()) {
+                LOG(WARNING) << __func__
+                             << " RegisterHandler() failed. Falling back to sleep_for(): "
+                             << result.error();
+                sigchld_fd = -1;
+            }
+        } else {
+            LOG(WARNING) << __func__ << " Epoll::Open() failed. Falling back to sleep_for(): "
+                         << result.error();
+            sigchld_fd = -1;
+        }
+    }
+    std::vector<pid_t> alive_pids(pids);
+    ReapAndRemove(alive_pids);
     while (!alive_pids.empty() && t.duration() < timeout) {
-        pid_t pid;
-        while ((pid = ReapOneProcess()) != 0) {
-            auto it = std::find(alive_pids.begin(), alive_pids.end(), pid);
-            if (it != alive_pids.end()) {
-                alive_pids.erase(it);
+        if (sigchld_fd >= 0) {
+            auto result = epoll.Wait(std::max(timeout - t.duration(), 0ms));
+            if (result.ok()) {
+                ReapAndRemove(alive_pids);
+                continue;
+            } else {
+                LOG(WARNING) << "Epoll::Wait() failed " << result.error();
             }
         }
-        if (alive_pids.empty()) {
-            break;
-        }
         std::this_thread::sleep_for(50ms);
+        ReapAndRemove(alive_pids);
     }
     LOG(INFO) << "Waiting for " << pids.size() << " pids to be reaped took " << t << " with "
               << alive_pids.size() << " of them still running";
-    for (pid_t pid : pids) {
+    for (pid_t pid : alive_pids) {
         std::string status = "(no-such-pid)";
         ReadFileToString(StringPrintf("/proc/%d/status", pid), &status);
-        LOG(INFO) << "Still running: " << pid << ' ' << status;
+        LOG(INFO) << "Still running: " << pid << '\n' << status;
     }
 }
 

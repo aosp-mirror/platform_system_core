@@ -30,6 +30,9 @@ bool fs_mgr_overlayfs_is_setup();
 namespace android {
 namespace fs_mgr {
 
+// Mount the overlayfs override for |fstab_entry|.
+void MountOverlayfs(const FstabEntry& fstab_entry, bool* scratch_can_be_mounted);
+
 void MapScratchPartitionIfNeeded(Fstab* fstab,
                                  const std::function<bool(const std::set<std::string>&)>& init);
 

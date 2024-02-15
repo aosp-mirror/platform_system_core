@@ -85,14 +85,10 @@ class ServiceList {
 
     void MarkPostData();
     bool IsPostData();
-    void MarkServicesUpdate();
-    bool IsServicesUpdated() const { return services_update_finished_; }
     void DelayService(const Service& service);
+    void StartDelayedServices();
 
-    void ResetState() {
-        post_data_ = false;
-        services_update_finished_ = false;
-    }
+    void ResetState() { post_data_ = false; }
 
     auto size() const { return services_.size(); }
 
@@ -100,7 +96,6 @@ class ServiceList {
     std::vector<std::unique_ptr<Service>> services_;
 
     bool post_data_ = false;
-    bool services_update_finished_ = false;
     std::vector<std::string> delayed_service_names_;
 };
 

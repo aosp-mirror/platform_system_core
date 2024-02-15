@@ -24,11 +24,7 @@
 #include <stdint.h>
 #include <sys/cdefs.h>
 
-#if defined(__BIONIC__)
 #include <linux/capability.h>
-#else  // defined(__BIONIC__)
-#include <private/android_filesystem_capability.h>
-#endif  // defined(__BIONIC__)
 
 /* Rules for directories and files has moved to system/code/libcutils/fs_config.c */
 

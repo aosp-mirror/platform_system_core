@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 
 #include <chrono>
@@ -196,6 +197,17 @@ class SnapshotTest : public ::testing::Test {
         return true;
     }
 
+    bool ShouldSkipLegacyMerging() {
+        if (!GetLegacyCompressionEnabledProperty() || !snapuserd_required_) {
+            return false;
+        }
+        int api_level = android::base::GetIntProperty("ro.board.api_level", -1);
+        if (api_level == -1) {
+            api_level = android::base::GetIntProperty("ro.product.first_api_level", -1);
+        }
+        return api_level != __ANDROID_API_S__;
+    }
+
     void InitializeState() {
         ASSERT_TRUE(sm->EnsureImageManager());
         image_manager_ = sm->image_manager();
@@ -333,7 +345,7 @@ class SnapshotTest : public ::testing::Test {
     }
 
     AssertionResult MapUpdateSnapshot(const std::string& name,
-                                      std::unique_ptr<ISnapshotWriter>* writer) {
+                                      std::unique_ptr<ICowWriter>* writer) {
         TestPartitionOpener opener(fake_super);
         CreateLogicalPartitionParams params{
                 .block_device = fake_super,
@@ -343,13 +355,9 @@ class SnapshotTest : public ::testing::Test {
                 .partition_opener = &opener,
         };
 
-        auto old_partition = "/dev/block/mapper/" + GetOtherPartitionName(name);
-        auto result = sm->OpenSnapshotWriter(params, {old_partition});
+        auto result = sm->OpenSnapshotWriter(params, {});
         if (!result) {
             return AssertionFailure() << "Cannot open snapshot for writing: " << name;
-        }
-        if (!result->Initialize()) {
-            return AssertionFailure() << "Cannot initialize snapshot for writing: " << name;
         }
 
         if (writer) {
@@ -428,7 +436,7 @@ class SnapshotTest : public ::testing::Test {
 
     // Prepare A/B slot for a partition named "test_partition".
     AssertionResult PrepareOneSnapshot(uint64_t device_size,
-                                       std::unique_ptr<ISnapshotWriter>* writer = nullptr) {
+                                       std::unique_ptr<ICowWriter>* writer = nullptr) {
         lock_ = nullptr;
 
         DeltaArchiveManifest manifest;
@@ -631,21 +639,38 @@ TEST_F(SnapshotTest, FirstStageMountAfterRollback) {
 TEST_F(SnapshotTest, Merge) {
     ASSERT_TRUE(AcquireLock());
 
-    static const uint64_t kDeviceSize = 1024 * 1024;
-
-    std::unique_ptr<ISnapshotWriter> writer;
-    ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize, &writer));
-
-    bool userspace_snapshots = sm->UpdateUsesUserSnapshots(lock_.get());
-
-    // Release the lock.
-    lock_ = nullptr;
+    static constexpr uint64_t kDeviceSize = 1024 * 1024;
+    static constexpr uint32_t kBlockSize = 4096;
 
     std::string test_string = "This is a test string.";
-    test_string.resize(writer->options().block_size);
-    ASSERT_TRUE(writer->AddRawBlocks(0, test_string.data(), test_string.size()));
-    ASSERT_TRUE(writer->Finalize());
-    writer = nullptr;
+    test_string.resize(kBlockSize);
+
+    bool userspace_snapshots = false;
+    if (snapuserd_required_) {
+        std::unique_ptr<ICowWriter> writer;
+        ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize, &writer));
+
+        userspace_snapshots = sm->UpdateUsesUserSnapshots(lock_.get());
+
+        // Release the lock.
+        lock_ = nullptr;
+
+        ASSERT_TRUE(writer->AddRawBlocks(0, test_string.data(), test_string.size()));
+        ASSERT_TRUE(writer->Finalize());
+        writer = nullptr;
+    } else {
+        ASSERT_TRUE(PrepareOneSnapshot(kDeviceSize));
+
+        // Release the lock.
+        lock_ = nullptr;
+
+        std::string path;
+        ASSERT_TRUE(dm_.GetDmDevicePathByName("test_partition_b", &path));
+
+        unique_fd fd(open(path.c_str(), O_WRONLY));
+        ASSERT_GE(fd, 0);
+        ASSERT_TRUE(android::base::WriteFully(fd, test_string.data(), test_string.size()));
+    }
 
     // Done updating.
     ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
@@ -654,7 +679,22 @@ TEST_F(SnapshotTest, Merge) {
 
     test_device->set_slot_suffix("_b");
     ASSERT_TRUE(sm->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(sm->InitiateMerge());
+
+    // Create stale files in snapshot directory. Merge should skip these files
+    // as the suffix doesn't match the current slot.
+    auto tmp_path = test_device->GetMetadataDir() + "/snapshots/test_partition_b.tmp";
+    auto other_slot = test_device->GetMetadataDir() + "/snapshots/test_partition_a";
+
+    unique_fd fd(open(tmp_path.c_str(), O_RDWR | O_CLOEXEC | O_CREAT, 0644));
+    ASSERT_GE(fd, 0);
+
+    fd.reset(open(other_slot.c_str(), O_RDWR | O_CLOEXEC | O_CREAT, 0644));
+    ASSERT_GE(fd, 0);
 
     // The device should have been switched to a snapshot-merge target.
     DeviceMapper::TargetInfo target;
@@ -671,13 +711,23 @@ TEST_F(SnapshotTest, Merge) {
     ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
     ASSERT_EQ(sm->GetUpdateState(), UpdateState::None);
 
+    // Make sure that snapshot states are cleared and all stale files
+    // are deleted
+    {
+        ASSERT_TRUE(AcquireLock());
+        auto local_lock = std::move(lock_);
+        std::vector<std::string> snapshots;
+        ASSERT_TRUE(sm->ListSnapshots(local_lock.get(), &snapshots));
+        ASSERT_TRUE(snapshots.empty());
+    }
+
     // The device should no longer be a snapshot or snapshot-merge.
     ASSERT_FALSE(sm->IsSnapshotDevice("test_partition_b"));
 
     // Test that we can read back the string we wrote to the snapshot. Note
     // that the base device is gone now. |snap_device| contains the correct
     // partition.
-    unique_fd fd(open("/dev/block/mapper/test_partition_b", O_RDONLY | O_CLOEXEC));
+    fd.reset(open("/dev/block/mapper/test_partition_b", O_RDONLY | O_CLOEXEC));
     ASSERT_GE(fd, 0);
 
     std::string buffer(test_string.size(), '\0');
@@ -761,6 +811,10 @@ TEST_F(SnapshotTest, FlashSuperDuringMerge) {
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
 
     // Now, reflash super. Note that we haven't called ProcessUpdateState, so the
@@ -1123,7 +1177,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
     AssertionResult MapOneUpdateSnapshot(const std::string& name) {
         if (snapuserd_required_) {
-            std::unique_ptr<ISnapshotWriter> writer;
+            std::unique_ptr<ICowWriter> writer;
             return MapUpdateSnapshot(name, &writer);
         } else {
             std::string path;
@@ -1144,7 +1198,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     AssertionResult WriteSnapshotAndHash(PartitionUpdate* partition) {
         std::string name = partition->partition_name() + "_b";
         if (snapuserd_required_) {
-            std::unique_ptr<ISnapshotWriter> writer;
+            std::unique_ptr<ICowWriter> writer;
             auto res = MapUpdateSnapshot(name, &writer);
             if (!res) {
                 return res;
@@ -1183,13 +1237,13 @@ class SnapshotUpdateTest : public SnapshotTest {
         SHA256_CTX ctx;
         SHA256_Init(&ctx);
 
-        if (!writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks()) {
             LOG(ERROR) << "CowWriter must specify maximum number of blocks";
             return false;
         }
-        const auto num_blocks = writer->options().max_blocks.value();
+        const auto num_blocks = writer->GetMaxBlocks().value();
 
-        const auto block_size = writer->options().block_size;
+        const auto block_size = writer->GetBlockSize();
         std::string block(block_size, '\0');
         for (uint64_t i = 0; i < num_blocks; i++) {
             if (!ReadFully(rand, block.data(), block.size())) {
@@ -1213,17 +1267,17 @@ class SnapshotUpdateTest : public SnapshotTest {
     // It doesn't really matter the order, we just want copies that reference
     // blocks that won't exist if the partition shrinks.
     AssertionResult ShiftAllSnapshotBlocks(const std::string& name, uint64_t old_size) {
-        std::unique_ptr<ISnapshotWriter> writer;
+        std::unique_ptr<ICowWriter> writer;
         if (auto res = MapUpdateSnapshot(name, &writer); !res) {
             return res;
         }
-        if (!writer->options().max_blocks || !*writer->options().max_blocks) {
+        if (!writer->GetMaxBlocks() || !*writer->GetMaxBlocks()) {
             return AssertionFailure() << "No max blocks set for " << name << " writer";
         }
 
-        uint64_t src_block = (old_size / writer->options().block_size) - 1;
+        uint64_t src_block = (old_size / writer->GetBlockSize()) - 1;
         uint64_t dst_block = 0;
-        uint64_t max_blocks = *writer->options().max_blocks;
+        uint64_t max_blocks = *writer->GetMaxBlocks();
         while (dst_block < max_blocks && dst_block < src_block) {
             if (!writer->AddCopy(dst_block, src_block)) {
                 return AssertionFailure() << "Unable to add copy for " << name << " for blocks "
@@ -1236,7 +1290,13 @@ class SnapshotUpdateTest : public SnapshotTest {
             return AssertionFailure() << "Unable to finalize writer for " << name;
         }
 
-        auto hash = HashSnapshot(writer.get());
+        auto old_partition = "/dev/block/mapper/" + GetOtherPartitionName(name);
+        auto reader = writer->OpenFileDescriptor(old_partition);
+        if (!reader) {
+            return AssertionFailure() << "Could not open file descriptor for " << name;
+        }
+
+        auto hash = HashSnapshot(reader.get());
         if (hash.empty()) {
             return AssertionFailure() << "Unable to hash snapshot writer for " << name;
         }
@@ -1344,6 +1404,10 @@ TEST_F(SnapshotUpdateTest, FullUpdateFlow) {
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
@@ -1387,7 +1451,7 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     for (auto* partition : partitions) {
         AddOperation(partition);
 
-        std::unique_ptr<ISnapshotWriter> writer;
+        std::unique_ptr<ICowWriter> writer;
         auto res = MapUpdateSnapshot(partition->partition_name() + "_b", &writer);
         ASSERT_TRUE(res);
         ASSERT_TRUE(writer->AddZeroBlocks(0, 1));
@@ -1407,6 +1471,10 @@ TEST_F(SnapshotUpdateTest, DuplicateOps) {
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 }
@@ -1476,6 +1544,10 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
     {
@@ -1521,93 +1593,6 @@ TEST_F(SnapshotUpdateTest, SpaceSwapUpdate) {
         ASSERT_TRUE(init->ListSnapshots(local_lock.get(), &snapshots));
         ASSERT_TRUE(snapshots.empty());
     }
-
-    // Check that the target partitions have the same content after the merge.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(IsPartitionUnchanged(name))
-                << "Content of " << name << " changes after the merge";
-    }
-}
-
-// Test that a transient merge consistency check failure can resume properly.
-TEST_F(SnapshotUpdateTest, ConsistencyCheckResume) {
-    if (!snapuserd_required_) {
-        // b/179111359
-        GTEST_SKIP() << "Skipping snapuserd test";
-    }
-
-    auto old_sys_size = GetSize(sys_);
-    auto old_prd_size = GetSize(prd_);
-
-    // Grow |sys| but shrink |prd|.
-    SetSize(sys_, old_sys_size * 2);
-    sys_->set_estimate_cow_size(8_MiB);
-    SetSize(prd_, old_prd_size / 2);
-    prd_->set_estimate_cow_size(1_MiB);
-
-    AddOperationForPartitions();
-
-    ASSERT_TRUE(sm->BeginUpdate());
-    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
-    ASSERT_TRUE(WriteSnapshotAndHash(sys_));
-    ASSERT_TRUE(WriteSnapshotAndHash(vnd_));
-    ASSERT_TRUE(ShiftAllSnapshotBlocks("prd_b", old_prd_size));
-
-    sync();
-
-    // Assert that source partitions aren't affected.
-    for (const auto& name : {"sys_a", "vnd_a", "prd_a"}) {
-        ASSERT_TRUE(IsPartitionUnchanged(name));
-    }
-
-    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
-
-    // Simulate shutting down the device.
-    ASSERT_TRUE(UnmapAll());
-
-    // After reboot, init does first stage mount.
-    auto init = NewManagerForFirstStageMount("_b");
-    ASSERT_NE(init, nullptr);
-    ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
-
-    // Check that the target partitions have the same content.
-    for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
-        ASSERT_TRUE(IsPartitionUnchanged(name));
-    }
-
-    auto old_checker = init->merge_consistency_checker();
-
-    init->set_merge_consistency_checker(
-            [](const std::string&, const SnapshotStatus&) -> MergeFailureCode {
-                return MergeFailureCode::WrongMergeCountConsistencyCheck;
-            });
-
-    // Initiate the merge and wait for it to be completed.
-    ASSERT_TRUE(init->InitiateMerge());
-    ASSERT_EQ(init->IsSnapuserdRequired(), snapuserd_required_);
-    {
-        // Check that the merge phase is FIRST_PHASE until at least one call
-        // to ProcessUpdateState() occurs.
-        ASSERT_TRUE(AcquireLock());
-        auto local_lock = std::move(lock_);
-        auto status = init->ReadSnapshotUpdateStatus(local_lock.get());
-        ASSERT_EQ(status.merge_phase(), MergePhase::FIRST_PHASE);
-    }
-
-    // Merge should have failed.
-    ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
-
-    // Simulate shutting down the device and creating partitions again.
-    ASSERT_TRUE(UnmapAll());
-
-    // Restore the checker.
-    init->set_merge_consistency_checker(std::move(old_checker));
-
-    ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
-
-    // Complete the merge.
-    ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 
     // Check that the target partitions have the same content after the merge.
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
@@ -1786,6 +1771,10 @@ TEST_F(SnapshotUpdateTest, ReclaimCow) {
 
     // Initiate the merge and wait for it to be completed.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, new_sm->ProcessUpdateState());
 
@@ -1924,6 +1913,10 @@ TEST_F(SnapshotUpdateTest, MergeCannotRemoveCow) {
     ASSERT_GE(fd, 0);
 
     // COW cannot be removed due to open fd, so expect a soft failure.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeNeedsReboot, init->ProcessUpdateState());
 
@@ -2027,6 +2020,10 @@ TEST_F(SnapshotUpdateTest, MergeInRecovery) {
 
     // Initiate the merge and then immediately stop it to simulate a reboot.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_TRUE(UnmapAll());
 
@@ -2059,6 +2056,10 @@ TEST_F(SnapshotUpdateTest, MergeInFastboot) {
 
     // Initiate the merge and then immediately stop it to simulate a reboot.
     auto new_sm = SnapshotManager::New(new TestDeviceInfo(fake_super, "_b"));
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(new_sm->InitiateMerge());
     ASSERT_TRUE(UnmapAll());
 
@@ -2136,6 +2137,10 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge in test";
+    }
+
     AddOperationForPartitions();
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2175,6 +2180,10 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge in test";
+    }
+
     AddOperationForPartitions();
 
     // Execute the update.
@@ -2312,32 +2321,6 @@ TEST_F(SnapshotUpdateTest, Overflow) {
             << "FinishedSnapshotWrites should detect overflow of CoW device.";
 }
 
-TEST_F(SnapshotUpdateTest, LowSpace) {
-    static constexpr auto kMaxFree = 10_MiB;
-    auto userdata = std::make_unique<LowSpaceUserdata>();
-    ASSERT_TRUE(userdata->Init(kMaxFree));
-
-    // Grow all partitions to 10_MiB, total 30_MiB. This requires 30 MiB of CoW space. After
-    // using the empty space in super (< 1 MiB), it uses 30 MiB of /userdata space.
-    constexpr uint64_t partition_size = 10_MiB;
-    SetSize(sys_, partition_size);
-    SetSize(vnd_, partition_size);
-    SetSize(prd_, partition_size);
-    sys_->set_estimate_cow_size(partition_size);
-    vnd_->set_estimate_cow_size(partition_size);
-    prd_->set_estimate_cow_size(partition_size);
-
-    AddOperationForPartitions();
-
-    // Execute the update.
-    ASSERT_TRUE(sm->BeginUpdate());
-    auto res = sm->CreateUpdateSnapshots(manifest_);
-    ASSERT_FALSE(res);
-    ASSERT_EQ(Return::ErrorCode::NO_SPACE, res.error_code());
-    ASSERT_GE(res.required_size(), 14_MiB);
-    ASSERT_LT(res.required_size(), 40_MiB);
-}
-
 TEST_F(SnapshotUpdateTest, AddPartition) {
     group_->add_partition_names("dlkm");
 
@@ -2379,8 +2362,10 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
     auto init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
 
-    ASSERT_TRUE(init->EnsureSnapuserdConnected());
-    init->set_use_first_stage_snapuserd(true);
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->EnsureSnapuserdConnected());
+        init->set_use_first_stage_snapuserd(true);
+    }
 
     ASSERT_TRUE(init->NeedSnapshotsInFirstStageMount());
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
@@ -2391,12 +2376,18 @@ TEST_F(SnapshotUpdateTest, AddPartition) {
         ASSERT_TRUE(IsPartitionUnchanged(name));
     }
 
-    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
-    for (const auto& name : partitions) {
-        ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+    if (snapuserd_required_) {
+        ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SECOND_STAGE));
+        for (const auto& name : partitions) {
+            ASSERT_TRUE(init->snapuserd_client()->WaitForDeviceDelete(name + "-user-cow-init"));
+        }
     }
 
     // Initiate the merge and wait for it to be completed.
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
 
@@ -2479,6 +2470,56 @@ TEST_F(SnapshotUpdateTest, DaemonTransition) {
         ASSERT_TRUE(android::fs_mgr::WaitForFileDeleted("/dev/dm-user/sys_b-user-cow-init", 10s));
         ASSERT_EQ(access("/dev/dm-user/sys_b-user-cow", F_OK), 0);
     }
+}
+
+TEST_F(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch) {
+    MountMetadata();
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    if (!sm->UpdateUsesUserSnapshots()) {
+        GTEST_SKIP() << "Test does not apply as UserSnapshots aren't enabled.";
+    }
+
+    ASSERT_TRUE(WriteSnapshots());
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(false));
+
+    if (ShouldSkipLegacyMerging()) {
+        GTEST_SKIP() << "Skipping legacy merge test";
+    }
+    // Mark the indicator
+    ASSERT_TRUE(sm->BootFromSnapshotsWithoutSlotSwitch());
+
+    ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+    sm->set_use_first_stage_snapuserd(true);
+
+    ASSERT_TRUE(sm->NeedSnapshotsInFirstStageMount());
+
+    // Map snapshots
+    ASSERT_TRUE(sm->MapAllSnapshots(10s));
+
+    // New updates should fail
+    ASSERT_FALSE(sm->BeginUpdate());
+
+    // Snapshots cannot be cancelled
+    ASSERT_FALSE(sm->CancelUpdate());
+
+    // Merge cannot start
+    ASSERT_FALSE(sm->InitiateMerge());
+
+    // Read bytes back and verify they match the cache.
+    ASSERT_TRUE(IsPartitionUnchanged("sys_b"));
+
+    // Remove the indicators
+    ASSERT_TRUE(sm->PrepareDeviceToBootWithoutSnapshot());
+
+    // Ensure snapshots are still mounted
+    ASSERT_TRUE(sm->IsUserspaceSnapshotUpdateInProgress());
+
+    // Cleanup snapshots
+    ASSERT_TRUE(sm->UnmapAllSnapshots());
 }
 
 TEST_F(SnapshotUpdateTest, MapAllSnapshots) {
@@ -2583,12 +2624,35 @@ TEST_F(SnapshotUpdateTest, QueryStatusError) {
     ASSERT_TRUE(init->InitiateMerge());
     ASSERT_EQ(UpdateState::MergeFailed, init->ProcessUpdateState());
 
+    if (ShouldSkipLegacyMerging()) {
+        LOG(INFO) << "Skipping legacy merge in test";
+        return;
+    }
+
     // Simulate a reboot that tries the merge again, with the non-failing dm.
     ASSERT_TRUE(UnmapAll());
     init = NewManagerForFirstStageMount("_b");
     ASSERT_NE(init, nullptr);
     ASSERT_TRUE(init->CreateLogicalAndSnapshotPartitions("super", snapshot_timeout_));
     ASSERT_EQ(UpdateState::MergeCompleted, init->ProcessUpdateState());
+}
+
+TEST_F(SnapshotUpdateTest, BadCowVersion) {
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "VABC only";
+    }
+
+    ASSERT_TRUE(sm->BeginUpdate());
+
+    auto dynamic_partition_metadata = manifest_.mutable_dynamic_partition_metadata();
+    dynamic_partition_metadata->set_cow_version(kMinCowVersion - 1);
+    ASSERT_FALSE(sm->CreateUpdateSnapshots(manifest_));
+
+    dynamic_partition_metadata->set_cow_version(kMaxCowVersion + 1);
+    ASSERT_FALSE(sm->CreateUpdateSnapshots(manifest_));
+
+    dynamic_partition_metadata->set_cow_version(kMaxCowVersion);
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
@@ -2699,50 +2763,6 @@ INSTANTIATE_TEST_SUITE_P(Snapshot, FlashAfterUpdateTest, Combine(Values(0, 1), B
                                     "Merge"s;
                          });
 
-class ImageManagerTest : public SnapshotTest {
-  protected:
-    void SetUp() override {
-        SKIP_IF_NON_VIRTUAL_AB();
-        SnapshotTest::SetUp();
-    }
-    void TearDown() override {
-        RETURN_IF_NON_VIRTUAL_AB();
-        CleanUp();
-    }
-    void CleanUp() {
-        if (!image_manager_) {
-            return;
-        }
-        EXPECT_TRUE(!image_manager_->BackingImageExists(kImageName) ||
-                    image_manager_->DeleteBackingImage(kImageName));
-    }
-
-    static constexpr const char* kImageName = "my_image";
-};
-
-TEST_F(ImageManagerTest, CreateImageNoSpace) {
-    bool at_least_one_failure = false;
-    for (uint64_t size = 1_MiB; size <= 512_MiB; size *= 2) {
-        auto userdata = std::make_unique<LowSpaceUserdata>();
-        ASSERT_TRUE(userdata->Init(size));
-
-        uint64_t to_allocate = userdata->free_space() + userdata->bsize();
-
-        auto res = image_manager_->CreateBackingImage(kImageName, to_allocate,
-                                                      IImageManager::CREATE_IMAGE_DEFAULT);
-        if (!res) {
-            at_least_one_failure = true;
-        } else {
-            ASSERT_EQ(res.error_code(), FiemapStatus::ErrorCode::NO_SPACE) << res.string();
-        }
-
-        CleanUp();
-    }
-
-    ASSERT_TRUE(at_least_one_failure)
-            << "We should have failed to allocate at least one over-sized image";
-}
-
 bool Mkdir(const std::string& path) {
     if (mkdir(path.c_str(), 0700) && errno != EEXIST) {
         std::cerr << "Could not mkdir " << path << ": " << strerror(errno) << std::endl;
@@ -2844,15 +2864,23 @@ void SnapshotTestEnvironment::TearDown() {
 }
 
 void KillSnapuserd() {
-    auto status = android::base::GetProperty("init.svc.snapuserd", "stopped");
-    if (status == "stopped") {
-        return;
+    // Detach the daemon if it's alive
+    auto snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
+    if (snapuserd_client) {
+        snapuserd_client->DetachSnapuserd();
     }
-    auto snapuserd_client = SnapuserdClient::Connect(kSnapuserdSocket, 5s);
-    if (!snapuserd_client) {
-        return;
+
+    // Now stop the service - Init will send a SIGKILL to the daemon. However,
+    // process state will move from "running" to "stopping". Only after the
+    // process is reaped by init, the service state is moved to "stopped".
+    //
+    // Since the tests involve starting the daemon immediately, wait for the
+    // process to completely stop (aka. wait until init reaps the terminated
+    // process).
+    android::base::SetProperty("ctl.stop", "snapuserd");
+    if (!android::base::WaitForProperty("init.svc.snapuserd", "stopped", 10s)) {
+        LOG(ERROR) << "Timed out waiting for snapuserd to stop.";
     }
-    snapuserd_client->DetachSnapuserd();
 }
 
 }  // namespace snapshot

@@ -43,10 +43,6 @@ using std::string;
 using std::to_string;
 using std::unique_ptr;
 
-static inline uintptr_t RoundPageUp(uintptr_t val) {
-    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
-}
-
 CoverageRecord::CoverageRecord(string tipc_dev, struct uuid* uuid)
     : tipc_dev_(std::move(tipc_dev)),
       coverage_srv_fd_(-1),
@@ -136,7 +132,7 @@ Result<void> CoverageRecord::Open() {
         return Error() << "failed to open coverage client: " << ret.error();
     }
     record_len_ = resp.open_args.record_len;
-    shm_len_ = RoundPageUp(record_len_);
+    shm_len_ = record_len_;
 
     BufferAllocator allocator;
 

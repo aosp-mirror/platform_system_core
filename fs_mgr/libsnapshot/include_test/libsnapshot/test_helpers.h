@@ -198,7 +198,7 @@ void DeleteBackingImage(android::fiemap::IImageManager* manager, const std::stri
 // Expect space of |path| is multiple of 4K.
 bool WriteRandomData(const std::string& path, std::optional<size_t> expect_size = std::nullopt,
                      std::string* hash = nullptr);
-std::string HashSnapshot(ISnapshotWriter* writer);
+std::string HashSnapshot(ICowWriter::FileDescriptor* writer);
 
 std::string ToHexString(const uint8_t* buf, size_t len);
 
@@ -213,29 +213,6 @@ void SetSize(PartitionUpdate* partition_update, uint64_t size);
 
 // Get partition size from update package metadata.
 uint64_t GetSize(PartitionUpdate* partition_update);
-
-// Util class for test cases on low space scenario. These tests assumes image manager
-// uses /data as backup device.
-class LowSpaceUserdata {
-  public:
-    // Set the maximum free space allowed for this test. If /userdata has more space than the given
-    // number, a file is allocated to consume space.
-    AssertionResult Init(uint64_t max_free_space);
-
-    uint64_t free_space() const;
-    uint64_t available_space() const;
-    uint64_t bsize() const;
-
-  private:
-    AssertionResult ReadUserdataStats();
-
-    static constexpr const char* kUserDataDevice = "/data";
-    std::unique_ptr<TemporaryFile> big_file_;
-    bool initialized_ = false;
-    uint64_t free_space_ = 0;
-    uint64_t available_space_ = 0;
-    uint64_t bsize_ = 0;
-};
 
 bool IsVirtualAbEnabled();
 

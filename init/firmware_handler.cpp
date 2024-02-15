@@ -33,6 +33,7 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/scopeguard.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
@@ -43,6 +44,7 @@ using android::base::Split;
 using android::base::Timer;
 using android::base::Trim;
 using android::base::unique_fd;
+using android::base::WaitForProperty;
 using android::base::WriteFully;
 
 namespace android {
@@ -80,6 +82,33 @@ static void LoadFirmware(const std::string& firmware, const std::string& root, i
 
 static bool IsBooting() {
     return access("/dev/.booting", F_OK) == 0;
+}
+
+static bool IsApexActivated() {
+    static bool apex_activated = []() {
+        // Wait for com.android.runtime.apex activation
+        // Property name and value must be kept in sync with system/apexd/apex/apex_constants.h
+        // 60s is the default firmware sysfs fallback timeout. (/sys/class/firmware/timeout)
+        if (!WaitForProperty("apexd.status", "activated", 60s)) {
+            LOG(ERROR) << "Apexd activation wait timeout";
+            return false;
+        }
+        return true;
+    }();
+
+    return apex_activated;
+}
+
+static bool NeedsRerunExternalHandler() {
+    static bool first = true;
+
+    // Rerun external handler only on the first try and when apex is activated
+    if (first) {
+        first = false;
+        return IsApexActivated();
+    }
+
+    return first;
 }
 
 ExternalFirmwareHandler::ExternalFirmwareHandler(std::string devpath, uid_t uid, gid_t gid,
@@ -210,6 +239,11 @@ std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
 
             auto result = RunExternalHandler(external_handler.handler_path, external_handler.uid,
                                              external_handler.gid, uevent);
+            if (!result.ok() && NeedsRerunExternalHandler()) {
+                auto res = RunExternalHandler(external_handler.handler_path, external_handler.uid,
+                                              external_handler.gid, uevent);
+                result = std::move(res);
+            }
             if (!result.ok()) {
                 LOG(ERROR) << "Using default firmware; External firmware handler failed: "
                            << result.error();

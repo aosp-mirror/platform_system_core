@@ -95,11 +95,17 @@ void WorkerThread::ConstructKernelCowHeader() {
 // internal COW format and if the block is compressed,
 // it will be de-compressed.
 bool WorkerThread::ProcessReplaceOp(const CowOperation* cow_op) {
-    if (!reader_->ReadData(*cow_op, &bufsink_)) {
-        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block;
+    void* buffer = bufsink_.GetPayloadBuffer(BLOCK_SZ);
+    if (!buffer) {
+        SNAP_LOG(ERROR) << "No space in buffer sink";
         return false;
     }
-
+    ssize_t rv = reader_->ReadData(cow_op, buffer, BLOCK_SZ);
+    if (rv != BLOCK_SZ) {
+        SNAP_LOG(ERROR) << "ProcessReplaceOp failed for block " << cow_op->new_block
+                        << ", return = " << rv << ", COW operation = " << *cow_op;
+        return false;
+    }
     return true;
 }
 
@@ -109,12 +115,13 @@ bool WorkerThread::ReadFromBaseDevice(const CowOperation* cow_op) {
         SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get payload buffer";
         return false;
     }
-    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
-                    << " Source: " << cow_op->source;
-    uint64_t offset = cow_op->source;
-    if (cow_op->type == kCowCopyOp) {
-        offset *= BLOCK_SZ;
+    uint64_t offset;
+    if (!reader_->GetSourceOffset(cow_op, &offset)) {
+        SNAP_LOG(ERROR) << "ReadFromBaseDevice: Failed to get source offset";
+        return false;
     }
+    SNAP_LOG(DEBUG) << " ReadFromBaseDevice...: new-block: " << cow_op->new_block
+                    << " Source: " << offset;
     if (!android::base::ReadFullyAtOffset(backing_store_fd_, buffer, BLOCK_SZ, offset)) {
         SNAP_PLOG(ERROR) << "Copy op failed. Read from backing store: " << backing_store_device_
                          << "at block :" << offset / BLOCK_SZ << " offset:" << offset % BLOCK_SZ;
@@ -170,7 +177,7 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
         return false;
     }
 
-    switch (cow_op->type) {
+    switch (cow_op->type()) {
         case kCowReplaceOp: {
             return ProcessReplaceOp(cow_op);
         }
@@ -184,7 +191,8 @@ bool WorkerThread::ProcessCowOp(const CowOperation* cow_op) {
         }
 
         default: {
-            SNAP_LOG(ERROR) << "Unsupported operation-type found: " << cow_op->type;
+            SNAP_LOG(ERROR) << "Unsupported operation-type found: "
+                            << static_cast<uint8_t>(cow_op->type());
         }
     }
     return false;
@@ -502,7 +510,7 @@ int WorkerThread::GetNumberOfMergedOps(void* merged_buffer, void* unmerged_buffe
                 if (read_ahead_buffer_map.find(cow_op->new_block) == read_ahead_buffer_map.end()) {
                     SNAP_LOG(ERROR)
                             << " Block: " << cow_op->new_block << " not found in read-ahead cache"
-                            << " Source: " << cow_op->source;
+                            << " Op: " << *cow_op;
                     return -1;
                 }
                 // If this is a final block merged in the read-ahead buffer

@@ -17,11 +17,7 @@
 #include <unistd.h>
 
 #include <chrono>
-#include <cstring>
-#include <iostream>
 #include <string>
-#include <thread>
-#include <vector>
 
 #include <android-base/unique_fd.h>
 
@@ -53,9 +49,14 @@ class SnapuserdClient {
     explicit SnapuserdClient(android::base::unique_fd&& sockfd);
     SnapuserdClient(){};
 
+    // Attempt to connect to snapsuerd, wait for the daemon to start if
+    // connection failed.
     static std::unique_ptr<SnapuserdClient> Connect(const std::string& socket_name,
                                                     std::chrono::milliseconds timeout_ms);
-
+    // Attempt to connect to snapsuerd, but does not wait for the daemon to
+    // start.
+    static std::unique_ptr<SnapuserdClient> TryConnect(const std::string& socket_name,
+                                                       std::chrono::milliseconds timeout_ms);
     bool StopSnapuserd();
 
     // Initializing a snapuserd handler is a three-step process:

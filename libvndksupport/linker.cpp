@@ -75,7 +75,7 @@ void* android_load_sphal_library(const char* name, int flag) {
         }
         return handle;
     } else {
-        ALOGD("Loading %s from current namespace instead of sphal namespace.", name);
+        ALOGW("Loading %s from current namespace instead of sphal namespace.", name);
         return dlopen(name, flag);
     }
 }

@@ -27,6 +27,7 @@ namespace init {
 
 PersistentProperties LoadPersistentProperties();
 void WritePersistentProperty(const std::string& name, const std::string& value);
+PersistentProperties LoadPersistentPropertiesFromMemory();
 
 // Exposed only for testing
 Result<PersistentProperties> LoadPersistentPropertyFile();

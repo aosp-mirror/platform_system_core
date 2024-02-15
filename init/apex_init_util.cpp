@@ -16,13 +16,15 @@
 
 #include "apex_init_util.h"
 
+#include <dirent.h>
 #include <glob.h>
 
+#include <set>
 #include <vector>
 
 #include <android-base/logging.h>
-#include <android-base/result.h>
 #include <android-base/properties.h>
+#include <android-base/result.h>
 #include <android-base/strings.h>
 
 #include "action_manager.h"
@@ -34,10 +36,13 @@
 namespace android {
 namespace init {
 
-static Result<std::vector<std::string>> CollectApexConfigs(const std::string& apex_name) {
+static Result<std::vector<std::string>> CollectRcScriptsFromApex(
+        const std::string& apex_name, const std::set<std::string>& skip_apexes) {
     glob_t glob_result;
-    std::string glob_pattern = apex_name.empty() ?
-            "/apex/*/etc/*rc" : "/apex/" + apex_name + "/etc/*rc";
+    // Pattern uses "*rc" instead of ".rc" because APEXes can have versioned RC files
+    // like foo.34rc.
+    std::string glob_pattern =
+            apex_name.empty() ? "/apex/*/etc/*rc" : "/apex/" + apex_name + "/etc/*rc";
 
     const int ret = glob(glob_pattern.c_str(), GLOB_MARK, nullptr, &glob_result);
     if (ret != 0 && ret != GLOB_NOMATCH) {
@@ -47,15 +52,28 @@ static Result<std::vector<std::string>> CollectApexConfigs(const std::string& ap
     std::vector<std::string> configs;
     for (size_t i = 0; i < glob_result.gl_pathc; i++) {
         std::string path = glob_result.gl_pathv[i];
-        // Filter-out /apex/<name>@<ver> paths. The paths are bind-mounted to
-        // /apex/<name> paths, so unless we filter them out, we will parse the
-        // same file twice.
-        std::vector<std::string> paths = android::base::Split(path, "/");
-        if (paths.size() >= 3 && paths[2].find('@') != std::string::npos) {
+
+        // Filter out directories
+        if (path.back() == '/') {
             continue;
         }
-        // Filter directories
-        if (path.back() == '/') {
+
+        // Get apex name from path.
+        std::vector<std::string> paths = android::base::Split(path, "/");
+        if (paths.size() < 3) {
+            continue;
+        }
+        const std::string& apex_name = paths[2];
+
+        // Filter out /apex/<name>@<ver> paths. The paths are bind-mounted to
+        // /apex/<name> paths, so unless we filter them out, we will parse the
+        // same file twice.
+        if (apex_name.find('@') != std::string::npos) {
+            continue;
+        }
+
+        // Filter out skip_set apexes
+        if (skip_apexes.count(apex_name) > 0) {
             continue;
         }
         configs.push_back(path);
@@ -64,11 +82,41 @@ static Result<std::vector<std::string>> CollectApexConfigs(const std::string& ap
     return configs;
 }
 
-static Result<void> ParseConfigs(const std::vector<std::string>& configs) {
+std::set<std::string> GetApexListFrom(const std::string& apex_dir) {
+    std::set<std::string> apex_list;
+    auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir(apex_dir.c_str()), closedir);
+    if (!dirp) {
+        return apex_list;
+    }
+    struct dirent* entry;
+    while ((entry = readdir(dirp.get())) != nullptr) {
+        if (entry->d_type != DT_DIR) continue;
+
+        const char* name = entry->d_name;
+        if (name[0] == '.') continue;
+        if (strchr(name, '@') != nullptr) continue;
+        if (strcmp(name, "sharedlibs") == 0) continue;
+        apex_list.insert(name);
+    }
+    return apex_list;
+}
+
+static Result<void> ParseRcScripts(const std::vector<std::string>& files) {
+    if (files.empty()) {
+        return {};
+    }
+    // APEXes can have versioned RC files. These should be filtered based on
+    // SDK version.
+    auto filtered = FilterVersionedConfigs(
+            files, android::base::GetIntProperty("ro.build.version.sdk", INT_MAX));
+    if (filtered.empty()) {
+        return {};
+    }
+
     Parser parser =
             CreateApexConfigParser(ActionManager::GetInstance(), ServiceList::GetInstance());
     std::vector<std::string> errors;
-    for (const auto& c : configs) {
+    for (const auto& c : filtered) {
         auto result = parser.ParseConfigFile(c);
         // We should handle other config files even when there's an error.
         if (!result.ok()) {
@@ -81,16 +129,21 @@ static Result<void> ParseConfigs(const std::vector<std::string>& configs) {
     return {};
 }
 
-Result<void> ParseApexConfigs(const std::string& apex_name) {
-    auto configs = OR_RETURN(CollectApexConfigs(apex_name));
+Result<void> ParseRcScriptsFromApex(const std::string& apex_name) {
+    auto configs = OR_RETURN(CollectRcScriptsFromApex(apex_name, /*skip_apexes=*/{}));
+    return ParseRcScripts(configs);
+}
 
-    if (configs.empty()) {
-        return {};
+Result<void> ParseRcScriptsFromAllApexes(bool bootstrap) {
+    std::set<std::string> skip_apexes;
+    if (!bootstrap) {
+        // In case we already loaded config files from bootstrap APEXes, we need to avoid loading
+        // them again. We can get the list of bootstrap APEXes by scanning /bootstrap-apex and
+        // skip them in CollectRcScriptsFromApex.
+        skip_apexes = GetApexListFrom("/bootstrap-apex");
     }
-
-    auto filtered_configs = FilterVersionedConfigs(configs,
-                                    android::base::GetIntProperty("ro.build.version.sdk", INT_MAX));
-    return ParseConfigs(filtered_configs);
+    auto configs = OR_RETURN(CollectRcScriptsFromApex(/*apex_name=*/"", skip_apexes));
+    return ParseRcScripts(configs);
 }
 
 }  // namespace init

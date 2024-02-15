@@ -1,0 +1,4 @@
+on init && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test64
+on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
+    exec_start boringssl_self_test_apex64

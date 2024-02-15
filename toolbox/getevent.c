@@ -111,8 +111,7 @@ static int print_possible_events(int fd, int print_flags)
                 break;
             bits_size = res + 16;
             bits = realloc(bits, bits_size * 2);
-            if(bits == NULL)
-                err(1, "failed to allocate buffer of size %d\n", (int)bits_size);
+            if (bits == NULL) err(1, "failed to allocate buffer of size %zd", bits_size);
         }
         res2 = 0;
         switch(i) {

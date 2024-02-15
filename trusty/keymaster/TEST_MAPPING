@@ -10,13 +10,15 @@
         "name": "RkpdAppUnitTests"
       },
       {
-        "name": "RkpdAppGoogleUnitTests"
+        "name": "RkpdAppGoogleUnitTests",
+        "keywords": ["internal"]
       },
       {
         "name": "RkpdAppIntegrationTests"
       },
       {
-        "name": "RkpdAppGoogleIntegrationTests"
+        "name": "RkpdAppGoogleIntegrationTests",
+        "keywords": ["internal"]
       }
   ]
 }

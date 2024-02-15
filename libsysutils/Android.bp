@@ -29,6 +29,10 @@ cc_library {
         "liblog",
     ],
 
+    header_libs: [
+        "bpf_headers",
+    ],
+
     export_include_dirs: ["include"],
 
     tidy: true,
