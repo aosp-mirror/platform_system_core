@@ -18,7 +18,9 @@
 
 #include <inttypes.h>
 
+#include <charconv>
 #include <functional>
+#include <limits>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -425,6 +427,27 @@ static void print_memory_maps(CallbackType callback, const Tombstone& tombstone)
   }
 }
 
+static std::string oct_encode(const std::string& data) {
+  std::string oct_encoded;
+  oct_encoded.reserve(data.size());
+
+  // N.B. the unsigned here is very important, otherwise e.g. \255 would render as
+  // \-123 (and overflow our buffer).
+  for (unsigned char c : data) {
+    if (isprint(c)) {
+      oct_encoded += c;
+    } else {
+      std::string oct_digits("\\\0\0\0", 4);
+      // char is encodable in 3 oct digits
+      static_assert(std::numeric_limits<unsigned char>::max() <= 8 * 8 * 8);
+      auto [ptr, ec] = std::to_chars(oct_digits.data() + 1, oct_digits.data() + 4, c, 8);
+      oct_digits.resize(ptr - oct_digits.data());
+      oct_encoded += oct_digits;
+    }
+  }
+  return oct_encoded;
+}
+
 static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
                               const Thread& thread) {
   print_thread_header(callback, tombstone, thread, true);
@@ -466,6 +489,12 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
 
   if (!tombstone.abort_message().empty()) {
     CBL("Abort message: '%s'", tombstone.abort_message().c_str());
+  }
+
+  for (const auto& crash_detail : tombstone.crash_details()) {
+    std::string oct_encoded_name = oct_encode(crash_detail.name());
+    std::string oct_encoded_data = oct_encode(crash_detail.data());
+    CBL("Extra crash detail: %s: '%s'", oct_encoded_name.c_str(), oct_encoded_data.c_str());
   }
 
   print_thread_registers(callback, tombstone, thread, true);
