@@ -48,8 +48,10 @@
 #include <android-base/unique_fd.h>
 
 #include <android/log.h>
+#include <android/set_abort_message.h>
 #include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
+#include <bionic/set_abort_message_internal.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -248,6 +250,46 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
   if (cause) {
     Cause *cause_proto = tombstone->add_causes();
     cause_proto->set_human_readable(*cause);
+  }
+}
+
+static void dump_crash_details(Tombstone* tombstone,
+                               std::shared_ptr<unwindstack::Memory>& process_memory,
+                               const ProcessInfo& process_info) {
+  uintptr_t address = process_info.crash_detail_page;
+  while (address) {
+    struct crash_detail_page_t page;
+    if (!process_memory->ReadFully(address, &page, sizeof(page))) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read crash detail page: %m");
+      break;
+    }
+    if (page.used > kNumCrashDetails) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "crash detail: page corrupted");
+      break;
+    }
+    for (size_t i = 0; i < page.used; ++i) {
+      const crash_detail_t& crash_detail = page.crash_details[i];
+      if (!crash_detail.data) {
+        continue;
+      }
+      std::string name(crash_detail.name_size, '\0');
+      if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(crash_detail.name), name.data(),
+                                     crash_detail.name_size)) {
+        async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "crash detail: failed to read name: %m");
+        continue;
+      }
+      std::string data(crash_detail.data_size, '\0');
+      if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(crash_detail.data), data.data(),
+                                     crash_detail.data_size)) {
+        async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                              "crash detail: failed to read data for %s: %m", name.c_str());
+        continue;
+      }
+      auto* proto_detail = tombstone->add_crash_details();
+      proto_detail->set_name(name);
+      proto_detail->set_data(data);
+    }
+    address = reinterpret_cast<uintptr_t>(page.prev);
   }
 }
 
@@ -698,7 +740,7 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
   *result.mutable_signal_info() = sig;
 
   dump_abort_message(&result, unwinder->GetProcessMemory(), process_info);
-
+  dump_crash_details(&result, unwinder->GetProcessMemory(), process_info);
   // Dump the main thread, but save the memory around the registers.
   dump_thread(&result, unwinder, main_thread, /* memory_dump */ true);
 
