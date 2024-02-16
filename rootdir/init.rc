@@ -640,6 +640,11 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
+
+    mkdir /metadata/aconfig 0750 root system
+    mkdir /metadata/aconfig/flags 0750 root system
+    mkdir /metadata/aconfig/boot 0754 root system
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
