@@ -83,7 +83,18 @@ using namespace std::chrono_literals;
 // be reliable.
 // 256KiB seems to work, but 1MiB bulk transfers lock up my z620 with a 3.13
 // kernel.
-#define MAX_USBFS_BULK_SIZE (16 * 1024)
+// 128KiB was experimentally found to be enough to saturate the bus at
+// SuperSpeed+, so we first try double that for writes. If the operation fails
+// due to a lack of contiguous regions (or an ancient kernel), try smaller sizes
+// until we find one that works (see LinuxUsbTransport::Write). Reads are less
+// performance critical so for now just use a known good size.
+#define MAX_USBFS_BULK_WRITE_SIZE (256 * 1024)
+#define MAX_USBFS_BULK_READ_SIZE (16 * 1024)
+
+// This size should pretty much always work (it's compatible with pre-3.3
+// kernels and it's what we used to use historically), so if it doesn't work
+// something has gone badly wrong.
+#define MIN_USBFS_BULK_WRITE_SIZE (16 * 1024)
 
 struct usb_handle
 {
@@ -108,6 +119,7 @@ class LinuxUsbTransport : public UsbTransport {
   private:
     std::unique_ptr<usb_handle> handle_;
     const uint32_t ms_timeout_;
+    size_t max_usbfs_bulk_write_size_ = MAX_USBFS_BULK_WRITE_SIZE;
 
     DISALLOW_COPY_AND_ASSIGN(LinuxUsbTransport);
 };
@@ -415,26 +427,32 @@ ssize_t LinuxUsbTransport::Write(const void* _data, size_t len)
     }
 
     auto submit_urb = [&](size_t i) {
-        int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
+        while (true) {
+            int xfer = (len > max_usbfs_bulk_write_size_) ? max_usbfs_bulk_write_size_ : len;
 
-        urb[i].type = USBDEVFS_URB_TYPE_BULK;
-        urb[i].endpoint = handle_->ep_out;
-        urb[i].buffer_length = xfer;
-        urb[i].buffer = data;
-        urb[i].usercontext = (void *)i;
+            urb[i].type = USBDEVFS_URB_TYPE_BULK;
+            urb[i].endpoint = handle_->ep_out;
+            urb[i].buffer_length = xfer;
+            urb[i].buffer = data;
+            urb[i].usercontext = (void *)i;
 
-        int n = ioctl(handle_->desc, USBDEVFS_SUBMITURB, &urb[i]);
-        if (n != 0) {
-            DBG("ioctl(USBDEVFS_SUBMITURB) failed\n");
-            return false;
+            int n = ioctl(handle_->desc, USBDEVFS_SUBMITURB, &urb[i]);
+            if (n != 0) {
+                if (errno == ENOMEM && max_usbfs_bulk_write_size_ > MIN_USBFS_BULK_WRITE_SIZE) {
+                    max_usbfs_bulk_write_size_ /= 2;
+                    continue;
+                }
+                DBG("ioctl(USBDEVFS_SUBMITURB) failed\n");
+                return false;
+            }
+
+            pending[i] = true;
+            count += xfer;
+            len -= xfer;
+            data += xfer;
+
+            return true;
         }
-
-        pending[i] = true;
-        count += xfer;
-        len -= xfer;
-        data += xfer;
-
-        return true;
     };
 
     auto reap_urb = [&](size_t i) {
@@ -500,7 +518,7 @@ ssize_t LinuxUsbTransport::Read(void* _data, size_t len)
     }
 
     while (len > 0) {
-        int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
+        int xfer = (len > MAX_USBFS_BULK_READ_SIZE) ? MAX_USBFS_BULK_READ_SIZE : len;
 
         bulk.ep = handle_->ep_in;
         bulk.len = xfer;
