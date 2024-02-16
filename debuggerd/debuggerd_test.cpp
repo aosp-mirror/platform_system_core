@@ -939,6 +939,187 @@ TEST_F(CrasherTest, abort_message) {
   ASSERT_MATCH(result, R"(Abort message: 'x{4045}')");
 }
 
+static char g_crash_detail_value_changes[] = "crash_detail_value";
+static char g_crash_detail_value[] = "crash_detail_value";
+static char g_crash_detail_value2[] = "crash_detail_value2";
+
+inline crash_detail_t* _Nullable android_register_crash_detail_strs(const char* _Nonnull name,
+                                                                    const char* _Nonnull data) {
+  return android_register_crash_detail(name, strlen(name), data, strlen(data));
+}
+
+TEST_F(CrasherTest, crash_detail_single) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME", g_crash_detail_value);
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'crash_detail_value')");
+}
+
+TEST_F(CrasherTest, crash_detail_single_byte_name) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME\1", g_crash_detail_value);
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME\\1: 'crash_detail_value')");
+}
+
+
+TEST_F(CrasherTest, crash_detail_single_bytes) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_register_crash_detail("CRASH_DETAIL_NAME", strlen("CRASH_DETAIL_NAME"), "\1",
+                                  sizeof("\1"));
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: '\\1\\0')");
+}
+
+TEST_F(CrasherTest, crash_detail_mixed) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    const char data[] = "helloworld\1\255\3";
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME", data);
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'helloworld\\1\\255\\3')");
+}
+
+TEST_F(CrasherTest, crash_detail_many) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    for (int i = 0; i < 1000; ++i) {
+      std::string name = "CRASH_DETAIL_NAME" + std::to_string(i);
+      std::string value = "CRASH_DETAIL_VALUE" + std::to_string(i);
+      auto* h = android_register_crash_detail_strs(name.data(), value.data());
+      android_unregister_crash_detail(h);
+    }
+
+    android_register_crash_detail_strs("FINAL_NAME", "FINAL_VALUE");
+    android_register_crash_detail_strs("FINAL_NAME2", "FINAL_VALUE2");
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, "CRASH_DETAIL_NAME");
+  ASSERT_NOT_MATCH(result, "CRASH_DETAIL_VALUE");
+  ASSERT_MATCH(result, R"(FINAL_NAME: 'FINAL_VALUE')");
+  ASSERT_MATCH(result, R"(FINAL_NAME2: 'FINAL_VALUE2')");
+}
+
+TEST_F(CrasherTest, crash_detail_single_changes) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME", g_crash_detail_value_changes);
+    g_crash_detail_value_changes[0] = 'C';
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'Crash_detail_value')");
+}
+
+TEST_F(CrasherTest, crash_detail_multiple) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME", g_crash_detail_value);
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME2", g_crash_detail_value2);
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME: 'crash_detail_value')");
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME2: 'crash_detail_value2')");
+}
+
+TEST_F(CrasherTest, crash_detail_remove) {
+  int intercept_result;
+  unique_fd output_fd;
+  StartProcess([]() {
+    auto* detail1 = android_register_crash_detail_strs("CRASH_DETAIL_NAME", g_crash_detail_value);
+    android_unregister_crash_detail(detail1);
+    android_register_crash_detail_strs("CRASH_DETAIL_NAME2", g_crash_detail_value2);
+    abort();
+  });
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  FinishIntercept(&intercept_result);
+
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_NOT_MATCH(result, R"(CRASH_DETAIL_NAME: 'crash_detail_value')");
+  ASSERT_MATCH(result, R"(CRASH_DETAIL_NAME2: 'crash_detail_value2')");
+}
+
 TEST_F(CrasherTest, abort_message_newline_trimmed) {
   int intercept_result;
   unique_fd output_fd;
