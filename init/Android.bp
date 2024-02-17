@@ -88,7 +88,6 @@ init_device_sources = [
 init_host_sources = [
     "check_builtins.cpp",
     "host_import_parser.cpp",
-    "host_init_verifier.cpp",
 ]
 
 soong_config_module_type {
@@ -320,7 +319,6 @@ cc_binary {
     installable: false,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
-
 
 soong_config_module_type {
     name: "init_first_stage_cc_defaults",
@@ -614,13 +612,13 @@ cc_defaults {
 cc_binary {
     name: "host_init_verifier",
     defaults: ["init_host_defaults"],
-    srcs: init_common_sources + init_host_sources,
+    srcs: ["host_init_verifier.cpp"] + init_common_sources + init_host_sources,
 }
 
 cc_library_host_static {
     name: "libinit_host",
     defaults: ["init_host_defaults"],
-    srcs: init_common_sources,
+    srcs: init_common_sources + init_host_sources,
     export_include_dirs: ["."],
     proto: {
         export_proto_headers: true,
