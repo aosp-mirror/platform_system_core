@@ -19,6 +19,10 @@
 #include "builtin_arguments.h"
 #include "result.h"
 
+#include <vector>
+
+#include <property_info_serializer/property_info_serializer.h>
+
 namespace android {
 namespace init {
 
@@ -42,6 +46,9 @@ Result<void> check_sysclktz(const BuiltinArguments& args);
 Result<void> check_umount_all(const BuiltinArguments& args);
 Result<void> check_wait(const BuiltinArguments& args);
 Result<void> check_wait_for_prop(const BuiltinArguments& args);
+
+Result<void> InitializeHostPropertyInfoArea(
+        const std::vector<properties::PropertyInfoEntry>& property_infos);
 
 }  // namespace init
 }  // namespace android
