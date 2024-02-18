@@ -21,17 +21,17 @@ using namespace std;
 
 namespace {
 
-TEST(vendorsupport, get_corresponding_vendor_api_level) {
-    ASSERT_EQ(__ANDROID_API_U__, vendor_api_level_of(__ANDROID_API_U__));
-    ASSERT_EQ(202404, vendor_api_level_of(__ANDROID_API_V__));
-    ASSERT_EQ(__INVALID_API_LEVEL, vendor_api_level_of(__ANDROID_API_FUTURE__));
+TEST(VendorSupport, GetCorrespondingVendorApiLevel) {
+    ASSERT_EQ(__ANDROID_API_U__, AVendorSupport_getVendorApiLevelOf(__ANDROID_API_U__));
+    ASSERT_EQ(202404, AVendorSupport_getVendorApiLevelOf(__ANDROID_API_V__));
+    ASSERT_EQ(__INVALID_API_LEVEL, AVendorSupport_getVendorApiLevelOf(__ANDROID_API_FUTURE__));
 }
 
-TEST(vendorsupport, get_corresponding_sdk_api_level) {
-    ASSERT_EQ(__ANDROID_API_U__, sdk_api_level_of(__ANDROID_API_U__));
-    ASSERT_EQ(__ANDROID_API_V__, sdk_api_level_of(202404));
-    ASSERT_EQ(__INVALID_API_LEVEL, sdk_api_level_of(__ANDROID_VENDOR_API_MAX__));
-    ASSERT_EQ(__INVALID_API_LEVEL, sdk_api_level_of(35));
+TEST(VendorSupport, GetCorrespondingSdkApiLevel) {
+    ASSERT_EQ(__ANDROID_API_U__, AVendorSupport_getSdkApiLevelOf(__ANDROID_API_U__));
+    ASSERT_EQ(__ANDROID_API_V__, AVendorSupport_getSdkApiLevelOf(202404));
+    ASSERT_EQ(__INVALID_API_LEVEL, AVendorSupport_getSdkApiLevelOf(__ANDROID_VENDOR_API_MAX__));
+    ASSERT_EQ(__INVALID_API_LEVEL, AVendorSupport_getSdkApiLevelOf(35));
 }
 
 }  // namespace

@@ -1104,7 +1104,8 @@ static void property_initialize_ro_vendor_api_level() {
         product_first_api_level = GetIntProperty("ro.build.version.sdk", __ANDROID_API_FUTURE__);
     }
 
-    vendor_api_level = std::min(vendor_api_level_of(product_first_api_level), vendor_api_level);
+    vendor_api_level =
+            std::min(AVendorSupport_getVendorApiLevelOf(product_first_api_level), vendor_api_level);
 
     if (vendor_api_level < 0) {
         LOG(ERROR) << "Unexpected vendor api level for " << VENDOR_API_LEVEL_PROP << ". Check "
