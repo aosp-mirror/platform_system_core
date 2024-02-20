@@ -397,6 +397,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
     ASSERT_SAME_OFFSET(scudo_stack_depot_size, scudo_stack_depot_size);
     ASSERT_SAME_OFFSET(recoverable_gwp_asan_crash, recoverable_gwp_asan_crash);
+    ASSERT_SAME_OFFSET(crash_detail_page, crash_detail_page);
 #undef ASSERT_SAME_OFFSET
 
     iovs[3] = {.iov_base = &thread_info->process_info,

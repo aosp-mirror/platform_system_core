@@ -78,6 +78,7 @@ static void RunScript() {
     const char* args[] = {path, "/first_stage.sh", nullptr};
     int rv = execv(path, const_cast<char**>(args));
     LOG(ERROR) << "unable to execv /first_stage.sh, returned " << rv << " errno " << errno;
+    _exit(127);
 }
 
 namespace android {
