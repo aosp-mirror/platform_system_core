@@ -15,6 +15,11 @@ option java_outer_classname = "TombstoneProtos";
 // NOTE TO OEMS:
 // If you add custom fields to this proto, do not use numbers in the reserved range.
 
+message CrashDetail {
+  bytes name = 1;
+  bytes data = 2;
+}
+
 message Tombstone {
   Architecture arch = 1;
   string build_fingerprint = 2;
@@ -33,6 +38,7 @@ message Tombstone {
 
   Signal signal_info = 10;
   string abort_message = 14;
+  repeated CrashDetail crash_details = 21;
   repeated Cause causes = 15;
 
   map<uint32, Thread> threads = 16;
@@ -40,7 +46,7 @@ message Tombstone {
   repeated LogBuffer log_buffers = 18;
   repeated FD open_fds = 19;
 
-  reserved 21 to 999;
+  reserved 22 to 999;
 }
 
 enum Architecture {

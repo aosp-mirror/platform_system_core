@@ -1,7 +1,7 @@
 LIBVENDORSUPPORT {
   global:
-    vendor_api_level_of; # llndk systemapi
-    sdk_api_level_of; # llndk systemapi
+    AVendorSupport_getVendorApiLevelOf; # llndk systemapi
+    AVendorSupport_getSdkApiLevelOf; # llndk systemapi
   local:
     *;
 };
