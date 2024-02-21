@@ -78,6 +78,7 @@ static void RunScript() {
     const char* args[] = {path, "/first_stage.sh", nullptr};
     int rv = execv(path, const_cast<char**>(args));
     LOG(ERROR) << "unable to execv /first_stage.sh, returned " << rv << " errno " << errno;
+    _exit(127);
 }
 
 namespace android {
@@ -86,7 +87,9 @@ namespace init {
 void StartConsole(const std::string& cmdline) {
     bool console = KernelConsolePresent(cmdline);
     // Use a simple sigchld handler -- first_stage_console doesn't need to track or log zombies
-    const struct sigaction chld_act { .sa_handler = SIG_DFL, .sa_flags = SA_NOCLDWAIT };
+    const struct sigaction chld_act {
+        .sa_flags = SA_NOCLDWAIT, .sa_handler = SIG_DFL
+    };
 
     sigaction(SIGCHLD, &chld_act, nullptr);
     pid_t pid = fork();

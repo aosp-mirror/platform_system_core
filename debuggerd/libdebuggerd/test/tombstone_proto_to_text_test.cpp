@@ -118,3 +118,19 @@ TEST_F(TombstoneProtoToTextTest, pac_enabled_keys) {
                "LOG pac_enabled_keys: 0000000000001009 \\(PR_PAC_APIAKEY, PR_PAC_APDBKEY, unknown "
                "0x1000\\)\\n");
 }
+
+TEST_F(TombstoneProtoToTextTest, crash_detail_string) {
+  auto* crash_detail = tombstone_->add_crash_details();
+  crash_detail->set_name("CRASH_DETAIL_NAME");
+  crash_detail->set_data("crash_detail_value");
+  ProtoToString();
+  EXPECT_MATCH(text_, "(CRASH_DETAIL_NAME: 'crash_detail_value')");
+}
+
+TEST_F(TombstoneProtoToTextTest, crash_detail_bytes) {
+  auto* crash_detail = tombstone_->add_crash_details();
+  crash_detail->set_name("CRASH_DETAIL_NAME");
+  crash_detail->set_data("helloworld\1\255\3");
+  ProtoToString();
+  EXPECT_MATCH(text_, R"(CRASH_DETAIL_NAME: 'helloworld\\1\\255\\3')");
+}
