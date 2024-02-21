@@ -121,7 +121,6 @@ bool CowWriterV3::ParseOptions() {
         return false;
     }
 
-    LOG(INFO) << "Compression factor: " << header_.max_compression_size;
     num_compress_threads_ = std::max(int(options_.num_compress_threads), 1);
     auto parts = android::base::Split(options_.compression, ",");
     if (parts.size() > 2) {
