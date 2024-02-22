@@ -109,6 +109,40 @@ TEST_F(CowTestV3, MaxOp) {
     ASSERT_EQ(reader.header_v3().op_count, 20);
 }
 
+TEST_F(CowTestV3, MaxOpSingleThreadCompression) {
+    CowOptions options;
+    options.op_count_max = 20;
+    options.num_compress_threads = 1;
+    options.compression_factor = 4096 * 8;
+    options.compression = "lz4";
+
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_TRUE(writer->AddZeroBlocks(1, 20));
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_FALSE(writer->AddRawBlocks(5, data.data(), data.size()));
+
+    ASSERT_TRUE(writer->Finalize());
+}
+
+TEST_F(CowTestV3, MaxOpMultiThreadCompression) {
+    CowOptions options;
+    options.op_count_max = 20;
+    options.num_compress_threads = 2;
+    options.compression_factor = 4096 * 8;
+    options.compression = "lz4";
+
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    ASSERT_TRUE(writer->AddZeroBlocks(1, 20));
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size, '\0');
+
+    ASSERT_FALSE(writer->AddRawBlocks(5, data.data(), data.size()));
+
+    ASSERT_TRUE(writer->Finalize());
+}
+
 TEST_F(CowTestV3, ZeroOp) {
     CowOptions options;
     options.op_count_max = 20;
