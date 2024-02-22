@@ -404,7 +404,7 @@ class wp
 public:
     typedef typename RefBase::weakref_type weakref_type;
 
-    inline wp() : m_ptr(nullptr), m_refs(nullptr) { }
+    inline constexpr wp() : m_ptr(nullptr), m_refs(nullptr) { }
 
     // if nullptr, returns nullptr
     //
