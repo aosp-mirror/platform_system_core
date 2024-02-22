@@ -356,6 +356,9 @@ bool CowWriterV3::ConstructCowOpCompressedBuffers(uint64_t new_block_start, cons
                    << ", actual number of blocks received from compressor " << blocks.size();
         return false;
     }
+    if (!CheckOpCount(blocks.size())) {
+        return false;
+    }
     size_t blocks_written = 0;
     for (size_t blk_index = 0; blk_index < blocks.size(); blk_index++) {
         CowOperation& op = cached_ops_.emplace_back();
@@ -395,9 +398,6 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
     }
     const auto bytes = reinterpret_cast<const uint8_t*>(data);
     const size_t num_blocks = (size / header_.block_size);
-    if (!CheckOpCount(num_blocks)) {
-        return false;
-    }
     for (size_t i = 0; i < num_blocks;) {
         const size_t blocks_to_write =
                 std::min<size_t>(batch_size_ - cached_data_.size(), num_blocks - i);
