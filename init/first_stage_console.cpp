@@ -16,6 +16,7 @@
 
 #include "first_stage_console.h"
 
+#include <spawn.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
@@ -65,20 +66,20 @@ static bool SetupConsole() {
     return true;
 }
 
-static void RunScript() {
-    LOG(INFO) << "Attempting to run /first_stage.sh...";
-    pid_t pid = fork();
-    if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(INFO) << "/first_stage.sh exited with status " << status;
-        return;
-    }
-    const char* path = "/system/bin/sh";
-    const char* args[] = {path, "/first_stage.sh", nullptr};
-    int rv = execv(path, const_cast<char**>(args));
-    LOG(ERROR) << "unable to execv /first_stage.sh, returned " << rv << " errno " << errno;
-    _exit(127);
+static pid_t SpawnImage(const char* file) {
+    const char* argv[] = {file, NULL};
+    const char* envp[] = {NULL};
+
+    char* const* argvp = const_cast<char* const*>(argv);
+    char* const* envpp = const_cast<char* const*>(envp);
+
+    pid_t pid;
+    errno = posix_spawn(&pid, argv[0], NULL, NULL, argvp, envpp);
+    if (!errno) return pid;
+
+    PLOG(ERROR) << "Failed to spawn '" << file << "'";
+
+    return (pid_t)0;
 }
 
 namespace android {
@@ -94,19 +95,21 @@ void StartConsole(const std::string& cmdline) {
     sigaction(SIGCHLD, &chld_act, nullptr);
     pid_t pid = fork();
     if (pid != 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        LOG(ERROR) << "console shell exited with status " << status;
+        wait(NULL);
+        LOG(ERROR) << "console shell exited";
         return;
     }
 
     if (console) console = SetupConsole();
-    RunScript();
+
+    LOG(INFO) << "Attempting to run /first_stage.sh...";
+    if (SpawnImage("/first_stage.sh")) {
+        wait(NULL);
+        LOG(INFO) << "/first_stage.sh exited";
+    }
+
     if (console) {
-        const char* path = "/system/bin/sh";
-        const char* args[] = {path, nullptr};
-        int rv = execv(path, const_cast<char**>(args));
-        LOG(ERROR) << "unable to execv, returned " << rv << " errno " << errno;
+        if (SpawnImage("/system/bin/sh")) wait(NULL);
     }
     _exit(127);
 }

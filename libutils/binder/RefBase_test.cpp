@@ -300,8 +300,8 @@ private:
     std::atomic<int>* mDeleteCount;
 };
 
-static sp<Bar> buffer;
-static std::atomic<bool> bufferFull(false);
+[[clang::no_destroy]] static constinit sp<Bar> buffer;
+static constinit std::atomic<bool> bufferFull(false);
 
 // Wait until bufferFull has value val.
 static inline void waitFor(bool val) {
@@ -380,8 +380,8 @@ TEST(RefBase, RacingDestructors) {
     }  // Otherwise this is slow and probably pointless on a uniprocessor.
 }
 
-static wp<Bar> wpBuffer;
-static std::atomic<bool> wpBufferFull(false);
+[[clang::no_destroy]] static constinit wp<Bar> wpBuffer;
+static constinit std::atomic<bool> wpBufferFull(false);
 
 // Wait until wpBufferFull has value val.
 static inline void wpWaitFor(bool val) {
