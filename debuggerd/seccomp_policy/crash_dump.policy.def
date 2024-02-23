@@ -25,8 +25,8 @@ getdents64: 1
 faccessat: 1
 recvmsg: 1
 recvfrom: 1
-sysinfo: 1
 setsockopt: 1
+sysinfo: 1
 
 process_vm_readv: 1
 
@@ -53,20 +53,29 @@ prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == PR_SET_VMA
 
 #if 0
 libminijail on vendor partitions older than P does not have constants from <sys/mman.h>.
-Define the values of PROT_READ and PROT_WRITE ourselves to maintain backwards compatibility.
+Define values for PROT_READ, PROT_WRITE and PROT_MTE ourselves to maintain backwards compatibility.
 #else
 #define PROT_READ 0x1
 #define PROT_WRITE 0x2
+#define PROT_MTE 0x20
 #endif
 
 madvise: 1
+#if defined(__aarch64__)
+mprotect: arg2 in PROT_READ|PROT_WRITE|PROT_MTE
+#else
 mprotect: arg2 in PROT_READ|PROT_WRITE
+#endif
 munmap: 1
 
 #if defined(__LP64__)
 getuid: 1
 fstat: 1
+#if defined(__aarch64__)
+mmap: arg2 in PROT_READ|PROT_WRITE|PROT_MTE
+#else
 mmap: arg2 in PROT_READ|PROT_WRITE
+#endif
 #else
 getuid32: 1
 fstat64: 1
