@@ -30,7 +30,7 @@ template<typename T> class wp;
 template<typename T>
 class sp {
 public:
-    inline sp() : m_ptr(nullptr) { }
+    inline constexpr sp() : m_ptr(nullptr) { }
 
     // The old way of using sp<> was like this. This is bad because it relies
     // on implicit conversion to sp<>, which we would like to remove (if an

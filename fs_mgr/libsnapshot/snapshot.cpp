@@ -3242,6 +3242,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             // Older OTAs don't set an explicit compression type, so default to gz.
             compression_algorithm = "gz";
         }
+        LOG(INFO) << "using compression algorithm: " << compression_algorithm
+                   << ", max compressible block size: " << compression_factor;
     }
 
     PartitionCowCreator cow_creator{
