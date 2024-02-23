@@ -34,3 +34,21 @@ cc_library {
         "liblog",
     ],
 }
+
+cc_library_headers {
+    name: "libvendorsupport_llndk_headers",
+    host_supported: true,
+    vendor_available: true,
+    recovery_available: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
+    native_bridge_supported: true,
+
+    export_include_dirs: ["include_llndk"],
+    llndk: {
+        llndk_headers: true,
+    },
+
+    system_shared_libs: [],
+    stl: "none",
+}
