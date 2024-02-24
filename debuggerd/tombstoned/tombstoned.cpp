@@ -417,6 +417,7 @@ static bool rename_tombstone_fd(borrowed_fd fd, borrowed_fd dirfd, const std::st
     return false;
   }
 
+  // This fd is created inside of dirfd in CrashQueue::create_temporary_file.
   std::string fd_path = StringPrintf("/proc/self/fd/%d", fd.get());
   rc = linkat(AT_FDCWD, fd_path.c_str(), dirfd.get(), path.c_str(), AT_SYMLINK_FOLLOW);
   if (rc != 0) {
