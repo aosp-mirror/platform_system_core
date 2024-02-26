@@ -508,8 +508,6 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
         // When snapshots are on current slot, we determine the size
         // of block device based on the number of COW operations. We cannot
         // use base device as it will be from older image.
-        size_t num_ops = 0;
-        uint64_t dev_sz = 0;
         unique_fd fd(open(cow_file.c_str(), O_RDONLY | O_CLOEXEC));
         if (fd < 0) {
             PLOG(ERROR) << "Failed to open " << cow_file;
@@ -522,13 +520,18 @@ bool SnapshotManager::MapDmUserCow(LockedFile* lock, const std::string& name,
             return false;
         }
 
+        uint64_t dev_sz = 0;
         const auto& header = reader.GetHeader();
-        if (header.prefix.major_version > 2) {
-            LOG(ERROR) << "COW format not supported";
-            return false;
+        if (header.prefix.major_version == 2) {
+            const size_t num_ops = reader.get_num_total_data_ops();
+            dev_sz = (num_ops * header.block_size);
+        } else {
+            // create_snapshot will skip in-place copy ops. Hence, fetch this
+            // information directly from v3 header.
+            const auto& v3_header = reader.header_v3();
+            dev_sz = v3_header.op_count_max * v3_header.block_size;
         }
-        num_ops = reader.get_num_total_data_ops();
-        dev_sz = (num_ops * header.block_size);
+
         base_sectors = dev_sz >> 9;
     } else {
         // For userspace snapshots, the size of the base device is taken as the
