@@ -61,7 +61,6 @@ enum CrashStatus {
 
 struct CrashArtifact {
   unique_fd fd;
-  std::optional<std::string> temporary_path;
 
   static CrashArtifact devnull() {
     CrashArtifact result;
@@ -145,17 +144,9 @@ class CrashQueue {
     std::optional<std::string> path;
     result.fd.reset(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0660));
     if (result.fd == -1) {
-      // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
-      static size_t counter = 0;
-      std::string tmp_filename = StringPrintf(".temporary%zu", counter++);
-      result.fd.reset(openat(dir_fd_, tmp_filename.c_str(),
-                             O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0660));
-      if (result.fd == -1) {
-        PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
-      }
-
-      result.temporary_path = std::move(tmp_filename);
+      PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
     }
+
     // We need to fchmodat after creating to avoid getting the umask applied.
     std::string fd_path = StringPrintf("/proc/self/fd/%d", result.fd.get());
     if (fchmodat(dir_fd_, fd_path.c_str(), 0664, 0) != 0) {
@@ -475,20 +466,6 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
       LOG(ERROR) << "missing path for proto tombstone";
     } else {
       rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
-    }
-  }
-
-  // If we don't have O_TMPFILE, we need to clean up after ourselves.
-  if (crash->output.text.temporary_path) {
-    rc = unlinkat(queue->dir_fd().get(), crash->output.text.temporary_path->c_str(), 0);
-    if (rc != 0) {
-      PLOG(ERROR) << "failed to unlink temporary tombstone at " << paths.text;
-    }
-  }
-  if (crash->output.proto && crash->output.proto->temporary_path) {
-    rc = unlinkat(queue->dir_fd().get(), crash->output.proto->temporary_path->c_str(), 0);
-    if (rc != 0) {
-      PLOG(ERROR) << "failed to unlink temporary proto tombstone";
     }
   }
 }
