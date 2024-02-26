@@ -709,7 +709,7 @@ on post-fs-data
 
     # Start tombstoned early to be able to store tombstones.
     mkdir /data/anr 0775 system system encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/tombstones 0775 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
     start tombstoned

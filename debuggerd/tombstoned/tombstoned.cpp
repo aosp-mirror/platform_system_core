@@ -156,6 +156,11 @@ class CrashQueue {
 
       result.temporary_path = std::move(tmp_filename);
     }
+    // We need to fchmodat after creating to avoid getting the umask applied.
+    std::string fd_path = StringPrintf("/proc/self/fd/%d", result.fd.get());
+    if (fchmodat(dir_fd_, fd_path.c_str(), 0664, 0) != 0) {
+      PLOG(ERROR) << "Failed to make tombstone world-readable";
+    }
 
     return std::move(result);
   }
