@@ -17,22 +17,28 @@ package {
 }
 
 cc_binary {
-  name: "mte_crash",
-  tidy: false,
-  srcs: ["mte_crash.cpp"],
-  sanitize: {
-    memtag_heap: true,
-    diag: {
-      memtag_heap: true,
+    name: "mte_crash",
+    tidy: false,
+    srcs: ["mte_crash.cpp"],
+    sanitize: {
+        memtag_heap: true,
+        diag: {
+            memtag_heap: true,
+        },
     },
-  },
 }
 
 java_test_host {
     name: "permissive_mte_test",
     libs: ["tradefed"],
-    static_libs: ["frameworks-base-hostutils", "cts-install-lib-host"],
-    srcs:  ["src/**/PermissiveMteTest.java", ":libtombstone_proto-src"],
+    static_libs: [
+        "frameworks-base-hostutils",
+        "cts-install-lib-host",
+    ],
+    srcs: [
+        "src/**/PermissiveMteTest.java",
+        ":libtombstone_proto-src",
+    ],
     data: [":mte_crash"],
     test_config: "AndroidTest.xml",
     test_suites: ["general-tests"],
