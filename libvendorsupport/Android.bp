@@ -49,6 +49,17 @@ cc_library_headers {
         llndk_headers: true,
     },
 
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+    min_sdk_version: "apex_inherit",
+
     system_shared_libs: [],
     stl: "none",
+
+    // This header library is used for libc and must be available to any sdk
+    // versions.
+    // Setting sdk_version to the lowest version allows the dependencies.
+    sdk_version: "1",
 }
