@@ -52,4 +52,3 @@ java_library_static {
     sdk_version: "current",
     static_libs: ["libprotobuf-java-lite"],
 }
-
