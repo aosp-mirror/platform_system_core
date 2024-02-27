@@ -597,7 +597,6 @@ cc_defaults {
     },
     generated_headers: [
         "generated_stub_builtin_function_map",
-        "generated_android_ids",
     ],
     target: {
         android: {
@@ -613,6 +612,9 @@ cc_binary {
     name: "host_init_verifier",
     defaults: ["init_host_defaults"],
     srcs: ["host_init_verifier.cpp"] + init_common_sources + init_host_sources,
+    generated_headers: [
+        "generated_android_ids",
+    ],
 }
 
 cc_library_host_static {
