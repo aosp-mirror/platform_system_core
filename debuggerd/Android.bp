@@ -21,8 +21,11 @@ cc_defaults {
     local_include_dirs: ["include"],
     product_variables: {
         debuggable: {
-            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
-        }
+            cflags: [
+                "-UANDROID_DEBUGGABLE",
+                "-DANDROID_DEBUGGABLE=1",
+            ],
+        },
     },
 }
 
@@ -256,7 +259,7 @@ cc_library_static {
     ],
 
     static_libs: [
-        "libdexfile_support",  // libunwindstack dependency
+        "libdexfile_support", // libunwindstack dependency
         "libunwindstack",
         "liblzma",
         "libbase",
@@ -299,7 +302,7 @@ cc_library_static {
         },
         android: {
             runtime_libs: [
-                "libdexfile",           // libdexfile_support dependency
+                "libdexfile", // libdexfile_support dependency
             ],
         },
     },
@@ -494,7 +497,7 @@ cc_defaults {
 
     header_libs: [
         "bionic_libc_platform_headers",
-        "libdebuggerd_common_headers"
+        "libdebuggerd_common_headers",
     ],
 
     static_libs: [
@@ -551,7 +554,6 @@ prebuilt_etc {
         },
     },
 }
-
 
 // This installs the "other" architecture (so 32-bit on 64-bit device).
 prebuilt_etc {
