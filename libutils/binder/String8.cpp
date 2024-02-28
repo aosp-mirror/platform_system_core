@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
-
 #include <utils/String8.h>
 
 #include <log/log.h>
 #include <utils/String16.h>
 
 #include <ctype.h>
+#include <stdint.h>
 
 #include <limits>
 #include <string>

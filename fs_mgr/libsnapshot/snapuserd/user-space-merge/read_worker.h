@@ -69,7 +69,7 @@ class ReadWorker : public Worker, public IBlockServer::Delegate {
     std::shared_ptr<IBlockServerOpener> block_server_opener_;
     std::unique_ptr<IBlockServer> block_server_;
 
-    std::basic_string<uint8_t> xor_buffer_;
+    std::vector<uint8_t> xor_buffer_;
     std::unique_ptr<void, decltype(&::free)> aligned_buffer_;
     std::unique_ptr<uint8_t[]> decompressed_buffer_;
 };

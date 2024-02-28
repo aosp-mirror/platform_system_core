@@ -14,7 +14,7 @@
 
 //! A Rust interface for the StatsD pull API.
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use statslog_rust_header::{Atoms, Stat, StatsError};
 use statspull_bindgen::*;
 use std::collections::HashMap;
@@ -107,9 +107,8 @@ impl Default for Metadata {
     }
 }
 
-lazy_static! {
-    static ref COOKIES: Mutex<HashMap<i32, fn() -> StatsPullResult>> = Mutex::new(HashMap::new());
-}
+static COOKIES: Lazy<Mutex<HashMap<i32, fn() -> StatsPullResult>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// # Safety
 ///
