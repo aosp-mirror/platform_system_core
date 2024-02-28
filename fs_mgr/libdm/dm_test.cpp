@@ -181,6 +181,13 @@ TEST_F(DmTest, DmSuspendResume) {
     ASSERT_EQ(dm.GetState(dev.name()), DmDeviceState::ACTIVE);
 }
 
+TEST_F(DmTest, StripeArgs) {
+    DmTargetStripe target(0, 4096, 1024, "/dev/loop0", "/dev/loop1");
+    ASSERT_EQ(target.name(), "striped");
+    ASSERT_TRUE(target.Valid());
+    ASSERT_EQ(target.GetParameterString(), "2 1024 /dev/loop0 0 /dev/loop1 0");
+}
+
 TEST_F(DmTest, DmVerityArgsAvb2) {
     std::string device = "/dev/block/platform/soc/1da4000.ufshc/by-name/vendor_a";
     std::string algorithm = "sha1";
