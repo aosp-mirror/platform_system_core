@@ -640,6 +640,11 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
+
+    mkdir /metadata/aconfig 0750 root system
+    mkdir /metadata/aconfig/flags 0750 root system
+    mkdir /metadata/aconfig/boot 0754 root system
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -704,7 +709,7 @@ on post-fs-data
 
     # Start tombstoned early to be able to store tombstones.
     mkdir /data/anr 0775 system system encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/tombstones 0775 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
     start tombstoned

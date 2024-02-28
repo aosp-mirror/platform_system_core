@@ -28,11 +28,11 @@ rt_sigaction: 1
 rt_tgsigqueueinfo: 1
 prctl: arg0 == PR_GET_NO_NEW_PRIVS || arg0 == 0x53564d41 || arg0 == PR_PAC_RESET_KEYS || arg0 == 56 || arg0 == 61
 madvise: 1
-mprotect: arg2 in 0x1|0x2
+mprotect: arg2 in 0x1|0x2|0x20
 munmap: 1
 getuid: 1
 fstat: 1
-mmap: arg2 in 0x1|0x2
+mmap: arg2 in 0x1|0x2|0x20
 geteuid: 1
 getgid: 1
 getegid: 1
