@@ -275,10 +275,6 @@ static void raise_caps() {
   }
 }
 
-static pid_t __fork() {
-  return clone(nullptr, nullptr, 0, nullptr);
-}
-
 // Double-clone, with CLONE_FILES to share the file descriptor table for kcmp validation.
 // Returns 0 in the orphaned child, the pid of the orphan in the original process, or -1 on failure.
 static void create_vm_process() {
@@ -426,7 +422,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   }
 
   // Don't use fork(2) to avoid calling pthread_atfork handlers.
-  pid_t crash_dump_pid = __fork();
+  pid_t crash_dump_pid = _Fork();
   if (crash_dump_pid == -1) {
     async_safe_format_log(ANDROID_LOG_FATAL, "libc",
                           "failed to fork in debuggerd signal handler: %s", strerror(errno));
