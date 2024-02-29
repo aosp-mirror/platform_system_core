@@ -47,7 +47,9 @@
 
 #include "partition_cow_creator.h"
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 #include <BootControlClient.h>
+#endif
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -89,6 +91,7 @@ int Usage() {
 namespace android {
 namespace snapshot {
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 class MapSnapshots {
   public:
     MapSnapshots(std::string path = "");
@@ -459,6 +462,7 @@ bool MapSnapshots::DeleteSnapshots() {
     }
     return true;
 }
+#endif
 
 bool DumpCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, &android::base::StderrLogger);
@@ -482,6 +486,7 @@ bool MergeCmdHandler(int /*argc*/, char** argv) {
     return false;
 }
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 bool GetVerityPartitions(std::vector<std::string>& partitions) {
     auto& dm = android::dm::DeviceMapper::Instance();
     auto dm_block_devices = dm.FindDmPartitions();
@@ -634,7 +639,6 @@ bool MapPrecreatedSnapshots(int argc, char** argv) {
     return cow.FinishSnapshotWrites();
 }
 
-#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 bool CreateTestUpdate(SnapshotManager* sm) {
     chromeos_update_engine::DeltaArchiveManifest manifest;
 
@@ -758,13 +762,13 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"map", MapCmdHandler},
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
         {"test-blank-ota", TestOtaHandler},
-#endif
-        {"unmap", UnmapCmdHandler},
         {"apply-update", ApplyUpdate},
         {"map-snapshots", MapPrecreatedSnapshots},
         {"unmap-snapshots", UnMapPrecreatedSnapshots},
         {"delete-snapshots", DeletePrecreatedSnapshots},
         {"revert-snapshots", RemovePrecreatedSnapshots},
+#endif
+        {"unmap", UnmapCmdHandler},
         // clang-format on
 };
 
