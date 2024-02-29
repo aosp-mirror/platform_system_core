@@ -15,6 +15,7 @@
 //
 
 #include <sysexits.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <filesystem>
@@ -46,9 +47,7 @@
 
 #include "partition_cow_creator.h"
 
-#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 #include <BootControlClient.h>
-#endif
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -79,7 +78,11 @@ int Usage() {
                  "  revert-snapshots\n"
                  "    Prepares devices to boot without snapshots on next boot.\n"
                  "    This does not delete the snapshot. It only removes the indicators\n"
-                 "    so that first stage init will not mount from snapshots.\n";
+                 "    so that first stage init will not mount from snapshots.\n"
+                 "  apply-update\n"
+                 "    Apply the incremental OTA update wherein the snapshots are\n"
+                 "    directly written to COW block device. This will bypass update-engine\n"
+                 "    and the device will be ready to boot from the target build.\n";
     return EX_USAGE;
 }
 
@@ -96,14 +99,22 @@ class MapSnapshots {
     bool DeleteSnapshots();
     bool CleanupSnapshot() { return sm_->PrepareDeviceToBootWithoutSnapshot(); }
     bool BeginUpdate();
+    bool ApplyUpdate();
 
   private:
     std::optional<std::string> GetCowImagePath(std::string& name);
+    bool PrepareUpdate();
     bool WriteSnapshotPatch(std::string cow_device, std::string patch);
+    std::string GetGroupName(const android::fs_mgr::LpMetadata& pt,
+                             const std::string& partiton_name);
     std::unique_ptr<SnapshotManager::LockedFile> lock_;
     std::unique_ptr<SnapshotManager> sm_;
     std::vector<std::future<bool>> threads_;
     std::string snapshot_dir_path_;
+    std::unordered_map<std::string, chromeos_update_engine::DynamicPartitionGroup*> group_map_;
+
+    std::vector<std::string> patchfiles_;
+    chromeos_update_engine::DeltaArchiveManifest manifest_;
 };
 
 MapSnapshots::MapSnapshots(std::string path) {
@@ -113,6 +124,178 @@ MapSnapshots::MapSnapshots(std::string path) {
         exit(1);
     }
     snapshot_dir_path_ = path + "/";
+}
+
+std::string MapSnapshots::GetGroupName(const android::fs_mgr::LpMetadata& pt,
+                                       const std::string& partition_name) {
+    std::string group_name;
+    for (const auto& partition : pt.partitions) {
+        std::string name = android::fs_mgr::GetPartitionName(partition);
+        auto suffix = android::fs_mgr::GetPartitionSlotSuffix(name);
+        std::string pname = name.substr(0, name.size() - suffix.size());
+        if (pname == partition_name) {
+            std::string group_name =
+                    android::fs_mgr::GetPartitionGroupName(pt.groups[partition.group_index]);
+            return group_name.substr(0, group_name.size() - suffix.size());
+        }
+    }
+    return "";
+}
+
+bool MapSnapshots::PrepareUpdate() {
+    auto source_slot = fs_mgr_get_slot_suffix();
+    auto source_slot_number = SlotNumberForSlotSuffix(source_slot);
+    auto super_source = fs_mgr_get_super_partition_name(source_slot_number);
+
+    // Get current partition information.
+    PartitionOpener opener;
+    auto source_metadata = ReadMetadata(opener, super_source, source_slot_number);
+    if (!source_metadata) {
+        LOG(ERROR) << "Could not read source partition metadata.\n";
+        return false;
+    }
+
+    auto dap = manifest_.mutable_dynamic_partition_metadata();
+    dap->set_snapshot_enabled(true);
+    dap->set_vabc_enabled(true);
+    dap->set_vabc_compression_param("lz4");
+    dap->set_cow_version(3);
+
+    for (const auto& entry : std::filesystem::directory_iterator(snapshot_dir_path_)) {
+        if (android::base::EndsWith(entry.path().generic_string(), ".patch")) {
+            patchfiles_.push_back(android::base::Basename(entry.path().generic_string()));
+        }
+    }
+
+    for (auto& patchfile : patchfiles_) {
+        std::string parsing_file = snapshot_dir_path_ + patchfile;
+        android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(parsing_file.c_str(), O_RDONLY)));
+        if (fd < 0) {
+            LOG(ERROR) << "Failed to open file: " << parsing_file;
+            return false;
+        }
+        uint64_t dev_sz = lseek(fd.get(), 0, SEEK_END);
+        if (!dev_sz) {
+            LOG(ERROR) << "Could not determine block device size: " << parsing_file;
+            return false;
+        }
+
+        const int block_sz = 4_KiB;
+        dev_sz += block_sz - 1;
+        dev_sz &= ~(block_sz - 1);
+
+        auto npos = patchfile.rfind(".patch");
+        auto partition_name = patchfile.substr(0, npos);
+
+        chromeos_update_engine::DynamicPartitionGroup* group = nullptr;
+        std::string group_name = GetGroupName(*source_metadata.get(), partition_name);
+        if (group_map_.find(group_name) != group_map_.end()) {
+            group = group_map_[group_name];
+        } else {
+            group = dap->add_groups();
+            group->set_name(group_name);
+            group_map_[group_name] = group;
+        }
+        group->add_partition_names(partition_name);
+
+        auto pu = manifest_.mutable_partitions()->Add();
+        pu->set_partition_name(partition_name);
+        pu->set_estimate_cow_size(dev_sz);
+
+        CowReader reader;
+        if (!reader.Parse(fd)) {
+            LOG(ERROR) << "COW reader parse failed";
+            return false;
+        }
+
+        uint64_t new_device_size = 0;
+        const auto& header = reader.GetHeader();
+        if (header.prefix.major_version == 2) {
+            size_t num_ops = reader.get_num_total_data_ops();
+            new_device_size = (num_ops * header.block_size);
+        } else {
+            const auto& v3_header = reader.header_v3();
+            new_device_size = v3_header.op_count_max * v3_header.block_size;
+        }
+
+        LOG(INFO) << "Partition: " << partition_name << " Group_name: " << group_name
+                  << " size: " << new_device_size << " COW-size: " << dev_sz;
+        pu->mutable_new_partition_info()->set_size(new_device_size);
+    }
+    return true;
+}
+
+bool MapSnapshots::ApplyUpdate() {
+    if (!PrepareUpdate()) {
+        LOG(ERROR) << "PrepareUpdate failed";
+        return false;
+    }
+    if (!sm_->BeginUpdate()) {
+        LOG(ERROR) << "BeginUpdate failed";
+        return false;
+    }
+    if (!sm_->CreateUpdateSnapshots(manifest_)) {
+        LOG(ERROR) << "Could not apply snapshots";
+        return false;
+    }
+
+    LOG(INFO) << "CreateUpdateSnapshots success";
+    if (!sm_->MapAllSnapshots(10s)) {
+        LOG(ERROR) << "MapAllSnapshots failed";
+        return false;
+    }
+
+    LOG(INFO) << "MapAllSnapshots success";
+
+    auto& dm = android::dm::DeviceMapper::Instance();
+    auto target_slot = fs_mgr_get_other_slot_suffix();
+    for (auto& patchfile : patchfiles_) {
+        auto npos = patchfile.rfind(".patch");
+        auto partition_name = patchfile.substr(0, npos) + target_slot;
+        auto cow_device = partition_name + "-cow";
+        std::string cow_path;
+        if (!dm.GetDmDevicePathByName(cow_device, &cow_path)) {
+            LOG(ERROR) << "Failed to cow path";
+            return false;
+        }
+        threads_.emplace_back(std::async(std::launch::async, &MapSnapshots::WriteSnapshotPatch,
+                                         this, cow_path, patchfile));
+    }
+
+    bool ret = true;
+    for (auto& t : threads_) {
+        ret = t.get() && ret;
+    }
+    if (!ret) {
+        LOG(ERROR) << "Snapshot writes failed";
+        return false;
+    }
+    if (!sm_->UnmapAllSnapshots()) {
+        LOG(ERROR) << "UnmapAllSnapshots failed";
+        return false;
+    }
+
+    LOG(INFO) << "Pre-created snapshots successfully copied";
+    // All snapshots have been written.
+    if (!sm_->FinishedSnapshotWrites(false /* wipe */)) {
+        LOG(ERROR) << "Could not finalize snapshot writes.\n";
+        return false;
+    }
+
+    auto hal = hal::BootControlClient::WaitForService();
+    if (!hal) {
+        LOG(ERROR) << "Could not find IBootControl HAL.\n";
+        return false;
+    }
+    auto target_slot_number = SlotNumberForSlotSuffix(target_slot);
+    auto cr = hal->SetActiveBootSlot(target_slot_number);
+    if (!cr.IsOk()) {
+        LOG(ERROR) << "Could not set active boot slot: " << cr.errMsg;
+        return false;
+    }
+
+    LOG(INFO) << "ApplyUpdate success";
+    return true;
 }
 
 bool MapSnapshots::BeginUpdate() {
@@ -227,11 +410,10 @@ bool MapSnapshots::WriteSnapshotPatch(std::string cow_device, std::string patch)
         if (file_offset >= dev_sz) {
             break;
         }
-
-        if (fsync(cfd.get()) < 0) {
-            PLOG(ERROR) << "Fsync failed at offset: " << file_offset << " size: " << to_read;
-            return false;
-        }
+    }
+    if (fsync(cfd.get()) < 0) {
+        PLOG(ERROR) << "Fsync failed";
+        return false;
     }
     return true;
 }
@@ -365,6 +547,30 @@ bool DeletePrecreatedSnapshots(int, char** argv) {
 
     MapSnapshots snapshot;
     return snapshot.DeleteSnapshots();
+}
+
+bool ApplyUpdate(int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    // Make sure we are root.
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return EXIT_FAILURE;
+    }
+
+    if (argc < 3) {
+        std::cerr << " apply-update <directory location where snapshot patches are present>"
+                     "    Apply the snapshots to the COW block device\n";
+        return false;
+    }
+
+    std::string path = std::string(argv[2]);
+    MapSnapshots cow(path);
+    if (!cow.ApplyUpdate()) {
+        return false;
+    }
+    LOG(INFO) << "Apply update success. Please reboot the device";
+    return true;
 }
 
 bool MapPrecreatedSnapshots(int argc, char** argv) {
@@ -554,6 +760,7 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"test-blank-ota", TestOtaHandler},
 #endif
         {"unmap", UnmapCmdHandler},
+        {"apply-update", ApplyUpdate},
         {"map-snapshots", MapPrecreatedSnapshots},
         {"unmap-snapshots", UnMapPrecreatedSnapshots},
         {"delete-snapshots", DeletePrecreatedSnapshots},
