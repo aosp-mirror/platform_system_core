@@ -14,5 +14,10 @@
     {
       "name": "debuggerd_test"
     }
+  ],
+  "postsubmit": [
+    {
+      "name": "CtsCrashDetailHostTestCases"
+    }
   ]
 }
