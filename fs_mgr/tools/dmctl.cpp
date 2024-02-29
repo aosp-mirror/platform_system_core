@@ -115,6 +115,21 @@ class TargetParser final {
             std::string block_device = NextArg();
             return std::make_unique<DmTargetAndroidVerity>(start_sector, num_sectors, keyid,
                                                            block_device);
+        } else if (target_type == "striped") {
+            if (!HasArgs(3)) {
+                std::cerr << "Expected \"striped\" <block_device0> <block_device1> <chunksize>"
+                          << std::endl;
+                return nullptr;
+            }
+            std::string block_device0 = NextArg();
+            std::string block_device1 = NextArg();
+            uint64_t chunk_size;
+            if (!android::base::ParseUint(NextArg(), &chunk_size)) {
+                std::cerr << "Expected start sector, got: " << PreviousArg() << std::endl;
+                return nullptr;
+            }
+            return std::make_unique<DmTargetStripe>(start_sector, num_sectors, chunk_size,
+                                                    block_device0, block_device1);
         } else if (target_type == "bow") {
             if (!HasArgs(1)) {
                 std::cerr << "Expected \"bow\" <block_device>" << std::endl;
