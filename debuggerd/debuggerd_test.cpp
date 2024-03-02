@@ -2647,7 +2647,7 @@ TEST_F(CrasherTest, fault_address_after_last_map) {
   match_str += format_full_pointer(crash_uptr);
   ASSERT_MATCH(result, match_str);
 
-  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->\)\n)");
 
   // Verifies that the fault address error message is at the end of the
   // maps section. To do this, the check below looks for the start of the
@@ -2699,7 +2699,7 @@ TEST_F(CrasherTest, fault_address_between_maps) {
   match_str += format_full_pointer(reinterpret_cast<uintptr_t>(middle_ptr));
   ASSERT_MATCH(result, match_str);
 
-  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->\)\n)");
 
   match_str = android::base::StringPrintf(
       R"(    %s.*\n--->Fault address falls at %s between mapped regions\n    %s)",
@@ -2737,7 +2737,7 @@ TEST_F(CrasherTest, fault_address_in_map) {
   match_str += format_full_pointer(reinterpret_cast<uintptr_t>(ptr));
   ASSERT_MATCH(result, match_str);
 
-  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->)\n)");
+  ASSERT_MATCH(result, R"(\nmemory map \(.*\): \(fault address prefixed with --->\)\n)");
 
   match_str = android::base::StringPrintf(R"(\n--->%s.*\n)", format_pointer(ptr).c_str());
   ASSERT_MATCH(result, match_str);

@@ -21,6 +21,7 @@ static int GetVsrLevel() {
     return android::base::GetIntProperty("ro.vendor.api_level", -1);
 }
 
+// @VsrTest = 3.7.6
 TEST(VAB, Enabled) {
     if (!android::base::GetBoolProperty("ro.build.ab_update", false) && (GetVsrLevel() < __ANDROID_API_T__)) {
         GTEST_SKIP();
