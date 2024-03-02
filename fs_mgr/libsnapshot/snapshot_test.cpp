@@ -104,6 +104,7 @@ std::string fake_super;
 
 void MountMetadata();
 
+// @VsrTest = 3.7.6
 class SnapshotTest : public ::testing::Test {
   public:
     SnapshotTest() : dm_(DeviceMapper::Instance()) {}
