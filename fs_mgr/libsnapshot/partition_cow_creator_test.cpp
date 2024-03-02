@@ -39,6 +39,7 @@ using ::testing::Truly;
 namespace android {
 namespace snapshot {
 
+// @VsrTest = 3.7.6
 class PartitionCowCreatorTest : public ::testing::Test {
   public:
     void SetUp() override {
