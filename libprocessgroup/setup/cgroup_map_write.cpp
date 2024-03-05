@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <regex>
+#include <optional>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -43,6 +43,7 @@
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
 
+#include "../build_flags.h"
 #include "cgroup_descriptor.h"
 
 using android::base::GetUintProperty;
@@ -56,6 +57,8 @@ static constexpr const char* CGROUPS_DESC_FILE = "/etc/cgroups.json";
 static constexpr const char* CGROUPS_DESC_VENDOR_FILE = "/vendor/etc/cgroups.json";
 
 static constexpr const char* TEMPLATE_CGROUPS_DESC_API_FILE = "/etc/task_profiles/cgroups_%u.json";
+
+static const std::string CGROUP_V2_ROOT_DEFAULT = "/sys/fs/cgroup";
 
 static bool ChangeDirModeAndOwner(const std::string& path, mode_t mode, const std::string& uid,
                                   const std::string& gid, bool permissive_mode = false) {
@@ -182,6 +185,8 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
     }
 }
 
+static const bool force_memcg_v2 = android::libprocessgroup_flags::force_memcg_v2();
+
 static bool ReadDescriptorsFromFile(const std::string& file_name,
                                     std::map<std::string, CgroupDescriptor>* descriptors) {
     std::vector<CgroupDescriptor> result;
@@ -205,20 +210,39 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
         const Json::Value& cgroups = root["Cgroups"];
         for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
             std::string name = cgroups[i]["Controller"].asString();
+
+            if (force_memcg_v2 && name == "memory") continue;
+
             MergeCgroupToDescriptors(descriptors, cgroups[i], name, "", 1);
         }
     }
 
+    bool memcgv2_present = false;
+    std::string root_path;
     if (root.isMember("Cgroups2")) {
         const Json::Value& cgroups2 = root["Cgroups2"];
-        std::string root_path = cgroups2["Path"].asString();
+        root_path = cgroups2["Path"].asString();
         MergeCgroupToDescriptors(descriptors, cgroups2, CGROUPV2_HIERARCHY_NAME, "", 2);
 
         const Json::Value& childGroups = cgroups2["Controllers"];
         for (Json::Value::ArrayIndex i = 0; i < childGroups.size(); ++i) {
             std::string name = childGroups[i]["Controller"].asString();
+
+            if (force_memcg_v2 && name == "memory") memcgv2_present = true;
+
             MergeCgroupToDescriptors(descriptors, childGroups[i], name, root_path, 2);
         }
+    }
+
+    if (force_memcg_v2 && !memcgv2_present) {
+        LOG(INFO) << "Forcing memcg to v2 hierarchy";
+        Json::Value memcgv2;
+        memcgv2["Controller"] = "memory";
+        memcgv2["NeedsActivation"] = true;
+        memcgv2["Path"] = ".";
+        memcgv2["Optional"] = true;  // In case of cgroup_disabled=memory, so we can still boot
+        MergeCgroupToDescriptors(descriptors, memcgv2, "memory",
+                                 root_path.empty() ? CGROUP_V2_ROOT_DEFAULT : root_path, 2);
     }
 
     return true;
@@ -308,7 +332,8 @@ static bool ActivateV2CgroupController(const CgroupDescriptor& descriptor) {
 
         if (!base::WriteStringToFile(str, path)) {
             if (IsOptionalController(controller)) {
-                PLOG(INFO) << "Failed to activate optional controller " << controller->name();
+                PLOG(INFO) << "Failed to activate optional controller " << controller->name()
+                           << " at " << path;
                 return true;
             }
             PLOG(ERROR) << "Failed to activate controller " << controller->name();
@@ -424,6 +449,40 @@ void CgroupDescriptor::set_mounted(bool mounted) {
 }  // namespace cgrouprc
 }  // namespace android
 
+static std::optional<bool> MGLRUDisabled() {
+    const std::string file_name = "/sys/kernel/mm/lru_gen/enabled";
+    std::string content;
+    if (!android::base::ReadFileToString(file_name, &content)) {
+        PLOG(ERROR) << "Failed to read MGLRU state from " << file_name;
+        return {};
+    }
+
+    return content == "0x0000";
+}
+
+static std::optional<bool> MEMCGDisabled(
+        const std::map<std::string, android::cgrouprc::CgroupDescriptor>& descriptors) {
+    std::string cgroup_v2_root = android::cgrouprc::CGROUP_V2_ROOT_DEFAULT;
+    const auto it = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+    if (it == descriptors.end()) {
+        LOG(WARNING) << "No Cgroups2 path found in cgroups.json. Vendor has modified Android, and "
+                     << "kernel memory use will be higher than intended.";
+    } else if (it->second.controller()->path() != cgroup_v2_root) {
+        cgroup_v2_root = it->second.controller()->path();
+    }
+
+    const std::string file_name = cgroup_v2_root + "/cgroup.controllers";
+    std::string content;
+    if (!android::base::ReadFileToString(file_name, &content)) {
+        PLOG(ERROR) << "Failed to read cgroup controllers from " << file_name;
+        return {};
+    }
+
+    // If we've forced memcg to v2 and it's not available, then it could only have been disabled
+    // on the kernel command line (GKI sets CONFIG_MEMCG).
+    return content.find("memory") == std::string::npos;
+}
+
 bool CgroupSetup() {
     using namespace android::cgrouprc;
 
@@ -454,6 +513,17 @@ bool CgroupSetup() {
         } else {
             // issue a warning and proceed with the next cgroup
             LOG(WARNING) << "Failed to setup " << name << " cgroup";
+        }
+    }
+
+    if (force_memcg_v2) {
+        if (MGLRUDisabled().value_or(false)) {
+            LOG(WARNING) << "Memcg forced to v2 hierarchy with MGLRU disabled! "
+                         << "Global reclaim performance will suffer.";
+        }
+        if (MEMCGDisabled(descriptors).value_or(false)) {
+            LOG(WARNING) << "Memcg forced to v2 hierarchy while memcg is disabled by kernel "
+                         << "command line!";
         }
     }
 

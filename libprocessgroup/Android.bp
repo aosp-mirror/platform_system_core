@@ -2,9 +2,28 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_defaults {
-    name: "libprocessgroup_defaults",
+soong_config_module_type {
+    name: "libprocessgroup_flag_aware_cc_defaults",
+    module_type: "cc_defaults",
+    config_namespace: "ANDROID",
+    bool_variables: [
+        "memcg_v2_force_enabled",
+    ],
+    properties: [
+        "cflags",
+    ],
+}
+
+libprocessgroup_flag_aware_cc_defaults {
+    name: "libprocessgroup_build_flags_cc",
     cpp_std: "gnu++20",
+    soong_config_variables: {
+        memcg_v2_force_enabled: {
+            cflags: [
+                "-DMEMCG_V2_FORCE_ENABLED=true",
+            ],
+        },
+    },
 }
 
 cc_library_headers {
@@ -67,7 +86,7 @@ cc_library {
     export_header_lib_headers: [
         "libprocessgroup_headers",
     ],
-    defaults: ["libprocessgroup_defaults"],
+    defaults: ["libprocessgroup_build_flags_cc"],
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
@@ -78,7 +97,7 @@ cc_library {
 cc_test {
     name: "task_profiles_test",
     host_supported: true,
-    defaults: ["libprocessgroup_defaults"],
+    defaults: ["libprocessgroup_build_flags_cc"],
     srcs: [
         "task_profiles_test.cpp",
     ],
