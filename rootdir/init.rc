@@ -303,6 +303,9 @@ on init
     mkdir /mnt/runtime/full 0755 root root
     mkdir /mnt/runtime/full/self 0755 root root
 
+    # For Pre-reboot Dexopt
+    mkdir /mnt/pre_reboot_dexopt 0755 artd artd
+
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
