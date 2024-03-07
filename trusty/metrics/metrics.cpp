@@ -78,9 +78,8 @@ Result<void> TrustyMetrics::HandleEvent() {
         return Error() << "connection to Metrics TA has not been initialized yet";
     }
 
-    uint8_t msg[METRICS_MAX_MSG_SIZE];
-
-    auto rc = read(metrics_fd_, msg, sizeof(msg));
+    struct metrics_msg metrics_msg;
+    int rc = read(metrics_fd_, &metrics_msg, sizeof(metrics_msg));
     if (rc < 0) {
         return ErrnoError() << "failed to read metrics message";
     }
@@ -89,23 +88,14 @@ Result<void> TrustyMetrics::HandleEvent() {
     if (msg_len < sizeof(metrics_req)) {
         return Error() << "message too small: " << rc;
     }
-    auto req = reinterpret_cast<metrics_req*>(msg);
-    size_t offset = sizeof(metrics_req);
+    uint32_t cmd = metrics_msg.req.cmd;
     uint32_t status = METRICS_NO_ERROR;
 
-    switch (req->cmd) {
+    switch (cmd) {
         case METRICS_CMD_REPORT_CRASH: {
-            if (msg_len < offset + sizeof(metrics_report_crash_req)) {
-                return Error() << "message too small: " << rc;
-            }
-            auto crash_args = reinterpret_cast<metrics_report_crash_req*>(msg + offset);
-            offset += sizeof(metrics_report_crash_req);
-
-            if (msg_len < offset + crash_args->app_id_len) {
-                return Error() << "message too small: " << rc;
-            }
-            auto app_id_ptr = reinterpret_cast<char*>(msg + offset);
-            std::string app_id(app_id_ptr, crash_args->app_id_len);
+            struct metrics_report_crash_req crash_args = metrics_msg.crash_args;
+            auto app_id_ptr = crash_args.app_id;
+            std::string app_id(app_id_ptr, UUID_STR_SIZE);
 
             HandleCrash(app_id);
             break;
@@ -121,7 +111,7 @@ Result<void> TrustyMetrics::HandleEvent() {
     }
 
     metrics_resp resp = {
-            .cmd = req->cmd | METRICS_CMD_RESP_BIT,
+            .cmd = cmd | METRICS_CMD_RESP_BIT,
             .status = status,
     };
 
