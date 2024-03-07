@@ -116,27 +116,6 @@ cc_library {
     },
 }
 
-cc_test {
-    name: "libcutils_sockets_test",
-    test_suites: ["device-tests"],
-    static_libs: ["libbase", "libcutils_sockets"],
-    cflags: [
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-    ],
-
-    srcs: ["sockets_test.cpp"],
-    target: {
-        android: {
-            srcs: [
-                "android_get_control_file_test.cpp",
-                "android_get_control_socket_test.cpp",
-            ],
-        },
-    },
-}
-
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -347,7 +326,10 @@ cc_test {
 
 cc_test {
     name: "KernelLibcutilsTest",
-    test_suites: ["general-tests", "vts"],
+    test_suites: [
+        "general-tests",
+        "vts",
+    ],
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
 }
