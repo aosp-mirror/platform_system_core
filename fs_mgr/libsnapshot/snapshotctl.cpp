@@ -52,6 +52,9 @@
 using namespace std::chrono_literals;
 using namespace std::string_literals;
 using namespace android::storage_literals;
+using android::base::LogdLogger;
+using android::base::StderrLogger;
+using android::base::TeeLogger;
 using android::fs_mgr::CreateLogicalPartitionParams;
 using android::fs_mgr::FindPartition;
 using android::fs_mgr::GetPartitionSize;
@@ -461,23 +464,23 @@ bool MapSnapshots::DeleteSnapshots() {
 }
 
 bool DumpCmdHandler(int /*argc*/, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
     return SnapshotManager::New()->Dump(std::cout);
 }
 
 bool MapCmdHandler(int, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
     using namespace std::chrono_literals;
     return SnapshotManager::New()->MapAllSnapshots(5000ms);
 }
 
 bool UnmapCmdHandler(int, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
     return SnapshotManager::New()->UnmapAllSnapshots();
 }
 
 bool MergeCmdHandler(int /*argc*/, char** argv) {
-    android::base::InitLogging(argv, &android::base::StderrLogger);
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
     LOG(WARNING) << "Deprecated. Call update_engine_client --merge instead.";
     return false;
 }
