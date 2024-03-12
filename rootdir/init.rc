@@ -303,6 +303,9 @@ on init
     mkdir /mnt/runtime/full 0755 root root
     mkdir /mnt/runtime/full/self 0755 root root
 
+    # For Pre-reboot Dexopt
+    mkdir /mnt/pre_reboot_dexopt 0755 artd artd
+
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
@@ -641,9 +644,9 @@ on post-fs
 
     mkdir /metadata/staged-install 0770 root system
 
-    mkdir /metadata/aconfig 0750 root system
-    mkdir /metadata/aconfig/flags 0750 root system
-    mkdir /metadata/aconfig/boot 0754 root system
+    mkdir /metadata/aconfig 0775 root system
+    mkdir /metadata/aconfig/flags 0770 root system
+    mkdir /metadata/aconfig/boot 0775 root system
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
@@ -1358,3 +1361,16 @@ on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_y
   write /sys/kernel/mm/lru_gen/enabled 5
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled 7
+
+# Allow other processes to run `snapshotctl` through `init`. This requires
+# `set_prop` permission on `snapshotctl_prop`.
+on property:sys.snapshotctl.map=requested
+    # "root" is needed to talk to gsid and pass its check on uid.
+    # "system" is needed to write to "/dev/socket/snapuserd" to talk to
+    # snapuserd.
+    exec - root root system -- /system/bin/snapshotctl map
+    setprop sys.snapshotctl.map "finished"
+
+on property:sys.snapshotctl.unmap=requested
+    exec - root root system -- /system/bin/snapshotctl unmap
+    setprop sys.snapshotctl.unmap "finished"
