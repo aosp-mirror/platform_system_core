@@ -310,6 +310,14 @@ bool CowWriterV3::CheckOpCount(size_t op_count) {
     return true;
 }
 
+size_t CowWriterV3::CachedDataSize() const {
+    size_t size = 0;
+    for (const auto& i : cached_data_) {
+        size += i.size();
+    }
+    return size;
+}
+
 bool CowWriterV3::EmitCopy(uint64_t new_block, uint64_t old_block, uint64_t num_blocks) {
     if (!CheckOpCount(num_blocks)) {
         return false;
@@ -342,7 +350,7 @@ bool CowWriterV3::NeedsFlush() const {
     // Allow bigger batch sizes for ops without data. A single CowOperationV3
     // struct uses 14 bytes of memory, even if we cache 200 * 16 ops in memory,
     // it's only ~44K.
-    return cached_data_.size() >= batch_size_ ||
+    return CachedDataSize() >= batch_size_ * header_.block_size ||
            cached_ops_.size() >= batch_size_ * kNonDataOpBufferSize;
 }
 
@@ -397,13 +405,13 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
         return false;
     }
     const auto bytes = reinterpret_cast<const uint8_t*>(data);
-    const size_t num_blocks = (size / header_.block_size);
-    for (size_t i = 0; i < num_blocks;) {
-        const size_t blocks_to_write =
-                std::min<size_t>(batch_size_ - cached_data_.size(), num_blocks - i);
-
-        if (!ConstructCowOpCompressedBuffers(new_block_start + i, bytes + header_.block_size * i,
-                                             old_block + i, offset, type, blocks_to_write)) {
+    size_t num_blocks = (size / header_.block_size);
+    size_t total_written = 0;
+    while (total_written < num_blocks) {
+        size_t chunk = std::min(num_blocks - total_written, batch_size_);
+        if (!ConstructCowOpCompressedBuffers(new_block_start + total_written,
+                                             bytes + header_.block_size * total_written,
+                                             old_block + total_written, offset, type, chunk)) {
             return false;
         }
 
@@ -413,8 +421,7 @@ bool CowWriterV3::EmitBlocks(uint64_t new_block_start, const void* data, size_t 
                        << ", op type: " << type;
             return false;
         }
-
-        i += blocks_to_write;
+        total_written += chunk;
     }
 
     return true;
@@ -482,7 +489,8 @@ bool CowWriterV3::EmitSequenceData(size_t num_ops, const uint32_t* data) {
 
     header_.sequence_data_count = num_ops;
 
-    // Ensure next_data_pos_ is updated as previously initialized + the newly added sequence buffer.
+    // Ensure next_data_pos_ is updated as previously initialized + the newly added sequence
+    // buffer.
     CHECK_EQ(next_data_pos_ + header_.sequence_data_count * sizeof(uint32_t),
              GetDataOffset(header_));
     next_data_pos_ = GetDataOffset(header_);
@@ -640,8 +648,8 @@ std::vector<CowWriterV3::CompressedBuffer> CowWriterV3::ProcessBlocksWithThreade
     //                   t1     t2     t1     t2    <- processed by these threads
     // Ordering is important here. We need to retrieve the compressed data in the same order we
     // processed it and assume that that we submit data beginning with the first thread and then
-    // round robin the consecutive data calls. We need to Fetch compressed buffers from the threads
-    // via the same ordering
+    // round robin the consecutive data calls. We need to Fetch compressed buffers from the
+    // threads via the same ordering
     for (size_t i = 0; i < compressed_vec.size(); i++) {
         compressed_buf.emplace_back(worker_buffers[i % num_threads][i / num_threads]);
     }
@@ -733,7 +741,8 @@ bool CowWriterV3::WriteOperation(std::span<const CowOperationV3> ops,
         }
         if (total_written != total_data_size) {
             PLOG(ERROR) << "write failed for data of size: " << data.size()
-                        << " at offset: " << next_data_pos_ << " " << errno;
+                        << " at offset: " << next_data_pos_ << " " << errno
+                        << ", only wrote: " << total_written;
             return false;
         }
     }
