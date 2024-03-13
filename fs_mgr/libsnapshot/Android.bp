@@ -46,6 +46,7 @@ cc_defaults {
         "libfstab",
         "libsnapuserd_client",
         "libz",
+        "libselinux",
     ],
     header_libs: [
         "libfiemap_headers",
@@ -91,6 +92,7 @@ filegroup {
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
+        "scratch_super.cpp",
     ],
 }
 
@@ -351,6 +353,7 @@ cc_binary {
     ],
     srcs: [
         "snapshotctl.cpp",
+        "scratch_super.cpp",
     ],
     static_libs: [
         "libbrotli",

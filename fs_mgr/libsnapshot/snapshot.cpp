@@ -48,6 +48,7 @@
 #include <libsnapshot/snapshot_stats.h>
 #include "device_info.h"
 #include "partition_cow_creator.h"
+#include "scratch_super.h"
 #include "snapshot_metadata_updater.h"
 #include "utility.h"
 
@@ -117,7 +118,11 @@ std::unique_ptr<SnapshotManager> SnapshotManager::New(IDeviceInfo* info) {
         info = new DeviceInfo();
     }
 
-    return std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    auto sm = std::unique_ptr<SnapshotManager>(new SnapshotManager(info));
+    if (info->IsTempMetadata()) {
+        LOG(INFO) << "Using temp metadata from super";
+    }
+    return sm;
 }
 
 std::unique_ptr<SnapshotManager> SnapshotManager::NewForFirstStageMount(IDeviceInfo* info) {
@@ -1110,6 +1115,13 @@ UpdateState SnapshotManager::ProcessUpdateState(const std::function<bool()>& cal
         if (result.state == UpdateState::MergeFailed) {
             AcknowledgeMergeFailure(result.failure_code);
         }
+
+        if (result.state == UpdateState::MergeCompleted) {
+            if (device_->IsTempMetadata()) {
+                CleanupScratchOtaMetadataIfPresent();
+            }
+        }
+
         if (result.state != UpdateState::Merging) {
             // Either there is no merge, or the merge was finished, so no need
             // to keep waiting.
@@ -2310,7 +2322,27 @@ bool SnapshotManager::ListSnapshots(LockedFile* lock, std::vector<std::string>* 
 }
 
 bool SnapshotManager::IsSnapshotManagerNeeded() {
-    return access(kBootIndicatorPath, F_OK) == 0;
+    if (access(kBootIndicatorPath, F_OK) == 0) {
+        return true;
+    }
+
+    if (IsScratchOtaMetadataOnSuper()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool SnapshotManager::MapTempOtaMetadataPartitionIfNeeded(
+        const std::function<bool(const std::string&)>& init) {
+    auto device = android::snapshot::GetScratchOtaMetadataPartition();
+    if (!device.empty()) {
+        init(device);
+        if (android::snapshot::MapScratchOtaMetadataPartition(device).empty()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::string SnapshotManager::GetGlobalRollbackIndicatorPath() {
@@ -2394,6 +2426,12 @@ bool SnapshotManager::MapAllPartitions(LockedFile* lock, const std::string& supe
         if (GetPartitionGroupName(metadata->groups[partition.group_index]) == kCowGroupName) {
             LOG(INFO) << "Skip mapping partition " << GetPartitionName(partition) << " in group "
                       << kCowGroupName;
+            continue;
+        }
+
+        if (GetPartitionName(partition) ==
+            android::base::Basename(android::snapshot::kOtaMetadataMount)) {
+            LOG(INFO) << "Partition: " << GetPartitionName(partition) << " skipping";
             continue;
         }
 
