@@ -37,6 +37,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android/avf_cc_flags.h>
 #include <modprobe/modprobe.h>
 #include <private/android_filesystem_config.h>
 
@@ -385,7 +386,12 @@ int FirstStageMain(int argc, char** argv) {
     // /second_stage_resources is used to preserve files from first to second
     // stage init
     CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
-                    "mode=0755,uid=0,gid=0"))
+                    "mode=0755,uid=0,gid=0"));
+
+    if (IsMicrodroid() && android::virtualization::IsOpenDiceChangesFlagEnabled()) {
+        CHECKCALL(mount("tmpfs", "/microdroid_resources", "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+                        "mode=0750,uid=0,gid=0"));
+    }
 #undef CHECKCALL
 
     SetStdioToDevNull(argv);
