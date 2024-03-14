@@ -143,7 +143,7 @@ static bool ptrace_interrupt(pid_t tid, int* received_signal) {
 }
 
 static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data,
-                                    bool recoverable_gwp_asan_crash) {
+                                    bool recoverable_crash) {
   ATRACE_CALL();
   android::base::unique_fd amfd(socket_local_client(
       "/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
@@ -169,7 +169,7 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
   // Activity Manager protocol:
   //  - 32-bit network-byte-order: pid
   //  - 32-bit network-byte-order: signal number
-  //  - byte: recoverable_gwp_asan_crash
+  //  - byte: recoverable_crash
   //  - bytes: raw text of the dump
   //  - null terminator
 
@@ -185,10 +185,9 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
     return false;
   }
 
-  uint8_t recoverable_gwp_asan_crash_byte = recoverable_gwp_asan_crash ? 1 : 0;
-  if (!android::base::WriteFully(amfd, &recoverable_gwp_asan_crash_byte,
-                                 sizeof(recoverable_gwp_asan_crash_byte))) {
-    PLOG(ERROR) << "AM recoverable_gwp_asan_crash_byte write failed";
+  uint8_t recoverable_crash_byte = recoverable_crash ? 1 : 0;
+  if (!android::base::WriteFully(amfd, &recoverable_crash_byte, sizeof(recoverable_crash_byte))) {
+    PLOG(ERROR) << "AM recoverable_crash_byte write failed";
     return false;
   }
 
@@ -280,11 +279,11 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
                           std::unique_ptr<unwindstack::Regs>* regs, ProcessInfo* process_info,
-                          bool* recoverable_gwp_asan_crash) {
+                          bool* recoverable_crash) {
   std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
   CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
   ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
-  *recoverable_gwp_asan_crash = false;
+  *recoverable_crash = false;
   if (rc == -1) {
     PLOG(FATAL) << "failed to read target ucontext";
   } else {
@@ -321,7 +320,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
       process_info->scudo_ring_buffer_size = crash_info->data.d.scudo_ring_buffer_size;
-      *recoverable_gwp_asan_crash = crash_info->data.d.recoverable_gwp_asan_crash;
+      *recoverable_crash = crash_info->data.d.recoverable_crash;
       process_info->crash_detail_page = crash_info->data.d.crash_detail_page;
       FALLTHROUGH_INTENDED;
     case 1:
@@ -487,7 +486,7 @@ int main(int argc, char** argv) {
   std::map<pid_t, ThreadInfo> thread_info;
   siginfo_t siginfo;
   std::string error;
-  bool recoverable_gwp_asan_crash = false;
+  bool recoverable_crash = false;
 
   {
     ATRACE_NAME("ptrace");
@@ -539,8 +538,7 @@ int main(int argc, char** argv) {
 
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
-        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info,
-                      &recoverable_gwp_asan_crash);
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info, &recoverable_crash);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
 
@@ -670,7 +668,7 @@ int main(int argc, char** argv) {
   if (fatal_signal) {
     // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
     if (thread_info[target_process].thread_name != "system_server") {
-      activity_manager_notify(target_process, signo, amfd_data, recoverable_gwp_asan_crash);
+      activity_manager_notify(target_process, signo, amfd_data, recoverable_crash);
     }
   }
 
