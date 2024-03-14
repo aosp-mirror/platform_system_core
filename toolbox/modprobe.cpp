@@ -257,6 +257,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
         switch (mode) {
             case AddModulesMode:
                 if (!m.LoadWithAliases(module, true, module_parameters)) {
+                    if (m.IsBlocklisted(module)) continue;
                     PLOG(ERROR) << "Failed to load module " << module;
                     rv = EXIT_FAILURE;
                 }
