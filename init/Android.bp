@@ -463,7 +463,7 @@ cc_binary {
     name: "init_first_stage.microdroid",
     defaults: [
         "avf_build_flags_cc",
-        "init_first_stage_defaults"
+        "init_first_stage_defaults",
     ],
     cflags: ["-DMICRODROID=1"],
     installable: false,
