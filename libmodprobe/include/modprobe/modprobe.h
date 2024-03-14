@@ -41,6 +41,7 @@ class Modprobe {
                             std::vector<std::string>* post_dependencies);
     void ResetModuleCount() { module_count_ = 0; }
     int GetModuleCount() { return module_count_; }
+    bool IsBlocklisted(const std::string& module_name);
 
   private:
     std::string MakeCanonical(const std::string& module_path);
@@ -52,7 +53,6 @@ class Modprobe {
     void AddOption(const std::string& module_name, const std::string& option_name,
                    const std::string& value);
     std::string GetKernelCmdline();
-    bool IsBlocklisted(const std::string& module_name);
 
     bool ParseDepCallback(const std::string& base_path, const std::vector<std::string>& args);
     bool ParseAliasCallback(const std::vector<std::string>& args);
