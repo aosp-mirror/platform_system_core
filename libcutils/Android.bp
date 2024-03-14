@@ -170,19 +170,19 @@ cc_library {
         linux_bionic: {
             enabled: true,
         },
+        host: {
+            srcs: [
+                "ashmem-host.cpp",
+                "trace-host.cpp",
+            ],
+        },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
-                "ashmem-host.cpp",
                 "fs_config.cpp",
-                "trace-host.cpp",
             ],
         },
         windows: {
             host_ldlibs: ["-lws2_32"],
-
-            srcs: [
-                "trace-host.cpp",
-            ],
 
             enabled: true,
             cflags: [
