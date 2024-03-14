@@ -247,6 +247,7 @@ on init
     write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
+    write /dev/blkio/blkio.prio.class promote-to-rt
     write /dev/blkio/background/blkio.prio.class restrict-to-be
 
     restorecon_recursive /mnt
