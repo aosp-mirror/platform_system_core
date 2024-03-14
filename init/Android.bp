@@ -162,6 +162,7 @@ libinit_cc_defaults {
     },
     static_libs: [
         "libavb",
+        "libavf_cc_flags",
         "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
@@ -359,6 +360,7 @@ init_first_stage_cc_defaults {
     static_libs: [
         "libc++fs",
         "libfs_avb",
+        "libavf_cc_flags",
         "libfs_mgr",
         "libfec",
         "libfec_rs",
@@ -459,7 +461,10 @@ cc_binary {
 
 cc_binary {
     name: "init_first_stage.microdroid",
-    defaults: ["init_first_stage_defaults"],
+    defaults: [
+        "avf_build_flags_cc",
+        "init_first_stage_defaults",
+    ],
     cflags: ["-DMICRODROID=1"],
     installable: false,
 }
