@@ -648,6 +648,7 @@ on post-fs
     mkdir /metadata/aconfig 0775 root system
     mkdir /metadata/aconfig/flags 0770 root system
     mkdir /metadata/aconfig/boot 0775 root system
+    exec_start aconfigd
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
