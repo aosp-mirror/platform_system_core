@@ -117,5 +117,10 @@ std::string GetApexNameFromFileName(const std::string& path);
 // (.rc == .0rc for ranking purposes)
 std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
                                                   int active_sdk);
+
+// Forks, executes the provided program in the child, and waits for the completion in the parent.
+// Child's stderr is captured and logged using LOG(ERROR).
+bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]);
+
 }  // namespace init
 }  // namespace android
