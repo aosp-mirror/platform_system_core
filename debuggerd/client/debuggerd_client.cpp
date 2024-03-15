@@ -116,7 +116,6 @@ static std::string get_wchan_data(int fd, pid_t pid) {
 
 bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int timeout_ms,
                             unique_fd output_fd) {
-  pid_t pid = tid;
   if (dump_type == kDebuggerdJavaBacktrace) {
     // Java dumps always get sent to the tgid, so we need to resolve our tid to a tgid.
     android::procinfo::ProcessInfo procinfo;
@@ -125,10 +124,10 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
       log_error(output_fd, 0, "failed to get process info: %s", error.c_str());
       return false;
     }
-    pid = procinfo.pid;
+    tid = procinfo.pid;
   }
 
-  LOG(INFO) << TAG "started dumping process " << pid;
+  LOG(INFO) << TAG "started dumping process " << tid;
 
   // Rather than try to deal with poll() all the way through the flow, we update
   // the socket timeout between each step (and only use poll() during the final
@@ -172,7 +171,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
 
   InterceptRequest req = {
       .dump_type = dump_type,
-      .pid = pid,
+      .pid = tid,
   };
 
   // Create an intermediate pipe to pass to the other end.
@@ -235,8 +234,8 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
   // Send the signal.
   const int signal = (dump_type == kDebuggerdJavaBacktrace) ? SIGQUIT : BIONIC_SIGNAL_DEBUGGER;
   sigval val = {.sival_int = (dump_type == kDebuggerdNativeBacktrace) ? 1 : 0};
-  if (sigqueue(pid, signal, val) != 0) {
-    log_error(output_fd, errno, "failed to send signal to pid %d", pid);
+  if (sigqueue(tid, signal, val) != 0) {
+    log_error(output_fd, errno, "failed to send signal to pid %d", tid);
     return false;
   }
 
@@ -299,7 +298,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
     }
   }
 
-  LOG(INFO) << TAG "done dumping process " << pid;
+  LOG(INFO) << TAG "done dumping process " << tid;
 
   return true;
 }

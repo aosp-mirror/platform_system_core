@@ -247,6 +247,7 @@ on init
     write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
+    write /dev/blkio/blkio.prio.class promote-to-rt
     write /dev/blkio/background/blkio.prio.class restrict-to-be
 
     restorecon_recursive /mnt
@@ -302,6 +303,9 @@ on init
     mkdir /mnt/runtime/write/self 0755 root root
     mkdir /mnt/runtime/full 0755 root root
     mkdir /mnt/runtime/full/self 0755 root root
+
+    # For Pre-reboot Dexopt
+    mkdir /mnt/pre_reboot_dexopt 0755 artd artd
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /mnt/sdcard
@@ -640,6 +644,12 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
+
+    mkdir /metadata/aconfig 0775 root system
+    mkdir /metadata/aconfig/flags 0770 root system
+    mkdir /metadata/aconfig/boot 0775 root system
+    exec_start aconfigd
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -704,7 +714,7 @@ on post-fs-data
 
     # Start tombstoned early to be able to store tombstones.
     mkdir /data/anr 0775 system system encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/tombstones 0775 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
     start tombstoned
@@ -1353,3 +1363,16 @@ on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_y
   write /sys/kernel/mm/lru_gen/enabled 5
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled 7
+
+# Allow other processes to run `snapshotctl` through `init`. This requires
+# `set_prop` permission on `snapshotctl_prop`.
+on property:sys.snapshotctl.map=requested
+    # "root" is needed to talk to gsid and pass its check on uid.
+    # "system" is needed to write to "/dev/socket/snapuserd" to talk to
+    # snapuserd.
+    exec - root root system -- /system/bin/snapshotctl map
+    setprop sys.snapshotctl.map "finished"
+
+on property:sys.snapshotctl.unmap=requested
+    exec - root root system -- /system/bin/snapshotctl unmap
+    setprop sys.snapshotctl.unmap "finished"

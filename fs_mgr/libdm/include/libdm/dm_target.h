@@ -116,6 +116,24 @@ class DmTargetLinear final : public DmTarget {
     uint64_t physical_sector_;
 };
 
+class DmTargetStripe final : public DmTarget {
+  public:
+    DmTargetStripe(uint64_t start, uint64_t length, uint64_t chunksize,
+                   const std::string& block_device0, const std::string& block_device1)
+        : DmTarget(start, length),
+          chunksize(chunksize),
+          block_device0_(block_device0),
+          block_device1_(block_device1) {}
+
+    std::string name() const override { return "striped"; }
+    std::string GetParameterString() const override;
+
+  private:
+    uint64_t chunksize;
+    std::string block_device0_;
+    std::string block_device1_;
+};
+
 class DmTargetVerity final : public DmTarget {
   public:
     DmTargetVerity(uint64_t start, uint64_t length, uint32_t version,
