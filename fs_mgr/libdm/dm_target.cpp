@@ -61,6 +61,10 @@ std::string DmTargetLinear::GetParameterString() const {
     return block_device_ + " " + std::to_string(physical_sector_);
 }
 
+std::string DmTargetStripe::GetParameterString() const {
+    return "2 " + std::to_string(chunksize) + " " + block_device0_ + " 0 " + block_device1_ + " 0";
+}
+
 DmTargetVerity::DmTargetVerity(uint64_t start, uint64_t length, uint32_t version,
                                const std::string& block_device, const std::string& hash_device,
                                uint32_t data_block_size, uint32_t hash_block_size,

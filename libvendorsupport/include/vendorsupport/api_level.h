@@ -14,38 +14,34 @@
 
 #pragma once
 
-#include <android/api-level.h>
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
 
 #define __ANDROID_VENDOR_API_MAX__ 1000000
 #define __INVALID_API_LEVEL -1
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @brief Find corresponding vendor API level from an SDK API version.
  *
  * @details
  * SDK API versions and vendor API levels are not compatible and not
- * convertible. However, this function can be used to compare the two versions
+ * exchangeable. However, this function can be used to compare the two versions
  * to know which one is newer than the other.
  *
- * @param sdk_api_level The SDK version int. This must be less than 10000.
+ * @param sdkApiLevel The SDK version int. This must be less than 10000.
  * @return The corresponding vendor API level of the SDK version. -1 if the SDK
  * version is invalid or 10000.
  */
-int vendor_api_level_of(int sdk_api_level);
+int AVendorSupport_getVendorApiLevelOf(int sdkApiLevel);
 
 /**
  * @brief Find corresponding SDK API version from a vendor API level.
  *
- * @param vendor_api_level The vendor API level int.
+ * @param vendorApiLevel The vendor API level int.
  * @return The corresponding SDK API version of the vendor API level. -1 if the
  * vendor API level is invalid.
  */
-int sdk_api_level_of(int vendor_api_level);
+int AVendorSupport_getSdkApiLevelOf(int vendorApiLevel);
 
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS

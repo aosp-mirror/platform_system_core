@@ -1081,7 +1081,9 @@ LOG OK "no overlay present before setup"
 LOG RUN "Testing adb disable-verity -R"
 
 T=$(adb_date)
-adb_su disable-verity -R >&2 ||
+adb_su disable-verity -R >&2
+err=${?}
+[[ ${err} -eq 0 || ${err} -eq 255 ]] ||
   die -t "${T}" "disable-verity -R failed"
 sleep 2
 adb_wait "${ADB_WAIT}" ||
@@ -1192,7 +1194,9 @@ LOG OK "adb remount from scratch"
 LOG RUN "Testing adb remount -R"
 
 T=$(adb_date)
-adb_su remount -R </dev/null >&2 ||
+adb_su remount -R </dev/null >&2
+err=${?}
+[[ ${err} -eq 0 || ${err} -eq 255 ]] ||
   die -t "${T}" "adb remount -R failed"
 sleep 2
 adb_wait "${ADB_WAIT}" ||

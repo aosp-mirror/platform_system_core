@@ -14,8 +14,6 @@
 // limitations under the License.
 //
 
-#include "host_init_verifier.h"
-
 #include <errno.h>
 #include <getopt.h>
 #include <pwd.h>
@@ -36,6 +34,7 @@
 #include <android-base/strings.h>
 #include <generated_android_ids.h>
 #include <hidl/metadata.h>
+#include <property_info_parser/property_info_parser.h>
 #include <property_info_serializer/property_info_serializer.h>
 
 #include "action.h"
@@ -57,9 +56,7 @@ using android::base::EndsWith;
 using android::base::ParseInt;
 using android::base::ReadFileToString;
 using android::base::Split;
-using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
-using android::properties::PropertyInfoArea;
 using android::properties::PropertyInfoEntry;
 
 static std::vector<std::string> passwd_files;
@@ -148,12 +145,6 @@ passwd* getpwnam(const char* login) {  // NOLINT: implementing bad function.
 namespace android {
 namespace init {
 
-static Result<void> check_stub(const BuiltinArguments& args) {
-    return {};
-}
-
-#include "generated_stub_builtin_function_map.h"
-
 void PrintUsage() {
     fprintf(stdout, R"(usage: host_init_verifier [options]
 
@@ -195,8 +186,6 @@ Result<InterfaceInheritanceHierarchyMap> ReadInterfaceInheritanceHierarchy() {
 
     return result;
 }
-
-const PropertyInfoArea* property_info_area;
 
 void HandlePropertyContexts(const std::string& filename,
                             std::vector<PropertyInfoEntry>* property_infos) {
@@ -288,15 +277,10 @@ int main(int argc, char** argv) {
     }
     SetKnownInterfaces(*interface_inheritance_hierarchy_map);
 
-    std::string serialized_contexts;
-    std::string trie_error;
-    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "string", &serialized_contexts,
-                   &trie_error)) {
-        LOG(ERROR) << "Unable to serialize property contexts: " << trie_error;
+    if (auto result = InitializeHostPropertyInfoArea(property_infos); !result.ok()) {
+        LOG(ERROR) << result.error();
         return EXIT_FAILURE;
     }
-
-    property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_contexts.c_str());
 
     if (!partition_map.empty()) {
         std::vector<std::string> vendor_prefixes;

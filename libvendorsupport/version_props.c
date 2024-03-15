@@ -16,26 +16,26 @@
 
 #include <log/log.h>
 
-int vendor_api_level_of(int sdk_api_level) {
-    if (sdk_api_level < __ANDROID_API_V__) {
-        return sdk_api_level;
+int AVendorSupport_getVendorApiLevelOf(int sdkApiLevel) {
+    if (sdkApiLevel < __ANDROID_API_V__) {
+        return sdkApiLevel;
     }
     // In Android V, vendor API level started with version 202404.
     // The calculation assumes that the SDK api level bumps once a year.
-    if (sdk_api_level < __ANDROID_API_FUTURE__) {
-        return 202404 + ((sdk_api_level - __ANDROID_API_V__) * 100);
+    if (sdkApiLevel < __ANDROID_API_FUTURE__) {
+        return 202404 + ((sdkApiLevel - __ANDROID_API_V__) * 100);
     }
-    ALOGE("The SDK version must be less than 10000: %d", sdk_api_level);
+    ALOGE("The SDK version must be less than 10000: %d", sdkApiLevel);
     return __INVALID_API_LEVEL;
 }
 
-int sdk_api_level_of(int vendor_api_level) {
-    if (vendor_api_level < __ANDROID_API_V__) {
-        return vendor_api_level;
+int AVendorSupport_getSdkApiLevelOf(int vendorApiLevel) {
+    if (vendorApiLevel < __ANDROID_API_V__) {
+        return vendorApiLevel;
     }
-    if (vendor_api_level >= 202404 && vendor_api_level < __ANDROID_VENDOR_API_MAX__) {
-        return (vendor_api_level - 202404) / 100 + __ANDROID_API_V__;
+    if (vendorApiLevel >= 202404 && vendorApiLevel < __ANDROID_VENDOR_API_MAX__) {
+        return (vendorApiLevel - 202404) / 100 + __ANDROID_API_V__;
     }
-    ALOGE("Unexpected vendor api level: %d", vendor_api_level);
+    ALOGE("Unexpected vendor api level: %d", vendorApiLevel);
     return __INVALID_API_LEVEL;
 }
