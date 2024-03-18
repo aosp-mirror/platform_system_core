@@ -34,22 +34,7 @@ namespace android {
 namespace snapshot {
 
 bool Daemon::IsUserspaceSnapshotsEnabled() {
-    const std::string UNKNOWN = "unknown";
-    const std::string vendor_release =
-            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
-
-    // No user-space snapshots if vendor partition is on Android 12
-    if (vendor_release.find("12") != std::string::npos) {
-        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
-                  << vendor_release;
-        return false;
-    }
-
     return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
-}
-
-bool Daemon::IsDmSnapshotTestingEnabled() {
-    return android::base::GetBoolProperty("snapuserd.test.dm.snapshots", false);
 }
 
 bool Daemon::StartDaemon(int argc, char** argv) {
@@ -65,16 +50,16 @@ bool Daemon::StartDaemon(int argc, char** argv) {
     // stage init and hence use the command line flags to get the information.
     bool user_snapshots = FLAGS_user_snapshot;
     if (!user_snapshots) {
-        user_snapshots = (!IsDmSnapshotTestingEnabled() && IsUserspaceSnapshotsEnabled());
+        user_snapshots = IsUserspaceSnapshotsEnabled();
     }
 
     if (user_snapshots) {
         LOG(INFO) << "Starting daemon for user-space snapshots.....";
         return StartServerForUserspaceSnapshots(arg_start, argc, argv);
     } else {
-        LOG(INFO) << "Starting daemon for dm-snapshots.....";
-        return StartServerForDmSnapshot(arg_start, argc, argv);
+        LOG(ERROR) << "Userspace snapshots not enabled. No support for legacy snapshots";
     }
+    return false;
 }
 
 bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** argv) {
@@ -130,48 +115,6 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
     return user_server_.WaitForSocket();
 }
 
-bool Daemon::StartServerForDmSnapshot(int arg_start, int argc, char** argv) {
-    sigfillset(&signal_mask_);
-    sigdelset(&signal_mask_, SIGINT);
-    sigdelset(&signal_mask_, SIGTERM);
-    sigdelset(&signal_mask_, SIGUSR1);
-
-    // Masking signals here ensure that after this point, we won't handle INT/TERM
-    // until after we call into ppoll()
-    signal(SIGINT, Daemon::SignalHandler);
-    signal(SIGTERM, Daemon::SignalHandler);
-    signal(SIGPIPE, Daemon::SignalHandler);
-    signal(SIGUSR1, Daemon::SignalHandler);
-
-    MaskAllSignalsExceptIntAndTerm();
-
-    if (FLAGS_socket_handoff) {
-        return server_.RunForSocketHandoff();
-    }
-    if (!FLAGS_no_socket) {
-        if (!server_.Start(FLAGS_socket)) {
-            return false;
-        }
-        return server_.Run();
-    }
-
-    for (int i = arg_start; i < argc; i++) {
-        auto parts = android::base::Split(argv[i], ",");
-        if (parts.size() != 3) {
-            LOG(ERROR) << "Malformed message, expected three sub-arguments.";
-            return false;
-        }
-        auto handler = server_.AddHandler(parts[0], parts[1], parts[2]);
-        if (!handler || !server_.StartHandler(handler)) {
-            return false;
-        }
-    }
-
-    // Skip the accept() call to avoid spurious log spam. The server will still
-    // run until all handlers have completed.
-    return server_.WaitForSocket();
-}
-
 void Daemon::MaskAllSignalsExceptIntAndTerm() {
     sigset_t signal_mask;
     sigfillset(&signal_mask);
@@ -198,16 +141,12 @@ void Daemon::Interrupt() {
     // and verify it through a temp variable.
     if (user_server_.IsServerRunning()) {
         user_server_.Interrupt();
-    } else {
-        server_.Interrupt();
     }
 }
 
 void Daemon::ReceivedSocketSignal() {
     if (user_server_.IsServerRunning()) {
         user_server_.ReceivedSocketSignal();
-    } else {
-        server_.ReceivedSocketSignal();
     }
 }
 
