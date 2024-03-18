@@ -52,6 +52,7 @@ static int Usage(void) {
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  getuuid <dm-name>" << std::endl;
+    std::cerr << "  ima <dm-name>" << std::endl;
     std::cerr << "  info <dm-name>" << std::endl;
     std::cerr << "  replace <dm-name> <targets...>" << std::endl;
     std::cerr << "  status <dm-name>" << std::endl;
@@ -508,7 +509,14 @@ static int DumpTable(const std::string& mode, int argc, char** argv) {
                       << std::endl;
             return -EINVAL;
         }
+    } else if (mode == "ima") {
+        if (!dm.GetTableStatusIma(argv[0], &table)) {
+            std::cerr << "Could not query table status of device \"" << argv[0] << "\"."
+                      << std::endl;
+            return -EINVAL;
+        }
     }
+
     std::cout << "Targets in the device-mapper table for " << argv[0] << ":" << std::endl;
     for (const auto& target : table) {
         std::cout << target.spec.sector_start << "-"
@@ -528,6 +536,10 @@ static int TableCmdHandler(int argc, char** argv) {
 
 static int StatusCmdHandler(int argc, char** argv) {
     return DumpTable("status", argc, argv);
+}
+
+static int ImaCmdHandler(int argc, char** argv) {
+    return DumpTable("ima", argc, argv);
 }
 
 static int ResumeCmdHandler(int argc, char** argv) {
@@ -570,6 +582,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"info", InfoCmdHandler},
         {"table", TableCmdHandler},
         {"status", StatusCmdHandler},
+        {"ima", ImaCmdHandler},
         {"resume", ResumeCmdHandler},
         {"suspend", SuspendCmdHandler},
         // clang-format on

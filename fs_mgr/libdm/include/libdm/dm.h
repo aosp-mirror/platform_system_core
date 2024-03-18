@@ -78,6 +78,7 @@ class IDeviceMapper {
     virtual bool LoadTable(const std::string& name, const DmTable& table) = 0;
     virtual bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) = 0;
+    virtual bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) = 0;
     virtual bool GetDeviceString(const std::string& name, std::string* dev) = 0;
     virtual bool DeleteDeviceIfExists(const std::string& name) = 0;
@@ -266,6 +267,12 @@ class DeviceMapper final : public IDeviceMapper {
     // not exist, or there were too many targets, the call will fail and return
     // false.
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) override;
+
+    // Query the status of a table, given a device name. The output vector will
+    // contain IMA TargetInfo for each target in the table. If the device does
+    // not exist, or there were too many targets, the call will fail and return
+    // false.
+    bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) override;
 
     // Identical to GetTableStatus, except also retrives the active table for the device
     // mapper device from the kernel.
