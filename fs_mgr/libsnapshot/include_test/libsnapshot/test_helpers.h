@@ -155,6 +155,9 @@ class DeviceMapperWrapper : public android::dm::IDeviceMapper {
     virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
         return impl_.GetTableStatus(name, table);
     }
+    virtual bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) {
+        return impl_.GetTableStatusIma(name, table);
+    }
     virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) {
         return impl_.GetDmDevicePathByName(name, path);
     }
