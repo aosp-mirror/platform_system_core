@@ -392,7 +392,7 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
     ASSERT_SAME_OFFSET(scudo_ring_buffer, scudo_ring_buffer);
     ASSERT_SAME_OFFSET(scudo_ring_buffer_size, scudo_ring_buffer_size);
     ASSERT_SAME_OFFSET(scudo_stack_depot_size, scudo_stack_depot_size);
-    ASSERT_SAME_OFFSET(recoverable_gwp_asan_crash, recoverable_gwp_asan_crash);
+    ASSERT_SAME_OFFSET(recoverable_crash, recoverable_crash);
     ASSERT_SAME_OFFSET(crash_detail_page, crash_detail_page);
 #undef ASSERT_SAME_OFFSET
 
@@ -569,6 +569,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
   }
 
   gwp_asan_callbacks_t gwp_asan_callbacks = {};
+  bool recoverable_gwp_asan_crash = false;
   if (g_callbacks.get_gwp_asan_callbacks != nullptr) {
     // GWP-ASan catches use-after-free and heap-buffer-overflow by using PROT_NONE
     // guard pages, which lead to SEGV. Normally, debuggerd prints a bug report
@@ -583,8 +584,28 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
         gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report &&
         gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery(info->si_addr)) {
       gwp_asan_callbacks.debuggerd_gwp_asan_pre_crash_report(info->si_addr);
-      process_info.recoverable_gwp_asan_crash = true;
+      recoverable_gwp_asan_crash = true;
+      process_info.recoverable_crash = true;
     }
+  }
+
+  if (info->si_signo == SIGSEGV &&
+      (info->si_code == SEGV_MTESERR || info->si_code == SEGV_MTEAERR) && is_permissive_mte()) {
+    process_info.recoverable_crash = true;
+    // If we are in permissive MTE mode, we do not crash, but instead disable MTE on this thread,
+    // and then let the failing instruction be retried. The second time should work (except
+    // if there is another non-MTE fault).
+    int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+    if (tagged_addr_ctrl < 0) {
+      fatal_errno("failed to PR_GET_TAGGED_ADDR_CTRL");
+    }
+    tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_NONE;
+    if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) < 0) {
+      fatal_errno("failed to PR_SET_TAGGED_ADDR_CTRL");
+    }
+    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                          "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
+    pthread_mutex_unlock(&crash_mutex);
   }
 
   // If sival_int is ~0, it means that the fallback handler has been called
@@ -598,7 +619,7 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // you can only set NO_NEW_PRIVS to 1, and the effect should be at worst a single missing
     // ANR trace.
     debuggerd_fallback_handler(info, ucontext, process_info.abort_msg);
-    if (no_new_privs && process_info.recoverable_gwp_asan_crash) {
+    if (no_new_privs && recoverable_gwp_asan_crash) {
       gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report(info->si_addr);
       return;
     }
@@ -675,29 +696,14 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     // If the signal is fatal, don't unlock the mutex to prevent other crashing threads from
     // starting to dump right before our death.
     pthread_mutex_unlock(&crash_mutex);
-  } else if (process_info.recoverable_gwp_asan_crash) {
-    gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report(info->si_addr);
+  } else if (process_info.recoverable_crash) {
+    if (recoverable_gwp_asan_crash) {
+      gwp_asan_callbacks.debuggerd_gwp_asan_post_crash_report(info->si_addr);
+    }
     pthread_mutex_unlock(&crash_mutex);
   }
 #ifdef __aarch64__
-  else if (info->si_signo == SIGSEGV &&
-           (info->si_code == SEGV_MTESERR || info->si_code == SEGV_MTEAERR) &&
-           is_permissive_mte()) {
-    // If we are in permissive MTE mode, we do not crash, but instead disable MTE on this thread,
-    // and then let the failing instruction be retried. The second time should work (except
-    // if there is another non-MTE fault).
-    int tagged_addr_ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
-    if (tagged_addr_ctrl < 0) {
-      fatal_errno("failed to PR_GET_TAGGED_ADDR_CTRL");
-    }
-    tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_NONE;
-    if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) < 0) {
-      fatal_errno("failed to PR_SET_TAGGED_ADDR_CTRL");
-    }
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
-                          "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
-    pthread_mutex_unlock(&crash_mutex);
-  } else if (info->si_signo == SIGSEGV && info->si_code == SEGV_MTEAERR && getppid() == 1) {
+  else if (info->si_signo == SIGSEGV && info->si_code == SEGV_MTEAERR && getppid() == 1) {
     // Back channel to init (see system/core/init/service.cpp) to signal that
     // this process crashed due to an ASYNC MTE fault and should be considered
     // for upgrade to SYNC mode. We are re-using the ART profiler signal, which
@@ -757,18 +763,7 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
   debuggerd_register_handlers(&action);
 }
 
-// When debuggerd's signal handler is the first handler called, it's great at
-// handling the recoverable GWP-ASan mode. For apps, sigchain (from libart) is
-// always the first signal handler, and so the following function is what
-// sigchain must call before processing the signal. This allows for processing
-// of a potentially recoverable GWP-ASan crash. If the signal requires GWP-ASan
-// recovery, then dump a report (via the regular debuggerd hanndler), and patch
-// up the allocator, and allow the process to continue (indicated by returning
-// 'true'). If the crash has nothing to do with GWP-ASan, or recovery isn't
-// possible, return 'false'.
-bool debuggerd_handle_signal(int signal_number, siginfo_t* info, void* context) {
-  if (signal_number != SIGSEGV || !signal_has_si_addr(info)) return false;
-
+bool debuggerd_handle_gwp_asan_signal(int signal_number, siginfo_t* info, void* context) {
   if (g_callbacks.get_gwp_asan_callbacks == nullptr) return false;
   gwp_asan_callbacks_t gwp_asan_callbacks = g_callbacks.get_gwp_asan_callbacks();
   if (gwp_asan_callbacks.debuggerd_needs_gwp_asan_recovery == nullptr ||
@@ -805,4 +800,34 @@ bool debuggerd_handle_signal(int signal_number, siginfo_t* info, void* context) 
 
   pthread_mutex_unlock(&first_crash_mutex);
   return true;
+}
+
+// When debuggerd's signal handler is the first handler called, it's great at
+// handling the recoverable GWP-ASan and permissive MTE modes. For apps,
+// sigchain (from libart) is always the first signal handler, and so the
+// following function is what sigchain must call before processing the signal.
+// This allows for processing of a potentially recoverable GWP-ASan or MTE
+// crash. If the signal requires recovery, then dump a report (via the regular
+// debuggerd hanndler), and patch up the allocator (in the case of GWP-ASan) or
+// disable MTE on the thread, and allow the process to continue (indicated by
+// returning 'true'). If the crash has nothing to do with GWP-ASan/MTE, or
+// recovery isn't possible, return 'false'.
+bool debuggerd_handle_signal(int signal_number, siginfo_t* info, void* context) {
+  if (signal_number != SIGSEGV) return false;
+  if (info->si_code == SEGV_MTEAERR || info->si_code == SEGV_MTESERR) {
+    if (!is_permissive_mte()) return false;
+    // Because permissive MTE disables MTE for the entire thread, we're less
+    // worried about getting a whole bunch of crashes in a row. ActivityManager
+    // doesn't like multiple native crashes for an app in a short period of time
+    // (see the comment about recoverable GWP-ASan in
+    // `debuggerd_handle_gwp_asan_signal`), but that shouldn't happen if MTE is
+    // disabled for the entire thread. This might need to be changed if there's
+    // some low-hanging bug that happens across multiple threads in quick
+    // succession.
+    debuggerd_signal_handler(signal_number, info, context);
+    return true;
+  }
+
+  if (!signal_has_si_addr(info)) return false;
+  return debuggerd_handle_gwp_asan_signal(signal_number, info, context);
 }
