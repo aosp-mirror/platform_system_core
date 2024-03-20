@@ -48,7 +48,9 @@
 
 // For non-vendor modules, API_LEVEL_AT_LEAST is replaced with __builtin_available(sdk_api_level) to
 // guard the API for __INTRODUCED_IN.
+#if !defined(API_LEVEL_AT_LEAST)
 #define API_LEVEL_AT_LEAST(sdk_api_level, vendor_api_level) \
     (__builtin_available(android sdk_api_level, *))
+#endif
 
 #endif  // __ANDROID_VENDOR__
