@@ -19,6 +19,7 @@
 #include "rpmb_protocol.h"
 
 #include <assert.h>
+#include <cutils/sockets.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -613,20 +614,24 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    cmdres_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    cmdres_sock = android_get_control_socket(socket_path);
     if (cmdres_sock < 0) {
-        ALOGE("rpmb_dev: Failed to create command/response socket: %s\n", strerror(errno));
-        return EXIT_FAILURE;
-    }
+        ALOGW("android_get_control_socket(%s) failed, fall back to create it\n", socket_path);
+        cmdres_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (cmdres_sock < 0) {
+            ALOGE("rpmb_dev: Failed to create command/response socket: %s\n", strerror(errno));
+            return EXIT_FAILURE;
+        }
 
-    cmdres_sockaddr.sun_family = AF_UNIX;
-    strncpy(cmdres_sockaddr.sun_path, socket_path, sizeof(cmdres_sockaddr.sun_path));
+        cmdres_sockaddr.sun_family = AF_UNIX;
+        strncpy(cmdres_sockaddr.sun_path, socket_path, sizeof(cmdres_sockaddr.sun_path));
 
-    ret = bind(cmdres_sock, (struct sockaddr*)&cmdres_sockaddr, sizeof(struct sockaddr_un));
-    if (ret < 0) {
-        ALOGE("rpmb_dev: Failed to bind command/response socket: %s: %s\n", socket_path,
-              strerror(errno));
-        return EXIT_FAILURE;
+        ret = bind(cmdres_sock, (struct sockaddr*)&cmdres_sockaddr, sizeof(struct sockaddr_un));
+        if (ret < 0) {
+            ALOGE("rpmb_dev: Failed to bind command/response socket: %s: %s\n", socket_path,
+                  strerror(errno));
+            return EXIT_FAILURE;
+        }
     }
 
     ret = listen(cmdres_sock, 1);
