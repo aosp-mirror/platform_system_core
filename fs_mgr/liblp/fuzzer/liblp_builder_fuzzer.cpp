@@ -28,7 +28,7 @@ static constexpr uint64_t kValidBlockSize = 4096 * 50;
 static constexpr uint64_t kBlockDeviceInfoSize = 1024 * 1024;
 static constexpr uint64_t kValidBlockDeviceInfoSize = 8_GiB;
 static constexpr uint64_t kValidMaxGroupSize = 40960;
-static constexpr uint64_t kMinBlockDevValue = 0;
+static constexpr uint64_t kMinBlockDevValue = 1;
 static constexpr uint64_t kMaxBlockDevValue = 100000;
 static constexpr uint64_t kMinSectorValue = 1;
 static constexpr uint64_t kMaxSectorValue = 1000000;
@@ -149,12 +149,16 @@ void BuilderFuzzer::selectRandomBuilder(int32_t randomBuilder, string superBlock
 
 void BuilderFuzzer::setupBuilder(string superBlockDeviceName) {
     uint64_t blockDeviceInfoSize =
-            mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint64_t>() : kValidBlockDeviceInfoSize;
+            mFdp.ConsumeBool()
+                    ? mFdp.ConsumeIntegralInRange<uint64_t>(kMinBlockDevValue, kMaxBlockDevValue)
+                    : kValidBlockDeviceInfoSize;
     uint32_t alignment = mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>() : kValidAlignment;
     uint32_t alignmentOffset =
             mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>() : kValidAlignmentOffset;
-    uint32_t logicalBlockSize =
-            mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>() : kValidLogicalBlockSize;
+    uint32_t logicalBlockSize = mFdp.ConsumeBool() ? mFdp.ConsumeIntegralInRange<uint32_t>(
+                                                             kMinBlockDevValue, kMaxBlockDevValue)
+                                                   : kValidLogicalBlockSize;
+
     BlockDeviceInfo super(superBlockDeviceName, blockDeviceInfoSize, alignment, alignmentOffset,
                           logicalBlockSize);
     mBlockDevices.push_back(super);
@@ -176,13 +180,16 @@ void BuilderFuzzer::setupBuilder(string superBlockDeviceName) {
             mFdp.ConsumeBool() ? kDeviceInfoName : mFdp.ConsumeRandomLengthString(kMaxBytes);
     BlockDeviceInfo changePartitionDeviceInfo(
             changePartitionDeviceInfoName,
-            mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint64_t>() : kBlockDeviceInfoSize /* size */,
+            mFdp.ConsumeBool()
+                    ? mFdp.ConsumeIntegralInRange<uint64_t>(kMinBlockDevValue, kMaxBlockDevValue)
+                    : kBlockDeviceInfoSize /* size */,
             mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>()
                                : kZeroAlignmentOffset /* alignment */,
             mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>()
                                : kZeroAlignmentOffset /* alignment_offset */,
-            mFdp.ConsumeBool() ? mFdp.ConsumeIntegral<uint32_t>()
-                               : kValidLogicalBlockSize /* logical_block_size */);
+            mFdp.ConsumeBool()
+                    ? mFdp.ConsumeIntegralInRange<uint32_t>(kMinBlockDevValue, kMaxBlockDevValue)
+                    : kValidLogicalBlockSize);
     mBlockDevices.push_back(changePartitionDeviceInfo);
 }
 
