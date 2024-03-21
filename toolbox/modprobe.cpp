@@ -112,6 +112,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     android::base::SetMinimumLogSeverity(android::base::INFO);
 
     std::vector<std::string> modules;
+    std::string modules_load_file;
     std::string module_parameters;
     std::string mods;
     std::vector<std::string> mod_dirs;
@@ -119,7 +120,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     bool blocklist = false;
     int rv = EXIT_SUCCESS;
 
-    int opt;
+    int opt, fd;
     int option_index = 0;
     // NB: We have non-standard short options -l and -D to make it easier for
     // OEMs to transition from toybox.
@@ -144,16 +145,19 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 // is supported here by default, ignore flag if no argument.
                 check_mode();
                 if (optarg == NULL) break;
-                if (!android::base::ReadFileToString(optarg, &mods)) {
+
+                // Since libmodprobe doesn't fail when the modules load file
+                // doesn't exist, let's check that here so that we don't
+                // silently fail.
+                fd = open(optarg, O_RDONLY | O_CLOEXEC | O_BINARY);
+                if (fd == -1) {
                     PLOG(ERROR) << "Failed to open " << optarg;
-                    rv = EXIT_FAILURE;
+                    return EXIT_FAILURE;
                 }
-                for (auto mod : android::base::Split(stripComments(mods), "\n")) {
-                    mod = android::base::Trim(mod);
-                    if (mod == "") continue;
-                    if (std::find(modules.begin(), modules.end(), mod) != modules.end()) continue;
-                    modules.emplace_back(mod);
-                }
+                close(fd);
+
+                mod_dirs.emplace_back(android::base::Dirname(optarg));
+                modules_load_file = android::base::Basename(optarg);
                 break;
             case 'b':
                 blocklist = true;
@@ -233,25 +237,33 @@ extern "C" int modprobe_main(int argc, char** argv) {
     LOG(DEBUG) << "mode is " << mode;
     LOG(DEBUG) << "mod_dirs is: " << android::base::Join(mod_dirs, " ");
     LOG(DEBUG) << "modules is: " << android::base::Join(modules, " ");
+    LOG(DEBUG) << "modules load file is: " << modules_load_file;
     LOG(DEBUG) << "module parameters is: " << android::base::Join(module_parameters, " ");
 
     if (modules.empty()) {
         if (mode == ListModulesMode) {
             // emulate toybox modprobe list with no pattern (list all)
             modules.emplace_back("*");
-        } else {
+        } else if (modules_load_file.empty()) {
             LOG(ERROR) << "No modules given.";
             print_usage();
             return EXIT_FAILURE;
         }
     }
-    if (parameter_count && modules.size() > 1) {
+    if (parameter_count && (modules.size() > 1 || !modules_load_file.empty())) {
         LOG(ERROR) << "Only one module may be loaded when specifying module parameters.";
         print_usage();
         return EXIT_FAILURE;
     }
 
-    Modprobe m(mod_dirs, "modules.load", blocklist);
+    Modprobe m(mod_dirs, modules_load_file.empty() ? "modules.load" : modules_load_file, blocklist);
+    if (mode == AddModulesMode && !modules_load_file.empty()) {
+        if (!m.LoadListedModules(false)) {
+            PLOG(ERROR) << "Failed to load all the modules from " << modules_load_file;
+            return EXIT_FAILURE;
+        }
+        /* Fall-through to load modules provided on the command line (if any)*/
+    }
 
     for (const auto& module : modules) {
         switch (mode) {

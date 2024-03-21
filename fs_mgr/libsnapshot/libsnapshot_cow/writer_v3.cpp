@@ -173,7 +173,7 @@ bool CowWriterV3::ParseOptions() {
         batch_size_ = std::max<size_t>(options_.cluster_ops, 1);
         data_vec_.reserve(batch_size_);
         cached_data_.reserve(batch_size_);
-        cached_ops_.reserve(batch_size_);
+        cached_ops_.reserve(batch_size_ * kNonDataOpBufferSize);
     }
 
     if (batch_size_ > 1) {
@@ -342,7 +342,8 @@ bool CowWriterV3::NeedsFlush() const {
     // Allow bigger batch sizes for ops without data. A single CowOperationV3
     // struct uses 14 bytes of memory, even if we cache 200 * 16 ops in memory,
     // it's only ~44K.
-    return cached_data_.size() >= batch_size_ || cached_ops_.size() >= batch_size_ * 16;
+    return cached_data_.size() >= batch_size_ ||
+           cached_ops_.size() >= batch_size_ * kNonDataOpBufferSize;
 }
 
 bool CowWriterV3::ConstructCowOpCompressedBuffers(uint64_t new_block_start, const void* data,

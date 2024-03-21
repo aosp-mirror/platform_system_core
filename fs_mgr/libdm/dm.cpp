@@ -39,6 +39,9 @@
 #ifndef DM_DEFERRED_REMOVE
 #define DM_DEFERRED_REMOVE (1 << 17)
 #endif
+#ifndef DM_IMA_MEASUREMENT_FLAG
+#define DM_IMA_MEASUREMENT_FLAG (1 << 19)
+#endif
 
 namespace android {
 namespace dm {
@@ -538,6 +541,10 @@ bool DeviceMapper::GetDeviceString(const std::string& name, std::string* dev) {
 
 bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
     return GetTable(name, 0, table);
+}
+
+bool DeviceMapper::GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, DM_IMA_MEASUREMENT_FLAG, table);
 }
 
 bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {

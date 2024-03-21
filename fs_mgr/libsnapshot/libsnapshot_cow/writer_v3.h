@@ -28,6 +28,9 @@ namespace android {
 namespace snapshot {
 
 using namespace android::storage_literals;
+// This is a multiple on top of the number of data ops that can be stored in our cache at once. This
+// is added so that we can cache more non-data ops as it takes up less space.
+static constexpr uint32_t kNonDataOpBufferSize = 16;
 
 class CowWriterV3 : public CowWriterBase {
   public:
