@@ -230,11 +230,7 @@ bool GetUserspaceSnapshotsEnabledProperty() {
     return fetcher->GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
-bool CanUseUserspaceSnapshots() {
-    if (!GetUserspaceSnapshotsEnabledProperty()) {
-        return false;
-    }
-
+bool IsVendorFromAndroid12() {
     auto fetcher = IPropertyFetcher::GetInstance();
 
     const std::string UNKNOWN = "unknown";
@@ -243,8 +239,15 @@ bool CanUseUserspaceSnapshots() {
 
     // No user-space snapshots if vendor partition is on Android 12
     if (vendor_release.find("12") != std::string::npos) {
-        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
-                  << vendor_release;
+        return true;
+    }
+
+    return false;
+}
+
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        LOG(INFO) << "Virtual A/B - Userspace snapshots disabled";
         return false;
     }
 

@@ -829,6 +829,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Set read-ahead size during OTA
     void SetReadAheadSize(const std::string& entry_block_device, off64_t size_kb);
 
+    // Returns true post OTA reboot if legacy snapuserd is required
+    bool IsLegacySnapuserdPostReboot();
+
     android::dm::IDeviceMapper& dm_;
     std::unique_ptr<IDeviceInfo> device_;
     std::string metadata_dir_;
@@ -839,6 +842,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
     std::unique_ptr<LpMetadata> old_partition_metadata_;
     std::optional<bool> is_snapshot_userspace_;
+    std::optional<bool> is_legacy_snapuserd_;
 };
 
 }  // namespace snapshot
