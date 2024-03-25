@@ -310,6 +310,7 @@ cc_binary {
     name: "init_second_stage",
     defaults: ["init_second_stage_defaults"],
     static_libs: ["libinit"],
+    visibility: ["//visibility:any_system_partition"],
 }
 
 cc_binary {
