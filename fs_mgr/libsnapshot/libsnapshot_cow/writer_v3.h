@@ -94,7 +94,7 @@ class CowWriterV3 : public CowWriterBase {
         }
         return false;
     }
-
+    size_t CachedDataSize() const;
     bool ReadBackVerification();
     bool FlushCacheOps();
     void InitWorkers();

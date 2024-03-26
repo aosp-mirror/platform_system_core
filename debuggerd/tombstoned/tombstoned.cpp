@@ -456,6 +456,14 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
 
   CrashArtifactPaths paths = queue->get_next_artifact_paths();
 
+  if (crash->output.proto && crash->output.proto->fd != -1) {
+    if (!paths.proto) {
+      LOG(ERROR) << "missing path for proto tombstone";
+    } else {
+      rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
+    }
+  }
+
   if (rename_tombstone_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
     if (crash->crash_type == kDebuggerdJavaBacktrace) {
       LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
@@ -464,14 +472,6 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
       // tombstone associated with a given native crash was written. Any changes
       // to this message must be carefully considered.
       LOG(ERROR) << "Tombstone written to: " << paths.text;
-    }
-  }
-
-  if (crash->output.proto && crash->output.proto->fd != -1) {
-    if (!paths.proto) {
-      LOG(ERROR) << "missing path for proto tombstone";
-    } else {
-      rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
     }
   }
 }
