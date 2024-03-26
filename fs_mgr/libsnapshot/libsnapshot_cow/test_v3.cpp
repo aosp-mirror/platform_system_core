@@ -209,6 +209,48 @@ TEST_F(CowTestV3, ReplaceOp) {
     ASSERT_EQ(sink, data);
 }
 
+TEST_F(CowTestV3, BigReplaceOp) {
+    CowOptions options;
+    options.op_count_max = 10000;
+    options.batch_write = true;
+    options.cluster_ops = 2048;
+
+    auto writer = CreateCowWriter(3, options, GetCowFd());
+    std::string data = "This is some data, believe it";
+    data.resize(options.block_size * 4096, '\0');
+    for (int i = 0; i < data.size(); i++) {
+        data[i] = static_cast<char>('A' + i / options.block_size);
+    }
+    ASSERT_TRUE(writer->AddRawBlocks(5, data.data(), data.size()));
+    ASSERT_TRUE(writer->Finalize());
+
+    CowReader reader;
+    ASSERT_TRUE(reader.Parse(cow_->fd));
+
+    const auto& header = reader.header_v3();
+    ASSERT_EQ(header.op_count, 4096);
+
+    auto iter = reader.GetOpIter();
+    ASSERT_NE(iter, nullptr);
+    ASSERT_FALSE(iter->AtEnd());
+
+    size_t i = 0;
+
+    while (!iter->AtEnd()) {
+        auto op = iter->Get();
+        std::string sink(options.block_size, '\0');
+        ASSERT_EQ(op->type(), kCowReplaceOp);
+        ASSERT_EQ(op->data_length, options.block_size);
+        ASSERT_EQ(op->new_block, 5 + i);
+        ASSERT_TRUE(ReadData(reader, op, sink.data(), options.block_size));
+        ASSERT_EQ(std::string_view(sink),
+                  std::string_view(data).substr(i * options.block_size, options.block_size))
+                << " readback data for " << i << "th block does not match";
+        iter->Next();
+        i++;
+    }
+}
+
 TEST_F(CowTestV3, ConsecutiveReplaceOp) {
     CowOptions options;
     options.op_count_max = 20;
