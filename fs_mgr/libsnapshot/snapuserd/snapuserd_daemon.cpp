@@ -34,6 +34,21 @@ namespace android {
 namespace snapshot {
 
 bool Daemon::IsUserspaceSnapshotsEnabled() {
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    // If the vendor is on Android S, install process will forcefully take the
+    // userspace snapshots path.
+    //
+    // We will not reach here post OTA reboot as the binary will be from vendor
+    // ramdisk which is on Android S.
+    if (vendor_release.find("12") != std::string::npos) {
+        LOG(INFO) << "Userspace snapshots enabled as vendor partition is on Android: "
+                  << vendor_release;
+        return true;
+    }
+
     return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
