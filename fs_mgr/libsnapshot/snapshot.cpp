@@ -3018,6 +3018,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_merge_phase(old_status.merge_phase());
         status.set_userspace_snapshots(old_status.userspace_snapshots());
         status.set_io_uring_enabled(old_status.io_uring_enabled());
+        status.set_legacy_snapuserd(old_status.legacy_snapuserd());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
