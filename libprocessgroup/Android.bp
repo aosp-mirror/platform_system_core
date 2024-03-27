@@ -5,12 +5,6 @@ package {
 cc_defaults {
     name: "libprocessgroup_defaults",
     cpp_std: "gnu++20",
-    cflags: [
-        "-Wall",
-        "-Werror",
-        "-Wexit-time-destructors",
-        "-Wno-unused-parameter",
-    ],
 }
 
 cc_library_headers {
