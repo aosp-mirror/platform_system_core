@@ -408,18 +408,6 @@ int FirstStageMain(int argc, char** argv) {
 
     LOG(INFO) << "init first stage started!";
 
-    // We only allow /vendor partition in debuggable Microdrod until it is verified during boot.
-    // TODO(b/285855436): remove this check.
-    if (IsMicrodroid()) {
-        bool mount_vendor =
-                cmdline.find("androidboot.microdroid.mount_vendor=1") != std::string::npos;
-        bool debuggable =
-                bootconfig.find("androidboot.microdroid.debuggable = \"1\"") != std::string::npos;
-        if (mount_vendor && !debuggable) {
-            LOG(FATAL) << "Attempted to mount /vendor partition for non-debuggable Microdroid VM";
-        }
-    }
-
     auto old_root_dir = std::unique_ptr<DIR, decltype(&closedir)>{opendir("/"), closedir};
     if (!old_root_dir) {
         PLOG(ERROR) << "Could not opendir(\"/\"), not freeing ramdisk";
