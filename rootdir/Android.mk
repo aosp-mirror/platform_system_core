@@ -223,13 +223,6 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
 
-# Append PLATFORM_VNDK_VERSION to base name.
-define append_vndk_version
-$(strip \
-  $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)) \
-)
-endef
-
 #######################################
 # sanitizer.libraries.txt
 include $(CLEAR_VARS)
