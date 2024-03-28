@@ -24,6 +24,7 @@ cc_binary {
     ],
     shared_libs: [
         "libc",
+        "libcutils",
         "liblog",
         "libcrypto",
     ],

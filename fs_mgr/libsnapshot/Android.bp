@@ -322,24 +322,6 @@ cc_test {
 }
 
 cc_test {
-    name: "vabc_legacy_tests",
-    defaults: [
-        "libsnapshot_test_defaults",
-        "libsnapshot_hal_deps",
-    ],
-    cppflags: [
-        "-DLIBSNAPSHOT_TEST_VABC_LEGACY",
-    ],
-    test_suites: [
-        "device-tests",
-    ],
-    test_options: {
-        // Legacy VABC launched in Android S.
-        min_shipping_api_level: 31,
-    },
-}
-
-cc_test {
     name: "vts_ota_config_test",
     srcs: [
         "vts_ota_config_test.cpp",
