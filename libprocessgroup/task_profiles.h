@@ -252,3 +252,6 @@ class TaskProfiles {
     std::map<std::string, std::shared_ptr<TaskProfile>, std::less<>> profiles_;
     std::map<std::string, std::unique_ptr<IProfileAttribute>, std::less<>> attributes_;
 };
+
+std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid);
+std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid);
