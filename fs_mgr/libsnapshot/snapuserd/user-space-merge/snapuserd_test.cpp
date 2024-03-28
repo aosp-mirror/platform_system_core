@@ -126,7 +126,8 @@ void SnapuserdTestBase::CreateBaseDevice() {
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
-    cow_system_ = std::make_unique<TemporaryFile>();
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
 
     CowOptions options;
     options.compression = "gz";
@@ -147,7 +148,8 @@ std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
     options.batch_write = true;
     options.compression_factor = params.block_size;
 
-    cow_system_ = std::make_unique<TemporaryFile>();
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
 
     unique_fd fd(cow_system_->fd);
     cow_system_->fd = -1;
@@ -989,6 +991,7 @@ void SnapuserdVariableBlockSizeTest::SetupCowV3ForVariableBlockSize() {
 void SnapuserdVariableBlockSizeTest::CreateV3CowDeviceForVariableBlockSize() {
     auto writer = CreateV3Cow();
 
+    ASSERT_NE(writer, nullptr);
     size_t total_data_to_write = size_;
 
     size_t total_blocks_to_write = total_data_to_write / BLOCK_SZ;
@@ -1337,6 +1340,7 @@ void HandlerTestV3::TearDown() {
 void HandlerTestV3::SetUpV3Cow() {
     auto writer = CreateV3Cow();
 
+    ASSERT_NE(writer, nullptr);
     size_t total_data_to_write = size_;
 
     size_t total_blocks_to_write = total_data_to_write / BLOCK_SZ;

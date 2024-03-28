@@ -14,10 +14,9 @@
 
 #pragma once
 
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
-
+/* As a vendor default header included in all vendor modules, this header MUST NOT include other
+ * header files or any declarations. Only macros are allowed.
+ */
 #if defined(__ANDROID_VENDOR__)
 
 // LLNDK (https://source.android.com/docs/core/architecture/vndk/build-system#ll-ndk) is similar to
@@ -49,9 +48,9 @@ __BEGIN_DECLS
 
 // For non-vendor modules, API_LEVEL_AT_LEAST is replaced with __builtin_available(sdk_api_level) to
 // guard the API for __INTRODUCED_IN.
+#if !defined(API_LEVEL_AT_LEAST)
 #define API_LEVEL_AT_LEAST(sdk_api_level, vendor_api_level) \
     (__builtin_available(android sdk_api_level, *))
+#endif
 
 #endif  // __ANDROID_VENDOR__
-
-__END_DECLS
