@@ -2883,7 +2883,16 @@ int main(int argc, char** argv) {
     ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
     gflags::ParseCommandLineFlags(&argc, &argv, false);
 
-    android::base::SetProperty("ctl.stop", "snapuserd");
+    bool vab_legacy = false;
+    if (FLAGS_force_mode == "vab-legacy") {
+        vab_legacy = true;
+    }
+
+    if (!vab_legacy) {
+        // This is necessary if the configuration we're testing doesn't match the device.
+        android::base::SetProperty("ctl.stop", "snapuserd");
+        android::snapshot::KillSnapuserd();
+    }
 
     std::unordered_set<std::string> modes = {"", "vab-legacy"};
     if (modes.count(FLAGS_force_mode) == 0) {
@@ -2891,13 +2900,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // This is necessary if the configuration we're testing doesn't match the device.
-    android::snapshot::KillSnapuserd();
-
     int ret = RUN_ALL_TESTS();
 
     android::base::SetProperty("snapuserd.test.io_uring.force_disable", "0");
 
-    android::snapshot::KillSnapuserd();
+    if (!vab_legacy) {
+        android::snapshot::KillSnapuserd();
+    }
     return ret;
 }
