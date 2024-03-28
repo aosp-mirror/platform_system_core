@@ -396,9 +396,10 @@ bool FirstStageMountVBootV2::CreateSnapshotPartitions(SnapshotManager* sm) {
     use_snapuserd_ = sm->IsSnapuserdRequired();
     if (use_snapuserd_) {
         if (sm->UpdateUsesUserSnapshots()) {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_USER);
+            LaunchFirstStageSnapuserd();
         } else {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_SNAPSHOT);
+            LOG(FATAL) << "legacy virtual-ab is no longer supported";
+            return false;
         }
     }
 
