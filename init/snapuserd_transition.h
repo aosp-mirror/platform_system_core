@@ -29,13 +29,8 @@
 namespace android {
 namespace init {
 
-enum class SnapshotDriver {
-    DM_SNAPSHOT,
-    DM_USER,
-};
-
 // Fork and exec a new copy of snapuserd.
-void LaunchFirstStageSnapuserd(SnapshotDriver driver);
+void LaunchFirstStageSnapuserd();
 
 class SnapuserdSelinuxHelper final {
     using SnapshotManager = android::snapshot::SnapshotManager;
