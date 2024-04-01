@@ -91,7 +91,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/apex/*/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
-    {},
+    { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
         // clang-format on
 };
 #ifndef __ANDROID_VNDK__
@@ -228,7 +228,7 @@ static const struct fs_path_config android_files[] = {
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/apex/*bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
-    {},
+    { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
         // clang-format on
 };
 #ifndef __ANDROID_VNDK__
@@ -318,8 +318,8 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
 auto __for_testing_only__fs_config_cmp = fs_config_cmp;
 #endif
 
-bool get_fs_config(const char* path, bool dir, const char* target_out_path,
-                   struct fs_config* fs_conf) {
+void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
+               unsigned* mode, uint64_t* capabilities) {
     const struct fs_path_config* pc;
     size_t which, plen;
 
@@ -362,11 +362,11 @@ bool get_fs_config(const char* path, bool dir, const char* target_out_path,
             if (fs_config_cmp(dir, prefix, len, path, plen)) {
                 free(prefix);
                 close(fd);
-                fs_conf->uid = header.uid;
-                fs_conf->gid = header.gid;
-                fs_conf->mode = header.mode;
-                fs_conf->capabilities = header.capabilities;
-                return true;
+                *uid = header.uid;
+                *gid = header.gid;
+                *mode = (*mode & (~07777)) | header.mode;
+                *capabilities = header.capabilities;
+                return;
             }
             free(prefix);
         }
@@ -375,28 +375,11 @@ bool get_fs_config(const char* path, bool dir, const char* target_out_path,
 
     for (pc = dir ? android_dirs : android_files; pc->prefix; pc++) {
         if (fs_config_cmp(dir, pc->prefix, strlen(pc->prefix), path, plen)) {
-            fs_conf->uid = pc->uid;
-            fs_conf->gid = pc->gid;
-            fs_conf->mode = pc->mode;
-            fs_conf->capabilities = pc->capabilities;
-            return true;
+            break;
         }
     }
-    return false;
-}
-
-void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
-               unsigned* mode, uint64_t* capabilities) {
-    struct fs_config conf;
-    if (get_fs_config(path, dir, target_out_path, &conf)) {
-        *uid = conf.uid;
-        *gid = conf.gid;
-        *mode = (*mode & S_IFMT) | conf.mode;
-        *capabilities = conf.capabilities;
-    } else {
-        *uid = AID_ROOT;
-        *gid = AID_ROOT;
-        *mode = (*mode & S_IFMT) | (dir ? 0755 : 0644);
-        *capabilities = 0;
-    }
+    *uid = pc->uid;
+    *gid = pc->gid;
+    *mode = (*mode & (~07777)) | pc->mode;
+    *capabilities = pc->capabilities;
 }
