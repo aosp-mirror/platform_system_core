@@ -21,11 +21,8 @@
 
 #pragma once
 
-#include <fcntl.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <sys/cdefs.h>
-#include <unistd.h>
 
 #include <linux/capability.h>
 
@@ -33,27 +30,17 @@
 
 __BEGIN_DECLS
 
-/* This API is deprecated. New users should call get_fs_config. */
+/*
+ * Used in:
+ *  build/tools/fs_config/fs_config.c
+ *  build/tools/fs_get_stats/fs_get_stats.c
+ *  system/extras/ext4_utils/make_ext4fs_main.c
+ *  external/squashfs-tools/squashfs-tools/android.c
+ *  system/core/cpio/mkbootfs.c
+ *  system/core/adb/file_sync_service.cpp
+ *  system/extras/ext4_utils/canned_fs_config.c
+ */
 void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
                unsigned* mode, uint64_t* capabilities);
-
-struct fs_config {
-  uid_t uid;
-  gid_t gid;
-  mode_t mode;
-  uint64_t capabilities;
-};
-
-/*
- * If a file system configuration was found for the specified path, store it to *conf.
- * Returns whether a file system configuration was found.
- *
- * dir: Whether path refers to a directory.
- * target_out_path: Path to the base directory to read the file system configuration from, or a null
- * pointer to use the root directory as the base. Host code should pass $ANDROID_PRODUCT_OUT or
- * equivalent, and device code should pass a null pointer.
- */
-bool get_fs_config(const char* path, bool dir, const char* target_out_path,
-                   struct fs_config* conf);
 
 __END_DECLS
