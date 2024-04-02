@@ -10,7 +10,10 @@ package {
 cc_test {
     name: "init_kill_services_test",
     srcs: ["init_kill_services_test.cpp"],
-    shared_libs: ["libbase"],
+    shared_libs: [
+        "libbase",
+        "libhidlbase",
+    ],
     test_suites: ["general-tests"],
 
     // TODO(b/153565474): switch back to auto-generation
