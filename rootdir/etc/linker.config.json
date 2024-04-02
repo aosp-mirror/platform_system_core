@@ -32,6 +32,8 @@
   ],
   "provideLibs": [
     "libaptX_encoder.so",
-    "libaptXHD_encoder.so"
+    "libaptXHD_encoder.so",
+    "libEGL.so",
+    "libGLESv2.so"
   ]
 }
