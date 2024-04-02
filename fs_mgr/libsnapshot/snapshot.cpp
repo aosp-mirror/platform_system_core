@@ -3018,6 +3018,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_merge_phase(old_status.merge_phase());
         status.set_userspace_snapshots(old_status.userspace_snapshots());
         status.set_io_uring_enabled(old_status.io_uring_enabled());
+        status.set_legacy_snapuserd(old_status.legacy_snapuserd());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3288,8 +3289,11 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
     }
 
-    LOG(INFO) << "userspace snapshots: " << userspace_snapshots
-              << " legacy_snapuserd: " << legacy_compression;
+    if (!userspace_snapshots && is_legacy_snapuserd && legacy_compression) {
+        userspace_snapshots = true;
+        LOG(INFO) << "Vendor from Android 12. Enabling userspace snapshot for OTA install";
+    }
+
     const bool using_snapuserd = userspace_snapshots || legacy_compression;
     if (!using_snapuserd) {
         LOG(INFO) << "Using legacy Virtual A/B (dm-snapshot)";
@@ -3389,6 +3393,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
 
         if (is_legacy_snapuserd) {
+            LOG(INFO) << "Setting legacy_snapuserd to true";
             status.set_legacy_snapuserd(true);
         }
     } else if (legacy_compression) {

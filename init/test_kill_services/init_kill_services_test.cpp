@@ -18,15 +18,20 @@
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
+#include <hidl/ServiceManagement.h>
 
 #include <iostream>
 
 using ::android::base::GetProperty;
 using ::android::base::SetProperty;
 using ::android::base::WaitForProperty;
+using ::android::hardware::isHidlSupported;
 using std::literals::chrono_literals::operator""s;
 
 void ExpectKillingServiceRecovers(const std::string& service_name) {
+    if (!isHidlSupported() && service_name == "hwservicemanager") {
+        GTEST_SKIP() << "No HIDL support on device so hwservicemanager will not be running";
+    }
     LOG(INFO) << "before we say hi to " << service_name << ", I can't have apexd around!";
 
     // b/280514080 - servicemanager will restart apexd, and apexd will restart the
