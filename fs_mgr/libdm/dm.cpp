@@ -769,5 +769,25 @@ bool DeviceMapper::CreatePlaceholderDevice(const std::string& name) {
     return true;
 }
 
+bool DeviceMapper::SendMessage(const std::string& name, uint64_t sector,
+                               const std::string& message) {
+    std::string ioctl_buffer(sizeof(struct dm_ioctl) + sizeof(struct dm_target_msg), 0);
+    ioctl_buffer += message;
+    ioctl_buffer.push_back('\0');
+
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(&ioctl_buffer[0]);
+    InitIo(io, name);
+    io->data_size = ioctl_buffer.size();
+    io->data_start = sizeof(struct dm_ioctl);
+    struct dm_target_msg* msg =
+            reinterpret_cast<struct dm_target_msg*>(&ioctl_buffer[sizeof(struct dm_ioctl)]);
+    msg->sector = sector;
+    if (ioctl(fd_, DM_TARGET_MSG, io)) {
+        PLOG(ERROR) << "DM_TARGET_MSG failed";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace dm
 }  // namespace android
