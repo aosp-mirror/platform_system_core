@@ -62,7 +62,7 @@ static constexpr char kSnapuserdFirstStageInfoVar[] = "FIRST_STAGE_SNAPUSERD_INF
 static constexpr char kSnapuserdLabel[] = "u:object_r:snapuserd_exec:s0";
 static constexpr char kSnapuserdSocketLabel[] = "u:object_r:snapuserd_socket:s0";
 
-void LaunchFirstStageSnapuserd(SnapshotDriver driver) {
+void LaunchFirstStageSnapuserd() {
     SocketDescriptor socket_desc;
     socket_desc.name = android::snapshot::kSnapuserdSocket;
     socket_desc.type = SOCK_STREAM;
@@ -85,22 +85,13 @@ void LaunchFirstStageSnapuserd(SnapshotDriver driver) {
     if (pid == 0) {
         socket->Publish();
 
-        if (driver == SnapshotDriver::DM_USER) {
-            char arg0[] = "/system/bin/snapuserd";
-            char arg1[] = "-user_snapshot";
-            char* const argv[] = {arg0, arg1, nullptr};
-            if (execv(arg0, argv) < 0) {
-                PLOG(FATAL) << "Cannot launch snapuserd; execv failed";
-            }
-            _exit(127);
-        } else {
-            char arg0[] = "/system/bin/snapuserd";
-            char* const argv[] = {arg0, nullptr};
-            if (execv(arg0, argv) < 0) {
-                PLOG(FATAL) << "Cannot launch snapuserd; execv failed";
-            }
-            _exit(127);
+        char arg0[] = "/system/bin/snapuserd";
+        char arg1[] = "-user_snapshot";
+        char* const argv[] = {arg0, arg1, nullptr};
+        if (execv(arg0, argv) < 0) {
+            PLOG(FATAL) << "Cannot launch snapuserd; execv failed";
         }
+        _exit(127);
     }
 
     auto client = SnapuserdClient::Connect(android::snapshot::kSnapuserdSocket, 10s);
