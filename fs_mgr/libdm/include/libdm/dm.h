@@ -307,6 +307,9 @@ class DeviceMapper final : public IDeviceMapper {
 
     bool GetDeviceNameAndUuid(dev_t dev, std::string* name, std::string* uuid);
 
+    // Send |message| to target, pointed by |name| and |sector|. Use 0 if |sector| is not needed.
+    bool SendMessage(const std::string& name, uint64_t sector, const std::string& message);
+
   private:
     // Maximum possible device mapper targets registered in the kernel.
     // This is only used to read the list of targets from kernel so we allocate
