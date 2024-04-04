@@ -1,2 +1,3 @@
 include platform/system/core:/janitors/OWNERS
 per-file modprobe.c=willmcvicker@google.com,dvander@google.com
+per-file getevent.c=file:platform/frameworks/base:/INPUT_OWNERS
