@@ -349,6 +349,35 @@ class DmTargetError final : public DmTarget {
     std::string GetParameterString() const override { return ""; }
 };
 
+class DmTargetThinPool final : public DmTarget {
+  public:
+    DmTargetThinPool(uint64_t start, uint64_t length, const std::string& metadata_dev,
+                     const std::string& data_dev, uint64_t data_block_size,
+                     uint64_t low_water_mark);
+
+    std::string name() const override { return "thin-pool"; }
+    std::string GetParameterString() const override;
+    bool Valid() const override;
+
+  private:
+    std::string metadata_dev_;
+    std::string data_dev_;
+    uint64_t data_block_size_;
+    uint64_t low_water_mark_;
+};
+
+class DmTargetThin final : public DmTarget {
+  public:
+    DmTargetThin(uint64_t start, uint64_t length, const std::string& pool_dev, uint64_t dev_id);
+
+    std::string name() const override { return "thin"; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string pool_dev_;
+    uint64_t dev_id_;
+};
+
 }  // namespace dm
 }  // namespace android
 

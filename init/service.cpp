@@ -352,14 +352,19 @@ void Service::Reap(const siginfo_t& siginfo) {
     }
 #endif
 
-    // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
+    // If we crash > 20 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
+    // Wait for 20 crashes so RescueParty has a chance to perform the
+    // mitigations. RescueParty finishes all its mitigations at 15 system_server
+    // restarts. If it is still crashing after all rescue party mitigations,
+    // reboot into bootloader.
+    constexpr int crash_count_threshold = 20;
     boot_clock::time_point now = boot_clock::now();
     if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART) &&
         !was_last_exit_ok_) {
         bool boot_completed = GetBoolProperty("sys.boot_completed", false);
         if (now < time_crashed_ + fatal_crash_window_ || !boot_completed) {
-            if (++crash_count_ > 4) {
+            if (++crash_count_ > crash_count_threshold) {
                 auto exit_reason = boot_completed ?
                     "in " + std::to_string(fatal_crash_window_.count()) + " minutes" :
                     "before boot completed";
