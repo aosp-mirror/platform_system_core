@@ -108,7 +108,7 @@ static bool is_permissive_mte() {
                            "persist.device_config.memory_safety_native.permissive.process.%s",
                            getprogname());
   // DO NOT REPLACE this with GetBoolProperty. That uses std::string which allocates, so it is
-  // not async-safe (and this functiong gets used in a signal handler).
+  // not async-safe, and this function gets used in a signal handler.
   return property_parse_bool("persist.sys.mte.permissive") ||
          property_parse_bool("persist.device_config.memory_safety_native.permissive.default") ||
          property_parse_bool(process_sysprop_name) ||
