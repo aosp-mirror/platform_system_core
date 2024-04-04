@@ -441,7 +441,7 @@ static int read_notify(const char *dirname, int nfd, int print_flags)
     if(res < (int)sizeof(*event)) {
         if(errno == EINTR)
             return 0;
-        fprintf(stderr, "could not get event, %s\n", strerror(errno));
+        fprintf(stderr, "could not get inotify events, %s\n", strerror(errno));
         return 1;
     }
     //printf("got %d bytes of event information\n", res);
@@ -664,7 +664,7 @@ int getevent_main(int argc, char *argv[])
                 if(ufds[i].revents & POLLIN) {
                     res = read(ufds[i].fd, &event, sizeof(event));
                     if(res < (int)sizeof(event)) {
-                        fprintf(stderr, "could not get event\n");
+                        fprintf(stderr, "could not get evdev event, %s\n", strerror(errno));
                         return 1;
                     }
                     if(get_time) {
