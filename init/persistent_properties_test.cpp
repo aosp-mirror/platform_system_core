@@ -17,6 +17,9 @@
 #include "persistent_properties.h"
 
 #include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <vector>
 
@@ -153,6 +156,31 @@ TEST(persistent_properties, UpdatePropertyBadParse) {
                          return entry.name() == "persist.sys.locale" && entry.value() == "pt-BR";
                      });
     EXPECT_FALSE(it == read_back_properties.properties().end());
+}
+
+TEST(persistent_properties, NopUpdateDoesntWriteFile) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    persistent_property_filename = tf.path;
+
+    auto last_modified = [&tf]() -> time_t {
+        struct stat buf;
+        EXPECT_EQ(fstat(tf.fd, &buf), 0);
+        return buf.st_mtime;
+    };
+
+    std::vector<std::pair<std::string, std::string>> persistent_properties = {
+            {"persist.sys.locale", "en-US"},
+            {"persist.sys.timezone", "America/Los_Angeles"},
+    };
+    ASSERT_RESULT_OK(
+            WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
+
+    time_t t = last_modified();
+    sleep(2);
+    WritePersistentProperty("persist.sys.locale", "en-US");
+    // Ensure that the file was not modified
+    ASSERT_EQ(last_modified(), t);
 }
 
 TEST(persistent_properties, RejectNonPersistProperty) {
