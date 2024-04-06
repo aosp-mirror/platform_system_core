@@ -37,7 +37,7 @@
 #define BENCH_RESULT_TPL                                    \
 "{"                                                         \
 "    \"schema_version\": 3,"                                \
-"    \"suite_name\": \"crypto\","                           \
+"    \"suite_name\": \"tipc\","                           \
 "    \"bench_name\": \"%s\","                               \
 "    \"results\": ["                                        \
 "        {"                                                 \
