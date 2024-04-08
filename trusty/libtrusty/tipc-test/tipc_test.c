@@ -1041,7 +1041,7 @@ static int run_as_bench(const struct tipc_test_params* params) {
     }
     avg /= params->bench;
 
-    fprintf(stderr, BENCH_RESULT_TPL, params->test_name, min, max, avg, cold, min, max, avg, cold);
+    printf(BENCH_RESULT_TPL, params->test_name, min, max, avg, cold, min, max, avg, cold);
     return rc;
 }
 
