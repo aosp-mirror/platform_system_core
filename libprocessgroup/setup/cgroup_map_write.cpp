@@ -483,6 +483,42 @@ static std::optional<bool> MEMCGDisabled(
     return content.find("memory") == std::string::npos;
 }
 
+static bool CreateV2SubHierarchy(
+        const std::string& path,
+        const std::map<std::string, android::cgrouprc::CgroupDescriptor>& descriptors) {
+    using namespace android::cgrouprc;
+
+    const auto cgv2_iter = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+    if (cgv2_iter == descriptors.end()) return false;
+    const android::cgrouprc::CgroupDescriptor cgv2_descriptor = cgv2_iter->second;
+
+    if (!Mkdir(path, cgv2_descriptor.mode(), cgv2_descriptor.uid(), cgv2_descriptor.gid())) {
+        PLOG(ERROR) << "Failed to create directory for " << path;
+        return false;
+    }
+
+    // Activate all v2 controllers in path so they can be activated in
+    // children as they are created.
+    for (const auto& [name, descriptor] : descriptors) {
+        const format::CgroupController* controller = descriptor.controller();
+        std::uint32_t flags = controller->flags();
+        if (controller->version() == 2 && name != CGROUPV2_HIERARCHY_NAME &&
+            flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+            std::string str("+");
+            str += controller->name();
+            if (!android::base::WriteStringToFile(str, path + "/cgroup.subtree_control")) {
+                if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
+                    PLOG(WARNING) << "Activation of cgroup controller " << str << " failed in path "
+                                  << path;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool CgroupSetup() {
     using namespace android::cgrouprc;
 
@@ -524,6 +560,21 @@ bool CgroupSetup() {
         if (MEMCGDisabled(descriptors).value_or(false)) {
             LOG(WARNING) << "Memcg forced to v2 hierarchy while memcg is disabled by kernel "
                          << "command line!";
+        }
+    }
+
+    // System / app isolation.
+    // This really belongs in early-init in init.rc, but we cannot use the flag there.
+    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation()) {
+        const auto it = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+        const std::string cgroup_v2_root = (it == descriptors.end())
+                                                   ? CGROUP_V2_ROOT_DEFAULT
+                                                   : it->second.controller()->path();
+
+        LOG(INFO) << "Using system/app isolation under: " << cgroup_v2_root;
+        if (!CreateV2SubHierarchy(cgroup_v2_root + "/apps", descriptors) ||
+            !CreateV2SubHierarchy(cgroup_v2_root + "/system", descriptors)) {
+            return false;
         }
     }
 

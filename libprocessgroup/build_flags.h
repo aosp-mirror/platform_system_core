@@ -20,10 +20,18 @@
 #define MEMCG_V2_FORCE_ENABLED false
 #endif
 
+#ifndef CGROUP_V2_SYS_APP_ISOLATION
+#define CGROUP_V2_SYS_APP_ISOLATION false
+#endif
+
 namespace android::libprocessgroup_flags {
 
 inline consteval bool force_memcg_v2() {
     return MEMCG_V2_FORCE_ENABLED;
+}
+
+inline consteval bool cgroup_v2_sys_app_isolation() {
+    return CGROUP_V2_SYS_APP_ISOLATION;
 }
 
 }  // namespace android::libprocessgroup_flags

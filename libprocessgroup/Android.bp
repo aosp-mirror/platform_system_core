@@ -8,6 +8,7 @@ soong_config_module_type {
     config_namespace: "ANDROID",
     bool_variables: [
         "memcg_v2_force_enabled",
+        "cgroup_v2_sys_app_isolation",
     ],
     properties: [
         "cflags",
@@ -21,6 +22,11 @@ libprocessgroup_flag_aware_cc_defaults {
         memcg_v2_force_enabled: {
             cflags: [
                 "-DMEMCG_V2_FORCE_ENABLED=true",
+            ],
+        },
+        cgroup_v2_sys_app_isolation: {
+            cflags: [
+                "-DCGROUP_V2_SYS_APP_ISOLATION=true",
             ],
         },
     },
