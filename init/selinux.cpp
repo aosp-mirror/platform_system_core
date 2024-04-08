@@ -66,6 +66,7 @@
 #include <android-base/result.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+#include <android/avf_cc_flags.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
 #include <libgsi/libgsi.h>
@@ -701,6 +702,15 @@ int SetupSelinux(char** argv) {
     }
 
     SelinuxSetEnforcement();
+
+    if (IsMicrodroid() && android::virtualization::IsOpenDiceChangesFlagEnabled()) {
+        // We run restorecon of /microdroid_resources while we are still in kernel context to avoid
+        // granting init `tmpfs:file relabelfrom` capability.
+        const int flags = SELINUX_ANDROID_RESTORECON_RECURSE;
+        if (selinux_android_restorecon("/microdroid_resources", flags) == -1) {
+            PLOG(FATAL) << "restorecon of /microdroid_resources failed";
+        }
+    }
 
     // We're in the kernel domain and want to transition to the init domain.  File systems that
     // store SELabels in their xattrs, such as ext4 do not need an explicit restorecon here,
