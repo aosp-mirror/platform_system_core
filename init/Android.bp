@@ -255,7 +255,10 @@ cc_library_static {
 
 cc_library_static {
     name: "libinit.microdroid",
-    defaults: ["libinit_defaults"],
+    defaults: [
+        "avf_build_flags_cc",
+        "libinit_defaults",
+    ],
     cflags: ["-DMICRODROID=1"],
 }
 
@@ -315,7 +318,10 @@ cc_binary {
 
 cc_binary {
     name: "init_second_stage.microdroid",
-    defaults: ["init_second_stage_defaults"],
+    defaults: [
+        "avf_build_flags_cc",
+        "init_second_stage_defaults",
+    ],
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     installable: false,
