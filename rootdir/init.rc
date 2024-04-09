@@ -1031,7 +1031,7 @@ on post-fs-data
     perform_apex_config
 
     # Create directories for boot animation.
-    mkdir /data/misc/bootanim 0755 system system encryption=DeleteIfNecessary
+    mkdir /data/misc/bootanim 0755 system system
 
     exec_start derive_sdk
 
