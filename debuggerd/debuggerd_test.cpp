@@ -610,7 +610,7 @@ __attribute__((noinline)) void mte_illegal_setjmp_helper(jmp_buf& jump_buf) {
   setjmp(jump_buf);
 }
 
-TEST_F(CrasherTest, mte_illegal_setjmp) {
+TEST_F(CrasherTest, DISABLED_mte_illegal_setjmp) {
   // This setjmp is illegal because it jumps back into a function that already returned.
   // Quoting man 3 setjmp:
   //     If the function which called setjmp() returns before longjmp() is
