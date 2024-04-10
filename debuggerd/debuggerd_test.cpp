@@ -1874,8 +1874,8 @@ TEST_P(GwpAsanCrasherTest, run_gwp_asan_test) {
   StartProcess([&recoverable]() {
     const char* env[] = {"GWP_ASAN_SAMPLE_RATE=1", "GWP_ASAN_PROCESS_SAMPLING=1",
                          "GWP_ASAN_MAX_ALLOCS=40000", nullptr, nullptr};
-    if (recoverable) {
-      env[3] = "GWP_ASAN_RECOVERABLE=true";
+    if (!recoverable) {
+      env[3] = "GWP_ASAN_RECOVERABLE=false";
     }
     std::string test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
     test_name = std::regex_replace(test_name, std::regex("run_gwp_asan_test"),
