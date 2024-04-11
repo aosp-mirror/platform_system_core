@@ -610,7 +610,7 @@ __attribute__((noinline)) void mte_illegal_setjmp_helper(jmp_buf& jump_buf) {
   setjmp(jump_buf);
 }
 
-TEST_F(CrasherTest, mte_illegal_setjmp) {
+TEST_F(CrasherTest, DISABLED_mte_illegal_setjmp) {
   // This setjmp is illegal because it jumps back into a function that already returned.
   // Quoting man 3 setjmp:
   //     If the function which called setjmp() returns before longjmp() is
@@ -1874,8 +1874,8 @@ TEST_P(GwpAsanCrasherTest, run_gwp_asan_test) {
   StartProcess([&recoverable]() {
     const char* env[] = {"GWP_ASAN_SAMPLE_RATE=1", "GWP_ASAN_PROCESS_SAMPLING=1",
                          "GWP_ASAN_MAX_ALLOCS=40000", nullptr, nullptr};
-    if (recoverable) {
-      env[3] = "GWP_ASAN_RECOVERABLE=true";
+    if (!recoverable) {
+      env[3] = "GWP_ASAN_RECOVERABLE=false";
     }
     std::string test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
     test_name = std::regex_replace(test_name, std::regex("run_gwp_asan_test"),

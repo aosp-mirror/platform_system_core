@@ -134,7 +134,7 @@ bool CowWriterV2::ParseOptions() {
         return false;
     }
     if (parts.size() > 1) {
-        if (!android::base::ParseUint(parts[1], &compression_.compression_level)) {
+        if (!android::base::ParseInt(parts[1], &compression_.compression_level)) {
             LOG(ERROR) << "failed to parse compression level invalid type: " << parts[1];
             return false;
         }
