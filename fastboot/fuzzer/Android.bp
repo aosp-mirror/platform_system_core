@@ -55,7 +55,10 @@ cc_fuzz {
     ],
     fuzz_config: {
         cc: [
-            "android-media-fuzzing-reports@google.com",
+            "dvander@google.com",
+            "elsk@google.com",
+            "enh@google.com",
+            "zhangkelvin@google.com",
         ],
         componentid: 533764,
         hotlists: [
