@@ -1547,9 +1547,14 @@ bool is_userspace_fastboot() {
 
 void reboot_to_userspace_fastboot() {
     fb->RebootTo("fastboot");
+    if (fb->WaitForDisconnect() != fastboot::SUCCESS) {
+        die("Error waiting for USB disconnect.");
+    }
     fb->set_transport(nullptr);
 
-    // Give the current connection time to close.
+    // Not all platforms support WaitForDisconnect. There also isn't a great way to tell whether
+    // or not WaitForDisconnect is supported. So, just wait a bit extra for everyone, in order to
+    // make sure that the device has had time to initiate its reboot and disconnect itself.
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
     fb->set_transport(open_device());
