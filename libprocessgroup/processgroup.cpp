@@ -78,14 +78,6 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     return true;
 }
 
-static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
-    return StringPrintf("%s/uid_%u", cgroup, uid);
-}
-
-static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, pid_t pid) {
-    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
-}
-
 static bool CgroupKillAvailable() {
     static std::once_flag f;
     static bool cgroup_kill_available = false;

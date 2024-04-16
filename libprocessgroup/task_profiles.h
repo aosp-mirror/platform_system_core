@@ -82,8 +82,8 @@ class ProfileAction {
 
     virtual void EnableResourceCaching(ResourceCacheType) {}
     virtual void DropResourceCaching(ResourceCacheType) {}
-    virtual bool IsValidForProcess(uid_t uid, pid_t pid) const { return false; }
-    virtual bool IsValidForTask(pid_t tid) const { return false; }
+    virtual bool IsValidForProcess(uid_t, pid_t) const { return false; }
+    virtual bool IsValidForTask(pid_t) const { return false; }
 
   protected:
     enum CacheUseResult { SUCCESS, FAIL, UNUSED };
@@ -109,8 +109,8 @@ class SetTimerSlackAction : public ProfileAction {
 
     const char* Name() const override { return "SetTimerSlack"; }
     bool ExecuteForTask(pid_t tid) const override;
-    bool IsValidForProcess(uid_t uid, pid_t pid) const override { return true; }
-    bool IsValidForTask(pid_t tid) const override { return true; }
+    bool IsValidForProcess(uid_t, pid_t) const override { return true; }
+    bool IsValidForTask(pid_t) const override { return true; }
 
   private:
     unsigned long slack_;
@@ -252,3 +252,6 @@ class TaskProfiles {
     std::map<std::string, std::shared_ptr<TaskProfile>, std::less<>> profiles_;
     std::map<std::string, std::unique_ptr<IProfileAttribute>, std::less<>> attributes_;
 };
+
+std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid);
+std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid);
