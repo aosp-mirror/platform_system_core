@@ -247,6 +247,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     } else {
         printf("done\n");
+        printf("\nNOTE: device reboot may be required before changes take effect.\n");
         return EXIT_SUCCESS;
     }
 }
