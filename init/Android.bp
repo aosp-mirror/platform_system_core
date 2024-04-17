@@ -259,6 +259,7 @@ cc_library_static {
         "avf_build_flags_cc",
         "libinit_defaults",
     ],
+    recovery_available: false,
     cflags: ["-DMICRODROID=1"],
 }
 
@@ -276,6 +277,13 @@ cc_defaults {
     defaults: ["init_defaults"],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
+}
+
+cc_binary {
+    name: "init_second_stage",
+    defaults: ["init_second_stage_defaults"],
+    static_libs: ["libinit"],
+    visibility: ["//visibility:any_system_partition"],
     target: {
         platform: {
             required: [
@@ -310,18 +318,12 @@ cc_defaults {
 }
 
 cc_binary {
-    name: "init_second_stage",
-    defaults: ["init_second_stage_defaults"],
-    static_libs: ["libinit"],
-    visibility: ["//visibility:any_system_partition"],
-}
-
-cc_binary {
     name: "init_second_stage.microdroid",
     defaults: [
         "avf_build_flags_cc",
         "init_second_stage_defaults",
     ],
+    recovery_available: false,
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     installable: false,
