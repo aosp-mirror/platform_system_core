@@ -109,7 +109,7 @@ cc_defaults {
         },
     },
     fuzz_config: {
-       cc: ["smoreland@google.com"],
+        cc: ["smoreland@google.com"],
     },
 }
 
@@ -273,6 +273,17 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
+    fuzz_config: {
+        cc: [
+            "smoreland@google.com",
+        ],
+        componentid: 128577,
+        description: "The fuzzer targets the APIs of libutils",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped",
+    },
 }
 
 cc_fuzz {
