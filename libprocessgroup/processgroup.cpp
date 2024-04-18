@@ -695,6 +695,15 @@ static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string c
 }
 
 int createProcessGroup(uid_t uid, pid_t initialPid, bool memControl) {
+    if (uid < 0) {
+        LOG(ERROR) << __func__ << ": invalid UID " << uid;
+        return -1;
+    }
+    if (initialPid <= 0) {
+        LOG(ERROR) << __func__ << ": invalid PID " << initialPid;
+        return -1;
+    }
+
     if (memControl && !UsePerAppMemcg()) {
         LOG(ERROR) << "service memory controls are used without per-process memory cgroup support";
         return -EINVAL;
