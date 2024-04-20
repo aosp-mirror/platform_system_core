@@ -147,6 +147,29 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
     entry->fs_options = std::move(fs_options);
 }
 
+void ParseUserDevices(const std::string& arg, FstabEntry* entry) {
+    auto param = Split(arg, ":");
+    if (param.size() != 2) {
+        LWARNING << "Warning: device= malformed: " << arg;
+        return;
+    }
+
+    if (access(param[1].c_str(), F_OK) != 0) {
+        LWARNING << "Warning: device does not exist : " << param[1];
+        return;
+    }
+
+    if (param[0] == "zoned") {
+        // atgc in f2fs does not support a zoned device
+        auto options = Split(entry->fs_options, ",");
+        options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
+        entry->fs_options = android::base::Join(options, ",");
+        LINFO << "Removed ATGC in fs_options as " << entry->fs_options << " for zoned device";
+        entry->fs_mgr_flags.is_zoned = true;
+    }
+    entry->user_devices.push_back(param[1]);
+}
+
 bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     for (const auto& flag : Split(flags, ",")) {
         if (flag.empty() || flag == "defaults") continue;
@@ -311,17 +334,8 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (flag == "zoned_device") {
-            if (access("/dev/block/by-name/zoned_device", F_OK) == 0) {
-                entry->zoned_device = "/dev/block/by-name/zoned_device";
-
-                // atgc in f2fs does not support a zoned device
-                auto options = Split(entry->fs_options, ",");
-                options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
-                entry->fs_options = android::base::Join(options, ",");
-                LINFO << "Removed ATGC in fs_options as " << entry->fs_options
-                      << " for zoned device=" << entry->zoned_device;
-            }
+        } else if (StartsWith(flag, "device=")) {
+            ParseUserDevices(arg, entry);
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
