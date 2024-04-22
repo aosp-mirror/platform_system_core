@@ -40,7 +40,7 @@
 #define ALTERNATE_DATA_DIR "alternate/"
 
 /* Maximum file size for filesystem backed storage (i.e. not block dev backed storage) */
-static size_t max_file_size = 0x10000000000;
+static uint64_t max_file_size = 0x10000000000;
 
 enum sync_state {
     SS_UNUSED = -1,
@@ -778,7 +778,8 @@ err_response:
 int determine_max_file_size(const char* max_file_size_from) {
     /* Use default if none passed in */
     if (max_file_size_from == NULL) {
-        ALOGI("No max file source given, continuing to use default: 0x%lx\n", max_file_size);
+        ALOGI("No max file source given, continuing to use default: 0x%" PRIx64 "\n",
+              max_file_size);
         return 0;
     }
 
@@ -823,7 +824,7 @@ int determine_max_file_size(const char* max_file_size_from) {
     close(fd);
     max_file_size = max_size;
 
-    ALOGI("Using 0x%lx as max file size\n", max_file_size);
+    ALOGI("Using 0x%" PRIx64 " as max file size\n", max_file_size);
     return 0;
 }
 
