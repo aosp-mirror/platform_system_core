@@ -425,16 +425,6 @@ on init
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
 
-    # qtaguid will limit access to specific data based on group memberships.
-    #   net_bw_acct grants impersonation of socket owners.
-    #   net_bw_stats grants access to other apps' detailed tagged-socket stats.
-    chown root net_bw_acct /proc/net/xt_qtaguid/ctrl
-    chown root net_bw_stats /proc/net/xt_qtaguid/stats
-
-    # Allow everybody to read the xt_qtaguid resource tracking misc dev.
-    # This is needed by any process that uses socket tagging.
-    chmod 0644 /dev/xt_qtaguid
-
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # pstore/ramoops previous console log
