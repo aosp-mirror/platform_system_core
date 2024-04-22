@@ -656,10 +656,6 @@ on late-fs
     exec -- /system/bin/fsverity_init --load-verified-keys
 
 # Only enable the bootreceiver tracing instance for kernels 5.10 and above.
-on late-fs && property:ro.kernel.version=4.9
-    setprop bootreceiver.enable 0
-on late-fs && property:ro.kernel.version=4.14
-    setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=4.19
     setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=5.4
