@@ -110,6 +110,7 @@ class MapSnapshots {
   private:
     std::optional<std::string> GetCowImagePath(std::string& name);
     bool PrepareUpdate();
+    bool GetCowDevicePath(std::string partition_name, std::string* cow_path);
     bool WriteSnapshotPatch(std::string cow_device, std::string patch);
     std::string GetGroupName(const android::fs_mgr::LpMetadata& pt,
                              const std::string& partiton_name);
@@ -231,6 +232,23 @@ bool MapSnapshots::PrepareUpdate() {
     return true;
 }
 
+bool MapSnapshots::GetCowDevicePath(std::string partition_name, std::string* cow_path) {
+    auto& dm = android::dm::DeviceMapper::Instance();
+    std::string cow_device = partition_name + "-cow";
+    if (dm.GetDmDevicePathByName(cow_device, cow_path)) {
+        return true;
+    }
+
+    LOG(INFO) << "Failed to find cow path: " << cow_device << " Checking the device for -img path";
+    // If the COW device exists only on /data
+    cow_device = partition_name + "-cow-img";
+    if (!dm.GetDmDevicePathByName(cow_device, cow_path)) {
+        LOG(ERROR) << "Failed to cow path: " << cow_device;
+        return false;
+    }
+    return true;
+}
+
 bool MapSnapshots::ApplyUpdate() {
     if (!PrepareUpdate()) {
         LOG(ERROR) << "PrepareUpdate failed";
@@ -253,15 +271,13 @@ bool MapSnapshots::ApplyUpdate() {
 
     LOG(INFO) << "MapAllSnapshots success";
 
-    auto& dm = android::dm::DeviceMapper::Instance();
     auto target_slot = fs_mgr_get_other_slot_suffix();
     for (auto& patchfile : patchfiles_) {
         auto npos = patchfile.rfind(".patch");
         auto partition_name = patchfile.substr(0, npos) + target_slot;
-        auto cow_device = partition_name + "-cow";
         std::string cow_path;
-        if (!dm.GetDmDevicePathByName(cow_device, &cow_path)) {
-            LOG(ERROR) << "Failed to cow path";
+        if (!GetCowDevicePath(partition_name, &cow_path)) {
+            LOG(ERROR) << "Failed to find cow path";
             return false;
         }
         threads_.emplace_back(std::async(std::launch::async, &MapSnapshots::WriteSnapshotPatch,
