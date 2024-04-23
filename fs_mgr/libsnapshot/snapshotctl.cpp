@@ -47,7 +47,9 @@
 
 #include "partition_cow_creator.h"
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 #include <BootControlClient.h>
+#endif
 
 using namespace std::chrono_literals;
 using namespace std::string_literals;
@@ -92,6 +94,7 @@ int Usage() {
 namespace android {
 namespace snapshot {
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 class MapSnapshots {
   public:
     MapSnapshots(std::string path = "");
@@ -107,6 +110,7 @@ class MapSnapshots {
   private:
     std::optional<std::string> GetCowImagePath(std::string& name);
     bool PrepareUpdate();
+    bool GetCowDevicePath(std::string partition_name, std::string* cow_path);
     bool WriteSnapshotPatch(std::string cow_device, std::string patch);
     std::string GetGroupName(const android::fs_mgr::LpMetadata& pt,
                              const std::string& partiton_name);
@@ -228,6 +232,23 @@ bool MapSnapshots::PrepareUpdate() {
     return true;
 }
 
+bool MapSnapshots::GetCowDevicePath(std::string partition_name, std::string* cow_path) {
+    auto& dm = android::dm::DeviceMapper::Instance();
+    std::string cow_device = partition_name + "-cow";
+    if (dm.GetDmDevicePathByName(cow_device, cow_path)) {
+        return true;
+    }
+
+    LOG(INFO) << "Failed to find cow path: " << cow_device << " Checking the device for -img path";
+    // If the COW device exists only on /data
+    cow_device = partition_name + "-cow-img";
+    if (!dm.GetDmDevicePathByName(cow_device, cow_path)) {
+        LOG(ERROR) << "Failed to cow path: " << cow_device;
+        return false;
+    }
+    return true;
+}
+
 bool MapSnapshots::ApplyUpdate() {
     if (!PrepareUpdate()) {
         LOG(ERROR) << "PrepareUpdate failed";
@@ -250,15 +271,13 @@ bool MapSnapshots::ApplyUpdate() {
 
     LOG(INFO) << "MapAllSnapshots success";
 
-    auto& dm = android::dm::DeviceMapper::Instance();
     auto target_slot = fs_mgr_get_other_slot_suffix();
     for (auto& patchfile : patchfiles_) {
         auto npos = patchfile.rfind(".patch");
         auto partition_name = patchfile.substr(0, npos) + target_slot;
-        auto cow_device = partition_name + "-cow";
         std::string cow_path;
-        if (!dm.GetDmDevicePathByName(cow_device, &cow_path)) {
-            LOG(ERROR) << "Failed to cow path";
+        if (!GetCowDevicePath(partition_name, &cow_path)) {
+            LOG(ERROR) << "Failed to find cow path";
             return false;
         }
         threads_.emplace_back(std::async(std::launch::async, &MapSnapshots::WriteSnapshotPatch,
@@ -462,6 +481,7 @@ bool MapSnapshots::DeleteSnapshots() {
     }
     return true;
 }
+#endif
 
 bool DumpCmdHandler(int /*argc*/, char** argv) {
     android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
@@ -485,6 +505,7 @@ bool MergeCmdHandler(int /*argc*/, char** argv) {
     return false;
 }
 
+#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 bool GetVerityPartitions(std::vector<std::string>& partitions) {
     auto& dm = android::dm::DeviceMapper::Instance();
     auto dm_block_devices = dm.FindDmPartitions();
@@ -637,7 +658,6 @@ bool MapPrecreatedSnapshots(int argc, char** argv) {
     return cow.FinishSnapshotWrites();
 }
 
-#ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 bool CreateTestUpdate(SnapshotManager* sm) {
     chromeos_update_engine::DeltaArchiveManifest manifest;
 
@@ -761,13 +781,13 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"map", MapCmdHandler},
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
         {"test-blank-ota", TestOtaHandler},
-#endif
-        {"unmap", UnmapCmdHandler},
         {"apply-update", ApplyUpdate},
         {"map-snapshots", MapPrecreatedSnapshots},
         {"unmap-snapshots", UnMapPrecreatedSnapshots},
         {"delete-snapshots", DeletePrecreatedSnapshots},
         {"revert-snapshots", RemovePrecreatedSnapshots},
+#endif
+        {"unmap", UnmapCmdHandler},
         // clang-format on
 };
 
