@@ -203,7 +203,7 @@ void set_human_readable_cause(Cause* cause, uint64_t fault_addr) {
 }
 
 static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
-                                const ProcessInfo& process_info, const ThreadInfo& main_thread) {
+                                const ProcessInfo& process_info, const ThreadInfo& target_thread) {
 #if defined(USE_SCUDO)
   ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
   if (scudo_crash_data.CrashIsMine()) {
@@ -213,13 +213,13 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
 #endif
 
   GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
-                                       main_thread);
+                                       target_thread);
   if (gwp_asan_crash_data.CrashIsMine()) {
     gwp_asan_crash_data.AddCauseProtos(tombstone, unwinder);
     return;
   }
 
-  const siginfo *si = main_thread.siginfo;
+  const siginfo *si = target_thread.siginfo;
   auto fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
   unwindstack::Maps* maps = unwinder->GetMaps();
 
@@ -238,14 +238,14 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
     } else if (fault_addr == 0xffff0f60) {
       cause = "call to kuser_cmpxchg64";
     } else {
-      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, target_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
     auto map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
-      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, target_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
     cause = StringPrintf("seccomp prevented call to disallowed %s system call %d", ABI_STRING,
@@ -685,7 +685,7 @@ static void dump_tags_around_fault_addr(Signal* signal, const Tombstone& tombsto
 }
 
 void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
-                             const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
+                             const std::map<pid_t, ThreadInfo>& threads, pid_t target_tid,
                              const ProcessInfo& process_info, const OpenFilesList* open_files) {
   Tombstone result;
 
@@ -694,19 +694,19 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
   result.set_revision(android::base::GetProperty("ro.revision", "unknown"));
   result.set_timestamp(get_timestamp());
 
-  const ThreadInfo& main_thread = threads.at(target_thread);
-  result.set_pid(main_thread.pid);
-  result.set_tid(main_thread.tid);
-  result.set_uid(main_thread.uid);
-  result.set_selinux_label(main_thread.selinux_label);
+  const ThreadInfo& target_thread = threads.at(target_tid);
+  result.set_pid(target_thread.pid);
+  result.set_tid(target_thread.tid);
+  result.set_uid(target_thread.uid);
+  result.set_selinux_label(target_thread.selinux_label);
   // The main thread must have a valid siginfo.
-  CHECK(main_thread.siginfo != nullptr);
+  CHECK(target_thread.siginfo != nullptr);
 
   struct sysinfo si;
   sysinfo(&si);
   android::procinfo::ProcessInfo proc_info;
   std::string error;
-  if (android::procinfo::GetProcessInfo(main_thread.pid, &proc_info, &error)) {
+  if (android::procinfo::GetProcessInfo(target_thread.pid, &proc_info, &error)) {
     uint64_t starttime = proc_info.starttime / sysconf(_SC_CLK_TCK);
     result.set_process_uptime(si.uptime - starttime);
   } else {
@@ -715,24 +715,24 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
   }
 
   auto cmd_line = result.mutable_command_line();
-  for (const auto& arg : main_thread.command_line) {
+  for (const auto& arg : target_thread.command_line) {
     *cmd_line->Add() = arg;
   }
 
-  if (!main_thread.siginfo) {
+  if (!target_thread.siginfo) {
     async_safe_fatal("siginfo missing");
   }
 
   Signal sig;
-  sig.set_number(main_thread.signo);
-  sig.set_name(get_signame(main_thread.siginfo));
-  sig.set_code(main_thread.siginfo->si_code);
-  sig.set_code_name(get_sigcode(main_thread.siginfo));
+  sig.set_number(target_thread.signo);
+  sig.set_name(get_signame(target_thread.siginfo));
+  sig.set_code(target_thread.siginfo->si_code);
+  sig.set_code_name(get_sigcode(target_thread.siginfo));
 
-  if (signal_has_sender(main_thread.siginfo, main_thread.pid)) {
+  if (signal_has_sender(target_thread.siginfo, target_thread.pid)) {
     sig.set_has_sender(true);
-    sig.set_sender_uid(main_thread.siginfo->si_uid);
-    sig.set_sender_pid(main_thread.siginfo->si_pid);
+    sig.set_sender_uid(target_thread.siginfo->si_uid);
+    sig.set_sender_pid(target_thread.siginfo->si_pid);
   }
 
   if (process_info.has_fault_address) {
@@ -746,28 +746,28 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
 
   dump_abort_message(&result, unwinder->GetProcessMemory(), process_info);
   dump_crash_details(&result, unwinder->GetProcessMemory(), process_info);
-  // Dump the main thread, but save the memory around the registers.
-  dump_thread(&result, unwinder, main_thread, /* memory_dump */ true);
+  // Dump the target thread, but save the memory around the registers.
+  dump_thread(&result, unwinder, target_thread, /* memory_dump */ true);
 
   for (const auto& [tid, thread_info] : threads) {
-    if (tid != target_thread) {
+    if (tid != target_tid) {
       dump_thread(&result, unwinder, thread_info);
     }
   }
 
-  dump_probable_cause(&result, unwinder, process_info, main_thread);
+  dump_probable_cause(&result, unwinder, process_info, target_thread);
 
   dump_mappings(&result, unwinder->GetMaps(), unwinder->GetProcessMemory());
 
   // Only dump logs on debuggable devices.
   if (android::base::GetBoolProperty("ro.debuggable", false)) {
     // Get the thread that corresponds to the main pid of the process.
-    const ThreadInfo& thread = threads.at(main_thread.pid);
+    const ThreadInfo& thread = threads.at(target_thread.pid);
 
     // Do not attempt to dump logs of the logd process because the gathering
     // of logs can hang until a timeout occurs.
     if (thread.thread_name != "logd") {
-      dump_logcat(&result, main_thread.pid);
+      dump_logcat(&result, target_thread.pid);
     }
   }
 
