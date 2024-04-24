@@ -135,7 +135,7 @@ std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
     unique_fd fd(cow_system_->fd);
     cow_system_->fd = -1;
 
-    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+    return CreateCowWriter(2, options, std::move(fd));
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
