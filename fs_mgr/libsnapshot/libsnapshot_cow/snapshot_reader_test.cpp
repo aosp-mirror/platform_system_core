@@ -184,7 +184,7 @@ TEST_F(OfflineSnapshotTest, CompressedSnapshot) {
     unique_fd cow_fd(dup(cow_->fd));
     ASSERT_GE(cow_fd, 0);
 
-    auto writer = CreateCowWriter(kDefaultCowVersion, options, std::move(cow_fd));
+    auto writer = CreateCowWriter(2, options, std::move(cow_fd));
     ASSERT_NO_FATAL_FAILURE(WriteCow(writer.get()));
     ASSERT_NO_FATAL_FAILURE(TestReads(writer.get()));
 }
