@@ -108,6 +108,9 @@ std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string
 FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string& path);
 const FstabEntry* GetEntryForMountPoint(const Fstab* fstab, const std::string& path);
 
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string_view path,
+                                  const std::string_view fstype);
+
 // This method builds DSU fstab entries and transfer the fstab.
 //
 // fstab points to the unmodified fstab.
