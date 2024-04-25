@@ -484,7 +484,11 @@ bool Modprobe::LoadModulesParallel(int num_threads) {
                 return false;
             }
 
-            if (module_options_[cnd_last].find("load_sequential=1") != std::string::npos) {
+            std::string str = "load_sequential=1";
+            auto it = module_options_[cnd_last].find(str);
+            if (it != std::string::npos) {
+                module_options_[cnd_last].erase(it, it + str.size());
+
                 if (!LoadWithAliases(cnd_last, true)) {
                     return false;
                 }
