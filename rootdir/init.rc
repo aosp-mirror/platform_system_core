@@ -870,6 +870,9 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
 
+    # Create directory for app metadata files
+    mkdir /data/app-metadata 0700 system system encryption=Require
+
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
     mkdir /data/fonts/files 0771 system system
