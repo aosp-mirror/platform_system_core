@@ -125,10 +125,12 @@ void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd,
                        unwindstack::AndroidUnwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
                        const ProcessInfo& process_info, OpenFilesList* open_files,
-                       std::string* amfd_data) {
+                       std::string* amfd_data, Architecture* guest_arch,
+                       unwindstack::AndroidUnwinder* guest_unwinder) {
   // Don't copy log messages to tombstone unless this is a development device.
   Tombstone tombstone;
-  engrave_tombstone_proto(&tombstone, unwinder, threads, target_thread, process_info, open_files);
+  engrave_tombstone_proto(&tombstone, unwinder, threads, target_thread, process_info, open_files,
+                          guest_arch, guest_unwinder);
 
   if (proto_fd != -1) {
     if (!tombstone.SerializeToFileDescriptor(proto_fd.get())) {
