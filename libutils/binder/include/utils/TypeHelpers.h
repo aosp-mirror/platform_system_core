@@ -109,6 +109,11 @@ ANDROID_BASIC_TYPES_TRAITS( unsigned long long )
 ANDROID_BASIC_TYPES_TRAITS( float )
 ANDROID_BASIC_TYPES_TRAITS( double )
 
+template<typename T> struct trait_trivial_ctor<T*>   { enum { value = true }; };
+template<typename T> struct trait_trivial_dtor<T*>   { enum { value = true }; };
+template<typename T> struct trait_trivial_copy<T*>   { enum { value = true }; };
+template<typename T> struct trait_trivial_move<T*>   { enum { value = true }; };
+
 // ---------------------------------------------------------------------------
 
 
