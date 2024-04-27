@@ -82,6 +82,7 @@ class Subsystem {
     enum DevnameSource {
         DEVNAME_UEVENT_DEVNAME,
         DEVNAME_UEVENT_DEVPATH,
+        DEVNAME_SYS_NAME,
     };
 
     Subsystem() {}
@@ -92,10 +93,18 @@ class Subsystem {
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc
     std::string ParseDevPath(const Uevent& uevent) const {
-        std::string devname = devname_source_ == DEVNAME_UEVENT_DEVNAME
-                                      ? uevent.device_name
-                                      : android::base::Basename(uevent.path);
-
+        std::string devname;
+        if (devname_source_ == DEVNAME_UEVENT_DEVNAME) {
+            devname = uevent.device_name;
+        } else if (devname_source_ == DEVNAME_UEVENT_DEVPATH) {
+            devname = android::base::Basename(uevent.path);
+        } else if (devname_source_ == DEVNAME_SYS_NAME) {
+            if (android::base::ReadFileToString("/sys/" + uevent.path + "/name", &devname)) {
+                devname.pop_back();  // Remove terminating newline
+            } else {
+                devname = uevent.device_name;
+            }
+        }
         return dir_name_ + "/" + devname;
     }
 

@@ -870,6 +870,9 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
 
+    # Create directory for app metadata files
+    mkdir /data/app-metadata 0700 system system encryption=Require
+
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
     mkdir /data/fonts/files 0771 system system
@@ -958,6 +961,10 @@ on post-fs-data
     mkdir /data/vendor_ce 0551 root root encryption=None
     mkdir /data/vendor_de 0551 root root encryption=None
 
+    # Similar to the top-level CE and DE directories, /data/storage_area must
+    # itself be unencrypted, since it contains encrypted directories.
+    mkdir /data/storage_area 0551 root root encryption=None
+
     # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
     # needed first to relabel the directory from media_rw_data_file.
     restorecon /data/media
@@ -971,8 +978,12 @@ on post-fs-data
     mkdir /data_mirror/data_de 0700 root root
     mkdir /data_mirror/misc_ce 0700 root root
     mkdir /data_mirror/misc_de 0700 root root
+    mkdir /data_mirror/storage_area 0700 root root
 
     # Create CE and DE data directory for default volume
+    # Not needed for storage_area directory, since this is
+    # not supported for non-default volumes and the path
+    # does not include the volume ID
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
     mkdir /data_mirror/misc_ce/null 0700 root root
@@ -986,6 +997,9 @@ on post-fs-data
     mount none /data/user_de /data_mirror/data_de/null bind rec
     mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
     mount none /data/misc_de /data_mirror/misc_de/null bind rec
+
+    # Also bind mount for the storage area directory (minus the volume ID)
+    mount none /data/storage_area /data_mirror/storage_area bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
@@ -1327,6 +1341,8 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null/0
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
+  umount /data_mirror/storage_area/0
+  umount /data_mirror/storage_area
   umount /data_mirror/cur_profiles
   umount /data_mirror/ref_profiles
   umount /data_mirror
