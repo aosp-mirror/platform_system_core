@@ -456,6 +456,7 @@ init_first_stage_cc_defaults {
 
         // First stage init is weird: it may start without stdout/stderr, and no /proc.
         hwaddress: false,
+        memtag_stack: false,
     },
 
     // Install adb_debug.prop into debug ramdisk.
