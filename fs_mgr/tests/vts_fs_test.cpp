@@ -74,6 +74,7 @@ TEST(fs, ErofsSupported) {
     ASSERT_EQ(access("/sys/fs/erofs", F_OK), 0);
 }
 
+// @VsrTest = 3.7.10
 TEST(fs, PartitionTypes) {
     // Requirements only apply to Android 13+, 5.10+ devices.
     int vsr_level = GetVsrLevel();

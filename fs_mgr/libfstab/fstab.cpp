@@ -849,6 +849,14 @@ std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string
                             [&path](const FstabEntry& entry) { return entry.mount_point == path; });
 }
 
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string_view path,
+                                  const std::string_view fstype) {
+    auto&& vec = GetEntriesByPred(fstab, [&path, fstype](const FstabEntry& entry) {
+        return entry.mount_point == path && entry.fs_type == fstype;
+    });
+    return vec.empty() ? nullptr : vec.front();
+}
+
 std::vector<const FstabEntry*> GetEntriesForMountPoint(const Fstab* fstab,
                                                        const std::string& path) {
     return GetEntriesByPred(fstab,

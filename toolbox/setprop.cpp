@@ -58,7 +58,7 @@ extern "C" int setprop_main(int argc, char** argv) {
         }
     }
 
-    if (value.size() >= PROP_VALUE_MAX && !StartsWith(value, "ro.")) {
+    if (value.size() >= PROP_VALUE_MAX && !StartsWith(name, "ro.")) {
         std::cerr << "Value '" << value << "' is too long, " << value.size()
                   << " bytes vs a max of " << PROP_VALUE_MAX << std::endl;
         return EXIT_FAILURE;

@@ -3,19 +3,6 @@ LOCAL_PATH:= $(call my-dir)
 $(eval $(call declare-1p-copy-files,system/core/rootdir,))
 
 #######################################
-# init-debug.rc
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := init-debug.rc
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
-
-include $(BUILD_PREBUILT)
-
-#######################################
 # asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 

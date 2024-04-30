@@ -37,12 +37,14 @@
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 #include <libdm/loop_control.h>
+#include <storage_literals/storage_literals.h>
 #include "test_util.h"
 #include "utility.h"
 
 using namespace std;
 using namespace std::chrono_literals;
 using namespace android::dm;
+using namespace android::storage_literals;
 using android::base::make_scope_guard;
 using android::base::unique_fd;
 
@@ -772,4 +774,43 @@ TEST_F(DmTest, GetNameAndUuid) {
     ASSERT_TRUE(dm.GetDeviceNameAndUuid(dev, &name, &uuid));
     ASSERT_EQ(name, test_name_);
     ASSERT_FALSE(uuid.empty());
+}
+
+TEST_F(DmTest, ThinProvisioning) {
+    if (!DeviceMapper::Instance().GetTargetByName("thin-pool", nullptr)) GTEST_SKIP();
+
+    constexpr uint64_t MetaSize = 2_MiB;
+    constexpr uint64_t DataSize = 64_MiB;
+    constexpr uint64_t ThinSize = 1_TiB;
+
+    // Prepare two loop devices for meta and data devices.
+    TemporaryFile meta;
+    ASSERT_GE(meta.fd, 0);
+    ASSERT_EQ(0, ftruncate64(meta.fd, MetaSize));
+    TemporaryFile data;
+    ASSERT_GE(data.fd, 0);
+    ASSERT_EQ(0, ftruncate64(data.fd, DataSize));
+
+    LoopDevice loop_meta(meta.fd, 10s);
+    ASSERT_TRUE(loop_meta.valid());
+    LoopDevice loop_data(data.fd, 10s);
+    ASSERT_TRUE(loop_data.valid());
+
+    // Create a thin-pool
+    DmTable poolTable;
+    poolTable.Emplace<DmTargetThinPool>(0, DataSize / kSectorSize, loop_meta.device(),
+                                        loop_data.device(), 128, 0);
+    TempDevice pool("pool", poolTable);
+    ASSERT_TRUE(pool.valid());
+
+    // Create a thin volume
+    uint64_t thin_volume_id = 0;
+    ASSERT_TRUE(DeviceMapper::Instance().SendMessage(
+            "pool", 0, "create_thin " + std::to_string(thin_volume_id)));
+
+    // Use a thin volume to create a 1T device
+    DmTable thinTable;
+    thinTable.Emplace<DmTargetThin>(0, ThinSize / kSectorSize, pool.path(), thin_volume_id);
+    TempDevice thin("thin", thinTable);
+    ASSERT_TRUE(thin.valid());
 }

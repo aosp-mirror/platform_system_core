@@ -373,7 +373,6 @@ cc_test {
 
     sanitize: {
         memtag_heap: true,
-        memtag_stack: true,
     },
 
     shared_libs: [
