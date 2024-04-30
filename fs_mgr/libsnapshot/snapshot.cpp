@@ -24,7 +24,6 @@
 #include <filesystem>
 #include <optional>
 #include <thread>
-#include <unordered_set>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -46,7 +45,6 @@
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/snapshot_stats.h>
 #include "device_info.h"
-#include "libsnapshot_cow/parser_v2.h"
 #include "partition_cow_creator.h"
 #include "snapshot_metadata_updater.h"
 #include "utility.h"
@@ -3309,7 +3307,7 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             compression_algorithm = "gz";
         }
         LOG(INFO) << "using compression algorithm: " << compression_algorithm
-                   << ", max compressible block size: " << compression_factor;
+                  << ", max compressible block size: " << compression_factor;
     }
 
     PartitionCowCreator cow_creator{

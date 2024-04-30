@@ -71,6 +71,9 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
     srcs: [":libdm_test_srcs"],
     auto_gen_config: true,
     require_root: true,
