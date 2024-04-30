@@ -33,7 +33,10 @@ typedef struct pkg_info {
   /** Package name like "com.android.blah". */
   char* name;
 
-  /** Package uid like 10014. */
+  /**
+   * Package uid like 10014.
+   * Note that apexes and SDK libraries may have a bogus 0xffffffff value.
+   */
   uid_t uid;
 
   /** Package's AndroidManifest.xml debuggable flag. */

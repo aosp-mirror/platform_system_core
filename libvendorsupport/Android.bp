@@ -23,7 +23,7 @@ cc_library {
     llndk: {
         symbol_file: "libvendorsupport.map.txt",
     },
-    srcs: ["version_props.c"],
+    srcs: ["version_props.cpp"],
     cflags: [
         "-Wall",
         "-Werror",
@@ -32,6 +32,7 @@ cc_library {
     export_include_dirs: ["include"],
     shared_libs: [
         "liblog",
+        "libbase",
     ],
 }
 
