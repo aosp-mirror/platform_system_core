@@ -96,7 +96,6 @@ soong_config_module_type {
     config_namespace: "ANDROID",
     bool_variables: [
         "PRODUCT_INSTALL_DEBUG_POLICY_TO_SYSTEM_EXT",
-        "release_write_appcompat_override_system_properties",
     ],
     properties: [
         "cflags",
@@ -160,9 +159,6 @@ libinit_cc_defaults {
                 "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=1",
             ],
         },
-        release_write_appcompat_override_system_properties: {
-            cflags: ["-DWRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES"],
-        }
     },
     static_libs: [
         "libavb",
