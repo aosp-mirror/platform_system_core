@@ -330,7 +330,7 @@ cc_binary {
     recovery_available: false,
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
-    installable: false,
+    no_full_install: true,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
@@ -480,7 +480,7 @@ cc_binary {
         "init_first_stage_defaults",
     ],
     cflags: ["-DMICRODROID=1"],
-    installable: false,
+    no_full_install: true,
 }
 
 phony {
