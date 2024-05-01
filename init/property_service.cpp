@@ -453,6 +453,10 @@ static uint32_t SendControlMessage(const std::string& msg, const std::string& na
                                    SocketConnection* socket, std::string* error) {
     auto lock = std::lock_guard{accept_messages_lock};
     if (!accept_messages) {
+        // If we're already shutting down and you're asking us to stop something,
+        // just say we did (https://issuetracker.google.com/336223505).
+        if (msg == "stop") return PROP_SUCCESS;
+
         *error = "Received control message after shutdown, ignoring";
         return PROP_ERROR_HANDLE_CONTROL_MESSAGE;
     }
