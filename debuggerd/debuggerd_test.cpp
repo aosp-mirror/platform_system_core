@@ -1667,6 +1667,9 @@ TEST_F(CrasherTest, seccomp_tombstone_thread_abort) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(
+      result,
+      R"(signal 6 \(SIGABRT\))");
   ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
