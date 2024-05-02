@@ -125,7 +125,8 @@ static int format_ext4(const std::string& fs_blkdev, const std::string& fs_mnt_p
 }
 
 static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs_projid,
-                       bool needs_casefold, bool fs_compress, const std::string& zoned_device) {
+                       bool needs_casefold, bool fs_compress, bool is_zoned,
+                       const std::vector<std::string>& user_devices) {
     if (!dev_sz) {
         int rc = get_dev_sz(fs_blkdev, &dev_sz);
         if (rc) {
@@ -159,16 +160,21 @@ static int format_f2fs(const std::string& fs_blkdev, uint64_t dev_sz, bool needs
     args.push_back(block_size.c_str());
     args.push_back("-b");
     args.push_back(block_size.c_str());
-    if (!zoned_device.empty()) {
-        args.push_back("-c");
-        args.push_back(zoned_device.c_str());
+
+    if (is_zoned) {
         args.push_back("-m");
-        args.push_back(fs_blkdev.c_str());
-    } else {
-        args.push_back(fs_blkdev.c_str());
-        args.push_back(size_str.c_str());
+    }
+    for (auto& device : user_devices) {
+        args.push_back("-c");
+        args.push_back(device.c_str());
     }
 
+    if (user_devices.empty()) {
+        args.push_back(fs_blkdev.c_str());
+        args.push_back(size_str.c_str());
+    } else {
+        args.push_back(fs_blkdev.c_str());
+    }
     return logwrap_fork_execvp(args.size(), args.data(), nullptr, false, LOG_KLOG, false, nullptr);
 }
 
@@ -184,7 +190,8 @@ int fs_mgr_do_format(const FstabEntry& entry) {
 
     if (entry.fs_type == "f2fs") {
         return format_f2fs(entry.blk_device, entry.length, needs_projid, needs_casefold,
-                           entry.fs_mgr_flags.fs_compress, entry.zoned_device);
+                           entry.fs_mgr_flags.fs_compress, entry.fs_mgr_flags.is_zoned,
+                           entry.user_devices);
     } else if (entry.fs_type == "ext4") {
         return format_ext4(entry.blk_device, entry.mount_point, needs_projid,
                            entry.fs_mgr_flags.ext_meta_csum);
