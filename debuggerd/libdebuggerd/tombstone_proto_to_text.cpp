@@ -586,6 +586,13 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
   CBL("Timestamp: %s", tombstone.timestamp().c_str());
   CBL("Process uptime: %ds", tombstone.process_uptime());
 
+  // only print this info if the page size is not 4k or has been in 16k mode
+  if (tombstone.page_size() != 4096) {
+    CBL("Page size: %d bytes", tombstone.page_size());
+  } else if (tombstone.has_been_16kb_mode()) {
+    CBL("Has been in 16kb mode: yes");
+  }
+
   // Process header
   const auto& threads = tombstone.threads();
   auto main_thread_it = threads.find(tombstone.tid());
