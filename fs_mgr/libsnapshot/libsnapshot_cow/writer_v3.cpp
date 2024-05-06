@@ -731,7 +731,8 @@ bool CowWriterV3::WriteOperation(std::span<const CowOperationV3> ops,
             i += chunk;
         }
         if (total_written != total_data_size) {
-            PLOG(ERROR) << "write failed for data of size: " << data.size()
+            PLOG(ERROR) << "write failed for data vector of size: " << data.size()
+                        << " and total data length: " << total_data_size
                         << " at offset: " << next_data_pos_ << " " << errno
                         << ", only wrote: " << total_written;
             return false;
