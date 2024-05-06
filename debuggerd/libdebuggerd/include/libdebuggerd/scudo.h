@@ -16,6 +16,8 @@
 
 #pragma once
 
+#if defined(USE_SCUDO)
+
 #include "types.h"
 #include "utility.h"
 
@@ -49,3 +51,5 @@ class ScudoCrashData {
   void FillInCause(Cause* cause, const scudo_error_report* report,
                    unwindstack::AndroidUnwinder* unwinder) const;
 };
+
+#endif  // USE_SCUDO
