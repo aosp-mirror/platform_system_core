@@ -46,7 +46,10 @@ message Tombstone {
   repeated LogBuffer log_buffers = 18;
   repeated FD open_fds = 19;
 
-  reserved 22 to 999;
+  uint32 page_size = 22;
+  bool has_been_16kb_mode = 23;
+
+  reserved 24 to 999;
 }
 
 enum Architecture {
