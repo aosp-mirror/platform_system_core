@@ -79,8 +79,8 @@ static std::string describe_pac_enabled_keys(long value) {
   return describe_end(value, desc);
 }
 
-static const char* abi_string(const Tombstone& tombstone) {
-  switch (tombstone.arch()) {
+static const char* abi_string(const Architecture& arch) {
+  switch (arch) {
     case Architecture::ARM32:
       return "arm";
     case Architecture::ARM64:
@@ -578,11 +578,37 @@ void print_logs(CallbackType callback, const Tombstone& tombstone, int tail) {
   }
 }
 
+static void print_guest_thread(CallbackType callback, const Tombstone& tombstone,
+                               const Thread& guest_thread) {
+  CBS("--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---");
+  CBS("Guest thread information");
+  print_thread_registers(callback, tombstone, guest_thread, true);
+
+  CBS("");
+  CB(true, "%d total frames", guest_thread.current_backtrace().size());
+  CB(true, "backtrace:");
+  print_backtrace(callback, tombstone, guest_thread.current_backtrace(), true);
+
+  print_thread_memory_dump(callback, tombstone, guest_thread);
+
+  CBS("");
+
+  // No memory maps to print.
+  if (!tombstone.memory_mappings().empty()) {
+    print_memory_maps(callback, tombstone);
+  } else {
+    CBS("No memory maps found");
+  }
+}
+
 bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) {
   CBL("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
   CBL("Build fingerprint: '%s'", tombstone.build_fingerprint().c_str());
   CBL("Revision: '%s'", tombstone.revision().c_str());
-  CBL("ABI: '%s'", abi_string(tombstone));
+  CBL("ABI: '%s'", abi_string(tombstone.arch()));
+  if (tombstone.guest_arch() != Architecture::NONE) {
+    CBL("Guest architecture: '%s'", abi_string(tombstone.guest_arch()));
+  }
   CBL("Timestamp: %s", tombstone.timestamp().c_str());
   CBL("Process uptime: %ds", tombstone.process_uptime());
 
@@ -634,6 +660,11 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
   }
 
   print_logs(callback, tombstone, 0);
+
+  // Process guest thread
+  if (tombstone.has_guest_thread()) {
+    print_guest_thread(callback, tombstone, tombstone.guest_thread());
+  }
 
   return true;
 }

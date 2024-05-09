@@ -22,6 +22,7 @@ message CrashDetail {
 
 message Tombstone {
   Architecture arch = 1;
+  Architecture guest_arch = 24;
   string build_fingerprint = 2;
   string revision = 3;
   string timestamp = 4;
@@ -42,6 +43,7 @@ message Tombstone {
   repeated Cause causes = 15;
 
   map<uint32, Thread> threads = 16;
+  Thread guest_thread = 25;
   repeated MemoryMapping memory_mappings = 17;
   repeated LogBuffer log_buffers = 18;
   repeated FD open_fds = 19;
@@ -49,7 +51,7 @@ message Tombstone {
   uint32 page_size = 22;
   bool has_been_16kb_mode = 23;
 
-  reserved 24 to 999;
+  reserved 26 to 999;
 }
 
 enum Architecture {
@@ -58,8 +60,9 @@ enum Architecture {
   X86 = 2;
   X86_64 = 3;
   RISCV64 = 4;
+  NONE = 5;
 
-  reserved 5 to 999;
+  reserved 6 to 999;
 }
 
 message Signal {
