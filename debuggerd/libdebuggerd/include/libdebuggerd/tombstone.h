@@ -28,6 +28,7 @@
 #include <android-base/unique_fd.h>
 
 #include "open_files_list.h"
+#include "tombstone.pb.h"
 #include "types.h"
 
 // Forward declarations
@@ -54,14 +55,17 @@ void engrave_tombstone(android::base::unique_fd output_fd, android::base::unique
                        unwindstack::AndroidUnwinder* unwinder,
                        const std::map<pid_t, ThreadInfo>& thread_info, pid_t target_thread,
                        const ProcessInfo& process_info, OpenFilesList* open_files,
-                       std::string* amfd_data);
+                       std::string* amfd_data, Architecture* guest_arch = nullptr,
+                       unwindstack::AndroidUnwinder* guest_unwinder = nullptr);
 
 void engrave_tombstone_ucontext(int tombstone_fd, int proto_fd, uint64_t abort_msg_address,
                                 siginfo_t* siginfo, ucontext_t* ucontext);
 
 void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
                              const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
-                             const ProcessInfo& process_info, const OpenFilesList* open_files);
+                             const ProcessInfo& process_info, const OpenFilesList* open_files,
+                             Architecture* guest_arch,
+                             unwindstack::AndroidUnwinder* guest_unwinder);
 
 bool tombstone_proto_to_text(
     const Tombstone& tombstone,
