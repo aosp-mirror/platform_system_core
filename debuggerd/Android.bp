@@ -452,7 +452,6 @@ cc_binary {
 
     header_libs: [
         "bionic_libc_platform_headers",
-        "libnative_bridge_support_accessor_headers",
     ],
 
     static_libs: [
@@ -462,8 +461,6 @@ cc_binary {
 
         "libtombstone_proto",
         "libprotobuf-cpp-lite",
-
-        "libnative_bridge_guest_state_accessor",
     ],
 
     shared_libs: [
@@ -479,15 +476,6 @@ cc_binary {
 
     // Required for tests.
     required: ["crash_dump.policy"],
-
-    target: {
-        android: {
-            header_libs: [
-                "libnative_bridge_support_accessor_headers", // For dlext_namespaces.h
-            ],
-            shared_libs: ["libdl_android"], // For android_get_exported_namespace implementation
-        },
-    },
 }
 
 cc_binary {
