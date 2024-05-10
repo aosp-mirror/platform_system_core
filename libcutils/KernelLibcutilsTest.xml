@@ -22,11 +22,11 @@
 
     <target_preparer class="com.android.tradefed.targetprep.PushFilePreparer">
         <option name="cleanup" value="true" />
-        <option name="push" value="KernelLibcutilsTest->/data/local/tmp/KernelLibcutilsTest" />
+        <option name="push" value="KernelLibcutilsTest->/data/local/tests/unrestricted/KernelLibcutilsTest" />
     </target_preparer>
 
     <test class="com.android.tradefed.testtype.GTest" >
-        <option name="native-test-device-path" value="/data/local/tmp" />
+        <option name="native-test-device-path" value="/data/local/tests/unrestricted" />
         <option name="module-name" value="KernelLibcutilsTest" />
         <option name="include-filter" value="*AshmemTest*" />
     </test>

@@ -459,6 +459,16 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,sys_ldo_ok,pmic,main", 227},
     {"reboot,sys_ldo_ok,pmic,sub", 228},
     {"reboot,smpl_timeout,pmic,main", 229},
+    {"reboot,ota,.*", 230},
+    {"reboot,periodic,.*", 231},
+    {"reboot,early,abl", 232},
+    {"reboot,early,bl2", 233},
+    {"reboot,longkey,pmic_cold", 234},
+    {"reboot,longkey,master_dc", 235},
+    {"reboot,ocp2,pmic,if", 236},
+    {"reboot,ocp,pmic,if", 237},
+    {"reboot,fship", 238},
+    {"reboot,ocp,.*", 239},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -820,7 +830,7 @@ std::string getSubreason(const std::string& content, size_t pos, bool quoted) {
   return subReason;
 }
 
-bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
+void addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
   // Check for kernel panic types to refine information
   if ((console.rfind("SysRq : Trigger a crash") != std::string::npos) ||
       (console.rfind("PC is at sysrq_handle_crash+") != std::string::npos)) {
@@ -832,63 +842,61 @@ bool addKernelPanicSubReason(const pstoreConsole& console, std::string& ret) {
     if (pos != std::string::npos) {
       ret += "," + getSubreason(console, pos + strlen(sysrqSubreason), /* quoted */ true);
     }
-    return true;
+    return;
   }
   if (console.rfind("Unable to handle kernel NULL pointer dereference at virtual address") !=
       std::string::npos) {
     ret = "kernel_panic,null";
-    return true;
+    return;
   }
   if (console.rfind("Kernel BUG at ") != std::string::npos) {
     ret = "kernel_panic,bug";
-    return true;
+    return;
   }
 
   std::string panic("Kernel panic - not syncing: ");
   auto pos = console.rfind(panic);
-  if (pos != std::string::npos) {
-    static const std::vector<std::pair<const std::string, const std::string>> panicReasons = {
-        {"Out of memory", "oom"},
-        {"out of memory", "oom"},
-        {"Oh boy, that early out of memory", "oom"},  // omg
-        {"BUG!", "bug"},
-        {"hung_task: blocked tasks", "hung"},
-        {"audit: ", "audit"},
-        {"scheduling while atomic", "atomic"},
-        {"Attempted to kill init!", "init"},
-        {"Requested init", "init"},
-        {"No working init", "init"},
-        {"Could not decompress init", "init"},
-        {"RCU Stall", "hung,rcu"},
-        {"stack-protector", "stack"},
-        {"kernel stack overflow", "stack"},
-        {"Corrupt kernel stack", "stack"},
-        {"low stack detected", "stack"},
-        {"corrupted stack end", "stack"},
-        {"subsys-restart: Resetting the SoC - modem crashed.", "modem"},
-        {"subsys-restart: Resetting the SoC - adsp crashed.", "adsp"},
-        {"subsys-restart: Resetting the SoC - dsps crashed.", "dsps"},
-        {"subsys-restart: Resetting the SoC - wcnss crashed.", "wcnss"},
-    };
+  if (pos == std::string::npos) return;
 
-    ret = "kernel_panic";
-    for (auto& s : panicReasons) {
-      if (console.find(panic + s.first, pos) != std::string::npos) {
-        ret += "," + s.second;
-        return true;
-      }
+  static const std::vector<std::pair<const std::string, const std::string>> panicReasons = {
+      {"Out of memory", "oom"},
+      {"out of memory", "oom"},
+      {"Oh boy, that early out of memory", "oom"},  // omg
+      {"BUG!", "bug"},
+      {"hung_task: blocked tasks", "hung"},
+      {"audit: ", "audit"},
+      {"scheduling while atomic", "atomic"},
+      {"Attempted to kill init!", "init"},
+      {"Requested init", "init"},
+      {"No working init", "init"},
+      {"Could not decompress init", "init"},
+      {"RCU Stall", "hung,rcu"},
+      {"stack-protector", "stack"},
+      {"kernel stack overflow", "stack"},
+      {"Corrupt kernel stack", "stack"},
+      {"low stack detected", "stack"},
+      {"corrupted stack end", "stack"},
+      {"subsys-restart: Resetting the SoC - modem crashed.", "modem"},
+      {"subsys-restart: Resetting the SoC - adsp crashed.", "adsp"},
+      {"subsys-restart: Resetting the SoC - dsps crashed.", "dsps"},
+      {"subsys-restart: Resetting the SoC - wcnss crashed.", "wcnss"},
+  };
+
+  ret = "kernel_panic";
+  for (auto& s : panicReasons) {
+    if (console.find(panic + s.first, pos) != std::string::npos) {
+      ret += "," + s.second;
+      return;
     }
-    auto reason = getSubreason(console, pos + panic.length(), /* newline */ false);
-    if (reason.length() > 3) {
-      ret += "," + reason;
-    }
-    return true;
   }
-  return false;
+  auto reason = getSubreason(console, pos + panic.length(), /* newline */ false);
+  if (reason.length() > 3) {
+    ret += "," + reason;
+  }
 }
 
-bool addKernelPanicSubReason(const std::string& content, std::string& ret) {
-  return addKernelPanicSubReason(pstoreConsole(content), ret);
+void addKernelPanicSubReason(const std::string& content, std::string& ret) {
+  addKernelPanicSubReason(pstoreConsole(content), ret);
 }
 
 const char system_reboot_reason_property[] = "sys.boot.reason";
@@ -1069,12 +1077,7 @@ std::string BootReasonStrToReason(const std::string& boot_reason) {
       }
 
       // Check for kernel panics, allowed to override reboot command.
-      if (!addKernelPanicSubReason(console, ret) &&
-          // check for long-press power down
-          ((console.rfind("Power held for ") != std::string::npos) ||
-           (console.rfind("charger: [") != std::string::npos))) {
-        ret = "cold";
-      }
+      (void)addKernelPanicSubReason(console, ret);
     }
 
     // TODO: use the HAL to get battery level (http://b/77725702).

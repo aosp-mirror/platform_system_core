@@ -1,0 +1,97 @@
+//
+// Copyright (C) 2022 The Android Open-Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+rust_binary {
+    name: "android.hardware.security.secretkeeper.trusty",
+    relative_install_path: "hw",
+    vendor: true,
+    init_rc: ["android.hardware.security.secretkeeper.trusty.rc"],
+    vintf_fragments: ["android.hardware.security.secretkeeper.trusty.xml"],
+    srcs: [
+        "src/hal_main.rs",
+    ],
+    rustlibs: [
+        "libandroid_logger",
+        "libauthgraph_hal",
+        "libauthgraph_wire",
+        "libbinder_rs",
+        "liblibc",
+        "liblog_rust",
+        "libsecretkeeper_hal",
+        "libtrusty-rs",
+    ],
+    defaults: [
+        "secretkeeper_use_latest_hal_aidl_rust",
+    ],
+    prefer_rlib: true,
+}
+
+cc_defaults {
+    name: "trusty_secretkeeper_fuzz_defaults",
+    srcs: [":trusty_tipc_fuzzer"],
+    fuzz_config: {
+        cc: [
+            "alanstokes@google.com",
+            "drysdale@google.com",
+            "shikhapanwar@google.com",
+        ],
+        componentid: 867125,
+        // TODO: add Secretkeeper hotlist
+        // hotlists: [""],
+    },
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_sk_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_ag_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper.authgraph\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}
+
+cc_fuzz {
+    name: "trusty_secretkeeper_bl_fuzzer",
+    defaults: [
+        "trusty_fuzzer_defaults",
+        "trusty_secretkeeper_fuzz_defaults",
+    ],
+    cflags: [
+        "-DTRUSTY_APP_PORT=\"com.android.trusty.secretkeeper.bootloader\"",
+        "-DTRUSTY_APP_UUID=\"4582bf12-1f7d-4830-9be5-36e6bd91c2c6\"",
+        "-DTRUSTY_APP_FILENAME=\"secretkeeper_app.syms.elf\"",
+    ],
+}

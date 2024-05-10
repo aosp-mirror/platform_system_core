@@ -108,8 +108,8 @@ static AvbIOResult get_size_of_partition(AvbOps* ops ATTRIBUTE_UNUSED,
 // Converts a partition name (with ab_suffix) to the corresponding mount point.
 // e.g., "system_a" => "/system",
 // e.g., "vendor_a" => "/vendor",
-static std::string DeriveMountPoint(const std::string& partition_name) {
-    const std::string ab_suffix = fs_mgr_get_slot_suffix();
+static std::string DeriveMountPoint(const std::string& partition_name,
+                                    const std::string& ab_suffix) {
     std::string mount_point(partition_name);
     auto found = partition_name.rfind(ab_suffix);
     if (found != std::string::npos) {
@@ -119,7 +119,7 @@ static std::string DeriveMountPoint(const std::string& partition_name) {
     return "/" + mount_point;
 }
 
-FsManagerAvbOps::FsManagerAvbOps() {
+FsManagerAvbOps::FsManagerAvbOps(const std::string& slot_suffix) {
     // We only need to provide the implementation of read_from_partition()
     // operation since that's all what is being used by the avb_slot_verify().
     // Other I/O operations are only required in bootloader but not in
@@ -135,6 +135,11 @@ FsManagerAvbOps::FsManagerAvbOps() {
 
     // Sets user_data for GetInstanceFromAvbOps() to convert it back to FsManagerAvbOps.
     avb_ops_.user_data = this;
+
+    slot_suffix_ = slot_suffix;
+    if (slot_suffix_.empty()) {
+        slot_suffix_ = fs_mgr_get_slot_suffix();
+    }
 }
 
 // Given a partition name (with ab_suffix), e.g., system_a, returns the corresponding
@@ -149,7 +154,7 @@ std::string FsManagerAvbOps::GetLogicalPath(const std::string& partition_name) {
         return "";
     }
 
-    const auto mount_point = DeriveMountPoint(partition_name);
+    const auto mount_point = DeriveMountPoint(partition_name, slot_suffix_);
     if (mount_point.empty()) return "";
 
     auto fstab_entry = GetEntryForMountPoint(&fstab_, mount_point);

@@ -28,6 +28,7 @@ using namespace std;
 using namespace android::os;
 using namespace android::os::storaged;
 
+namespace android {
 class StoragedService : public BinderService<StoragedService>, public BnStoraged {
 private:
     void dumpUidRecordsDebug(int fd, const vector<struct uid_record>& entries);
@@ -53,4 +54,5 @@ public:
 
 sp<IStoragedPrivate> get_storaged_pri_service();
 
+}  // namespace android
 #endif /* _STORAGED_SERVICE_H_ */

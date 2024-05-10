@@ -26,7 +26,9 @@ cc_fuzz {
         "-DTRUSTY_APP_FILENAME=\"keymaster.syms.elf\"",
     ],
     fuzz_config: {
-       cc: ["trong@google.com"],
+       cc: ["trong@google.com", "drysdale@google.com"],
+       componentid: 1084733,
+       hotlists: ["4271696"],
     },
 
     // The initial corpus for this fuzzer was derived by dumping messages from

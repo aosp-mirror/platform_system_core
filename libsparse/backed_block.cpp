@@ -315,6 +315,10 @@ int backed_block_add_file(struct backed_block_list* bbl, const char* filename, i
   bb->len = len;
   bb->type = BACKED_BLOCK_FILE;
   bb->file.filename = strdup(filename);
+  if (!bb->file.filename) {
+    free(bb);
+    return -ENOMEM;
+  }
   bb->file.offset = offset;
   bb->next = nullptr;
 
@@ -359,14 +363,17 @@ int backed_block_split(struct backed_block_list* bbl, struct backed_block* bb,
   new_bb->len = bb->len - max_len;
   new_bb->block = bb->block + max_len / bbl->block_size;
   new_bb->next = bb->next;
-  bb->next = new_bb;
-  bb->len = max_len;
 
   switch (bb->type) {
     case BACKED_BLOCK_DATA:
       new_bb->data.data = (char*)bb->data.data + max_len;
       break;
     case BACKED_BLOCK_FILE:
+      new_bb->file.filename = strdup(bb->file.filename);
+      if (!new_bb->file.filename) {
+        free(new_bb);
+        return -ENOMEM;
+      }
       new_bb->file.offset += max_len;
       break;
     case BACKED_BLOCK_FD:
@@ -376,5 +383,7 @@ int backed_block_split(struct backed_block_list* bbl, struct backed_block* bb,
       break;
   }
 
+  bb->next = new_bb;
+  bb->len = max_len;
   return 0;
 }

@@ -23,6 +23,7 @@
 #include <sys/types.h>
 
 #include <memory>
+#include <unordered_map>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -122,24 +123,6 @@ void RemoveLegacyPersistentPropertyFiles() {
     }
 }
 
-PersistentProperties LoadPersistentPropertiesFromMemory() {
-    PersistentProperties persistent_properties;
-    __system_property_foreach(
-        [](const prop_info* pi, void* cookie) {
-            __system_property_read_callback(
-                pi,
-                [](void* cookie, const char* name, const char* value, unsigned serial) {
-                    if (StartsWith(name, "persist.")) {
-                        auto properties = reinterpret_cast<PersistentProperties*>(cookie);
-                        AddPersistentProperty(name, value, properties);
-                    }
-                },
-                cookie);
-        },
-        &persistent_properties);
-    return persistent_properties;
-}
-
 Result<std::string> ReadPersistentPropertyFile() {
     const std::string temp_filename = persistent_property_filename + ".tmp";
     if (access(temp_filename.c_str(), F_OK) == 0) {
@@ -161,9 +144,9 @@ Result<PersistentProperties> ParsePersistentPropertyFile(const std::string& file
         return Error() << "Unable to parse persistent property file: Could not parse protobuf";
     }
     for (auto& prop : persistent_properties.properties()) {
-        if (!StartsWith(prop.name(), "persist.")) {
+        if (!StartsWith(prop.name(), "persist.") && !StartsWith(prop.name(), "next_boot.")) {
             return Error() << "Unable to load persistent property file: property '" << prop.name()
-                           << "' doesn't start with 'persist.'";
+                           << "' doesn't start with 'persist.' or 'next_boot.'";
         }
     }
     return persistent_properties;
@@ -221,6 +204,24 @@ Result<void> WritePersistentPropertyFile(const PersistentProperties& persistent_
     return {};
 }
 
+PersistentProperties LoadPersistentPropertiesFromMemory() {
+    PersistentProperties persistent_properties;
+    __system_property_foreach(
+            [](const prop_info* pi, void* cookie) {
+                __system_property_read_callback(
+                        pi,
+                        [](void* cookie, const char* name, const char* value, unsigned serial) {
+                            if (StartsWith(name, "persist.")) {
+                                auto properties = reinterpret_cast<PersistentProperties*>(cookie);
+                                AddPersistentProperty(name, value, properties);
+                            }
+                        },
+                        cookie);
+            },
+            &persistent_properties);
+    return persistent_properties;
+}
+
 // Persistent properties are not written often, so we rather not keep any data in memory and read
 // then rewrite the persistent property file for each update.
 void WritePersistentProperty(const std::string& name, const std::string& value) {
@@ -235,6 +236,9 @@ void WritePersistentProperty(const std::string& name, const std::string& value) 
                            persistent_properties->mutable_properties()->end(),
                            [&name](const auto& record) { return record.name() == name; });
     if (it != persistent_properties->mutable_properties()->end()) {
+        if (it->value() == value) {
+            return;
+        }
         it->set_name(name);
         it->set_value(value);
     } else {
@@ -266,8 +270,57 @@ PersistentProperties LoadPersistentProperties() {
         }
     }
 
-    return *persistent_properties;
+    // loop over to find all staged props
+    auto const staged_prefix = std::string_view("next_boot.");
+    auto staged_props = std::unordered_map<std::string, std::string>();
+    for (const auto& property_record : persistent_properties->properties()) {
+        auto const& prop_name = property_record.name();
+        auto const& prop_value = property_record.value();
+        if (StartsWith(prop_name, staged_prefix)) {
+            auto actual_prop_name = prop_name.substr(staged_prefix.size());
+            staged_props[actual_prop_name] = prop_value;
+        }
+    }
+
+    if (staged_props.empty()) {
+        return *persistent_properties;
+    }
+
+    // if has staging, apply staging and perserve the original prop order
+    PersistentProperties updated_persistent_properties;
+    for (const auto& property_record : persistent_properties->properties()) {
+        auto const& prop_name = property_record.name();
+        auto const& prop_value = property_record.value();
+
+        // don't include staged props anymore
+        if (StartsWith(prop_name, staged_prefix)) {
+            continue;
+        }
+
+        auto iter = staged_props.find(prop_name);
+        if (iter != staged_props.end()) {
+            AddPersistentProperty(prop_name, iter->second, &updated_persistent_properties);
+            staged_props.erase(iter);
+        } else {
+            AddPersistentProperty(prop_name, prop_value, &updated_persistent_properties);
+        }
+    }
+
+    // add any additional staged props
+    for (auto const& [prop_name, prop_value] : staged_props) {
+        AddPersistentProperty(prop_name, prop_value, &updated_persistent_properties);
+    }
+
+    // write current updated persist prop file
+    auto result = WritePersistentPropertyFile(updated_persistent_properties);
+    if (!result.ok()) {
+        LOG(ERROR) << "Could not store persistent property: " << result.error();
+    }
+
+    return updated_persistent_properties;
 }
+
+
 
 }  // namespace init
 }  // namespace android

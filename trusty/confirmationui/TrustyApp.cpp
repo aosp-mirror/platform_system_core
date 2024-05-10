@@ -30,10 +30,6 @@ namespace confirmationui {
 
 using ::android::base::unique_fd;
 
-static inline uintptr_t RoundPageUp(uintptr_t val) {
-    return (val + (PAGE_SIZE - 1)) & ~(PAGE_SIZE - 1);
-}
-
 ssize_t TrustyApp::TrustyRpc(const uint8_t* obegin, const uint8_t* oend, uint8_t* ibegin,
                              uint8_t* iend) {
     uint32_t olen = oend - obegin;
@@ -99,7 +95,7 @@ TrustyApp::TrustyApp(const std::string& path, const std::string& appname)
         return;
     }
 
-    uint32_t shm_len = RoundPageUp(CONFIRMATIONUI_MAX_MSG_SIZE);
+    uint32_t shm_len = CONFIRMATIONUI_MAX_MSG_SIZE;
     BufferAllocator allocator;
     unique_fd dma_buf(allocator.Alloc("system", shm_len));
     if (dma_buf < 0) {

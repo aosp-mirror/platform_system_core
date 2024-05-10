@@ -17,6 +17,9 @@
 #include "persistent_properties.h"
 
 #include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <vector>
 
@@ -155,6 +158,31 @@ TEST(persistent_properties, UpdatePropertyBadParse) {
     EXPECT_FALSE(it == read_back_properties.properties().end());
 }
 
+TEST(persistent_properties, NopUpdateDoesntWriteFile) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    persistent_property_filename = tf.path;
+
+    auto last_modified = [&tf]() -> time_t {
+        struct stat buf;
+        EXPECT_EQ(fstat(tf.fd, &buf), 0);
+        return buf.st_mtime;
+    };
+
+    std::vector<std::pair<std::string, std::string>> persistent_properties = {
+            {"persist.sys.locale", "en-US"},
+            {"persist.sys.timezone", "America/Los_Angeles"},
+    };
+    ASSERT_RESULT_OK(
+            WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
+
+    time_t t = last_modified();
+    sleep(2);
+    WritePersistentProperty("persist.sys.locale", "en-US");
+    // Ensure that the file was not modified
+    ASSERT_EQ(last_modified(), t);
+}
+
 TEST(persistent_properties, RejectNonPersistProperty) {
     TemporaryFile tf;
     ASSERT_TRUE(tf.fd != -1);
@@ -176,6 +204,38 @@ TEST(persistent_properties, RejectNonPersistProperty) {
                                       entry.value() == "pt-BR";
                            });
     EXPECT_FALSE(it == read_back_properties.properties().end());
+}
+
+TEST(persistent_properties, StagedPersistProperty) {
+    TemporaryFile tf;
+    ASSERT_TRUE(tf.fd != -1);
+    persistent_property_filename = tf.path;
+
+    std::vector<std::pair<std::string, std::string>> persistent_properties = {
+        {"persist.sys.locale", "en-US"},
+        {"next_boot.persist.test.numbers", "54321"},
+        {"persist.sys.timezone", "America/Los_Angeles"},
+        {"persist.test.numbers", "12345"},
+        {"next_boot.persist.test.extra", "abc"},
+    };
+
+    ASSERT_RESULT_OK(
+            WritePersistentPropertyFile(VectorToPersistentProperties(persistent_properties)));
+
+    std::vector<std::pair<std::string, std::string>> expected_persistent_properties = {
+        {"persist.sys.locale", "en-US"},
+        {"persist.sys.timezone", "America/Los_Angeles"},
+        {"persist.test.numbers", "54321"},
+        {"persist.test.extra", "abc"},
+    };
+
+    // lock down that staged props are applied
+    auto first_read_back_properties = LoadPersistentProperties();
+    CheckPropertiesEqual(expected_persistent_properties, first_read_back_properties);
+
+    // lock down that other props are not overwritten
+    auto second_read_back_properties = LoadPersistentProperties();
+    CheckPropertiesEqual(expected_persistent_properties, second_read_back_properties);
 }
 
 }  // namespace init

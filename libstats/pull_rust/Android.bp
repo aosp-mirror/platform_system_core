@@ -28,7 +28,6 @@ rust_bindgen {
     ],
     source_stem: "bindings",
     bindgen_flags: [
-        "--size_t-is-usize",
         "--allowlist-function=AStatsEventList_addStatsEvent",
         "--allowlist-function=AStatsEvent_.*",
         "--allowlist-function=AStatsManager_.*",
@@ -61,8 +60,8 @@ rust_library {
     crate_name: "statspull_rust",
     srcs: ["stats_pull.rs"],
     rustlibs: [
-        "liblazy_static",
         "liblog_rust",
+        "libonce_cell",
         "libstatslog_rust_header",
         "libstatspull_bindgen",
     ],

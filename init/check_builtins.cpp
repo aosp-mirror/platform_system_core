@@ -28,9 +28,9 @@
 #include <android-base/parsedouble.h>
 #include <android-base/parseint.h>
 #include <android-base/strings.h>
+#include <property_info_parser/property_info_parser.h>
 
 #include "builtin_arguments.h"
-#include "host_init_verifier.h"
 #include "interface_utils.h"
 #include "property_type.h"
 #include "rlimit_parser.h"
@@ -39,6 +39,9 @@
 
 using android::base::ParseInt;
 using android::base::StartsWith;
+using android::properties::BuildTrie;
+using android::properties::PropertyInfoArea;
+using android::properties::PropertyInfoEntry;
 
 #define ReturnIfAnyArgsEmpty()     \
     for (const auto& arg : args) { \
@@ -49,6 +52,26 @@ using android::base::StartsWith;
 
 namespace android {
 namespace init {
+
+const PropertyInfoArea* property_info_area;
+
+Result<void> InitializeHostPropertyInfoArea(const std::vector<PropertyInfoEntry>& property_infos) {
+    static std::string serialized_contexts;
+    std::string trie_error;
+    if (!BuildTrie(property_infos, "u:object_r:default_prop:s0", "string", &serialized_contexts,
+                   &trie_error)) {
+        return Error() << "Unable to serialize property contexts: " << trie_error;
+    }
+
+    property_info_area = reinterpret_cast<const PropertyInfoArea*>(serialized_contexts.c_str());
+    return {};
+}
+
+static Result<void> check_stub(const BuiltinArguments& args) {
+    return {};
+}
+
+#include "generated_stub_builtin_function_map.h"
 
 Result<void> check_chown(const BuiltinArguments& args) {
     if (!args[1].empty()) {

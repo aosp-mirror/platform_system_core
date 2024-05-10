@@ -20,7 +20,7 @@
 
 #include <pthread.h>
 
-#include <utils/Log.h>
+#include <log/log.h>
 #include <utils/Vector.h>
 
 #if defined(__ANDROID__) && !defined(__ANDROID_RECOVERY__)

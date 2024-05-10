@@ -41,8 +41,5 @@ cc_library_shared {
     export_header_lib_headers: [
         "libprocessgroup_headers",
     ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
+    defaults: ["libprocessgroup_build_flags_cc"],
 }

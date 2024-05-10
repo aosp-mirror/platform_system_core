@@ -29,6 +29,7 @@
 #include <fs_mgr/roots.h>
 #include <liblp/property_fetcher.h>
 
+using android::dm::DeviceMapper;
 using android::dm::kSectorSize;
 using android::fiemap::FiemapStatus;
 using android::fs_mgr::EnsurePathMounted;
@@ -229,11 +230,7 @@ bool GetUserspaceSnapshotsEnabledProperty() {
     return fetcher->GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
 }
 
-bool CanUseUserspaceSnapshots() {
-    if (!GetUserspaceSnapshotsEnabledProperty()) {
-        return false;
-    }
-
+bool IsVendorFromAndroid12() {
     auto fetcher = IPropertyFetcher::GetInstance();
 
     const std::string UNKNOWN = "unknown";
@@ -242,8 +239,15 @@ bool CanUseUserspaceSnapshots() {
 
     // No user-space snapshots if vendor partition is on Android 12
     if (vendor_release.find("12") != std::string::npos) {
-        LOG(INFO) << "Userspace snapshots disabled as vendor partition is on Android: "
-                  << vendor_release;
+        return true;
+    }
+
+    return false;
+}
+
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        LOG(INFO) << "Virtual A/B - Userspace snapshots disabled";
         return false;
     }
 
@@ -251,7 +255,10 @@ bool CanUseUserspaceSnapshots() {
         LOG(INFO) << "Userspace snapshots disabled for testing";
         return false;
     }
-
+    if (!KernelSupportsCompressedSnapshots()) {
+        LOG(ERROR) << "Userspace snapshots requested, but no kernel support is available.";
+        return false;
+    }
     return true;
 }
 
@@ -276,6 +283,11 @@ std::string GetOtherPartitionName(const std::string& name) {
 bool IsDmSnapshotTestingEnabled() {
     auto fetcher = IPropertyFetcher::GetInstance();
     return fetcher->GetBoolProperty("snapuserd.test.dm.snapshots", false);
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
 }
 
 }  // namespace snapshot

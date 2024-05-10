@@ -1,0 +1,2754 @@
+{
+ "array_types" :
+ [
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIA0_i",
+   "name" : "int[0]",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIA0_i",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  }
+ ],
+ "builtin_types" :
+ [
+  {
+   "alignment" : 1,
+   "is_integral" : true,
+   "linker_set_key" : "_ZTIa",
+   "name" : "signed char",
+   "referenced_type" : "_ZTIa",
+   "self_type" : "_ZTIa",
+   "size" : 1
+  },
+  {
+   "alignment" : 1,
+   "is_integral" : true,
+   "is_unsigned" : true,
+   "linker_set_key" : "_ZTIb",
+   "name" : "bool",
+   "referenced_type" : "_ZTIb",
+   "self_type" : "_ZTIb",
+   "size" : 1
+  },
+  {
+   "alignment" : 1,
+   "is_integral" : true,
+   "is_unsigned" : true,
+   "linker_set_key" : "_ZTIc",
+   "name" : "char",
+   "referenced_type" : "_ZTIc",
+   "self_type" : "_ZTIc",
+   "size" : 1
+  },
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIf",
+   "name" : "float",
+   "referenced_type" : "_ZTIf",
+   "self_type" : "_ZTIf",
+   "size" : 4
+  },
+  {
+   "alignment" : 4,
+   "is_integral" : true,
+   "linker_set_key" : "_ZTIi",
+   "name" : "int",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIi",
+   "size" : 4
+  },
+  {
+   "alignment" : 4,
+   "is_integral" : true,
+   "is_unsigned" : true,
+   "linker_set_key" : "_ZTIj",
+   "name" : "unsigned int",
+   "referenced_type" : "_ZTIj",
+   "self_type" : "_ZTIj",
+   "size" : 4
+  },
+  {
+   "alignment" : 8,
+   "is_integral" : true,
+   "linker_set_key" : "_ZTIl",
+   "name" : "long",
+   "referenced_type" : "_ZTIl",
+   "self_type" : "_ZTIl",
+   "size" : 8
+  },
+  {
+   "alignment" : 8,
+   "is_integral" : true,
+   "is_unsigned" : true,
+   "linker_set_key" : "_ZTIm",
+   "name" : "unsigned long",
+   "referenced_type" : "_ZTIm",
+   "self_type" : "_ZTIm",
+   "size" : 8
+  },
+  {
+   "linker_set_key" : "_ZTIv",
+   "name" : "void",
+   "referenced_type" : "_ZTIv",
+   "self_type" : "_ZTIv"
+  }
+ ],
+ "elf_functions" :
+ [
+  {
+   "name" : "_Z23socket_make_sockaddr_unPKciP11sockaddr_unPj"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZN7android4base4TrimIRNSt3__112basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEEEES8_OT_"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE4syncEv"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE5imbueERKNS_6localeE"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE6setbufEPcl"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE7seekoffExNS_8ios_base7seekdirEj"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE7seekposENS_4fposI9mbstate_tEEj"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE8overflowEi"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE9pbackfailEi"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEE9underflowEv"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEEC2Ev"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEED0Ev"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__113basic_filebufIcNS_11char_traitsIcEEED2Ev"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__124__put_character_sequenceIcNS_11char_traitsIcEEEERNS_13basic_ostreamIT_T0_EES7_PKS4_m"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__16vectorI5EntryNS_9allocatorIS1_EEE24__emplace_back_slow_pathIJS1_EEEvDpOT_"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__17getlineIcNS_11char_traitsIcEENS_9allocatorIcEEEERNS_13basic_istreamIT_T0_EES9_RNS_12basic_stringIS6_S7_T1_EES6_"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZNSt3__1lsINS_11char_traitsIcEEEERNS_13basic_ostreamIcT_EES6_PKc"
+  },
+  {
+   "name" : "android_get_control_file"
+  },
+  {
+   "name" : "android_get_control_socket"
+  },
+  {
+   "name" : "android_get_ioprio"
+  },
+  {
+   "name" : "android_reboot"
+  },
+  {
+   "name" : "android_set_ioprio"
+  },
+  {
+   "name" : "ashmem_create_region"
+  },
+  {
+   "name" : "ashmem_get_size_region"
+  },
+  {
+   "name" : "ashmem_pin_region"
+  },
+  {
+   "name" : "ashmem_set_prot_region"
+  },
+  {
+   "name" : "ashmem_unpin_region"
+  },
+  {
+   "name" : "ashmem_valid"
+  },
+  {
+   "name" : "atrace_async_begin_body"
+  },
+  {
+   "name" : "atrace_async_end_body"
+  },
+  {
+   "name" : "atrace_async_for_track_begin_body"
+  },
+  {
+   "name" : "atrace_async_for_track_end_body"
+  },
+  {
+   "name" : "atrace_begin_body"
+  },
+  {
+   "name" : "atrace_end_body"
+  },
+  {
+   "name" : "atrace_get_enabled_tags"
+  },
+  {
+   "name" : "atrace_init"
+  },
+  {
+   "name" : "atrace_instant_body"
+  },
+  {
+   "name" : "atrace_instant_for_track_body"
+  },
+  {
+   "name" : "atrace_int64_body"
+  },
+  {
+   "name" : "atrace_int_body"
+  },
+  {
+   "name" : "atrace_set_tracing_enabled"
+  },
+  {
+   "name" : "atrace_setup"
+  },
+  {
+   "name" : "atrace_update_tags"
+  },
+  {
+   "name" : "canned_fs_config"
+  },
+  {
+   "name" : "config_bool"
+  },
+  {
+   "name" : "config_find"
+  },
+  {
+   "name" : "config_free"
+  },
+  {
+   "name" : "config_load"
+  },
+  {
+   "name" : "config_load_file"
+  },
+  {
+   "name" : "config_node"
+  },
+  {
+   "name" : "config_set"
+  },
+  {
+   "name" : "config_str"
+  },
+  {
+   "name" : "fs_config"
+  },
+  {
+   "name" : "fs_mkdirs"
+  },
+  {
+   "name" : "fs_prepare_dir"
+  },
+  {
+   "name" : "fs_prepare_dir_strict"
+  },
+  {
+   "name" : "fs_prepare_file_strict"
+  },
+  {
+   "name" : "fs_read_atomic_int"
+  },
+  {
+   "name" : "fs_write_atomic_int"
+  },
+  {
+   "name" : "get_fs_config"
+  },
+  {
+   "name" : "hashmapCreate"
+  },
+  {
+   "name" : "hashmapForEach"
+  },
+  {
+   "name" : "hashmapFree"
+  },
+  {
+   "name" : "hashmapGet"
+  },
+  {
+   "name" : "hashmapHash"
+  },
+  {
+   "name" : "hashmapLock"
+  },
+  {
+   "name" : "hashmapPut"
+  },
+  {
+   "name" : "hashmapRemove"
+  },
+  {
+   "name" : "hashmapUnlock"
+  },
+  {
+   "name" : "klog_set_level"
+  },
+  {
+   "name" : "klog_write"
+  },
+  {
+   "name" : "klog_writev"
+  },
+  {
+   "name" : "load_canned_fs_config"
+  },
+  {
+   "name" : "load_file"
+  },
+  {
+   "name" : "multiuser_convert_sdk_sandbox_to_app_uid"
+  },
+  {
+   "name" : "multiuser_get_app_id"
+  },
+  {
+   "name" : "multiuser_get_cache_gid"
+  },
+  {
+   "name" : "multiuser_get_ext_cache_gid"
+  },
+  {
+   "name" : "multiuser_get_ext_gid"
+  },
+  {
+   "name" : "multiuser_get_sdk_sandbox_uid"
+  },
+  {
+   "name" : "multiuser_get_shared_app_gid"
+  },
+  {
+   "name" : "multiuser_get_shared_gid"
+  },
+  {
+   "name" : "multiuser_get_uid"
+  },
+  {
+   "name" : "multiuser_get_user_id"
+  },
+  {
+   "name" : "native_handle_clone"
+  },
+  {
+   "name" : "native_handle_close"
+  },
+  {
+   "name" : "native_handle_close_with_tag"
+  },
+  {
+   "name" : "native_handle_create"
+  },
+  {
+   "name" : "native_handle_delete"
+  },
+  {
+   "name" : "native_handle_init"
+  },
+  {
+   "name" : "native_handle_set_fdsan_tag"
+  },
+  {
+   "name" : "native_handle_unset_fdsan_tag"
+  },
+  {
+   "name" : "partition_wiped"
+  },
+  {
+   "name" : "property_get"
+  },
+  {
+   "name" : "property_get_bool"
+  },
+  {
+   "name" : "property_get_int32"
+  },
+  {
+   "name" : "property_get_int64"
+  },
+  {
+   "name" : "property_list"
+  },
+  {
+   "name" : "property_set"
+  },
+  {
+   "name" : "record_stream_free"
+  },
+  {
+   "name" : "record_stream_get_next"
+  },
+  {
+   "name" : "record_stream_new"
+  },
+  {
+   "name" : "socket_close"
+  },
+  {
+   "name" : "socket_get_local_port"
+  },
+  {
+   "name" : "socket_inaddr_any_server"
+  },
+  {
+   "name" : "socket_local_client"
+  },
+  {
+   "name" : "socket_local_client_connect"
+  },
+  {
+   "name" : "socket_local_server"
+  },
+  {
+   "name" : "socket_local_server_bind"
+  },
+  {
+   "name" : "socket_network_client"
+  },
+  {
+   "name" : "socket_network_client_timeout"
+  },
+  {
+   "name" : "socket_send_buffers"
+  },
+  {
+   "name" : "str_parms_add_float"
+  },
+  {
+   "name" : "str_parms_add_int"
+  },
+  {
+   "name" : "str_parms_add_str"
+  },
+  {
+   "name" : "str_parms_create"
+  },
+  {
+   "name" : "str_parms_create_str"
+  },
+  {
+   "name" : "str_parms_del"
+  },
+  {
+   "name" : "str_parms_destroy"
+  },
+  {
+   "name" : "str_parms_dump"
+  },
+  {
+   "name" : "str_parms_get_float"
+  },
+  {
+   "name" : "str_parms_get_int"
+  },
+  {
+   "name" : "str_parms_get_str"
+  },
+  {
+   "name" : "str_parms_has_key"
+  },
+  {
+   "name" : "str_parms_to_str"
+  },
+  {
+   "name" : "uevent_kernel_multicast_recv"
+  },
+  {
+   "name" : "uevent_kernel_multicast_uid_recv"
+  },
+  {
+   "name" : "uevent_kernel_recv"
+  },
+  {
+   "name" : "uevent_open_socket"
+  }
+ ],
+ "elf_objects" :
+ [
+  {
+   "binding" : "weak",
+   "name" : "_ZTCNSt3__114basic_ifstreamIcNS_11char_traitsIcEEEE0_NS_13basic_istreamIcS2_EE"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZTTNSt3__114basic_ifstreamIcNS_11char_traitsIcEEEE"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZTVNSt3__113basic_filebufIcNS_11char_traitsIcEEEE"
+  },
+  {
+   "binding" : "weak",
+   "name" : "_ZTVNSt3__114basic_ifstreamIcNS_11char_traitsIcEEEE"
+  },
+  {
+   "name" : "atrace_enabled_tags"
+  },
+  {
+   "name" : "atrace_is_ready"
+  },
+  {
+   "name" : "atrace_marker_fd"
+  }
+ ],
+ "enum_types" :
+ [
+  {
+   "alignment" : 4,
+   "enum_fields" :
+   [
+    {
+     "enum_field_value" : 0,
+     "name" : "IoSchedClass_NONE"
+    },
+    {
+     "enum_field_value" : 1,
+     "name" : "IoSchedClass_RT"
+    },
+    {
+     "enum_field_value" : 2,
+     "name" : "IoSchedClass_BE"
+    },
+    {
+     "enum_field_value" : 3,
+     "name" : "IoSchedClass_IDLE"
+    }
+   ],
+   "linker_set_key" : "_ZTI12IoSchedClass",
+   "name" : "IoSchedClass",
+   "referenced_type" : "_ZTI12IoSchedClass",
+   "self_type" : "_ZTI12IoSchedClass",
+   "size" : 4,
+   "source_file" : "system/core/libcutils/include/cutils/iosched_policy.h",
+   "underlying_type" : "_ZTIj"
+  }
+ ],
+ "function_types" :
+ [
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIFbPvS_E",
+   "name" : "bool (void *, void *)",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "referenced_type" : "_ZTIFbPvS_E",
+   "return_type" : "_ZTIb",
+   "self_type" : "_ZTIFbPvS_E",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIFbPvS_S_E",
+   "name" : "bool (void *, void *, void *)",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "referenced_type" : "_ZTIFbPvS_S_E",
+   "return_type" : "_ZTIb",
+   "self_type" : "_ZTIFbPvS_S_E",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIFiPvE",
+   "name" : "int (void *)",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "referenced_type" : "_ZTIFiPvE",
+   "return_type" : "_ZTIi",
+   "self_type" : "_ZTIFiPvE",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 4,
+   "linker_set_key" : "_ZTIFvPKcS0_PvE",
+   "name" : "void (const char *, const char *, void *)",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "referenced_type" : "_ZTIFvPKcS0_PvE",
+   "return_type" : "_ZTIv",
+   "self_type" : "_ZTIFvPKcS0_PvE",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  }
+ ],
+ "functions" :
+ [
+  {
+   "function_name" : "android_get_control_file",
+   "linker_set_key" : "android_get_control_file",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/android_get_control_file.h"
+  },
+  {
+   "function_name" : "android_get_control_socket",
+   "linker_set_key" : "android_get_control_socket",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "android_get_ioprio",
+   "linker_set_key" : "android_get_ioprio",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIP12IoSchedClass"
+    },
+    {
+     "referenced_type" : "_ZTIPi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/iosched_policy.h"
+  },
+  {
+   "function_name" : "android_reboot",
+   "linker_set_key" : "android_reboot",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/android_reboot.h"
+  },
+  {
+   "function_name" : "android_set_ioprio",
+   "linker_set_key" : "android_set_ioprio",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTI12IoSchedClass"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/iosched_policy.h"
+  },
+  {
+   "function_name" : "ashmem_create_region",
+   "linker_set_key" : "ashmem_create_region",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "ashmem_get_size_region",
+   "linker_set_key" : "ashmem_get_size_region",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "ashmem_pin_region",
+   "linker_set_key" : "ashmem_pin_region",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "ashmem_set_prot_region",
+   "linker_set_key" : "ashmem_set_prot_region",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "ashmem_unpin_region",
+   "linker_set_key" : "ashmem_unpin_region",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "ashmem_valid",
+   "linker_set_key" : "ashmem_valid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/ashmem.h"
+  },
+  {
+   "function_name" : "atrace_async_begin_body",
+   "linker_set_key" : "atrace_async_begin_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_async_end_body",
+   "linker_set_key" : "atrace_async_end_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_async_for_track_begin_body",
+   "linker_set_key" : "atrace_async_for_track_begin_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_async_for_track_end_body",
+   "linker_set_key" : "atrace_async_for_track_end_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_begin_body",
+   "linker_set_key" : "atrace_begin_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_end_body",
+   "linker_set_key" : "atrace_end_body",
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_get_enabled_tags",
+   "linker_set_key" : "atrace_get_enabled_tags",
+   "return_type" : "_ZTIm",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_init",
+   "linker_set_key" : "atrace_init",
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_instant_body",
+   "linker_set_key" : "atrace_instant_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_instant_for_track_body",
+   "linker_set_key" : "atrace_instant_for_track_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_int64_body",
+   "linker_set_key" : "atrace_int64_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIl"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_int_body",
+   "linker_set_key" : "atrace_int_body",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_set_tracing_enabled",
+   "linker_set_key" : "atrace_set_tracing_enabled",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIb"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_setup",
+   "linker_set_key" : "atrace_setup",
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "atrace_update_tags",
+   "linker_set_key" : "atrace_update_tags",
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "function_name" : "canned_fs_config",
+   "linker_set_key" : "canned_fs_config",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPm"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/private/canned_fs_config.h"
+  },
+  {
+   "function_name" : "config_bool",
+   "linker_set_key" : "config_bool",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_find",
+   "linker_set_key" : "config_find",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIP5cnode",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_free",
+   "linker_set_key" : "config_free",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_load",
+   "linker_set_key" : "config_load",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_load_file",
+   "linker_set_key" : "config_load_file",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_node",
+   "linker_set_key" : "config_node",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIP5cnode",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_set",
+   "linker_set_key" : "config_set",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "config_str",
+   "linker_set_key" : "config_str",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIPKc",
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "function_name" : "fs_config",
+   "linker_set_key" : "fs_config",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    },
+    {
+     "referenced_type" : "_ZTIPm"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
+  },
+  {
+   "function_name" : "fs_mkdirs",
+   "linker_set_key" : "fs_mkdirs",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "fs_prepare_dir",
+   "linker_set_key" : "fs_prepare_dir",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "fs_prepare_dir_strict",
+   "linker_set_key" : "fs_prepare_dir_strict",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "fs_prepare_file_strict",
+   "linker_set_key" : "fs_prepare_file_strict",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "fs_read_atomic_int",
+   "linker_set_key" : "fs_read_atomic_int",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "fs_write_atomic_int",
+   "linker_set_key" : "fs_write_atomic_int",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "get_fs_config",
+   "linker_set_key" : "get_fs_config",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIb"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIP9fs_config"
+    }
+   ],
+   "return_type" : "_ZTIb",
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
+  },
+  {
+   "function_name" : "hashmapCreate",
+   "linker_set_key" : "hashmapCreate",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIm"
+    },
+    {
+     "referenced_type" : "_ZTIPFiPvE"
+    },
+    {
+     "referenced_type" : "_ZTIPFbPvS_E"
+    }
+   ],
+   "return_type" : "_ZTIP7Hashmap",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapForEach",
+   "linker_set_key" : "hashmapForEach",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    },
+    {
+     "referenced_type" : "_ZTIPFbPvS_S_E"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapFree",
+   "linker_set_key" : "hashmapFree",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapGet",
+   "linker_set_key" : "hashmapGet",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "return_type" : "_ZTIPv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapHash",
+   "linker_set_key" : "hashmapHash",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapLock",
+   "linker_set_key" : "hashmapLock",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapPut",
+   "linker_set_key" : "hashmapPut",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "return_type" : "_ZTIPv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapRemove",
+   "linker_set_key" : "hashmapRemove",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "return_type" : "_ZTIPv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "hashmapUnlock",
+   "linker_set_key" : "hashmapUnlock",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP7Hashmap"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "function_name" : "klog_set_level",
+   "linker_set_key" : "klog_set_level",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/klog.h"
+  },
+  {
+   "function_name" : "klog_write",
+   "linker_set_key" : "klog_write",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/klog.h"
+  },
+  {
+   "function_name" : "klog_writev",
+   "linker_set_key" : "klog_writev",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPK5iovec"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/klog.h"
+  },
+  {
+   "function_name" : "load_canned_fs_config",
+   "linker_set_key" : "load_canned_fs_config",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/private/canned_fs_config.h"
+  },
+  {
+   "function_name" : "load_file",
+   "linker_set_key" : "load_file",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    }
+   ],
+   "return_type" : "_ZTIPv",
+   "source_file" : "system/core/libcutils/include/cutils/misc.h"
+  },
+  {
+   "function_name" : "multiuser_convert_sdk_sandbox_to_app_uid",
+   "linker_set_key" : "multiuser_convert_sdk_sandbox_to_app_uid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_app_id",
+   "linker_set_key" : "multiuser_get_app_id",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_cache_gid",
+   "linker_set_key" : "multiuser_get_cache_gid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_ext_cache_gid",
+   "linker_set_key" : "multiuser_get_ext_cache_gid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_ext_gid",
+   "linker_set_key" : "multiuser_get_ext_gid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_sdk_sandbox_uid",
+   "linker_set_key" : "multiuser_get_sdk_sandbox_uid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_shared_app_gid",
+   "linker_set_key" : "multiuser_get_shared_app_gid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_shared_gid",
+   "linker_set_key" : "multiuser_get_shared_gid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_uid",
+   "linker_set_key" : "multiuser_get_uid",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "multiuser_get_user_id",
+   "linker_set_key" : "multiuser_get_user_id",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIj"
+    }
+   ],
+   "return_type" : "_ZTIj",
+   "source_file" : "system/core/libcutils/include/cutils/multiuser.h"
+  },
+  {
+   "function_name" : "native_handle_clone",
+   "linker_set_key" : "native_handle_clone",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPK13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIP13native_handle",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_close",
+   "linker_set_key" : "native_handle_close",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPK13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_close_with_tag",
+   "linker_set_key" : "native_handle_close_with_tag",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPK13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_create",
+   "linker_set_key" : "native_handle_create",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIP13native_handle",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_delete",
+   "linker_set_key" : "native_handle_delete",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_init",
+   "linker_set_key" : "native_handle_init",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIP13native_handle",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_set_fdsan_tag",
+   "linker_set_key" : "native_handle_set_fdsan_tag",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPK13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "native_handle_unset_fdsan_tag",
+   "linker_set_key" : "native_handle_unset_fdsan_tag",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPK13native_handle"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "function_name" : "partition_wiped",
+   "linker_set_key" : "partition_wiped",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/partition_utils.h"
+  },
+  {
+   "function_name" : "property_get",
+   "linker_set_key" : "property_get",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "property_get_bool",
+   "linker_set_key" : "property_get_bool",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIa"
+    }
+   ],
+   "return_type" : "_ZTIa",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "property_get_int32",
+   "linker_set_key" : "property_get_int32",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "property_get_int64",
+   "linker_set_key" : "property_get_int64",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIl"
+    }
+   ],
+   "return_type" : "_ZTIl",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "property_list",
+   "linker_set_key" : "property_list",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPFvPKcS0_PvE"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "property_set",
+   "linker_set_key" : "property_set",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "function_name" : "record_stream_free",
+   "linker_set_key" : "record_stream_free",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP12RecordStream"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "function_name" : "record_stream_get_next",
+   "linker_set_key" : "record_stream_get_next",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP12RecordStream"
+    },
+    {
+     "referenced_type" : "_ZTIPPv"
+    },
+    {
+     "referenced_type" : "_ZTIPm"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "function_name" : "record_stream_new",
+   "linker_set_key" : "record_stream_new",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIP12RecordStream",
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "function_name" : "socket_close",
+   "linker_set_key" : "socket_close",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_get_local_port",
+   "linker_set_key" : "socket_get_local_port",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_inaddr_any_server",
+   "linker_set_key" : "socket_inaddr_any_server",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_local_client",
+   "linker_set_key" : "socket_local_client",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_local_client_connect",
+   "linker_set_key" : "socket_local_client_connect",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_local_server",
+   "linker_set_key" : "socket_local_server",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_local_server_bind",
+   "linker_set_key" : "socket_local_server_bind",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_network_client",
+   "linker_set_key" : "socket_network_client",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_network_client_timeout",
+   "linker_set_key" : "socket_network_client_timeout",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "socket_send_buffers",
+   "linker_set_key" : "socket_send_buffers",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPK22cutils_socket_buffer_t"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIl",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "function_name" : "str_parms_add_float",
+   "linker_set_key" : "str_parms_add_float",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIf"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_add_int",
+   "linker_set_key" : "str_parms_add_int",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_add_str",
+   "linker_set_key" : "str_parms_add_str",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_create",
+   "linker_set_key" : "str_parms_create",
+   "return_type" : "_ZTIP9str_parms",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_create_str",
+   "linker_set_key" : "str_parms_create_str",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIP9str_parms",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_del",
+   "linker_set_key" : "str_parms_del",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_destroy",
+   "linker_set_key" : "str_parms_destroy",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_dump",
+   "linker_set_key" : "str_parms_dump",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    }
+   ],
+   "return_type" : "_ZTIv",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_get_float",
+   "linker_set_key" : "str_parms_get_float",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPf"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_get_int",
+   "linker_set_key" : "str_parms_get_int",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_get_str",
+   "linker_set_key" : "str_parms_get_str",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIPc"
+    },
+    {
+     "referenced_type" : "_ZTIi"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_has_key",
+   "linker_set_key" : "str_parms_has_key",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "str_parms_to_str",
+   "linker_set_key" : "str_parms_to_str",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIP9str_parms"
+    }
+   ],
+   "return_type" : "_ZTIPc",
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "function_name" : "uevent_kernel_multicast_recv",
+   "linker_set_key" : "uevent_kernel_multicast_recv",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "return_type" : "_ZTIl",
+   "source_file" : "system/core/libcutils/include/cutils/uevent.h"
+  },
+  {
+   "function_name" : "uevent_kernel_multicast_uid_recv",
+   "linker_set_key" : "uevent_kernel_multicast_uid_recv",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    }
+   ],
+   "return_type" : "_ZTIl",
+   "source_file" : "system/core/libcutils/include/cutils/uevent.h"
+  },
+  {
+   "function_name" : "uevent_kernel_recv",
+   "linker_set_key" : "uevent_kernel_recv",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIPv"
+    },
+    {
+     "referenced_type" : "_ZTIm"
+    },
+    {
+     "referenced_type" : "_ZTIb"
+    },
+    {
+     "referenced_type" : "_ZTIPj"
+    }
+   ],
+   "return_type" : "_ZTIl",
+   "source_file" : "system/core/libcutils/include/cutils/uevent.h"
+  },
+  {
+   "function_name" : "uevent_open_socket",
+   "linker_set_key" : "uevent_open_socket",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "referenced_type" : "_ZTIb"
+    }
+   ],
+   "return_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/uevent.h"
+  }
+ ],
+ "global_vars" :
+ [
+  {
+   "linker_set_key" : "atrace_enabled_tags",
+   "name" : "atrace_enabled_tags",
+   "referenced_type" : "_ZTIm",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "linker_set_key" : "atrace_is_ready",
+   "name" : "atrace_is_ready",
+   "referenced_type" : "_ZTINSt3__16atomicIbEE",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  },
+  {
+   "linker_set_key" : "atrace_marker_fd",
+   "name" : "atrace_marker_fd",
+   "referenced_type" : "_ZTIi",
+   "source_file" : "system/core/libcutils/include/cutils/trace.h"
+  }
+ ],
+ "lvalue_reference_types" : [],
+ "pointer_types" :
+ [
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP12IoSchedClass",
+   "name" : "IoSchedClass *",
+   "referenced_type" : "_ZTI12IoSchedClass",
+   "self_type" : "_ZTIP12IoSchedClass",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/iosched_policy.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP12RecordStream",
+   "name" : "RecordStream *",
+   "referenced_type" : "_ZTI12RecordStream",
+   "self_type" : "_ZTIP12RecordStream",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP13native_handle",
+   "name" : "native_handle *",
+   "referenced_type" : "_ZTI13native_handle",
+   "self_type" : "_ZTIP13native_handle",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP5cnode",
+   "name" : "cnode *",
+   "referenced_type" : "_ZTI5cnode",
+   "self_type" : "_ZTIP5cnode",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP7Hashmap",
+   "name" : "Hashmap *",
+   "referenced_type" : "_ZTI7Hashmap",
+   "self_type" : "_ZTIP7Hashmap",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP9fs_config",
+   "name" : "fs_config *",
+   "referenced_type" : "_ZTI9fs_config",
+   "self_type" : "_ZTIP9fs_config",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIP9str_parms",
+   "name" : "str_parms *",
+   "referenced_type" : "_ZTI9str_parms",
+   "self_type" : "_ZTIP9str_parms",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPFbPvS_E",
+   "name" : "bool (*)(void *, void *)",
+   "referenced_type" : "_ZTIFbPvS_E",
+   "self_type" : "_ZTIPFbPvS_E",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPFbPvS_S_E",
+   "name" : "bool (*)(void *, void *, void *)",
+   "referenced_type" : "_ZTIFbPvS_S_E",
+   "self_type" : "_ZTIPFbPvS_S_E",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPFiPvE",
+   "name" : "int (*)(void *)",
+   "referenced_type" : "_ZTIFiPvE",
+   "self_type" : "_ZTIPFiPvE",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/hashmap.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPFvPKcS0_PvE",
+   "name" : "void (*)(const char *, const char *, void *)",
+   "referenced_type" : "_ZTIFvPKcS0_PvE",
+   "self_type" : "_ZTIPFvPKcS0_PvE",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/properties.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPK13native_handle",
+   "name" : "const native_handle *",
+   "referenced_type" : "_ZTIK13native_handle",
+   "self_type" : "_ZTIPK13native_handle",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPK22cutils_socket_buffer_t",
+   "name" : "const cutils_socket_buffer_t *",
+   "referenced_type" : "_ZTIK22cutils_socket_buffer_t",
+   "self_type" : "_ZTIPK22cutils_socket_buffer_t",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPK5iovec",
+   "name" : "const iovec *",
+   "referenced_type" : "_ZTIK5iovec",
+   "self_type" : "_ZTIPK5iovec",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/klog.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPKc",
+   "name" : "const char *",
+   "referenced_type" : "_ZTIKc",
+   "self_type" : "_ZTIPKc",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPKv",
+   "name" : "const void *",
+   "referenced_type" : "_ZTIKv",
+   "self_type" : "_ZTIPKv",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPPv",
+   "name" : "void **",
+   "referenced_type" : "_ZTIPv",
+   "self_type" : "_ZTIPPv",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPc",
+   "name" : "char *",
+   "referenced_type" : "_ZTIc",
+   "self_type" : "_ZTIPc",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPf",
+   "name" : "float *",
+   "referenced_type" : "_ZTIf",
+   "self_type" : "_ZTIPf",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/str_parms.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPi",
+   "name" : "int *",
+   "referenced_type" : "_ZTIi",
+   "self_type" : "_ZTIPi",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/iosched_policy.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPj",
+   "name" : "unsigned int *",
+   "referenced_type" : "_ZTIj",
+   "self_type" : "_ZTIPj",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/misc.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPm",
+   "name" : "unsigned long *",
+   "referenced_type" : "_ZTIm",
+   "self_type" : "_ZTIPm",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/record_stream.h"
+  },
+  {
+   "alignment" : 8,
+   "linker_set_key" : "_ZTIPv",
+   "name" : "void *",
+   "referenced_type" : "_ZTIv",
+   "self_type" : "_ZTIPv",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/cutils/misc.h"
+  }
+ ],
+ "qualified_types" :
+ [
+  {
+   "alignment" : 4,
+   "is_const" : true,
+   "linker_set_key" : "_ZTIK13native_handle",
+   "name" : "const native_handle",
+   "referenced_type" : "_ZTI13native_handle",
+   "self_type" : "_ZTIK13native_handle",
+   "size" : 12,
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "alignment" : 8,
+   "is_const" : true,
+   "linker_set_key" : "_ZTIK22cutils_socket_buffer_t",
+   "name" : "const cutils_socket_buffer_t",
+   "referenced_type" : "_ZTI22cutils_socket_buffer_t",
+   "self_type" : "_ZTIK22cutils_socket_buffer_t",
+   "size" : 16,
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "alignment" : 8,
+   "is_const" : true,
+   "linker_set_key" : "_ZTIK5iovec",
+   "name" : "const iovec",
+   "referenced_type" : "_ZTI5iovec",
+   "self_type" : "_ZTIK5iovec",
+   "size" : 16,
+   "source_file" : "system/core/libcutils/include/cutils/klog.h"
+  },
+  {
+   "alignment" : 1,
+   "is_const" : true,
+   "linker_set_key" : "_ZTIKc",
+   "name" : "const char",
+   "referenced_type" : "_ZTIc",
+   "self_type" : "_ZTIKc",
+   "size" : 1,
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "is_const" : true,
+   "linker_set_key" : "_ZTIKv",
+   "name" : "const void",
+   "referenced_type" : "_ZTIv",
+   "self_type" : "_ZTIKv",
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  }
+ ],
+ "record_types" :
+ [
+  {
+   "alignment" : 4,
+   "fields" :
+   [
+    {
+     "field_name" : "version",
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "field_name" : "numFds",
+     "field_offset" : 32,
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "field_name" : "numInts",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIi"
+    },
+    {
+     "field_name" : "data",
+     "field_offset" : 96,
+     "referenced_type" : "_ZTIA0_i"
+    }
+   ],
+   "linker_set_key" : "_ZTI13native_handle",
+   "name" : "native_handle",
+   "referenced_type" : "_ZTI13native_handle",
+   "self_type" : "_ZTI13native_handle",
+   "size" : 12,
+   "source_file" : "system/core/libcutils/include/cutils/native_handle.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "data",
+     "referenced_type" : "_ZTIPKv"
+    },
+    {
+     "field_name" : "length",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "linker_set_key" : "_ZTI22cutils_socket_buffer_t",
+   "name" : "cutils_socket_buffer_t",
+   "referenced_type" : "_ZTI22cutils_socket_buffer_t",
+   "self_type" : "_ZTI22cutils_socket_buffer_t",
+   "size" : 16,
+   "source_file" : "system/core/libcutils/include/cutils/sockets.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "next",
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "field_name" : "first_child",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "field_name" : "last_child",
+     "field_offset" : 128,
+     "referenced_type" : "_ZTIP5cnode"
+    },
+    {
+     "field_name" : "name",
+     "field_offset" : 192,
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "field_name" : "value",
+     "field_offset" : 256,
+     "referenced_type" : "_ZTIPKc"
+    }
+   ],
+   "linker_set_key" : "_ZTI5cnode",
+   "name" : "cnode",
+   "referenced_type" : "_ZTI5cnode",
+   "self_type" : "_ZTI5cnode",
+   "size" : 40,
+   "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "uid",
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "gid",
+     "field_offset" : 32,
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "mode",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "capabilities",
+     "field_offset" : 128,
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "linker_set_key" : "_ZTI9fs_config",
+   "name" : "fs_config",
+   "referenced_type" : "_ZTI9fs_config",
+   "self_type" : "_ZTI9fs_config",
+   "size" : 24,
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
+  }
+ ],
+ "rvalue_reference_types" : []
+}

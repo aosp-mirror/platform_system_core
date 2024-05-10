@@ -88,7 +88,7 @@ char* locale;
 #define POWER_ON_KEY_TIME (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 #define UNPLUGGED_DISPLAY_TIME (3 * MSEC_PER_SEC)
-#define MAX_BATT_LEVEL_WAIT_TIME (3 * MSEC_PER_SEC)
+#define MAX_BATT_LEVEL_WAIT_TIME (5 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME_PROP "ro.product.charger.unplugged_shutdown_time"
 
 #define LAST_KMSG_MAX_SZ (32 * 1024)
@@ -620,6 +620,18 @@ void Charger::OnHealthInfoChanged(const ChargerHealthInfo& health_info) {
         kick_animation(&batt_anim_);
     }
     health_info_ = health_info;
+
+    if (property_get_bool("ro.charger_mode_autoboot", false)) {
+        if (health_info_.battery_level >= boot_min_cap_) {
+            if (property_get_bool("ro.enable_boot_charger_mode", false)) {
+                LOGW("booting from charger mode\n");
+                property_set("sys.boot_from_charger_mode", "1");
+            } else {
+                LOGW("Battery SOC = %d%%, Automatically rebooting\n", health_info_.battery_level);
+                reboot(RB_AUTOBOOT);
+            }
+        }
+    }
 }
 
 int Charger::OnPrepareToWait(void) {

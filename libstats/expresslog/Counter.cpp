@@ -28,5 +28,10 @@ void Counter::logIncrement(const char* metricName, int64_t amount) {
     stats_write(EXPRESS_EVENT_REPORTED, metricIdHash, amount);
 }
 
+void Counter::logIncrementWithUid(const char* metricName, int32_t uid, int64_t amount) {
+    const int64_t metricIdHash = farmhash::Fingerprint64(metricName, strlen(metricName));
+    stats_write(EXPRESS_UID_EVENT_REPORTED, metricIdHash, amount, uid);
+}
+
 }  // namespace expresslog
 }  // namespace android

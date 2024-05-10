@@ -104,7 +104,7 @@ std::string CgroupController::GetProcsFilePath(const std::string& rel_path, uid_
     return proc_path.append(CGROUP_PROCS_FILE);
 }
 
-bool CgroupController::GetTaskGroup(int tid, std::string* group) const {
+bool CgroupController::GetTaskGroup(pid_t tid, std::string* group) const {
     std::string file_name = StringPrintf("/proc/%d/cgroup", tid);
     std::string content;
     if (!android::base::ReadFileToString(file_name, &content)) {

@@ -48,8 +48,10 @@
 #include <android-base/unique_fd.h>
 
 #include <android/log.h>
+#include <android/set_abort_message.h>
 #include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
+#include <bionic/crash_detail_internal.h>
 #include <log/log.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -69,6 +71,9 @@
 #include "tombstone.pb.h"
 
 using android::base::StringPrintf;
+
+// The maximum number of messages to save in the protobuf per file.
+static constexpr size_t kMaxLogMessages = 500;
 
 // Use the demangler from libc++.
 extern "C" char* __cxa_demangle(const char*, char*, size_t*, int* status);
@@ -91,6 +96,11 @@ static Architecture get_arch() {
 
 static std::optional<std::string> get_stack_overflow_cause(uint64_t fault_addr, uint64_t sp,
                                                            unwindstack::Maps* maps) {
+  // Under stack MTE the stack pointer and/or the fault address can be tagged.
+  // In order to calculate deltas between them, strip off the tags off both
+  // addresses.
+  fault_addr = untag_address(fault_addr);
+  sp = untag_address(sp);
   static constexpr uint64_t kMaxDifferenceBytes = 256;
   uint64_t difference;
   if (sp >= fault_addr) {
@@ -193,7 +203,7 @@ void set_human_readable_cause(Cause* cause, uint64_t fault_addr) {
 }
 
 static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
-                                const ProcessInfo& process_info, const ThreadInfo& main_thread) {
+                                const ProcessInfo& process_info, const ThreadInfo& target_thread) {
 #if defined(USE_SCUDO)
   ScudoCrashData scudo_crash_data(unwinder->GetProcessMemory().get(), process_info);
   if (scudo_crash_data.CrashIsMine()) {
@@ -203,13 +213,13 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
 #endif
 
   GwpAsanCrashData gwp_asan_crash_data(unwinder->GetProcessMemory().get(), process_info,
-                                       main_thread);
+                                       target_thread);
   if (gwp_asan_crash_data.CrashIsMine()) {
     gwp_asan_crash_data.AddCauseProtos(tombstone, unwinder);
     return;
   }
 
-  const siginfo *si = main_thread.siginfo;
+  const siginfo *si = target_thread.siginfo;
   auto fault_addr = reinterpret_cast<uint64_t>(si->si_addr);
   unwindstack::Maps* maps = unwinder->GetMaps();
 
@@ -228,14 +238,14 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
     } else if (fault_addr == 0xffff0f60) {
       cause = "call to kuser_cmpxchg64";
     } else {
-      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, target_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSEGV && si->si_code == SEGV_ACCERR) {
     auto map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
     } else {
-      cause = get_stack_overflow_cause(fault_addr, main_thread.registers->sp(), maps);
+      cause = get_stack_overflow_cause(fault_addr, target_thread.registers->sp(), maps);
     }
   } else if (si->si_signo == SIGSYS && si->si_code == SYS_SECCOMP) {
     cause = StringPrintf("seccomp prevented call to disallowed %s system call %d", ABI_STRING,
@@ -245,6 +255,46 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
   if (cause) {
     Cause *cause_proto = tombstone->add_causes();
     cause_proto->set_human_readable(*cause);
+  }
+}
+
+static void dump_crash_details(Tombstone* tombstone,
+                               std::shared_ptr<unwindstack::Memory>& process_memory,
+                               const ProcessInfo& process_info) {
+  uintptr_t address = process_info.crash_detail_page;
+  while (address) {
+    struct crash_detail_page_t page;
+    if (!process_memory->ReadFully(address, &page, sizeof(page))) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "failed to read crash detail page: %m");
+      break;
+    }
+    if (page.used > kNumCrashDetails) {
+      async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "crash detail: page corrupted");
+      break;
+    }
+    for (size_t i = 0; i < page.used; ++i) {
+      const crash_detail_t& crash_detail = page.crash_details[i];
+      if (!crash_detail.data) {
+        continue;
+      }
+      std::string name(crash_detail.name_size, '\0');
+      if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(crash_detail.name), name.data(),
+                                     crash_detail.name_size)) {
+        async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "crash detail: failed to read name: %m");
+        continue;
+      }
+      std::string data(crash_detail.data_size, '\0');
+      if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(crash_detail.data), data.data(),
+                                     crash_detail.data_size)) {
+        async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG,
+                              "crash detail: failed to read data for %s: %m", name.c_str());
+        continue;
+      }
+      auto* proto_detail = tombstone->add_crash_details();
+      proto_detail->set_name(name);
+      proto_detail->set_data(data);
+    }
+    address = reinterpret_cast<uintptr_t>(page.prev);
   }
 }
 
@@ -490,27 +540,48 @@ static void dump_mappings(Tombstone* tombstone, unwindstack::Maps* maps,
   }
 }
 
+// This creates a fake log message that indicates an error occurred when
+// reading the log.
+static void add_error_log_msg(Tombstone* tombstone, const std::string&& error_msg) {
+  LogBuffer buffer;
+  buffer.set_name("ERROR");
+
+  LogMessage* log_msg = buffer.add_logs();
+  log_msg->set_timestamp("00-00 00:00:00.000");
+  log_msg->set_pid(0);
+  log_msg->set_tid(0);
+  log_msg->set_priority(ANDROID_LOG_ERROR);
+  log_msg->set_tag("");
+  log_msg->set_message(error_msg);
+
+  *tombstone->add_log_buffers() = std::move(buffer);
+
+  async_safe_format_log(ANDROID_LOG_ERROR, LOG_TAG, "%s", error_msg.c_str());
+}
+
 static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
-  logger_list* logger_list =
-      android_logger_list_open(android_name_to_log_id(logger), ANDROID_LOG_NONBLOCK, 0, pid);
+  logger_list* logger_list = android_logger_list_open(android_name_to_log_id(logger),
+                                                      ANDROID_LOG_NONBLOCK, kMaxLogMessages, pid);
+  if (logger_list == nullptr) {
+    add_error_log_msg(tombstone, android::base::StringPrintf("Cannot open log file %s", logger));
+    return;
+  }
 
   LogBuffer buffer;
-
   while (true) {
     log_msg log_entry;
     ssize_t actual = android_logger_list_read(logger_list, &log_entry);
-
     if (actual < 0) {
       if (actual == -EINTR) {
         // interrupted by signal, retry
         continue;
       }
-      if (actual == -EAGAIN) {
-        // non-blocking EOF; we're done
-        break;
-      } else {
-        break;
+      // Don't consider EAGAIN an error since this is a non-blocking call.
+      if (actual != -EAGAIN) {
+        add_error_log_msg(tombstone, android::base::StringPrintf("reading log %s failed (%s)",
+                                                                 logger, strerror(-actual)));
       }
+      break;
     } else if (actual == 0) {
       break;
     }
@@ -614,7 +685,7 @@ static void dump_tags_around_fault_addr(Signal* signal, const Tombstone& tombsto
 }
 
 void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder* unwinder,
-                             const std::map<pid_t, ThreadInfo>& threads, pid_t target_thread,
+                             const std::map<pid_t, ThreadInfo>& threads, pid_t target_tid,
                              const ProcessInfo& process_info, const OpenFilesList* open_files) {
   Tombstone result;
 
@@ -623,19 +694,19 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
   result.set_revision(android::base::GetProperty("ro.revision", "unknown"));
   result.set_timestamp(get_timestamp());
 
-  const ThreadInfo& main_thread = threads.at(target_thread);
-  result.set_pid(main_thread.pid);
-  result.set_tid(main_thread.tid);
-  result.set_uid(main_thread.uid);
-  result.set_selinux_label(main_thread.selinux_label);
+  const ThreadInfo& target_thread = threads.at(target_tid);
+  result.set_pid(target_thread.pid);
+  result.set_tid(target_thread.tid);
+  result.set_uid(target_thread.uid);
+  result.set_selinux_label(target_thread.selinux_label);
   // The main thread must have a valid siginfo.
-  CHECK(main_thread.siginfo != nullptr);
+  CHECK(target_thread.siginfo != nullptr);
 
   struct sysinfo si;
   sysinfo(&si);
   android::procinfo::ProcessInfo proc_info;
   std::string error;
-  if (android::procinfo::GetProcessInfo(main_thread.pid, &proc_info, &error)) {
+  if (android::procinfo::GetProcessInfo(target_thread.pid, &proc_info, &error)) {
     uint64_t starttime = proc_info.starttime / sysconf(_SC_CLK_TCK);
     result.set_process_uptime(si.uptime - starttime);
   } else {
@@ -643,25 +714,28 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
                           error.c_str());
   }
 
+  result.set_page_size(getpagesize());
+  result.set_has_been_16kb_mode(android::base::GetBoolProperty("ro.misctrl.16kb_before", false));
+
   auto cmd_line = result.mutable_command_line();
-  for (const auto& arg : main_thread.command_line) {
+  for (const auto& arg : target_thread.command_line) {
     *cmd_line->Add() = arg;
   }
 
-  if (!main_thread.siginfo) {
+  if (!target_thread.siginfo) {
     async_safe_fatal("siginfo missing");
   }
 
   Signal sig;
-  sig.set_number(main_thread.signo);
-  sig.set_name(get_signame(main_thread.siginfo));
-  sig.set_code(main_thread.siginfo->si_code);
-  sig.set_code_name(get_sigcode(main_thread.siginfo));
+  sig.set_number(target_thread.signo);
+  sig.set_name(get_signame(target_thread.siginfo));
+  sig.set_code(target_thread.siginfo->si_code);
+  sig.set_code_name(get_sigcode(target_thread.siginfo));
 
-  if (signal_has_sender(main_thread.siginfo, main_thread.pid)) {
+  if (signal_has_sender(target_thread.siginfo, target_thread.pid)) {
     sig.set_has_sender(true);
-    sig.set_sender_uid(main_thread.siginfo->si_uid);
-    sig.set_sender_pid(main_thread.siginfo->si_pid);
+    sig.set_sender_uid(target_thread.siginfo->si_uid);
+    sig.set_sender_pid(target_thread.siginfo->si_pid);
   }
 
   if (process_info.has_fault_address) {
@@ -674,23 +748,30 @@ void engrave_tombstone_proto(Tombstone* tombstone, unwindstack::AndroidUnwinder*
   *result.mutable_signal_info() = sig;
 
   dump_abort_message(&result, unwinder->GetProcessMemory(), process_info);
-
-  // Dump the main thread, but save the memory around the registers.
-  dump_thread(&result, unwinder, main_thread, /* memory_dump */ true);
+  dump_crash_details(&result, unwinder->GetProcessMemory(), process_info);
+  // Dump the target thread, but save the memory around the registers.
+  dump_thread(&result, unwinder, target_thread, /* memory_dump */ true);
 
   for (const auto& [tid, thread_info] : threads) {
-    if (tid != target_thread) {
+    if (tid != target_tid) {
       dump_thread(&result, unwinder, thread_info);
     }
   }
 
-  dump_probable_cause(&result, unwinder, process_info, main_thread);
+  dump_probable_cause(&result, unwinder, process_info, target_thread);
 
   dump_mappings(&result, unwinder->GetMaps(), unwinder->GetProcessMemory());
 
   // Only dump logs on debuggable devices.
   if (android::base::GetBoolProperty("ro.debuggable", false)) {
-    dump_logcat(&result, main_thread.pid);
+    // Get the thread that corresponds to the main pid of the process.
+    const ThreadInfo& thread = threads.at(target_thread.pid);
+
+    // Do not attempt to dump logs of the logd process because the gathering
+    // of logs can hang until a timeout occurs.
+    if (thread.thread_name != "logd") {
+      dump_logcat(&result, target_thread.pid);
+    }
   }
 
   dump_open_fds(&result, open_files);

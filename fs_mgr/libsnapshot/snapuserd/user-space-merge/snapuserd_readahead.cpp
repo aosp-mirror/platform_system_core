@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
+#include "snapuserd_readahead.h"
+
+#include <pthread.h>
+
 #include "snapuserd_core.h"
+#include "utility.h"
 
 namespace android {
 namespace snapshot {
@@ -32,14 +37,17 @@ ReadAhead::ReadAhead(const std::string& cow_device, const std::string& backing_d
 }
 
 void ReadAhead::CheckOverlap(const CowOperation* cow_op) {
-    uint64_t source_block = cow_op->source;
-    uint64_t source_offset = 0;
-    if (cow_op->type == kCowXorOp) {
-        source_block /= BLOCK_SZ;
-        source_offset = cow_op->source % BLOCK_SZ;
+    uint64_t source_offset;
+    if (!reader_->GetSourceOffset(cow_op, &source_offset)) {
+        SNAP_LOG(ERROR) << "ReadAhead operation has no source offset: " << *cow_op;
+        return;
     }
+
+    uint64_t source_block = GetBlockFromOffset(header_, source_offset);
+    bool misaligned = (GetBlockRelativeOffset(header_, source_offset) != 0);
+
     if (dest_blocks_.count(cow_op->new_block) || source_blocks_.count(source_block) ||
-        (source_offset > 0 && source_blocks_.count(source_block + 1))) {
+        (misaligned && source_blocks_.count(source_block + 1))) {
         overlap_ = true;
     }
 
@@ -64,11 +72,12 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
 
     // Get the first block with offset
     const CowOperation* cow_op = GetRAOpIter();
-    *source_offset = cow_op->source;
 
-    if (cow_op->type == kCowCopyOp) {
-        *source_offset *= BLOCK_SZ;
-    } else if (cow_op->type == kCowXorOp) {
+    if (!reader_->GetSourceOffset(cow_op, source_offset)) {
+        SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
+        return nr_consecutive;
+    }
+    if (cow_op->type() == kCowXorOp) {
         xor_op_vec.push_back(cow_op);
     }
 
@@ -86,10 +95,10 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
      */
     while (!RAIterDone() && num_ops) {
         const CowOperation* op = GetRAOpIter();
-        uint64_t next_offset = op->source;
-
-        if (cow_op->type == kCowCopyOp) {
-            next_offset *= BLOCK_SZ;
+        uint64_t next_offset;
+        if (!reader_->GetSourceOffset(op, &next_offset)) {
+            SNAP_LOG(ERROR) << "PrepareNextReadAhead operation has no source offset: " << *cow_op;
+            break;
         }
 
         // Check for consecutive blocks
@@ -97,7 +106,7 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
             break;
         }
 
-        if (op->type == kCowXorOp) {
+        if (op->type() == kCowXorOp) {
             xor_op_vec.push_back(op);
         }
 
@@ -113,6 +122,24 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
 
     return nr_consecutive;
 }
+
+class [[nodiscard]] AutoNotifyReadAheadFailed {
+  public:
+    AutoNotifyReadAheadFailed(std::shared_ptr<SnapshotHandler> snapuserd) : snapuserd_(snapuserd) {}
+
+    ~AutoNotifyReadAheadFailed() {
+        if (cancelled_) {
+            return;
+        }
+        snapuserd_->ReadAheadIOFailed();
+    }
+
+    void Cancel() { cancelled_ = true; }
+
+  private:
+    std::shared_ptr<SnapshotHandler> snapuserd_;
+    bool cancelled_ = false;
+};
 
 bool ReadAhead::ReconstructDataFromCow() {
     std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
@@ -145,6 +172,8 @@ bool ReadAhead::ReconstructDataFromCow() {
         metadata_offset += sizeof(struct ScratchMetadata);
     }
 
+    AutoNotifyReadAheadFailed notify_read_ahead_failed(snapuserd_);
+
     // We are done re-constructing the mapping; however, we need to make sure
     // all the COW operations to-be merged are present in the re-constructed
     // mapping.
@@ -162,7 +191,6 @@ bool ReadAhead::ReconstructDataFromCow() {
         if (!(num_ops == 0)) {
             SNAP_LOG(ERROR) << "ReconstructDataFromCow failed. Not all ops recoverd "
                             << " Pending ops: " << num_ops;
-            snapuserd_->ReadAheadIOFailed();
             return false;
         }
 
@@ -175,11 +203,12 @@ bool ReadAhead::ReconstructDataFromCow() {
 
     if (!snapuserd_->ReadAheadIOCompleted(true)) {
         SNAP_LOG(ERROR) << "ReadAheadIOCompleted failed...";
-        snapuserd_->ReadAheadIOFailed();
         return false;
     }
 
+    snapuserd_->RaThreadStarted();
     SNAP_LOG(INFO) << "ReconstructDataFromCow success";
+    notify_read_ahead_failed.Cancel();
     return true;
 }
 
@@ -402,7 +431,7 @@ bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
         // will fallback to synchronous I/O.
         int ret = io_uring_wait_cqe(ring_.get(), &cqe);
         if (ret) {
-            SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << ret;
+            SNAP_LOG(ERROR) << "Read-ahead - io_uring_wait_cqe failed: " << strerror(-ret);
             status = false;
             break;
         }
@@ -467,14 +496,20 @@ bool ReadAhead::ReadXorData(size_t block_index, size_t xor_op_index,
         if (xor_op_index < xor_op_vec.size()) {
             const CowOperation* xor_op = xor_op_vec[xor_op_index];
             if (xor_op->new_block == new_block) {
-                if (!reader_->ReadData(*xor_op, &bufsink_)) {
+                void* buffer = bufsink_.AcquireBuffer(BLOCK_SZ);
+                if (!buffer) {
+                    SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer for block: "
+                                    << xor_op->new_block;
+                    return false;
+                }
+                if (ssize_t rv = reader_->ReadData(xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
                     SNAP_LOG(ERROR)
-                            << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block;
+                            << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block
+                            << ", return value: " << rv;
                     return false;
                 }
 
                 xor_op_index += 1;
-                bufsink_.UpdateBufferOffset(BLOCK_SZ);
             }
         }
         block_index += 1;
@@ -491,6 +526,8 @@ bool ReadAhead::ReadAheadSyncIO() {
     source_blocks_.clear();
     blocks_.clear();
     std::vector<const CowOperation*> xor_op_vec;
+
+    AutoNotifyReadAheadFailed notify_read_ahead_failed(snapuserd_);
 
     bufsink_.ResetBufferOffset();
 
@@ -518,8 +555,6 @@ bool ReadAhead::ReadAheadSyncIO() {
                              << " offset :" << source_offset % BLOCK_SZ
                              << " buffer_offset : " << buffer_offset << " io_size : " << io_size
                              << " buf-addr : " << read_ahead_buffer_;
-
-            snapuserd_->ReadAheadIOFailed();
             return false;
         }
 
@@ -530,6 +565,7 @@ bool ReadAhead::ReadAheadSyncIO() {
 
     // Done with merging ordered ops
     if (RAIterDone() && total_blocks_merged_ == 0) {
+        notify_read_ahead_failed.Cancel();
         return true;
     }
 
@@ -560,20 +596,25 @@ bool ReadAhead::ReadAheadSyncIO() {
             // Check if this block is an XOR op
             if (xor_op->new_block == new_block) {
                 // Read the xor'ed data from COW
-                if (!reader_->ReadData(*xor_op, &bufsink)) {
+                void* buffer = bufsink.GetPayloadBuffer(BLOCK_SZ);
+                if (!buffer) {
+                    SNAP_LOG(ERROR) << "ReadAhead - failed to allocate buffer";
+                    return false;
+                }
+                if (ssize_t rv = reader_->ReadData(xor_op, buffer, BLOCK_SZ); rv != BLOCK_SZ) {
                     SNAP_LOG(ERROR)
-                            << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block;
-                    snapuserd_->ReadAheadIOFailed();
+                            << " ReadAhead - XorOp Read failed for block: " << xor_op->new_block
+                            << ", return value: " << rv;
                     return false;
                 }
                 // Pointer to the data read from base device
-                uint8_t* buffer = reinterpret_cast<uint8_t*>(bufptr);
+                uint8_t* read_buffer = reinterpret_cast<uint8_t*>(bufptr);
                 // Get the xor'ed data read from COW device
                 uint8_t* xor_data = reinterpret_cast<uint8_t*>(bufsink.GetPayloadBufPtr());
 
                 // Retrieve the original data
                 for (size_t byte_offset = 0; byte_offset < BLOCK_SZ; byte_offset++) {
-                    buffer[byte_offset] ^= xor_data[byte_offset];
+                    read_buffer[byte_offset] ^= xor_data[byte_offset];
                 }
 
                 // Move to next XOR op
@@ -604,6 +645,7 @@ bool ReadAhead::ReadAheadSyncIO() {
     bm->new_block = 0;
     bm->file_offset = 0;
 
+    notify_read_ahead_failed.Cancel();
     return true;
 }
 
@@ -652,6 +694,7 @@ bool ReadAhead::ReadAheadIOStart() {
     // window. If there is a crash during this time frame, merge should resume
     // based on the contents of the scratch space.
     if (!snapuserd_->WaitForMergeReady()) {
+        SNAP_LOG(ERROR) << "ReadAhead failed to wait for merge ready";
         return false;
     }
 
@@ -674,9 +717,13 @@ bool ReadAhead::ReadAheadIOStart() {
     total_ra_blocks_completed_ += total_blocks_merged_;
     snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged_);
 
-    // Flush the data only if we have a overlapping blocks in the region
+    // Flush the scratch data - Technically, we should flush only for overlapping
+    // blocks; However, since this region is mmap'ed, the dirty pages can still
+    // get flushed to disk at any random point in time. Instead, make sure
+    // the data in scratch is in the correct state before merge thread resumes.
+    //
     // Notify the Merge thread to resume merging this window
-    if (!snapuserd_->ReadAheadIOCompleted(overlap_)) {
+    if (!snapuserd_->ReadAheadIOCompleted(true)) {
         SNAP_LOG(ERROR) << "ReadAheadIOCompleted failed...";
         snapuserd_->ReadAheadIOFailed();
         return false;
@@ -713,6 +760,10 @@ void ReadAhead::FinalizeIouring() {
 }
 
 bool ReadAhead::RunThread() {
+    SNAP_LOG(INFO) << "ReadAhead thread started.";
+
+    pthread_setname_np(pthread_self(), "ReadAhead");
+
     if (!InitializeFds()) {
         return false;
     }
@@ -727,10 +778,15 @@ bool ReadAhead::RunThread() {
 
     InitializeIouring();
 
-    if (setpriority(PRIO_PROCESS, gettid(), kNiceValueForMergeThreads)) {
-        SNAP_PLOG(ERROR) << "Failed to set priority for TID: " << gettid();
+    if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
+        SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
+    if (!SetProfiles({"CPUSET_SP_BACKGROUND"})) {
+        SNAP_PLOG(ERROR) << "Failed to assign task profile to readahead thread";
+    }
+
+    SNAP_LOG(INFO) << "ReadAhead processing.";
     while (!RAIterDone()) {
         if (!ReadAheadIOStart()) {
             break;
@@ -741,7 +797,7 @@ bool ReadAhead::RunThread() {
     CloseFds();
     reader_->CloseCowFd();
 
-    SNAP_LOG(INFO) << " ReadAhead thread terminating....";
+    SNAP_LOG(INFO) << " ReadAhead thread terminating.";
     return true;
 }
 
@@ -768,6 +824,7 @@ bool ReadAhead::InitReader() {
     if (!reader_->InitForMerge(std::move(cow_fd_))) {
         return false;
     }
+    header_ = reader_->GetHeader();
     return true;
 }
 
@@ -776,7 +833,7 @@ void ReadAhead::InitializeRAIter() {
 }
 
 bool ReadAhead::RAIterDone() {
-    if (cowop_iter_->Done()) {
+    if (cowop_iter_->AtEnd()) {
         return true;
     }
 
@@ -794,15 +851,14 @@ void ReadAhead::RAIterNext() {
 }
 
 void ReadAhead::RAResetIter(uint64_t num_blocks) {
-    while (num_blocks && !cowop_iter_->RDone()) {
+    while (num_blocks && !cowop_iter_->AtBegin()) {
         cowop_iter_->Prev();
         num_blocks -= 1;
     }
 }
 
 const CowOperation* ReadAhead::GetRAOpIter() {
-    const CowOperation* cow_op = &cowop_iter_->Get();
-    return cow_op;
+    return cowop_iter_->Get();
 }
 
 void ReadAhead::InitializeBuffer() {

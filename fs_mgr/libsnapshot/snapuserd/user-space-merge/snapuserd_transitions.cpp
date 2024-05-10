@@ -189,33 +189,32 @@ void SnapshotHandler::InitiateMerge() {
     cv.notify_all();
 }
 
+static inline bool IsMergeBeginError(MERGE_IO_TRANSITION io_state) {
+    return io_state == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
+           io_state == MERGE_IO_TRANSITION::IO_TERMINATED;
+}
+
 // Invoked by Merge thread - Waits on RA thread to resume merging. Will
 // be waken up RA thread.
 bool SnapshotHandler::WaitForMergeBegin() {
-    {
-        std::unique_lock<std::mutex> lock(lock_);
-        while (!MergeInitiated()) {
-            cv.wait(lock);
+    std::unique_lock<std::mutex> lock(lock_);
 
-            if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-                return false;
-            }
-        }
+    cv.wait(lock, [this]() -> bool { return MergeInitiated() || IsMergeBeginError(io_state_); });
 
-        while (!(io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN ||
-                 io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-                 io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED)) {
-            cv.wait(lock);
-        }
-
-        if (io_state_ == MERGE_IO_TRANSITION::READ_AHEAD_FAILURE ||
-            io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-            return false;
-        }
-
-        return true;
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
     }
+
+    cv.wait(lock, [this]() -> bool {
+        return io_state_ == MERGE_IO_TRANSITION::MERGE_BEGIN || IsMergeBeginError(io_state_);
+    });
+
+    if (IsMergeBeginError(io_state_)) {
+        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        return false;
+    }
+    return true;
 }
 
 // Invoked by RA thread - Flushes the RA block to scratch space if necessary
@@ -277,6 +276,7 @@ bool SnapshotHandler::WaitForMergeReady() {
         if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED ||
             io_state_ == MERGE_IO_TRANSITION::MERGE_COMPLETE ||
             io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
+            SNAP_LOG(ERROR) << "Wait for merge ready failed: " << io_state_;
             return false;
         }
         return true;
@@ -366,10 +366,36 @@ void SnapshotHandler::WaitForMergeComplete() {
     }
 }
 
+void SnapshotHandler::RaThreadStarted() {
+    std::unique_lock<std::mutex> lock(lock_);
+    ra_thread_started_ = true;
+}
+
+void SnapshotHandler::WaitForRaThreadToStart() {
+    auto now = std::chrono::system_clock::now();
+    auto deadline = now + 3s;
+    {
+        std::unique_lock<std::mutex> lock(lock_);
+        while (!ra_thread_started_) {
+            auto status = cv.wait_until(lock, deadline);
+            if (status == std::cv_status::timeout) {
+                SNAP_LOG(ERROR) << "Read-ahead thread did not start";
+                return;
+            }
+        }
+    }
+}
+
+void SnapshotHandler::MarkMergeComplete() {
+    std::lock_guard<std::mutex> lock(lock_);
+    merge_complete_ = true;
+}
+
 std::string SnapshotHandler::GetMergeStatus() {
     bool merge_not_initiated = false;
     bool merge_monitored = false;
     bool merge_failed = false;
+    bool merge_complete = false;
 
     {
         std::lock_guard<std::mutex> lock(lock_);
@@ -385,10 +411,9 @@ std::string SnapshotHandler::GetMergeStatus() {
         if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED) {
             merge_failed = true;
         }
-    }
 
-    struct CowHeader* ch = reinterpret_cast<struct CowHeader*>(mapped_addr_);
-    bool merge_complete = (ch->num_merge_ops == reader_->get_num_total_data_ops());
+        merge_complete = merge_complete_;
+    }
 
     if (merge_not_initiated) {
         // Merge was not initiated yet; however, we have merge completion
@@ -424,7 +449,6 @@ std::string SnapshotHandler::GetMergeStatus() {
         return "snapshot-merge-failed";
     }
 
-    // Merge complete
     if (merge_complete) {
         return "snapshot-merge-complete";
     }
@@ -618,7 +642,6 @@ bool SnapshotHandler::GetRABuffer(std::unique_lock<std::mutex>* lock, uint64_t b
     std::unordered_map<uint64_t, void*>::iterator it = read_ahead_buffer_map_.find(block);
 
     if (it == read_ahead_buffer_map_.end()) {
-        SNAP_LOG(ERROR) << "Block: " << block << " not found in RA buffer";
         return false;
     }
 
@@ -642,6 +665,13 @@ MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void*
         MERGE_GROUP_STATE state = blk_state->merge_state_;
         switch (state) {
             case MERGE_GROUP_STATE::GROUP_MERGE_PENDING: {
+                // If this is a merge-resume path, check if the data is
+                // available from scratch space. Data from scratch space takes
+                // higher precedence than from source device for overlapping
+                // blocks.
+                if (resume_merge_ && GetRABuffer(&lock, new_block, buffer)) {
+                    return (MERGE_GROUP_STATE::GROUP_MERGE_IN_PROGRESS);
+                }
                 blk_state->num_ios_in_progress += 1;  // ref count
                 [[fallthrough]];
             }
@@ -665,6 +695,27 @@ MERGE_GROUP_STATE SnapshotHandler::ProcessMergingBlock(uint64_t new_block, void*
                 return MERGE_GROUP_STATE::GROUP_INVALID;
             }
         }
+    }
+}
+
+std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value) {
+    switch (value) {
+        case MERGE_IO_TRANSITION::INVALID:
+            return os << "INVALID";
+        case MERGE_IO_TRANSITION::MERGE_READY:
+            return os << "MERGE_READY";
+        case MERGE_IO_TRANSITION::MERGE_BEGIN:
+            return os << "MERGE_BEGIN";
+        case MERGE_IO_TRANSITION::MERGE_FAILED:
+            return os << "MERGE_FAILED";
+        case MERGE_IO_TRANSITION::MERGE_COMPLETE:
+            return os << "MERGE_COMPLETE";
+        case MERGE_IO_TRANSITION::IO_TERMINATED:
+            return os << "IO_TERMINATED";
+        case MERGE_IO_TRANSITION::READ_AHEAD_FAILURE:
+            return os << "READ_AHEAD_FAILURE";
+        default:
+            return os << "unknown";
     }
 }
 

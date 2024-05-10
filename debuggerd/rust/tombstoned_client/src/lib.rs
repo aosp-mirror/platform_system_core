@@ -39,20 +39,26 @@ pub struct TombstonedConnection {
 }
 
 impl TombstonedConnection {
+    /// # Safety
+    ///
+    /// The file descriptors must be valid and open.
     unsafe fn from_raw_fds(
         tombstoned_socket: RawFd,
         text_output_fd: RawFd,
         proto_output_fd: RawFd,
     ) -> Self {
         Self {
-            tombstoned_socket: File::from_raw_fd(tombstoned_socket),
+            // SAFETY: The caller guarantees that the file descriptor is valid and open.
+            tombstoned_socket: unsafe { File::from_raw_fd(tombstoned_socket) },
             text_output: if text_output_fd >= 0 {
-                Some(File::from_raw_fd(text_output_fd))
+                // SAFETY: The caller guarantees that the file descriptor is valid and open.
+                Some(unsafe { File::from_raw_fd(text_output_fd) })
             } else {
                 None
             },
             proto_output: if proto_output_fd >= 0 {
-                Some(File::from_raw_fd(proto_output_fd))
+                // SAFETY: The caller guarantees that the file descriptor is valid and open.
+                Some(unsafe { File::from_raw_fd(proto_output_fd) })
             } else {
                 None
             },
@@ -71,6 +77,8 @@ impl TombstonedConnection {
             &mut proto_output_fd,
             dump_type,
         ) {
+            // SAFETY: If tombstoned_connect_files returns successfully then they file descriptors
+            // are valid and open.
             Ok(unsafe { Self::from_raw_fds(tombstoned_socket, text_output_fd, proto_output_fd) })
         } else {
             Err(Error)
@@ -146,8 +154,6 @@ mod tests {
             .write_all(b"test data")
             .expect("Failed to write to text output FD.");
 
-        connection
-            .notify_completion()
-            .expect("Failed to notify completion.");
+        connection.notify_completion().expect("Failed to notify completion.");
     }
 }

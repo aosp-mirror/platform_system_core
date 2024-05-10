@@ -1,4 +1,4 @@
-# See https://android.googlesource.com/platform/ndk/+/master/docs/PlatformApis.md
+# See https://android.googlesource.com/platform/ndk/+/main/docs/PlatformApis.md
 libandroid.so
 libandroidthings.so
 libaaudio.so

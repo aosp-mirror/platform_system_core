@@ -65,7 +65,7 @@ struct InterceptRequest {
 };
 
 enum class InterceptStatus : uint8_t {
-  // Returned when an intercept of a different type has already been
+  // Returned when an intercept of the same type has already been
   // registered (and is active) for a given PID.
   kFailedAlreadyRegistered,
   // Returned in all other failure cases.
@@ -99,7 +99,9 @@ struct __attribute__((__packed__)) CrashInfoDataDynamic : public CrashInfoDataSt
   uintptr_t scudo_region_info;
   uintptr_t scudo_ring_buffer;
   size_t scudo_ring_buffer_size;
-  bool recoverable_gwp_asan_crash;
+  size_t scudo_stack_depot_size;
+  bool recoverable_crash;
+  uintptr_t crash_detail_page;
 };
 
 struct __attribute__((__packed__)) CrashInfo {

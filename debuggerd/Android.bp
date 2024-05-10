@@ -12,6 +12,7 @@ cc_defaults {
         "-Wno-unused-argument",
         "-Wno-unused-function",
         "-Wno-nullability-completeness",
+        "-Wno-reorder-init-list",
         "-Os",
         "-fno-finite-loops",
         "-DANDROID_DEBUGGABLE=0",
@@ -20,8 +21,11 @@ cc_defaults {
     local_include_dirs: ["include"],
     product_variables: {
         debuggable: {
-            cflags: ["-UANDROID_DEBUGGABLE", "-DANDROID_DEBUGGABLE=1"],
-        }
+            cflags: [
+                "-UANDROID_DEBUGGABLE",
+                "-DANDROID_DEBUGGABLE=1",
+            ],
+        },
     },
 }
 
@@ -31,9 +35,10 @@ cc_library_headers {
     recovery_available: true,
     vendor_ramdisk_available: true,
     apex_available: [
+        "com.android.runtime",
         "com.android.virt",
         "//apex_available:platform",
-   ],
+    ],
 }
 
 cc_library_shared {
@@ -84,6 +89,7 @@ cc_library_static {
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["tombstoned/include"],
+    apex_available: ["com.android.runtime"],
 }
 
 // Core implementation, linked into libdebuggerd_handler and the dynamic linker.
@@ -109,6 +115,9 @@ cc_library_static {
 
     export_header_lib_headers: ["libdebuggerd_common_headers"],
     export_include_dirs: ["include"],
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 // Implementation with a no-op fallback.
@@ -185,9 +194,45 @@ cc_library {
     export_include_dirs: ["include"],
 }
 
+cc_library {
+    name: "libdebuggerd_tombstone_proto_to_text",
+    defaults: ["debuggerd_defaults"],
+    ramdisk_available: true,
+    recovery_available: true,
+    vendor_ramdisk_available: true,
+
+    local_include_dirs: ["libdebuggerd/include"],
+    export_include_dirs: ["libdebuggerd/include"],
+
+    srcs: [
+        "libdebuggerd/tombstone_proto_to_text.cpp",
+    ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
+    ],
+
+    static_libs: [
+        "libbase",
+        "liblog_for_runtime_apex",
+        "libunwindstack",
+    ],
+
+    whole_static_libs: [
+        "libtombstone_proto",
+        "libprotobuf-cpp-lite",
+    ],
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.runtime",
+    ],
+}
+
 cc_library_static {
     name: "libdebuggerd",
     defaults: ["debuggerd_defaults"],
+    ramdisk_available: true,
     recovery_available: true,
     vendor_ramdisk_available: true,
 
@@ -195,10 +240,14 @@ cc_library_static {
         "libdebuggerd/backtrace.cpp",
         "libdebuggerd/gwp_asan.cpp",
         "libdebuggerd/open_files_list.cpp",
+        "libdebuggerd/scudo.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/tombstone_proto.cpp",
-        "libdebuggerd/tombstone_proto_to_text.cpp",
         "libdebuggerd/utility.cpp",
+    ],
+
+    cflags: [
+        "-DUSE_SCUDO",
     ],
 
     local_include_dirs: ["libdebuggerd/include"],
@@ -212,25 +261,25 @@ cc_library_static {
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
         "liblog_headers",
+        "scudo_headers",
     ],
 
     static_libs: [
-        "libdexfile_support",  // libunwindstack dependency
+        "libdexfile_support", // libunwindstack dependency
         "libunwindstack",
         "liblzma",
         "libbase",
         "libcutils",
     ],
-    runtime_libs: [
-        "libdexfile",           // libdexfile_support dependency
-    ],
 
     whole_static_libs: [
+        "libdebuggerd_tombstone_proto_to_text",
         "libasync_safe",
         "gwp_asan_crash_handler",
         "libtombstone_proto",
         "libprocinfo",
         "libprotobuf-cpp-lite",
+        "libscudo",
     ],
 
     target: {
@@ -250,6 +299,19 @@ cc_library_static {
                 "libdexfile",
             ],
         },
+        ramdisk: {
+            exclude_static_libs: [
+                "libdexfile_support",
+            ],
+            exclude_runtime_libs: [
+                "libdexfile",
+            ],
+        },
+        android: {
+            runtime_libs: [
+                "libdexfile", // libdexfile_support dependency
+            ],
+        },
     },
 
     product_variables: {
@@ -257,13 +319,14 @@ cc_library_static {
             cflags: ["-DROOT_POSSIBLE"],
         },
 
-        malloc_not_svelte: {
-            cflags: ["-DUSE_SCUDO"],
-            whole_static_libs: ["libscudo"],
-            srcs: ["libdebuggerd/scudo.cpp"],
-            header_libs: ["scudo_headers"],
+        malloc_low_memory: {
+            cflags: ["-UUSE_SCUDO"],
+            exclude_static_libs: ["libscudo"],
         },
     },
+    apex_available: [
+        "com.android.runtime",
+    ],
 }
 
 cc_binary {
@@ -297,7 +360,7 @@ cc_test {
         "libdebuggerd/test/elf_fake.cpp",
         "libdebuggerd/test/log_fake.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
-        "libdebuggerd/test/utility_test.cpp",
+        "libdebuggerd/test/tombstone_proto_to_text_test.cpp",
     ],
 
     target: {
@@ -311,6 +374,10 @@ cc_test {
                 "libtombstoned_client_static",
             ],
         },
+    },
+
+    sanitize: {
+        memtag_heap: true,
     },
 
     shared_libs: [
@@ -368,6 +435,7 @@ cc_binary {
     name: "crash_dump",
     srcs: [
         "crash_dump.cpp",
+        "tombstone_handler.cpp",
         "util.cpp",
     ],
     defaults: ["debuggerd_defaults"],
@@ -438,7 +506,7 @@ cc_defaults {
 
     header_libs: [
         "bionic_libc_platform_headers",
-        "libdebuggerd_common_headers"
+        "libdebuggerd_common_headers",
     ],
 
     static_libs: [
@@ -496,7 +564,6 @@ prebuilt_etc {
     },
 }
 
-
 // This installs the "other" architecture (so 32-bit on 64-bit device).
 prebuilt_etc {
     name: "crash_dump.policy_other",
@@ -508,6 +575,9 @@ prebuilt_etc {
         },
         arm64: {
             src: "seccomp_policy/crash_dump.arm.policy",
+        },
+        riscv64: {
+            enabled: false,
         },
         x86: {
             src: "seccomp_policy/crash_dump.x86_64.policy",

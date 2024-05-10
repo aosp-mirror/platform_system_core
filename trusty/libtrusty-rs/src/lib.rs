@@ -102,6 +102,8 @@ impl TipcChannel {
         let file = File::options().read(true).write(true).open(device)?;
 
         let srv_name = CString::new(service).expect("Service name contained null bytes");
+        // SAFETY: The file descriptor is valid because it came from a `File`, and the name is a
+        // valid C string because it came from a `CString`.
         unsafe {
             tipc_connect(file.as_raw_fd(), srv_name.as_ptr())?;
         }

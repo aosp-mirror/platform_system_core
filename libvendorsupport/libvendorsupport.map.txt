@@ -1,0 +1,7 @@
+LIBVENDORSUPPORT {
+  global:
+    AVendorSupport_getVendorApiLevelOf; # llndk systemapi
+    AVendorSupport_getSdkApiLevelOf; # llndk systemapi
+  local:
+    *;
+};

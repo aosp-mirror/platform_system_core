@@ -116,6 +116,24 @@ class DmTargetLinear final : public DmTarget {
     uint64_t physical_sector_;
 };
 
+class DmTargetStripe final : public DmTarget {
+  public:
+    DmTargetStripe(uint64_t start, uint64_t length, uint64_t chunksize,
+                   const std::string& block_device0, const std::string& block_device1)
+        : DmTarget(start, length),
+          chunksize(chunksize),
+          block_device0_(block_device0),
+          block_device1_(block_device1) {}
+
+    std::string name() const override { return "striped"; }
+    std::string GetParameterString() const override;
+
+  private:
+    uint64_t chunksize;
+    std::string block_device0_;
+    std::string block_device1_;
+};
+
 class DmTargetVerity final : public DmTarget {
   public:
     DmTargetVerity(uint64_t start, uint64_t length, uint32_t version,
@@ -329,6 +347,35 @@ class DmTargetError final : public DmTarget {
 
     std::string name() const override { return "error"; }
     std::string GetParameterString() const override { return ""; }
+};
+
+class DmTargetThinPool final : public DmTarget {
+  public:
+    DmTargetThinPool(uint64_t start, uint64_t length, const std::string& metadata_dev,
+                     const std::string& data_dev, uint64_t data_block_size,
+                     uint64_t low_water_mark);
+
+    std::string name() const override { return "thin-pool"; }
+    std::string GetParameterString() const override;
+    bool Valid() const override;
+
+  private:
+    std::string metadata_dev_;
+    std::string data_dev_;
+    uint64_t data_block_size_;
+    uint64_t low_water_mark_;
+};
+
+class DmTargetThin final : public DmTarget {
+  public:
+    DmTargetThin(uint64_t start, uint64_t length, const std::string& pool_dev, uint64_t dev_id);
+
+    std::string name() const override { return "thin"; }
+    std::string GetParameterString() const override;
+
+  private:
+    std::string pool_dev_;
+    uint64_t dev_id_;
 };
 
 }  // namespace dm
