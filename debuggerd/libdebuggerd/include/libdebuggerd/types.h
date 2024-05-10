@@ -39,6 +39,8 @@ struct ThreadInfo {
 
   int signo = 0;
   siginfo_t* siginfo = nullptr;
+
+  std::unique_ptr<unwindstack::Regs> guest_registers;
 };
 
 // This struct is written into a pipe from inside the crashing process.
