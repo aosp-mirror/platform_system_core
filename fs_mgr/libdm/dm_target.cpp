@@ -61,6 +61,10 @@ std::string DmTargetLinear::GetParameterString() const {
     return block_device_ + " " + std::to_string(physical_sector_);
 }
 
+std::string DmTargetStripe::GetParameterString() const {
+    return "2 " + std::to_string(chunksize) + " " + block_device0_ + " 0 " + block_device1_ + " 0";
+}
+
 DmTargetVerity::DmTargetVerity(uint64_t start, uint64_t length, uint32_t version,
                                const std::string& block_device, const std::string& hash_device,
                                uint32_t data_block_size, uint32_t hash_block_size,
@@ -292,6 +296,44 @@ std::string DmTargetUser::GetParameterString() const {
     argv.push_back(std::to_string(size()));
     argv.push_back(control_device());
     return android::base::Join(argv, " ");
+}
+
+DmTargetThinPool::DmTargetThinPool(uint64_t start, uint64_t length, const std::string& metadata_dev,
+                                   const std::string& data_dev, uint64_t data_block_size,
+                                   uint64_t low_water_mark)
+    : DmTarget(start, length),
+      metadata_dev_(metadata_dev),
+      data_dev_(data_dev),
+      data_block_size_(data_block_size),
+      low_water_mark_(low_water_mark) {}
+
+std::string DmTargetThinPool::GetParameterString() const {
+    std::vector<std::string> args{
+            metadata_dev_,
+            data_dev_,
+            std::to_string(data_block_size_),
+            std::to_string(low_water_mark_),
+    };
+    return android::base::Join(args, " ");
+}
+
+bool DmTargetThinPool::Valid() const {
+    // data_block_size: must be between 128 (64KB) and 2097152 (1GB) and a multiple of 128 (64KB)
+    if (data_block_size_ < 128 || data_block_size_ > 2097152) return false;
+    if (data_block_size_ % 128) return false;
+    return true;
+}
+
+DmTargetThin::DmTargetThin(uint64_t start, uint64_t length, const std::string& pool_dev,
+                           uint64_t dev_id)
+    : DmTarget(start, length), pool_dev_(pool_dev), dev_id_(dev_id) {}
+
+std::string DmTargetThin::GetParameterString() const {
+    std::vector<std::string> args{
+            pool_dev_,
+            std::to_string(dev_id_),
+    };
+    return android::base::Join(args, " ");
 }
 
 }  // namespace dm

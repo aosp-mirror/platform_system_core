@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -24,9 +25,14 @@
 namespace android {
 namespace init {
 
-// Parse all config files for a given apex.
-// If apex name is empty(""), config files for all apexes will be parsed.
-Result<void> ParseApexConfigs(const std::string& apex_name);
+// Scans apex_dir (/apex) to get the list of active APEXes.
+std::set<std::string> GetApexListFrom(const std::string& apex_dir);
+
+// Parse all RC scripts for a given apex.
+Result<void> ParseRcScriptsFromApex(const std::string& apex_name);
+
+// Parse all RC scripts for all apexes under /apex.
+Result<void> ParseRcScriptsFromAllApexes(bool bootstrap);
 
 }  // namespace init
 }  // namespace android

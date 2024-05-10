@@ -56,8 +56,7 @@ class FiemapStatus {
     // For logging and debugging only.
     std::string string() const;
 
-  protected:
-    FiemapStatus(ErrorCode code) : error_code_(code) {}
+    explicit FiemapStatus(ErrorCode code) : error_code_(code) {}
 
   private:
     ErrorCode error_code_;

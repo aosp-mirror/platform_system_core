@@ -52,8 +52,8 @@ enum class DmDeviceState { INVALID, SUSPENDED, ACTIVE };
 
 static constexpr uint64_t kSectorSize = 512;
 
-// Returns `path` without /dev/block prefix if and only if `path` starts with
-// that prefix.
+// Returns `path` without /dev/block prefix if `path` starts with that prefix.
+// Or, if `path` is a symlink, do the same with its real path.
 std::optional<std::string> ExtractBlockDeviceName(const std::string& path);
 
 // This interface is for testing purposes. See DeviceMapper proper for what these methods do.
@@ -78,6 +78,7 @@ class IDeviceMapper {
     virtual bool LoadTable(const std::string& name, const DmTable& table) = 0;
     virtual bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) = 0;
+    virtual bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) = 0;
     virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) = 0;
     virtual bool GetDeviceString(const std::string& name, std::string* dev) = 0;
     virtual bool DeleteDeviceIfExists(const std::string& name) = 0;
@@ -267,6 +268,12 @@ class DeviceMapper final : public IDeviceMapper {
     // false.
     bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) override;
 
+    // Query the status of a table, given a device name. The output vector will
+    // contain IMA TargetInfo for each target in the table. If the device does
+    // not exist, or there were too many targets, the call will fail and return
+    // false.
+    bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) override;
+
     // Identical to GetTableStatus, except also retrives the active table for the device
     // mapper device from the kernel.
     bool GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) override;
@@ -297,6 +304,11 @@ class DeviceMapper final : public IDeviceMapper {
     // simply calls CreateEmptyDevice. On 5.15 and higher, it also loads (but does not activate)
     // a placeholder table containing dm-error.
     bool CreatePlaceholderDevice(const std::string& name);
+
+    bool GetDeviceNameAndUuid(dev_t dev, std::string* name, std::string* uuid);
+
+    // Send |message| to target, pointed by |name| and |sector|. Use 0 if |sector| is not needed.
+    bool SendMessage(const std::string& name, uint64_t sector, const std::string& message);
 
   private:
     // Maximum possible device mapper targets registered in the kernel.

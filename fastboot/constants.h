@@ -69,6 +69,7 @@
 #define FB_VAR_VARIANT "variant"
 #define FB_VAR_OFF_MODE_CHARGE_STATE "off-mode-charge"
 #define FB_VAR_BATTERY_VOLTAGE "battery-voltage"
+#define FB_VAR_BATTERY_SOC "battery-soc"
 #define FB_VAR_BATTERY_SOC_OK "battery-soc-ok"
 #define FB_VAR_SUPER_PARTITION_NAME "super-partition-name"
 #define FB_VAR_SNAPSHOT_UPDATE_STATUS "snapshot-update-status"
@@ -81,3 +82,5 @@
 #define FB_VAR_TREBLE_ENABLED "treble-enabled"
 #define FB_VAR_MAX_FETCH_SIZE "max-fetch-size"
 #define FB_VAR_DMESG "dmesg"
+#define FB_VAR_BATTERY_SERIAL_NUMBER "battery-serial-number"
+#define FB_VAR_BATTERY_PART_STATUS "battery-part-status"

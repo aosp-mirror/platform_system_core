@@ -399,6 +399,14 @@ static int send_ufs_rpmb_req(int sg_fd, const struct storage_rpmb_send_req* req,
 
     bool is_request_write = req->reliable_write_size > 0;
 
+    /*
+     * Internally this call connects to the suspend service, which will cause
+     * this service to start if not already running. If the binder thread pool
+     * has not been started at this point, this call will block and poll for the
+     * service every 1s. We need to make sure the thread pool is started to
+     * receive an async notification that the service is started to avoid
+     * blocking (see main).
+     */
     wl_rc = acquire_wake_lock(PARTIAL_WAKE_LOCK, UFS_WAKE_LOCK_NAME);
     if (wl_rc < 0) {
         ALOGE("%s: failed to acquire wakelock: %d, %s\n", __func__, wl_rc, strerror(errno));

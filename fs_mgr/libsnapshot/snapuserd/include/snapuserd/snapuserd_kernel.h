@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <linux/types.h>
+
 namespace android {
 namespace snapshot {
 
@@ -40,6 +42,10 @@ static constexpr uint32_t SNAPSHOT_VALID = 1;
  * multiple of 512 bytes. Hence these two constants.
  */
 static constexpr uint32_t SECTOR_SHIFT = 9;
+static constexpr uint64_t SECTOR_SIZE = (1ULL << SECTOR_SHIFT);
+
+static constexpr size_t BLOCK_SZ = 4096;
+static constexpr size_t BLOCK_SHIFT = (__builtin_ffs(BLOCK_SZ) - 1);
 
 typedef __u64 sector_t;
 typedef sector_t chunk_t;
@@ -66,7 +72,7 @@ struct disk_header {
 
     /* In sectors */
     uint32_t chunk_size;
-} __packed;
+} __attribute__((packed));
 
 // A disk exception is a mapping of old_chunk to new_chunk
 // old_chunk is the chunk ID of a dm-snapshot device.
@@ -74,7 +80,7 @@ struct disk_header {
 struct disk_exception {
     uint64_t old_chunk;
     uint64_t new_chunk;
-} __packed;
+} __attribute__((packed));
 
 // Control structures to communicate with dm-user
 // It comprises of header and a payload

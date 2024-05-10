@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <stdlib.h>
 
@@ -27,6 +28,7 @@
 #include <modprobe/modprobe.h>
 
 #include <sys/utsname.h>
+#include <unistd.h>
 
 namespace {
 
@@ -85,6 +87,31 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     }
 }
 
+// Find directories in format of "/lib/modules/x.y.z-*".
+static int KernelVersionNameFilter(const dirent* de) {
+    unsigned int major, minor;
+    static std::string kernel_version;
+    utsname uts;
+
+    if (kernel_version.empty()) {
+        if ((uname(&uts) != 0) || (sscanf(uts.release, "%u.%u", &major, &minor) != 2)) {
+            LOG(ERROR) << "Could not parse the kernel version from uname";
+            return 0;
+        }
+        kernel_version = android::base::StringPrintf("%u.%u", major, minor);
+    }
+
+    if (android::base::StartsWith(de->d_name, kernel_version)) {
+        return 1;
+    }
+    return 0;
+}
+
+std::string GetPageSizeSuffix() {
+    static const size_t page_size = sysconf(_SC_PAGE_SIZE);
+    return android::base::StringPrintf("_%zuk", page_size / 1024);
+}
+
 }  // anonymous namespace
 
 extern "C" int modprobe_main(int argc, char** argv) {
@@ -92,6 +119,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     android::base::SetMinimumLogSeverity(android::base::INFO);
 
     std::vector<std::string> modules;
+    std::string modules_load_file;
     std::string module_parameters;
     std::string mods;
     std::vector<std::string> mod_dirs;
@@ -99,7 +127,7 @@ extern "C" int modprobe_main(int argc, char** argv) {
     bool blocklist = false;
     int rv = EXIT_SUCCESS;
 
-    int opt;
+    int opt, fd;
     int option_index = 0;
     // NB: We have non-standard short options -l and -D to make it easier for
     // OEMs to transition from toybox.
@@ -124,16 +152,19 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 // is supported here by default, ignore flag if no argument.
                 check_mode();
                 if (optarg == NULL) break;
-                if (!android::base::ReadFileToString(optarg, &mods)) {
+
+                // Since libmodprobe doesn't fail when the modules load file
+                // doesn't exist, let's check that here so that we don't
+                // silently fail.
+                fd = open(optarg, O_RDONLY | O_CLOEXEC | O_BINARY);
+                if (fd == -1) {
                     PLOG(ERROR) << "Failed to open " << optarg;
-                    rv = EXIT_FAILURE;
+                    return EXIT_FAILURE;
                 }
-                for (auto mod : android::base::Split(stripComments(mods), "\n")) {
-                    mod = android::base::Trim(mod);
-                    if (mod == "") continue;
-                    if (std::find(modules.begin(), modules.end(), mod) != modules.end()) continue;
-                    modules.emplace_back(mod);
-                }
+                close(fd);
+
+                mod_dirs.emplace_back(android::base::Dirname(optarg));
+                modules_load_file = android::base::Basename(optarg);
                 break;
             case 'b':
                 blocklist = true;
@@ -192,43 +223,73 @@ extern "C" int modprobe_main(int argc, char** argv) {
     }
 
     if (mod_dirs.empty()) {
-        utsname uts;
-        uname(&uts);
-        mod_dirs.emplace_back(android::base::StringPrintf("/lib/modules/%s", uts.release));
+        static constexpr auto LIB_MODULES_PREFIX = "/lib/modules/";
+        dirent** kernel_dirs = NULL;
+
+        int n = scandir(LIB_MODULES_PREFIX, &kernel_dirs, KernelVersionNameFilter, NULL);
+        if (n == -1) {
+            PLOG(ERROR) << "Failed to scan dir " << LIB_MODULES_PREFIX;
+            return EXIT_FAILURE;
+        } else if (n > 0) {
+            while (n--) {
+                mod_dirs.emplace_back(LIB_MODULES_PREFIX + std::string(kernel_dirs[n]->d_name));
+            }
+        }
+        free(kernel_dirs);
+
+        // Allow modules to be directly inside /lib/modules
+        mod_dirs.emplace_back(LIB_MODULES_PREFIX);
+    }
+    if (getpagesize() != 4096) {
+        struct utsname uts {};
+        if (uname(&uts)) {
+            PLOG(FATAL) << "Failed to get kernel version";
+        }
+        const auto module_dir = android::base::StringPrintf("/lib/modules/%s%s", uts.release,
+                                                            GetPageSizeSuffix().c_str());
+        struct stat st {};
+        if (stat(module_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+            mod_dirs.clear();
+            mod_dirs.emplace_back(module_dir);
+        }
     }
 
     LOG(DEBUG) << "mode is " << mode;
     LOG(DEBUG) << "mod_dirs is: " << android::base::Join(mod_dirs, " ");
     LOG(DEBUG) << "modules is: " << android::base::Join(modules, " ");
+    LOG(DEBUG) << "modules load file is: " << modules_load_file;
     LOG(DEBUG) << "module parameters is: " << android::base::Join(module_parameters, " ");
 
     if (modules.empty()) {
         if (mode == ListModulesMode) {
             // emulate toybox modprobe list with no pattern (list all)
             modules.emplace_back("*");
-        } else {
+        } else if (modules_load_file.empty()) {
             LOG(ERROR) << "No modules given.";
             print_usage();
             return EXIT_FAILURE;
         }
     }
-    if (mod_dirs.empty()) {
-        LOG(ERROR) << "No module configuration directories given.";
-        print_usage();
-        return EXIT_FAILURE;
-    }
-    if (parameter_count && modules.size() > 1) {
+    if (parameter_count && (modules.size() > 1 || !modules_load_file.empty())) {
         LOG(ERROR) << "Only one module may be loaded when specifying module parameters.";
         print_usage();
         return EXIT_FAILURE;
     }
 
-    Modprobe m(mod_dirs, "modules.load", blocklist);
+    Modprobe m(mod_dirs, modules_load_file.empty() ? "modules.load" : modules_load_file, blocklist);
+    if (mode == AddModulesMode && !modules_load_file.empty()) {
+        if (!m.LoadListedModules(false)) {
+            PLOG(ERROR) << "Failed to load all the modules from " << modules_load_file;
+            return EXIT_FAILURE;
+        }
+        /* Fall-through to load modules provided on the command line (if any)*/
+    }
 
     for (const auto& module : modules) {
         switch (mode) {
             case AddModulesMode:
                 if (!m.LoadWithAliases(module, true, module_parameters)) {
+                    if (m.IsBlocklisted(module)) continue;
                     PLOG(ERROR) << "Failed to load module " << module;
                     rv = EXIT_FAILURE;
                 }

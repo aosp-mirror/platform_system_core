@@ -66,18 +66,12 @@ static const std::map<std::string, int> cap_map = {
         CAP_MAP_ENTRY(WAKE_ALARM),
         CAP_MAP_ENTRY(BLOCK_SUSPEND),
         CAP_MAP_ENTRY(AUDIT_READ),
-#if defined(__BIONIC__)
         CAP_MAP_ENTRY(PERFMON),
         CAP_MAP_ENTRY(BPF),
         CAP_MAP_ENTRY(CHECKPOINT_RESTORE),
-#endif
 };
 
-#if defined(__BIONIC__)
 static_assert(CAP_LAST_CAP == CAP_CHECKPOINT_RESTORE, "CAP_LAST_CAP is not CAP_CHECKPOINT_RESTORE");
-#else
-static_assert(CAP_LAST_CAP == CAP_AUDIT_READ, "CAP_LAST_CAP is not CAP_AUDIT_READ");
-#endif
 
 static bool ComputeCapAmbientSupported() {
 #if defined(__ANDROID__)

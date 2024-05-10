@@ -1,2 +1,2 @@
-on post-fs-data && property:ro.debuggable=1
+on post-fs-data && property:ro.debuggable=1 && property:ro.boot.dynamic_partitions=true
     exec_background - root root -- /system/bin/clean_scratch_files

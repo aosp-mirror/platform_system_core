@@ -88,7 +88,6 @@ init_device_sources = [
 init_host_sources = [
     "check_builtins.cpp",
     "host_import_parser.cpp",
-    "host_init_verifier.cpp",
 ]
 
 soong_config_module_type {
@@ -163,19 +162,18 @@ libinit_cc_defaults {
     },
     static_libs: [
         "libavb",
+        "libavf_cc_flags",
         "libbootloader_message",
         "libc++fs",
         "libcgrouprc_format",
-        "libfsverity_init",
         "liblmkd_utils",
         "liblz4",
-        "libmini_keyctl_static",
+        "libzstd",
         "libmodprobe",
         "libprocinfo",
         "libprotobuf-cpp-lite",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",
-        "libsigningutils",
         "libsnapshot_cow",
         "libsnapshot_init",
         "libxml2",
@@ -184,14 +182,12 @@ libinit_cc_defaults {
     ],
     shared_libs: [
         "libbase",
-        "libcrypto",
         "libcutils",
         "libdl",
         "libext4_utils",
         "libfs_mgr",
         "libgsi",
         "libhidl-gen-utils",
-        "libkeyutils",
         "liblog",
         "liblogwrap",
         "liblp",
@@ -200,7 +196,7 @@ libinit_cc_defaults {
         "libselinux",
         "libunwindstack",
         "libutils",
-        "libziparchive",
+        "libvendorsupport",
     ],
     header_libs: ["bionic_libc_platform_headers"],
     bootstrap: true,
@@ -213,8 +209,8 @@ cc_library_headers {
     visibility: [":__subpackages__"],
 }
 
-cc_library_static {
-    name: "libinit",
+cc_defaults {
+    name: "libinit_defaults",
     recovery_available: true,
     defaults: [
         "init_defaults",
@@ -227,7 +223,6 @@ cc_library_static {
     ],
     whole_static_libs: [
         "libcap",
-        "libcom.android.sysprop.apex",
         "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
@@ -251,10 +246,21 @@ cc_library_static {
             ],
         },
     },
-    visibility: [
-        "//system/apex/apexd",
-        "//frameworks/native/cmds/installd",
+}
+
+cc_library_static {
+    name: "libinit",
+    defaults: ["libinit_defaults"],
+}
+
+cc_library_static {
+    name: "libinit.microdroid",
+    defaults: [
+        "avf_build_flags_cc",
+        "libinit_defaults",
     ],
+    recovery_available: false,
+    cflags: ["-DMICRODROID=1"],
 }
 
 phony {
@@ -264,14 +270,20 @@ phony {
     ],
 }
 
-cc_binary {
-    name: "init_second_stage",
+cc_defaults {
+    name: "init_second_stage_defaults",
     recovery_available: true,
     stem: "init",
     defaults: ["init_defaults"],
-    static_libs: ["libinit"],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
+}
+
+cc_binary {
+    name: "init_second_stage",
+    defaults: ["init_second_stage_defaults"],
+    static_libs: ["libinit"],
+    visibility: ["//visibility:any_system_partition"],
     target: {
         platform: {
             required: [
@@ -303,6 +315,18 @@ cc_binary {
             ],
         },
     },
+}
+
+cc_binary {
+    name: "init_second_stage.microdroid",
+    defaults: [
+        "avf_build_flags_cc",
+        "init_second_stage_defaults",
+    ],
+    recovery_available: false,
+    static_libs: ["libinit.microdroid"],
+    cflags: ["-DMICRODROID=1"],
+    no_full_install: true,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
@@ -323,12 +347,8 @@ init_first_stage_cc_defaults {
             installable: false,
         },
     },
-}
 
-cc_binary {
-    name: "init_first_stage",
     stem: "init",
-    defaults: ["init_first_stage_defaults"],
 
     srcs: [
         "block_dev_initializer.cpp",
@@ -349,6 +369,7 @@ cc_binary {
     static_libs: [
         "libc++fs",
         "libfs_avb",
+        "libavf_cc_flags",
         "libfs_mgr",
         "libfec",
         "libfec_rs",
@@ -370,6 +391,7 @@ cc_binary {
         "libprotobuf-cpp-lite",
         "libsnapshot_cow",
         "liblz4",
+        "libzstd",
         "libsnapshot_init",
         "update_metadata-protos",
         "libprocinfo",
@@ -430,6 +452,7 @@ cc_binary {
 
         // First stage init is weird: it may start without stdout/stderr, and no /proc.
         hwaddress: false,
+        memtag_stack: false,
     },
 
     // Install adb_debug.prop into debug ramdisk.
@@ -441,6 +464,21 @@ cc_binary {
     install_in_root: true,
 }
 
+cc_binary {
+    name: "init_first_stage",
+    defaults: ["init_first_stage_defaults"],
+}
+
+cc_binary {
+    name: "init_first_stage.microdroid",
+    defaults: [
+        "avf_build_flags_cc",
+        "init_first_stage_defaults",
+    ],
+    cflags: ["-DMICRODROID=1"],
+    no_full_install: true,
+}
+
 phony {
     name: "init_system",
     required: ["init_second_stage"],
@@ -450,6 +488,7 @@ phony {
 // ------------------------------------------------------------------------------
 
 cc_test {
+    // Note: This is NOT a CTS test. See b/320800872
     name: "CtsInitTestCases",
     defaults: ["init_defaults"],
     require_root: true,
@@ -482,7 +521,6 @@ cc_test {
     ],
 
     test_suites: [
-        "cts",
         "device-tests",
     ],
 }
@@ -502,10 +540,13 @@ cc_defaults {
         "libbase",
         "libcutils",
         "libselinux",
-        "libhidl-gen-utils",
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
+    ],
+    static_libs: [
+        "libfs_mgr",
+        "libhidl-gen-utils",
     ],
 }
 
@@ -571,7 +612,6 @@ cc_defaults {
     },
     generated_headers: [
         "generated_stub_builtin_function_map",
-        "generated_android_ids",
     ],
     target: {
         android: {
@@ -586,13 +626,16 @@ cc_defaults {
 cc_binary {
     name: "host_init_verifier",
     defaults: ["init_host_defaults"],
-    srcs: init_common_sources + init_host_sources,
+    srcs: ["host_init_verifier.cpp"] + init_common_sources + init_host_sources,
+    generated_headers: [
+        "generated_android_ids",
+    ],
 }
 
 cc_library_host_static {
     name: "libinit_host",
     defaults: ["init_host_defaults"],
-    srcs: init_common_sources,
+    srcs: init_common_sources + init_host_sources,
     export_include_dirs: ["."],
     proto: {
         export_proto_headers: true,

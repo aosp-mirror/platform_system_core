@@ -116,27 +116,6 @@ cc_library {
     },
 }
 
-cc_test {
-    name: "libcutils_sockets_test",
-    test_suites: ["device-tests"],
-    static_libs: ["libbase", "libcutils_sockets"],
-    cflags: [
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-    ],
-
-    srcs: ["sockets_test.cpp"],
-    target: {
-        android: {
-            srcs: [
-                "android_get_control_file_test.cpp",
-                "android_get_control_socket_test.cpp",
-            ],
-        },
-    },
-}
-
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -162,7 +141,6 @@ cc_library {
         "properties.cpp",
         "record_stream.cpp",
         "strlcpy.c",
-        "threads.cpp",
     ],
 
     target: {
@@ -172,11 +150,15 @@ cc_library {
                 "libasync_safe",
             ],
         },
+        linux: {
+            srcs: [
+                "canned_fs_config.cpp",
+                "fs_config.cpp",
+            ],
+        },
         not_windows: {
             srcs: libcutils_nonwindows_sources + [
                 "ashmem-host.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "trace-host.cpp",
             ],
         },
@@ -202,8 +184,6 @@ cc_library {
             srcs: libcutils_nonwindows_sources + [
                 "android_reboot.cpp",
                 "ashmem-dev.cpp",
-                "canned_fs_config.cpp",
-                "fs_config.cpp",
                 "klog.cpp",
                 "partition_utils.cpp",
                 "qtaguid.cpp",
@@ -219,11 +199,19 @@ cc_library {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
         product: {
             exclude_srcs: [
                 "qtaguid.cpp",
             ],
+            header_abi_checker: {
+                enabled: true,
+                ref_dump_dirs: ["abi-dumps"],
+            },
         },
     },
 
@@ -286,11 +274,14 @@ cc_defaults {
     ],
 }
 
+always_static_test_libraries = [
+    "libjsoncpp",
+]
+
 test_libraries = [
     "libcutils",
     "liblog",
     "libbase",
-    "libjsoncpp",
     "libprocessgroup",
     "libcgrouprc",
 ]
@@ -301,6 +292,7 @@ cc_test {
     defaults: ["libcutils_test_default"],
     host_supported: true,
     shared_libs: test_libraries,
+    static_libs: always_static_test_libraries,
     require_root: true,
 }
 
@@ -310,7 +302,7 @@ cc_defaults {
     static_libs: [
         "libc",
         "libcgrouprc_format",
-    ] + test_libraries,
+    ] + test_libraries + always_static_test_libraries,
     stl: "libc++_static",
     require_root: true,
 
@@ -334,7 +326,10 @@ cc_test {
 
 cc_test {
     name: "KernelLibcutilsTest",
-    test_suites: ["general-tests", "vts"],
+    test_suites: [
+        "general-tests",
+        "vts",
+    ],
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
 }

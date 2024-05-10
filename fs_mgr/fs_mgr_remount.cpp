@@ -42,8 +42,10 @@
 #include <fstab/fstab.h>
 #include <libavb_user/libavb_user.h>
 #include <libgsi/libgsid.h>
+#include <private/android_filesystem_config.h>
 
-#include "fs_mgr_priv_overlayfs.h"
+#include "fs_mgr_overlayfs_control.h"
+#include "fs_mgr_overlayfs_mount.h"
 
 using namespace std::literals;
 using android::fs_mgr::Fstab;
@@ -87,17 +89,6 @@ const std::string system_mount_point(const android::fs_mgr::FstabEntry& entry) {
     return entry.mount_point;
 }
 
-const FstabEntry* GetWrappedEntry(const Fstab& overlayfs_candidates, const FstabEntry& entry) {
-    auto mount_point = system_mount_point(entry);
-    auto it = std::find_if(overlayfs_candidates.begin(), overlayfs_candidates.end(),
-                           [&mount_point](const auto& entry) {
-                               return android::base::StartsWith(mount_point,
-                                                                system_mount_point(entry) + "/");
-                           });
-    if (it == overlayfs_candidates.end()) return nullptr;
-    return &(*it);
-}
-
 class MyLogger {
   public:
     explicit MyLogger(bool verbose) : verbose_(verbose) {}
@@ -127,12 +118,11 @@ class MyLogger {
 }
 
 static android::sp<android::os::IVold> GetVold() {
+    auto sm = android::defaultServiceManager();
     while (true) {
-        if (auto sm = android::defaultServiceManager()) {
-            if (auto binder = sm->getService(android::String16("vold"))) {
-                if (auto vold = android::interface_cast<android::os::IVold>(binder)) {
-                    return vold;
-                }
+        if (auto binder = sm->checkService(android::String16("vold"))) {
+            if (auto vold = android::interface_cast<android::os::IVold>(binder)) {
+                return vold;
             }
         }
         std::this_thread::sleep_for(2s);
@@ -169,15 +159,25 @@ bool VerifyCheckpointing() {
     // not checkpointing.
     auto vold = GetVold();
     bool checkpointing = false;
-    if (!vold->isCheckpointing(&checkpointing).isOk()) {
-        LOG(ERROR) << "Could not determine checkpointing status.";
-        return false;
-    }
-    if (checkpointing) {
-        LOG(ERROR) << "Cannot use remount when a checkpoint is in progress.";
-        LOG(ERROR) << "To force end checkpointing, call 'vdc checkpoint commitChanges'";
-        LOG(ERROR) << "Warning: this can lead to data corruption if rolled back.";
-        return false;
+    bool show_help = true;
+
+    while (true) {
+        if (!vold->isCheckpointing(&checkpointing).isOk()) {
+            LOG(ERROR) << "Could not determine checkpointing status.";
+            return false;
+        }
+        if (!checkpointing) {
+            break;
+        }
+        if (show_help) {
+            show_help = false;
+            std::cerr << "WARNING: Userdata checkpoint is in progress. To force end checkpointing, "
+                         "call 'vdc checkpoint commitChanges'. This can lead to data corruption if "
+                         "rolled back."
+                      << std::endl;
+            LOG(INFO) << "Waiting for checkpoint to complete and then continue remount.";
+        }
+        std::this_thread::sleep_for(4s);
     }
     return true;
 }
@@ -195,9 +195,6 @@ static bool IsRemountable(Fstab& candidates, const FstabEntry& entry) {
     }
     if (auto candidate_entry = GetEntryForMountPoint(&candidates, entry.mount_point)) {
         return candidate_entry->fs_type == entry.fs_type;
-    }
-    if (GetWrappedEntry(candidates, entry)) {
-        return false;
     }
     return true;
 }
@@ -252,11 +249,6 @@ bool GetRemountList(const Fstab& fstab, const std::vector<std::string>& argv, Fs
         }
 
         const FstabEntry* entry = &*it;
-        if (auto wrap = GetWrappedEntry(candidates, *entry); wrap != nullptr) {
-            LOG(INFO) << "partition " << arg << " covered by overlayfs for " << wrap->mount_point
-                      << ", switching";
-            entry = wrap;
-        }
 
         // If it's already remounted, include it so it gets gracefully skipped
         // later on.
@@ -389,8 +381,8 @@ bool RemountPartition(Fstab& fstab, Fstab& mounts, FstabEntry& entry) {
 
     // Now remount!
     for (const auto& mnt_point : {mount_point, entry.mount_point}) {
-        if (::mount(blk_device.c_str(), mnt_point.c_str(), entry.fs_type.c_str(), MS_REMOUNT,
-                    nullptr) == 0) {
+        if (::mount(blk_device.c_str(), mnt_point.c_str(), entry.fs_type.c_str(),
+                    MS_REMOUNT | MS_NOATIME, nullptr) == 0) {
             LOG(INFO) << "Remounted " << mnt_point << " as RW";
             return true;
         }
@@ -617,7 +609,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Make sure we are root.
-    if (::getuid() != 0) {
+    if (const auto uid = ::getuid(); uid != AID_ROOT) {
+        // If requesting auto reboot, also try to auto gain root.
+        if (auto_reboot && uid == AID_SHELL && access("/system/xbin/su", F_OK) == 0) {
+            std::vector<char*> args{const_cast<char*>("/system/xbin/su"),
+                                    const_cast<char*>("root")};
+            for (int i = 0; i < argc; ++i) {
+                args.push_back(argv[i]);
+            }
+            args.push_back(nullptr);
+            LOG(INFO) << "Attempting to gain root with \"su root\"";
+            execv(args[0], args.data());
+            PLOG(ERROR) << "Failed to execute \"su root\"";
+        }
         LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
         return EXIT_FAILURE;
     }

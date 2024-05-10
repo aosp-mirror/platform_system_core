@@ -31,6 +31,7 @@ const char kPathSeparator =
 #endif
 
 std::string GetHomeDirPath();
+bool FileExists(const std::string& path);
 bool EnsureDirectoryExists(const std::string& directory_path);
 
 class FileLock {

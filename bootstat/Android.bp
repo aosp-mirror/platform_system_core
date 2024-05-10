@@ -72,9 +72,6 @@ cc_binary {
     ],
     init_rc: ["bootstat.rc"],
     product_variables: {
-        pdk: {
-            enabled: false,
-        },
         debuggable: {
             init_rc: ["bootstat-debug.rc"],
         },

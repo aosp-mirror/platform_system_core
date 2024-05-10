@@ -18,13 +18,9 @@
 
 #include <utils/StopWatch.h>
 
-/* for PRId64 */
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS 1
-#endif
 #include <inttypes.h>
 
-#include <utils/Log.h>
+#include <log/log.h>
 
 namespace android {
 

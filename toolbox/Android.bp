@@ -69,6 +69,7 @@ cc_binary {
     name: "toolbox",
     defaults: ["toolbox_binary_defaults"],
     recovery_available: true,
+    vendor_ramdisk_available: true,
 }
 
 cc_binary {

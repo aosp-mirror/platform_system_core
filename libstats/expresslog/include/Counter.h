@@ -24,6 +24,8 @@ namespace expresslog {
 class Counter final {
 public:
     static void logIncrement(const char* metricId, int64_t amount = 1);
+
+    static void logIncrementWithUid(const char* metricId, int32_t uid, int64_t amount = 1);
 };
 
 }  // namespace expresslog

@@ -51,8 +51,10 @@ struct ProcessInfo {
   uintptr_t scudo_region_info = 0;
   uintptr_t scudo_ring_buffer = 0;
   size_t scudo_ring_buffer_size = 0;
+  size_t scudo_stack_depot_size = 0;
 
   bool has_fault_address = false;
   uintptr_t untagged_fault_address = 0;
   uintptr_t maybe_tagged_fault_address = 0;
+  uintptr_t crash_detail_page = 0;
 };

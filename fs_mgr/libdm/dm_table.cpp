@@ -38,11 +38,11 @@ bool DmTable::RemoveTarget(std::unique_ptr<DmTarget>&& /* target */) {
 bool DmTable::valid() const {
     if (targets_.empty()) {
         LOG(ERROR) << "Device-mapper table must have at least one target.";
-        return "";
+        return false;
     }
     if (targets_[0]->start() != 0) {
         LOG(ERROR) << "Device-mapper table must start at logical sector 0.";
-        return "";
+        return false;
     }
     return true;
 }

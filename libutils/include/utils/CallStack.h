@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_CALLSTACK_H
-#define ANDROID_CALLSTACK_H
+#pragma once
 
 #include <memory>
 
@@ -27,17 +26,19 @@
 #include <sys/types.h>
 
 #if !defined(__APPLE__) && !defined(_WIN32)
-# define WEAKS_AVAILABLE 1
+# define CALLSTACK_WEAKS_AVAILABLE 1
 #endif
 #ifndef CALLSTACK_WEAK
-# ifdef WEAKS_AVAILABLE
+# ifdef CALLSTACK_WEAKS_AVAILABLE
 #   define CALLSTACK_WEAK __attribute__((weak))
-# else // !WEAKS_AVAILABLE
+# else // !CALLSTACK_WEAKS_AVAILABLE
 #   define CALLSTACK_WEAK
-# endif // !WEAKS_AVAILABLE
+# endif // !CALLSTACK_WEAKS_AVAILABLE
 #endif // CALLSTACK_WEAK predefined
 
-#define ALWAYS_INLINE __attribute__((always_inline))
+#ifndef CALLSTACK_ALWAYS_INLINE
+#define CALLSTACK_ALWAYS_INLINE __attribute__((always_inline))
+#endif  // CALLSTACK_ALWAYS_INLINE predefined
 
 namespace android {
 
@@ -89,7 +90,7 @@ public:
     //
     // DO NOT USE THESE. They will disappear.
     struct StackDeleter {
-#ifdef WEAKS_AVAILABLE
+#ifdef CALLSTACK_WEAKS_AVAILABLE
         void operator()(CallStack* stack) {
             deleteStack(stack);
         }
@@ -101,8 +102,8 @@ public:
     typedef std::unique_ptr<CallStack, StackDeleter> CallStackUPtr;
 
     // Return current call stack if possible, nullptr otherwise.
-#ifdef WEAKS_AVAILABLE
-    static CallStackUPtr ALWAYS_INLINE getCurrent(int32_t ignoreDepth = 1) {
+#ifdef CALLSTACK_WEAKS_AVAILABLE
+    static CallStackUPtr CALLSTACK_ALWAYS_INLINE getCurrent(int32_t ignoreDepth = 1) {
         if (reinterpret_cast<uintptr_t>(getCurrentInternal) == 0) {
             ALOGW("CallStack::getCurrentInternal not linked, returning null");
             return CallStackUPtr(nullptr);
@@ -110,15 +111,16 @@ public:
             return getCurrentInternal(ignoreDepth);
         }
     }
-#else // !WEAKS_AVAILABLE
-    static CallStackUPtr ALWAYS_INLINE getCurrent(int32_t = 1) {
+#else // !CALLSTACK_WEAKS_AVAILABLE
+    static CallStackUPtr CALLSTACK_ALWAYS_INLINE getCurrent(int32_t = 1) {
         return CallStackUPtr(nullptr);
     }
-#endif // !WEAKS_AVAILABLE
+#endif // !CALLSTACK_WEAKS_AVAILABLE
 
-#ifdef WEAKS_AVAILABLE
-    static void ALWAYS_INLINE logStack(const char* logtag, CallStack* stack = getCurrent().get(),
-                                       android_LogPriority priority = ANDROID_LOG_DEBUG) {
+#ifdef CALLSTACK_WEAKS_AVAILABLE
+    static void CALLSTACK_ALWAYS_INLINE logStack(const char* logtag,
+                                                 CallStack* stack = getCurrent().get(),
+                                                 android_LogPriority priority = ANDROID_LOG_DEBUG) {
         if (reinterpret_cast<uintptr_t>(logStackInternal) != 0 && stack != nullptr) {
             logStackInternal(logtag, stack, priority);
         } else {
@@ -127,30 +129,31 @@ public:
     }
 
 #else
-    static void ALWAYS_INLINE logStack(const char* logtag, CallStack* = getCurrent().get(),
-                                       android_LogPriority = ANDROID_LOG_DEBUG) {
+    static void CALLSTACK_ALWAYS_INLINE logStack(const char* logtag,
+                                                 CallStack* = getCurrent().get(),
+                                                 android_LogPriority = ANDROID_LOG_DEBUG) {
         ALOG(LOG_WARN, logtag, "CallStack::logStackInternal not linked");
     }
-#endif // !WEAKS_AVAILABLE
+#endif // !CALLSTACK_WEAKS_AVAILABLE
 
-#ifdef WEAKS_AVAILABLE
-    static String8 ALWAYS_INLINE stackToString(const char* prefix = nullptr,
-                                               const CallStack* stack = getCurrent().get()) {
+#ifdef CALLSTACK_WEAKS_AVAILABLE
+    static String8 CALLSTACK_ALWAYS_INLINE
+    stackToString(const char* prefix = nullptr, const CallStack* stack = getCurrent().get()) {
         if (reinterpret_cast<uintptr_t>(stackToStringInternal) != 0 && stack != nullptr) {
             return stackToStringInternal(prefix, stack);
         } else {
             return String8::format("%s<CallStack package not linked>", (prefix ? prefix : ""));
         }
     }
-#else // !WEAKS_AVAILABLE
-    static String8 ALWAYS_INLINE stackToString(const char* prefix = nullptr,
-                                               const CallStack* = getCurrent().get()) {
+#else // !CALLSTACK_WEAKS_AVAILABLE
+    static String8 CALLSTACK_ALWAYS_INLINE stackToString(const char* prefix = nullptr,
+                                                         const CallStack* = getCurrent().get()) {
         return String8::format("%s<CallStack package not linked>", (prefix ? prefix : ""));
     }
-#endif // !WEAKS_AVAILABLE
+#endif // !CALLSTACK_WEAKS_AVAILABLE
 
   private:
-#ifdef WEAKS_AVAILABLE
+#ifdef CALLSTACK_WEAKS_AVAILABLE
     static CallStackUPtr CALLSTACK_WEAK getCurrentInternal(int32_t ignoreDepth);
     static void CALLSTACK_WEAK logStackInternal(const char* logtag, const CallStack* stack,
                                                 android_LogPriority priority);
@@ -158,11 +161,13 @@ public:
     // The deleter is only invoked on non-null pointers. Hence it will never be
     // invoked if CallStack is not linked.
     static void CALLSTACK_WEAK deleteStack(CallStack* stack);
-#endif // WEAKS_AVAILABLE
+#endif // CALLSTACK_WEAKS_AVAILABLE
 
     Vector<String8> mFrameLines;
 };
 
 }  // namespace android
 
-#endif // ANDROID_CALLSTACK_H
+#undef CALLSTACK_WEAKS_AVAILABLE
+#undef CALLSTACK_WEAK
+#undef CALLSTACK_ALWAYS_INLINE

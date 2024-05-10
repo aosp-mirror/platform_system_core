@@ -39,6 +39,9 @@
 #ifndef DM_DEFERRED_REMOVE
 #define DM_DEFERRED_REMOVE (1 << 17)
 #endif
+#ifndef DM_IMA_MEASUREMENT_FLAG
+#define DM_IMA_MEASUREMENT_FLAG (1 << 19)
+#endif
 
 namespace android {
 namespace dm {
@@ -106,6 +109,10 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
     if (!GetDeviceUniquePath(name, &unique_path)) {
         LOG(ERROR) << "Failed to get unique path for device " << name;
     }
+    // Expect to have uevent generated if the unique path actually exists. This may not exist
+    // if the device was created but has never been activated before it gets deleted.
+    bool need_uevent = !unique_path.empty() && access(unique_path.c_str(), F_OK) == 0;
+
     struct dm_ioctl io;
     InitIo(&io, name);
 
@@ -116,7 +123,7 @@ bool DeviceMapper::DeleteDevice(const std::string& name,
 
     // Check to make sure appropriate uevent is generated so ueventd will
     // do the right thing and remove the corresponding device node and symlinks.
-    if ((io.flags & DM_UEVENT_GENERATED_FLAG) == 0) {
+    if (need_uevent && (io.flags & DM_UEVENT_GENERATED_FLAG) == 0) {
         LOG(ERROR) << "Didn't generate uevent for [" << name << "] removal";
         return false;
     }
@@ -240,6 +247,25 @@ bool DeviceMapper::GetDeviceUniquePath(const std::string& name, std::string* pat
         return false;
     }
     *path = "/dev/block/mapper/by-uuid/"s + io.uuid;
+    return true;
+}
+
+bool DeviceMapper::GetDeviceNameAndUuid(dev_t dev, std::string* name, std::string* uuid) {
+    struct dm_ioctl io;
+    InitIo(&io, {});
+    io.dev = dev;
+
+    if (ioctl(fd_, DM_DEV_STATUS, &io) < 0) {
+        PLOG(ERROR) << "Failed to find device dev: " << major(dev) << ":" << minor(dev);
+        return false;
+    }
+
+    if (name) {
+        *name = io.name;
+    }
+    if (uuid) {
+        *uuid = io.uuid;
+    }
     return true;
 }
 
@@ -517,6 +543,10 @@ bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInf
     return GetTable(name, 0, table);
 }
 
+bool DeviceMapper::GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, DM_IMA_MEASUREMENT_FLAG, table);
+}
+
 bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {
     return GetTable(name, DM_STATUS_TABLE_FLAG, table);
 }
@@ -589,8 +619,12 @@ std::string DeviceMapper::GetTargetType(const struct dm_target_spec& spec) {
 
 std::optional<std::string> ExtractBlockDeviceName(const std::string& path) {
     static constexpr std::string_view kDevBlockPrefix("/dev/block/");
-    if (android::base::StartsWith(path, kDevBlockPrefix)) {
-        return path.substr(kDevBlockPrefix.length());
+    std::string real_path;
+    if (!android::base::Realpath(path, &real_path)) {
+        real_path = path;
+    }
+    if (android::base::StartsWith(real_path, kDevBlockPrefix)) {
+        return real_path.substr(kDevBlockPrefix.length());
     }
     return {};
 }
@@ -731,6 +765,26 @@ bool DeviceMapper::CreatePlaceholderDevice(const std::string& name) {
         if (!LoadTable(name, table)) {
             return false;
         }
+    }
+    return true;
+}
+
+bool DeviceMapper::SendMessage(const std::string& name, uint64_t sector,
+                               const std::string& message) {
+    std::string ioctl_buffer(sizeof(struct dm_ioctl) + sizeof(struct dm_target_msg), 0);
+    ioctl_buffer += message;
+    ioctl_buffer.push_back('\0');
+
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(&ioctl_buffer[0]);
+    InitIo(io, name);
+    io->data_size = ioctl_buffer.size();
+    io->data_start = sizeof(struct dm_ioctl);
+    struct dm_target_msg* msg =
+            reinterpret_cast<struct dm_target_msg*>(&ioctl_buffer[sizeof(struct dm_ioctl)]);
+    msg->sector = sector;
+    if (ioctl(fd_, DM_TARGET_MSG, io)) {
+        PLOG(ERROR) << "DM_TARGET_MSG failed";
+        return false;
     }
     return true;
 }

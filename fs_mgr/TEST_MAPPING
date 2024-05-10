@@ -16,7 +16,8 @@
       "name": "fiemap_writer_test"
     },
     {
-      "name": "fs_mgr_vendor_overlay_test"
+      "name": "fs_mgr_vendor_overlay_test",
+      "keywords": ["internal"]
     },
     {
       "name": "vts_libsnapshot_test"
@@ -25,30 +26,24 @@
       "name": "vab_legacy_tests"
     },
     {
-      "name": "vabc_legacy_tests"
-    },
-    {
-      "name": "libsnapshot_fuzzer_test"
-    },
-    {
       "name": "cow_api_test"
+    },
+    {
+      "name": "snapuserd_test"
     }
   ],
   "kernel-presubmit": [
     {
-      "name": "vts_libdm_test"
+      "name": "libdm_test"
     },
     {
-      "name": "vts_core_liblp_test"
-    },
-    {
-      "name": "vts_libsnapshot_test"
+      "name": "liblp_test"
     },
     {
       "name": "vab_legacy_tests"
     },
     {
-      "name": "vabc_legacy_tests"
+      "name": "snapuserd_test"
     }
   ]
 }

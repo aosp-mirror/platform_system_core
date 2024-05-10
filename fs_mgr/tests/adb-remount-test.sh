@@ -1081,7 +1081,9 @@ LOG OK "no overlay present before setup"
 LOG RUN "Testing adb disable-verity -R"
 
 T=$(adb_date)
-adb_su disable-verity -R >&2 ||
+adb_su disable-verity -R >&2
+err=${?}
+[[ ${err} -eq 0 || ${err} -eq 255 ]] ||
   die -t "${T}" "disable-verity -R failed"
 sleep 2
 adb_wait "${ADB_WAIT}" ||
@@ -1192,7 +1194,9 @@ LOG OK "adb remount from scratch"
 LOG RUN "Testing adb remount -R"
 
 T=$(adb_date)
-adb_su remount -R </dev/null >&2 ||
+adb_su remount -R </dev/null >&2
+err=${?}
+[[ ${err} -eq 0 || ${err} -eq 255 ]] ||
   die -t "${T}" "adb remount -R failed"
 sleep 2
 adb_wait "${ADB_WAIT}" ||
@@ -1233,6 +1237,12 @@ adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null &&
 adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null &&
   die "/vendor is not RO"
 
+data_device=$(adb_sh awk '$2 == "/data" { print $1; exit }' /proc/mounts)
+RO=$(adb_sh grep " ro," /proc/mounts </dev/null |
+    grep -v "^${data_device}" |
+    skip_administrative_mounts |
+    awk '{ print $1 }')
+
 T=$(adb_date)
 adb remount >&2 ||
   die -t "${T}" "adb remount"
@@ -1240,6 +1250,12 @@ adb_sh grep -qE " (/system|/) [^ ]* rw," /proc/mounts </dev/null ||
   die -t "${T}" "/system is not RW"
 adb_sh grep -q " /vendor [^ ]* rw," /proc/mounts </dev/null ||
   die -t "${T}" "/vendor is not RW"
+
+# Only find mounts that are remounted RO -> RW
+RW=$(adb_sh grep " rw," /proc/mounts </dev/null |
+    grep -v "^${data_device}" |
+    skip_administrative_mounts |
+    grep -E "^($(join_with '|' ${RO})) ")
 
 scratch_on_super=false
 if ${overlayfs_needed}; then
@@ -1287,27 +1303,19 @@ if ${overlayfs_needed}; then
     fi
   done
 
-  data_device=$(adb_sh awk '$2 == "/data" { print $1; exit }' /proc/mounts)
   # KISS (we do not support sub-mounts for system partitions currently)
   adb_sh grep "^overlay " /proc/mounts </dev/null |
     grep -vE "^overlay.* /(apex|system|vendor)/[^ ]" |
     grep " overlay ro," &&
     die "expected overlay to be RW after remount"
-  adb_sh grep -v noatime /proc/mounts </dev/null |
-    grep -v "^${data_device}" |
-    skip_administrative_mounts |
-    grep -v ' ro,' &&
-    die "mounts are not noatime"
 
-  D=$(adb_sh grep " rw," /proc/mounts </dev/null |
-      grep -v "^${data_device}" |
-      skip_administrative_mounts |
+  D=$(echo "${RW}" |
       awk '{ print $1 }' |
       sed 's|/dev/root|/|' |
       sort -u)
   if [ -n "${D}" ]; then
     adb_sh df -k ${D} </dev/null |
-      sed -e 's/^Filesystem      /Filesystem (rw) /'
+      sed -e 's/^Filesystem     /Filesystem (rw)/'
   fi >&2
   for d in ${D}; do
     if adb_sh tune2fs -l "${d}" </dev/null 2>&1 | grep -q "Filesystem features:.*shared_blocks" ||
@@ -1318,6 +1326,10 @@ if ${overlayfs_needed}; then
 else
   is_overlayfs_mounted && die -t "${T}" "unexpected overlay takeover"
 fi
+
+echo -n "${RW}" |
+  grep -v noatime &&
+  die "mounts (rw) are not noatime"
 
 LOG OK "adb remount RW"
 

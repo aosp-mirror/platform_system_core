@@ -260,8 +260,8 @@ unsigned int sparse_file_block_size(struct sparse_file* s) {
   return s->block_size;
 }
 
-static struct backed_block* move_chunks_up_to_len(struct sparse_file* from, struct sparse_file* to,
-                                                  unsigned int len) {
+static int move_chunks_up_to_len(struct sparse_file* from, struct sparse_file* to, unsigned int len,
+                                 backed_block** out_bb) {
   int64_t count = 0;
   struct output_file* out_counter;
   struct backed_block* last_bb = nullptr;
@@ -282,7 +282,7 @@ static struct backed_block* move_chunks_up_to_len(struct sparse_file* from, stru
   out_counter = output_file_open_callback(out_counter_write, &count, to->block_size, to->len, false,
                                           true, 0, false);
   if (!out_counter) {
-    return nullptr;
+    return -1;
   }
 
   for (bb = start; bb; bb = backed_block_iter_next(bb)) {
@@ -319,7 +319,8 @@ move:
 out:
   output_file_close(out_counter);
 
-  return bb;
+  *out_bb = bb;
+  return 0;
 }
 
 int sparse_file_resparse(struct sparse_file* in_s, unsigned int max_len, struct sparse_file** out_s,
@@ -337,7 +338,15 @@ int sparse_file_resparse(struct sparse_file* in_s, unsigned int max_len, struct 
   do {
     s = sparse_file_new(in_s->block_size, in_s->len);
 
-    bb = move_chunks_up_to_len(in_s, s, max_len);
+    if (move_chunks_up_to_len(in_s, s, max_len, &bb) < 0) {
+      sparse_file_destroy(s);
+      for (int i = 0; i < c && i < out_s_count; i++) {
+        sparse_file_destroy(out_s[i]);
+        out_s[i] = nullptr;
+      }
+      sparse_file_destroy(tmp);
+      return -1;
+    }
 
     if (c < out_s_count) {
       out_s[c] = s;
