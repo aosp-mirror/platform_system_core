@@ -410,11 +410,11 @@ static void usage(void)
             "\t-n, --nodes=FILE: Dev nodes description file\n"
             "\n"
             "Dev nodes description:\n"
-            "\t[dir|nod] [perms] [uid] [gid] [c|b] [minor] [major]\n"
+            "\t[dir|nod] [perms] [uid] [gid] [c|b] [major] [minor]\n"
             "\tExample:\n"
             "\t\t# My device nodes\n"
             "\t\tdir dev 0755 0 0\n"
-            "\t\tnod dev/null 0600 0 0 c 1 5\n"
+            "\t\tnod dev/null 0600 0 0 c 1 3\n"
     );
 }
 
