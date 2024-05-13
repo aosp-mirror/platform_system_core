@@ -445,11 +445,6 @@ int main(int argc, char *argv[])
     int num_dirs = argc - optind;
     argv += optind;
 
-    if (num_dirs <= 0) {
-        usage();
-        errx(1, "no directories to process?!");
-    }
-
     while(num_dirs-- > 0){
         char *x = strchr(*argv, '=');
         if(x != 0) {
