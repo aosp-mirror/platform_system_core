@@ -402,7 +402,7 @@ static const struct option long_options[] = {
 static void usage(void)
 {
     fprintf(stderr,
-            "Usage: mkbootfs [-n FILE] [-d DIR|-F FILE] DIR...\n"
+            "Usage: mkbootfs [-n FILE] [-d DIR|-f FILE] DIR...\n"
             "\n"
             "\t-d, --dirname=DIR: fs-config directory\n"
             "\t-f, --file=FILE: Canned configuration file\n"
