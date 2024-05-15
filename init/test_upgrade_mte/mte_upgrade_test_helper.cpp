@@ -22,6 +22,7 @@
 #include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
+
 #include <memory>
 
 int MaybeDowngrade() {
@@ -65,7 +66,5 @@ int main(int argc, char** argv) {
     // This binary gets run by src/com/android/tests/init/MteUpgradeTest.java, which
     // asserts that it crashes as expected.
     f[17] = 'x';
-    char buf[1];
-    read(1, buf, 1);
     return 0;
 }
