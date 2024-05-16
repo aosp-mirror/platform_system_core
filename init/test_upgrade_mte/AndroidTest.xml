@@ -20,9 +20,11 @@
     <target_preparer class="com.android.tradefed.targetprep.PushFilePreparer">
       <option name="cleanup" value="true" />
       <option name="remount-system" value="true" />
-      <option name="push" value="mte_upgrade_test.rc->/system/etc/init/mte_upgrade_test.rc" />
-      <option name="push" value="mte_upgrade_test_helper->/system/bin/mte_upgrade_test_helper" />
-      <option name="push" value="mte_upgrade_test_helper->/data/local/tmp/app_process64" />
+
+      <option name="push-file" key="mte_upgrade_test.rc" value="/system/etc/init/mte_upgrade_test.rc" />
+      <option name="push-file" key="mte_upgrade_test_helper" value="/system/bin/mte_upgrade_test_helper" />
+      <option name="push-file" key="mte_upgrade_test_helper" value="/data/local/tmp/app_process64" />
+      <option name="post-push" value="chmod 644 /system/etc/init/mte_upgrade_test.rc" />
     </target_preparer>
     <test class="com.android.tradefed.testtype.HostTest" >
         <option name="jar" value="mte_upgrade_test.jar" />
