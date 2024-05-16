@@ -23,8 +23,10 @@
 
 #include "log/log.h"
 
-#include "stats_event.h"
-#include "stats_socket.h"
+#include <stats_event.h>
+#include <stats_socket.h>
+
+#include "statssocket_lazy.h"
 
 // This file provides a lazy interface to libstatssocket.so to address early boot dependencies.
 // Specifically bootanimation, surfaceflinger, and lmkd run before the statsd APEX is loaded and
@@ -76,6 +78,13 @@ static void* LoadLibstatssocket(int dlopen_flags) {
     }
     return dlopen("libstatssocket.so", dlopen_flags);
 }
+
+namespace android::statssocket::lazy {
+bool IsAvailable() {
+    static const void* handle = LoadLibstatssocket(RTLD_NOW);
+    return handle != nullptr;
+}
+}  // namespace android::statssocket::lazy
 
 //
 // Initialization and symbol binding.
