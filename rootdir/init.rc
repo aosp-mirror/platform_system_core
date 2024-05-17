@@ -640,8 +640,7 @@ on post-fs
     mkdir /metadata/aconfig/boot 0775 root system
 
     mkdir /metadata/aconfig_test_missions 0775 root system
-    exec_start aconfigd-init
-    start aconfigd
+    exec_start aconfigd-platform-init
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
@@ -1031,6 +1030,8 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+    exec_start aconfigd-mainline-init
+    start aconfigd
 
     # Create directories for boot animation.
     mkdir /data/misc/bootanim 0755 system system
