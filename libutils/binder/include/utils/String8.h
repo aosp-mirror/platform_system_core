@@ -36,6 +36,10 @@
 #define HAS_STRING_VIEW
 #endif
 
+#if __cplusplus >= 202002L
+#include <compare>
+#endif
+
 // ---------------------------------------------------------------------------
 
 namespace android {
@@ -106,6 +110,9 @@ public:
     inline  bool                operator!=(const String8& other) const;
     inline  bool                operator>=(const String8& other) const;
     inline  bool                operator>(const String8& other) const;
+#if __cplusplus >= 202002L
+    inline std::strong_ordering operator<=>(const String8& other) const;
+#endif
 
     inline  bool                operator<(const char* other) const;
     inline  bool                operator<=(const char* other) const;
@@ -113,6 +120,9 @@ public:
     inline  bool                operator!=(const char* other) const;
     inline  bool                operator>=(const char* other) const;
     inline  bool                operator>(const char* other) const;
+#if __cplusplus >= 202002L
+    inline std::strong_ordering operator<=>(const char* other) const;
+#endif
 
     inline                      operator const char*() const;
 
@@ -302,6 +312,19 @@ inline bool String8::operator>(const String8& other) const
     return strcmp(mString, other.mString) > 0;
 }
 
+#if __cplusplus >= 202002L
+inline std::strong_ordering String8::operator<=>(const String8& other) const {
+    int result = strcmp(mString, other.mString);
+    if (result == 0) {
+        return std::strong_ordering::equal;
+    } else if (result < 0) {
+        return std::strong_ordering::less;
+    } else {
+        return std::strong_ordering::greater;
+    }
+}
+#endif
+
 inline bool String8::operator<(const char* other) const
 {
     return strcmp(mString, other) < 0;
@@ -331,6 +354,19 @@ inline bool String8::operator>(const char* other) const
 {
     return strcmp(mString, other) > 0;
 }
+
+#if __cplusplus >= 202002L
+inline std::strong_ordering String8::operator<=>(const char* other) const {
+    int result = strcmp(mString, other);
+    if (result == 0) {
+        return std::strong_ordering::equal;
+    } else if (result < 0) {
+        return std::strong_ordering::less;
+    } else {
+        return std::strong_ordering::greater;
+    }
+}
+#endif
 
 inline String8::operator const char*() const
 {
