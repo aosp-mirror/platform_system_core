@@ -319,7 +319,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
     default:
       LOG(FATAL) << "unexpected CrashInfo version: " << crash_info->header.version;
       break;
-  };
+  }
 
   if (rc < expected_size) {
     LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
