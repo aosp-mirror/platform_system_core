@@ -570,6 +570,8 @@ Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
             {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
             {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
             {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
+            {"--force", SELINUX_ANDROID_RESTORECON_FORCE},
+            {"--data-data", SELINUX_ANDROID_RESTORECON_DATADATA},
             {0, 0}};
 
     int flag = 0;
