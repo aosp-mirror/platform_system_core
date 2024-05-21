@@ -7,6 +7,12 @@ package {
 
 cc_library_static {
     name: "libstatssocket_lazy",
+    local_include_dirs: [
+        "include",
+    ],
+    export_include_dirs: [
+        "include",
+    ],
     header_libs: [
         "libstatssocket_headers",
     ],
@@ -28,7 +34,10 @@ cc_test {
         "-Wall",
         "-Werror",
     ],
-    test_suites: ["device-tests", "mts-statsd"],
+    test_suites: [
+        "device-tests",
+        "mts-statsd",
+    ],
     test_config: "libstatssocket_lazy_test.xml",
     // TODO(b/153588990): Remove when the build system properly separates.
     // 32bit and 64bit architectures.
