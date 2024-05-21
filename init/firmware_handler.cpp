@@ -264,8 +264,9 @@ std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
     return uevent.firmware;
 }
 
-void FirmwareHandler::ProcessFirmwareEvent(const std::string& root,
+void FirmwareHandler::ProcessFirmwareEvent(const std::string& path,
                                            const std::string& firmware) const {
+    std::string root = "/sys" + path;
     std::string loading = root + "/loading";
     std::string data = root + "/data";
 
@@ -296,6 +297,7 @@ void FirmwareHandler::ProcessFirmwareEvent(const std::string& root,
                                                     ", fstat failed: " + strerror(errno));
             return false;
         }
+        LOG(INFO) << "found " << file << " for " << path;
         LoadFirmware(firmware, root, fw_fd.get(), sb.st_size, loading_fd.get(), data_fd.get());
         return true;
     };
@@ -362,7 +364,7 @@ void FirmwareHandler::HandleUevent(const Uevent& uevent) {
     if (pid == 0) {
         Timer t;
         auto firmware = GetFirmwarePath(uevent);
-        ProcessFirmwareEvent("/sys" + uevent.path, firmware);
+        ProcessFirmwareEvent(uevent.path, firmware);
         LOG(INFO) << "loading " << uevent.path << " took " << t;
         _exit(EXIT_SUCCESS);
     }
