@@ -57,7 +57,7 @@ class FirmwareHandler : public UeventHandler {
     Result<std::string> RunExternalHandler(const std::string& handler, uid_t uid, gid_t gid,
                                            const Uevent& uevent) const;
     std::string GetFirmwarePath(const Uevent& uevent) const;
-    void ProcessFirmwareEvent(const std::string& root, const std::string& firmware) const;
+    void ProcessFirmwareEvent(const std::string& path, const std::string& firmware) const;
     bool ForEachFirmwareDirectory(std::function<bool(const std::string&)> handler) const;
 
     std::vector<std::string> firmware_directories_;
