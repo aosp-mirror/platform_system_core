@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include <android-base/chrono_utils.h>
@@ -377,8 +378,8 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
 
     if (FindPlatformDevice(uevent.path, &device)) {
         // Skip /devices/platform or /devices/ if present
-        static const std::string devices_platform_prefix = "/devices/platform/";
-        static const std::string devices_prefix = "/devices/";
+        static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
+        static constexpr std::string_view devices_prefix = "/devices/";
 
         if (StartsWith(device, devices_platform_prefix)) {
             device = device.substr(devices_platform_prefix.length());
