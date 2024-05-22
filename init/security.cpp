@@ -114,10 +114,9 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
         return {};
     }
 #elif defined(__riscv)
-    // TODO: sv48 and sv57 have both been added to the kernel, but the kernel
-    // still doesn't support more than 24 bits.
-    // https://github.com/google/android-riscv64/issues/1
-    if (SetMmapRndBitsMin(24, 24, false)) {
+    // riscv64 supports 24 rnd bits with Sv39, and starting with the 6.9 kernel,
+    // 33 bits with Sv48 and Sv57.
+    if (SetMmapRndBitsMin(33, 24, false)) {
         return {};
     }
 #elif defined(__x86_64__)
