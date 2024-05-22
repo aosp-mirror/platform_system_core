@@ -120,6 +120,9 @@ message SnapshotStatus {
 
     // Max bytes to be compressed at once (4k, 8k, 16k, 32k, 64k, 128k)
     uint64 compression_factor = 16;
+
+    // Default value is 32, can be set lower for low mem devices
+    uint32 read_ahead_size = 17;
 }
 
 // Next: 8
