@@ -103,7 +103,7 @@ message SnapshotStatus {
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
 
-    // Compression algorithm (none, gz, lz4, zstd, or brotli).
+    // Compression algorithm (none, lz4, zstd).
     string compression_algorithm = 11;
 
     // Estimated COW size from OTA manifest.
