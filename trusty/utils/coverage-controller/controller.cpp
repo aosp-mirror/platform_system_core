@@ -60,6 +60,7 @@ void Controller::run(std::string output_dir) {
                 filename.insert(0, output_dir);
                 android::base::Result<void> res = record_list_[index]->SaveFile(filename);
                 counters[index]++;
+                WRITE_ONCE(control->read_buffer_cnt, counters[index]);
             }
             if(complete_cnt == counters[index] &&
                 !(flags & FLAG_RUN)) {

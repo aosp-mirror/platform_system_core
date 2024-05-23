@@ -32,7 +32,7 @@ namespace fs_mgr {
 
 struct FstabEntry {
     std::string blk_device;
-    std::string zoned_device;
+    std::vector<std::string> user_devices;
     std::string logical_partition_name;
     std::string mount_point;
     std::string fs_type;
@@ -85,6 +85,7 @@ struct FstabEntry {
         bool ext_meta_csum : 1;
         bool fs_compress : 1;
         bool overlayfs_remove_missing_lowerdir : 1;
+        bool is_zoned : 1;
     } fs_mgr_flags = {};
 
     bool is_encryptable() const { return fs_mgr_flags.crypt; }
