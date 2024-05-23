@@ -202,7 +202,9 @@ static int usage() {
     fprintf(stderr, "  fdsan_file            close a file descriptor that's owned by a FILE*\n");
     fprintf(stderr, "  fdsan_dir             close a file descriptor that's owned by a DIR*\n");
     fprintf(stderr, "  seccomp               fail a seccomp check\n");
+#if defined(__LP64__)
     fprintf(stderr, "  xom                   read execute-only memory\n");
+#endif
     fprintf(stderr, "\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call liblog LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call liblog LOG_ALWAYS_FATAL_IF\n");

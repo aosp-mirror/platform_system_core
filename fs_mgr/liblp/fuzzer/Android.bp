@@ -15,6 +15,10 @@
  *
  */
 
+package {
+    default_team: "trendy_team_android_kernel",
+}
+
 cc_defaults {
     name: "liblp_fuzz_defaults",
     header_libs: [
@@ -33,7 +37,7 @@ cc_defaults {
     ],
     fuzz_config: {
         cc: [
-            "android-media-fuzzing-reports@google.com",
+            "android-systems-storage@google.com",
         ],
         componentid: 59148,
         hotlists: ["4593311"],
@@ -41,8 +45,8 @@ cc_defaults {
         vector: "local_no_privileges_required",
         service_privilege: "privileged",
         users: "multi_user",
-        fuzzed_code_usage: "shipped"
-    }
+        fuzzed_code_usage: "shipped",
+    },
 }
 
 cc_fuzz {
@@ -196,6 +200,6 @@ cc_fuzz {
         ":test_vendor_boot_v4_with_frag",
     ],
     cflags: [
-      "-Wno-unused-parameter",
-   ],
+        "-Wno-unused-parameter",
+    ],
 }

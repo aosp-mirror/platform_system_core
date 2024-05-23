@@ -974,6 +974,17 @@ static std::string ConstructBuildFingerprint(bool legacy) {
     std::string build_fingerprint = GetProperty("ro.product.brand", UNKNOWN);
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.product.name", UNKNOWN);
+
+    // should be set in /product/etc/build.prop
+    // when we have a dev option device, and we've switched the kernel to 16kb mode
+    // we use the same system image, but we've switched out the kernel, so make it
+    // visible at a high level
+    bool has16KbDevOption =
+            android::base::GetBoolProperty("ro.product.build.16k_page.enabled", false);
+    if (has16KbDevOption && getpagesize() == 16384) {
+        build_fingerprint += "_16kb";
+    }
+
     build_fingerprint += '/';
     build_fingerprint += GetProperty("ro.product.device", UNKNOWN);
     build_fingerprint += ':';
@@ -1312,14 +1323,12 @@ void CreateSerializedPropertyInfo() {
     }
     selinux_android_restorecon(PROP_TREE_FILE, 0);
 
-#ifdef WRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES
     mkdir(APPCOMPAT_OVERRIDE_PROP_FOLDERNAME, S_IRWXU | S_IXGRP | S_IXOTH);
     if (!WriteStringToFile(serialized_contexts, APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0444, 0, 0,
                            false)) {
         PLOG(ERROR) << "Unable to write appcompat override property infos to file";
     }
     selinux_android_restorecon(APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0);
-#endif
 }
 
 static void ExportKernelBootProps() {
