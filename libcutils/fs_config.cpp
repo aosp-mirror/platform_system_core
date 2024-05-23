@@ -68,10 +68,6 @@ static const struct fs_path_config android_dirs[] = {
     { 01771, AID_SYSTEM,       AID_MISC,         0, "data/misc" },
     { 00775, AID_MEDIA_RW,     AID_MEDIA_RW,     0, "data/media/Music" },
     { 00775, AID_MEDIA_RW,     AID_MEDIA_RW,     0, "data/media" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/nativetest" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/nativetest64" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/benchmarktest" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/benchmarktest64" },
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
@@ -143,12 +139,6 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest/tests.txt" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/tests.txt" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/benchmarktest/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/benchmarktest64/*" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" }, // legacy
     { 00600, AID_ROOT,      AID_ROOT,      0, "system/etc/prop.default" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" }, // legacy; only for P release
