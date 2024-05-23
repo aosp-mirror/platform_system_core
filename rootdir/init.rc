@@ -637,6 +637,7 @@ on post-fs
 
     mkdir /metadata/aconfig 0775 root system
     mkdir /metadata/aconfig/flags 0770 root system
+    mkdir /metadata/aconfig/maps 0775 root system
     mkdir /metadata/aconfig/boot 0775 root system
 
     mkdir /metadata/aconfig_test_missions 0775 root system
