@@ -127,9 +127,6 @@ class DeviceHandler : public UeventHandler {
     virtual ~DeviceHandler() = default;
 
     void HandleUevent(const Uevent& uevent) override;
-    void ColdbootDone() override;
-
-    std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
 
     // `androidboot.partition_map` allows associating a partition name for a raw block device
     // through a comma separated and semicolon deliminated list. For example,
@@ -138,11 +135,13 @@ class DeviceHandler : public UeventHandler {
     static std::string GetPartitionNameForDevice(const std::string& device);
 
   private:
+    void ColdbootDone() override;
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, bool block, int major, int minor,
                     const std::vector<std::string>& links) const;
+    std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
     void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
