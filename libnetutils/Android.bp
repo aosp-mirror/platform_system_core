@@ -18,9 +18,6 @@ license {
 cc_library_shared {
     name: "libnetutils",
     vendor_available: true,
-    vndk: {
-        enabled: true,
-    },
 
     srcs: [
         "dhcpclient.c",
