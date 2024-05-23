@@ -183,10 +183,7 @@ cc_library {
     name: "libutils",
     defaults: ["libutils_impl_defaults"],
 
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
 
     target: {
         product: {
@@ -228,10 +225,7 @@ cc_library {
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
     min_sdk_version: "29",
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
 
     header_libs: [
         "libbase_headers",
