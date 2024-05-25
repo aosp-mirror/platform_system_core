@@ -503,6 +503,8 @@ cc_binary {
             enabled: false,
         },
     },
+    stl: "libc++_static",
+    static_executable: true,
 }
 
 python_library_host {
