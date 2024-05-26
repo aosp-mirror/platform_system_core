@@ -402,7 +402,7 @@ static const struct option long_options[] = {
 static void usage(void)
 {
     fprintf(stderr,
-            "Usage: mkbootfs [-n FILE] [-d DIR|-F FILE] DIR...\n"
+            "Usage: mkbootfs [-n FILE] [-d DIR|-f FILE] DIR...\n"
             "\n"
             "\t-d, --dirname=DIR: fs-config directory\n"
             "\t-f, --file=FILE: Canned configuration file\n"
@@ -410,11 +410,11 @@ static void usage(void)
             "\t-n, --nodes=FILE: Dev nodes description file\n"
             "\n"
             "Dev nodes description:\n"
-            "\t[dir|nod] [perms] [uid] [gid] [c|b] [minor] [major]\n"
+            "\t[dir|nod] [perms] [uid] [gid] [c|b] [major] [minor]\n"
             "\tExample:\n"
             "\t\t# My device nodes\n"
             "\t\tdir dev 0755 0 0\n"
-            "\t\tnod dev/null 0600 0 0 c 1 5\n"
+            "\t\tnod dev/null 0600 0 0 c 1 3\n"
     );
 }
 
@@ -444,11 +444,6 @@ int main(int argc, char *argv[])
 
     int num_dirs = argc - optind;
     argv += optind;
-
-    if (num_dirs <= 0) {
-        usage();
-        errx(1, "no directories to process?!");
-    }
 
     while(num_dirs-- > 0){
         char *x = strchr(*argv, '=');
