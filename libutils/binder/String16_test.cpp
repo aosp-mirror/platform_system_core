@@ -16,6 +16,8 @@
 
 #include <utils/String16.h>
 #include <utils/String8.h>
+#include <compare>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -256,4 +258,46 @@ TEST(String16Test, insert) {
 
     EXPECT_EQ(NO_MEMORY, s.insert(3, u"", SIZE_MAX));
     EXPECT_STR16EQ(u"foo!bar", s.c_str());
+}
+
+TEST(String16Test, comparisons) {
+    const char16_t* cstr1 = u"abc";
+    const char16_t* cstr2 = u"def";
+
+    // str1 and str1b will point to different blocks of memory but with equal contents.
+    String16 str1(cstr1);
+    String16 str1b(cstr1);
+    String16 str2(cstr2);
+
+    EXPECT_TRUE((str1 <=> str1b) == 0);
+    EXPECT_FALSE(str1 != str1b);
+    EXPECT_FALSE(str1 < str1b);
+    EXPECT_TRUE(str1 <= str1b);
+    EXPECT_TRUE(str1 == str1b);
+    EXPECT_TRUE(str1 >= str1b);
+    EXPECT_FALSE(str1 > str1b);
+
+    EXPECT_TRUE((str1 <=> str2) < 0);
+    EXPECT_TRUE((str2 <=> str1) > 0);
+    EXPECT_TRUE(str1 != str2);
+    EXPECT_TRUE(str1 < str2);
+    EXPECT_TRUE(str1 <= str2);
+    EXPECT_FALSE(str1 == str2);
+    EXPECT_FALSE(str1 >= str2);
+    EXPECT_FALSE(str1 > str2);
+
+    // Verify that pre-C++20 comparison operators work with a std::pair of a String8, which only
+    // provides <=> in C++20 and up. See b/339775405.
+
+    std::pair<String16, int> pair1(str1, 13);
+    std::pair<String16, int> pair1b(str1b, 13);
+    std::pair<String16, int> pair2(str2, 13);
+
+    EXPECT_TRUE(pair1 == pair1b);
+    EXPECT_FALSE(pair1 < pair1b);
+    EXPECT_FALSE(pair1 > pair1b);
+
+    EXPECT_TRUE(pair1 != pair2);
+    EXPECT_TRUE(pair1 < pair2);
+    EXPECT_FALSE(pair1 > pair2);
 }

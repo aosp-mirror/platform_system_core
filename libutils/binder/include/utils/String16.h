@@ -29,6 +29,10 @@
 #define HAS_STRING_VIEW
 #endif
 
+#if __cplusplus >= 202002L
+#include <compare>
+#endif
+
 // ---------------------------------------------------------------------------
 
 namespace android {
@@ -105,6 +109,9 @@ public:
     inline  bool                operator!=(const String16& other) const;
     inline  bool                operator>=(const String16& other) const;
     inline  bool                operator>(const String16& other) const;
+#if __cplusplus >= 202002L
+    inline std::strong_ordering operator<=>(const String16& other) const;
+#endif
 
     inline  bool                operator<(const char16_t* other) const;
     inline  bool                operator<=(const char16_t* other) const;
@@ -112,6 +119,9 @@ public:
     inline  bool                operator!=(const char16_t* other) const;
     inline  bool                operator>=(const char16_t* other) const;
     inline  bool                operator>(const char16_t* other) const;
+#if __cplusplus >= 202002L
+    inline std::strong_ordering operator<=>(const char16_t* other) const;
+#endif
 
     inline                      operator const char16_t*() const;
 
@@ -334,6 +344,19 @@ inline bool String16::operator>(const String16& other) const
     return strzcmp16(mString, size(), other.mString, other.size()) > 0;
 }
 
+#if __cplusplus >= 202002L
+inline std::strong_ordering String16::operator<=>(const String16& other) const {
+    int result = strzcmp16(mString, size(), other.mString, other.size());
+    if (result == 0) {
+        return std::strong_ordering::equal;
+    } else if (result < 0) {
+        return std::strong_ordering::less;
+    } else {
+        return std::strong_ordering::greater;
+    }
+}
+#endif
+
 inline bool String16::operator<(const char16_t* other) const
 {
     return strcmp16(mString, other) < 0;
@@ -363,6 +386,19 @@ inline bool String16::operator>(const char16_t* other) const
 {
     return strcmp16(mString, other) > 0;
 }
+
+#if __cplusplus >= 202002L
+inline std::strong_ordering String16::operator<=>(const char16_t* other) const {
+    int result = strcmp16(mString, other);
+    if (result == 0) {
+        return std::strong_ordering::equal;
+    } else if (result < 0) {
+        return std::strong_ordering::less;
+    } else {
+        return std::strong_ordering::greater;
+    }
+}
+#endif
 
 inline String16::operator const char16_t*() const
 {
