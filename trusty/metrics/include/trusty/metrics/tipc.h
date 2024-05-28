@@ -49,6 +49,7 @@
  * @METRICS_CMD_REQ_SHIFT:            number of bits used by @METRICS_CMD_RESP_BIT
  * @METRICS_CMD_REPORT_EVENT_DROP:    report gaps in the event stream
  * @METRICS_CMD_REPORT_CRASH:         report an app crash event
+ * @METRICS_CMD_REPORT_EXIT:          report an app exit
  * @METRICS_CMD_REPORT_STORAGE_ERROR: report trusty storage error
  */
 enum metrics_cmd {
@@ -57,7 +58,8 @@ enum metrics_cmd {
 
     METRICS_CMD_REPORT_EVENT_DROP = (1 << METRICS_CMD_REQ_SHIFT),
     METRICS_CMD_REPORT_CRASH = (2 << METRICS_CMD_REQ_SHIFT),
-    METRICS_CMD_REPORT_STORAGE_ERROR = (3 << METRICS_CMD_REQ_SHIFT),
+    METRICS_CMD_REPORT_EXIT = (3 << METRICS_CMD_REQ_SHIFT),
+    METRICS_CMD_REPORT_STORAGE_ERROR = (4 << METRICS_CMD_REQ_SHIFT),
 };
 
 /**
@@ -92,9 +94,22 @@ struct metrics_resp {
 } __attribute__((__packed__));
 
 /**
+ * struct metrics_report_exit_req - arguments of %METRICS_CMD_REPORT_EXIT
+ *                                   requests
+ * @app_id: app_id in the form UUID in ascii format
+ *          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ * @exit_code: architecture-specific exit code
+ */
+struct metrics_report_exit_req {
+    char app_id[UUID_STR_SIZE];
+    uint32_t exit_code;
+} __attribute__((__packed__));
+
+/**
  * struct metrics_report_crash_req - arguments of %METRICS_CMD_REPORT_CRASH
  *                                   requests
- * @app_id: uuid of the app that crashed
+ * @app_id: app_id in the form UUID in ascii format
+ *          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
  * @crash_reason: architecture-specific code representing the reason for the
  *                crash
  */
@@ -158,6 +173,7 @@ struct metrics_msg {
     struct metrics_req req;
     union {
         struct metrics_report_crash_req crash_args;
+        struct metrics_report_exit_req exit_args;
         struct metrics_report_storage_error_req storage_args;
     };
 } __attribute__((__packed__));
