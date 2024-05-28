@@ -211,26 +211,6 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
 
 #######################################
-# sanitizer.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := sanitizer.libraries.txt
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(LOCAL_MODULE)
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := \
-    $(SANITIZER_STEMS) \
-    $(2ND_SANITIZER_STEMS)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
-		echo $(lib) >> $@;)
-
-#######################################
 # ramdisk_node_list
 include $(CLEAR_VARS)
 
