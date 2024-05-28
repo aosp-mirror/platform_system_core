@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include <android-base/unique_fd.h>
 #include <libsnapshot/cow_format.h>
