@@ -435,6 +435,7 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     if (ReadFileToString("/sys/class/block/" + uevent.device_name + "/queue/zoned", &model) &&
         !StartsWith(model, "none")) {
         links.emplace_back("/dev/block/by-name/zoned_device");
+        links.emplace_back("/dev/sys/block/by-name/zoned_device");
     }
 
     auto last_slash = uevent.path.rfind('/');
@@ -483,11 +484,21 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
     // event.
     if (action == "add" || (action == "change" && StartsWith(devpath, "/dev/block/dm-"))) {
         for (const auto& link : links) {
+            std::string target;
+            if (StartsWith(link, "/dev/block/")) {
+                target = devpath;
+            } else if (StartsWith(link, "/dev/sys/block/")) {
+                target = "/sys/class/block/" + Basename(devpath);
+            } else {
+                LOG(ERROR) << "Unrecognized link type: " << link;
+                continue;
+            }
+
             if (!mkdir_recursive(Dirname(link), 0755)) {
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
 
-            if (symlink(devpath.c_str(), link.c_str())) {
+            if (symlink(target.c_str(), link.c_str())) {
                 if (errno != EEXIST) {
                     PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
                 } else if (std::string link_path;
