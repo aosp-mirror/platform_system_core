@@ -41,11 +41,13 @@ cc_defaults {
 cc_library {
     name: "libutils_binder",
     defaults: ["libutils_binder_impl_defaults"],
+    cmake_snapshot_supported: false,
 }
 
 cc_library_shared {
     name: "libutils_binder_sdk",
     defaults: ["libutils_binder_impl_defaults_nodeps"],
+    cmake_snapshot_supported: true,
 
     header_libs: [
         "liblog_stub",
