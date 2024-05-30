@@ -60,6 +60,7 @@ struct PartitionCowCreator {
     bool using_snapuserd = false;
     std::string compression_algorithm;
     uint64_t compression_factor;
+    uint32_t read_ahead_size;
 
     // True if multi-threaded compression should be enabled
     bool enable_threading;
