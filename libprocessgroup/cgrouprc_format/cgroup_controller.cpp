@@ -20,11 +20,6 @@ namespace android {
 namespace cgrouprc {
 namespace format {
 
-CgroupController::CgroupController() : version_(0), flags_(0) {
-    memset(name_, 0, sizeof(name_));
-    memset(path_, 0, sizeof(path_));
-}
-
 CgroupController::CgroupController(uint32_t version, uint32_t flags, const std::string& name,
                                    const std::string& path)
     : CgroupController() {

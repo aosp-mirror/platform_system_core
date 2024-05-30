@@ -32,7 +32,7 @@ class CgroupController {
   public:
     // Does not own controller
     explicit CgroupController(const ACgroupController* controller)
-        : controller_(controller), state_(UNKNOWN) {}
+        : controller_(controller) {}
 
     uint32_t version() const;
     const char* name() const;
@@ -53,7 +53,7 @@ class CgroupController {
     };
 
     const ACgroupController* controller_ = nullptr;
-    ControllerState state_;
+    ControllerState state_ = ControllerState::UNKNOWN;
 };
 
 class CgroupMap {
