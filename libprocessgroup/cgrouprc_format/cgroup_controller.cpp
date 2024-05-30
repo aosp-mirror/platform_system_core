@@ -22,7 +22,7 @@ namespace format {
 
 CgroupController::CgroupController(uint32_t version, uint32_t flags, const std::string& name,
                                    const std::string& path)
-    : CgroupController() {
+{
     // strlcpy isn't available on host. Although there is an implementation
     // in licutils, libcutils itself depends on libcgrouprc_format, causing
     // a circular dependency.
