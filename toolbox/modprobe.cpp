@@ -15,7 +15,6 @@
  */
 
 #include <ctype.h>
-#include <fcntl.h>
 #include <getopt.h>
 #include <stdlib.h>
 
@@ -28,7 +27,6 @@
 #include <modprobe/modprobe.h>
 
 #include <sys/utsname.h>
-#include <unistd.h>
 
 namespace {
 
@@ -105,11 +103,6 @@ static int KernelVersionNameFilter(const dirent* de) {
         return 1;
     }
     return 0;
-}
-
-std::string GetPageSizeSuffix() {
-    static const size_t page_size = sysconf(_SC_PAGE_SIZE);
-    return android::base::StringPrintf("_%zuk", page_size / 1024);
 }
 
 }  // anonymous namespace
@@ -239,19 +232,6 @@ extern "C" int modprobe_main(int argc, char** argv) {
 
         // Allow modules to be directly inside /lib/modules
         mod_dirs.emplace_back(LIB_MODULES_PREFIX);
-    }
-    if (getpagesize() != 4096) {
-        struct utsname uts {};
-        if (uname(&uts)) {
-            PLOG(FATAL) << "Failed to get kernel version";
-        }
-        const auto module_dir = android::base::StringPrintf("/lib/modules/%s%s", uts.release,
-                                                            GetPageSizeSuffix().c_str());
-        struct stat st {};
-        if (stat(module_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
-            mod_dirs.clear();
-            mod_dirs.emplace_back(module_dir);
-        }
     }
 
     LOG(DEBUG) << "mode is " << mode;
