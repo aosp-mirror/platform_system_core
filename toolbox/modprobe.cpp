@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <string>
 
@@ -85,6 +86,20 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     }
 }
 
+static bool ModDirMatchesKernelPageSize(const char* mod_dir) {
+    static const unsigned int kernel_pgsize_kb = getpagesize() / 1024;
+    const char* mod_sfx = strrchr(mod_dir, '_');
+    unsigned int mod_pgsize_kb;
+    int mod_sfx_len;
+
+    if (mod_sfx == NULL || sscanf(mod_sfx, "_%uk%n", &mod_pgsize_kb, &mod_sfx_len) != 1 ||
+        strlen(mod_sfx) != mod_sfx_len) {
+        mod_pgsize_kb = 4;
+    }
+
+    return kernel_pgsize_kb == mod_pgsize_kb;
+}
+
 // Find directories in format of "/lib/modules/x.y.z-*".
 static int KernelVersionNameFilter(const dirent* de) {
     unsigned int major, minor;
@@ -100,7 +115,7 @@ static int KernelVersionNameFilter(const dirent* de) {
     }
 
     if (android::base::StartsWith(de->d_name, kernel_version)) {
-        return 1;
+        return ModDirMatchesKernelPageSize(de->d_name);
     }
     return 0;
 }
