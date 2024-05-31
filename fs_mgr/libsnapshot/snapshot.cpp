@@ -101,8 +101,7 @@ static constexpr auto kUpdateStateCheckInterval = 2s;
  * time, they could use O_DIRECT functionality wherein the I/O to the source
  * block device will be O_DIRECT.
  */
-static constexpr auto kCowReadAheadSizeKb = 32;
-static constexpr auto kSourceReadAheadSizeKb = 32;
+static constexpr auto kReadAheadSizeKb = 32;
 
 // Note: IImageManager is an incomplete type in the header, so the default
 // destructor doesn't work.
@@ -418,6 +417,7 @@ bool SnapshotManager::CreateSnapshot(LockedFile* lock, PartitionCowCreator* cow_
     status->set_using_snapuserd(cow_creator->using_snapuserd);
     status->set_compression_algorithm(cow_creator->compression_algorithm);
     status->set_compression_factor(cow_creator->compression_factor);
+    status->set_read_ahead_size(cow_creator->read_ahead_size);
     if (cow_creator->enable_threading) {
         status->set_enable_threading(cow_creator->enable_threading);
     }
@@ -1142,8 +1142,8 @@ auto SnapshotManager::CheckMergeState(const std::function<bool()>& before_cancel
     return result;
 }
 
-auto SnapshotManager::CheckMergeState(LockedFile* lock, const std::function<bool()>& before_cancel)
-        -> MergeResult {
+auto SnapshotManager::CheckMergeState(LockedFile* lock,
+                                      const std::function<bool()>& before_cancel) -> MergeResult {
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
     switch (update_status.state()) {
         case UpdateState::None:
@@ -1765,9 +1765,8 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
                                base_path_merge;
                 snapuserd_argv->emplace_back(std::move(message));
             }
-
-            SetReadAheadSize(cow_image_device, kCowReadAheadSizeKb);
-            SetReadAheadSize(source_device, kSourceReadAheadSizeKb);
+            SetReadAheadSize(cow_image_device, snapshot_status.read_ahead_size());
+            SetReadAheadSize(source_device, snapshot_status.read_ahead_size());
 
             // Do not attempt to connect to the new snapuserd yet, it hasn't
             // been started. We do however want to wait for the misc device
@@ -2852,8 +2851,8 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
     return true;
 }
 
-auto SnapshotManager::OpenFile(const std::string& file, int lock_flags)
-        -> std::unique_ptr<LockedFile> {
+auto SnapshotManager::OpenFile(const std::string& file,
+                               int lock_flags) -> std::unique_ptr<LockedFile> {
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
@@ -3309,19 +3308,19 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         LOG(INFO) << "using compression algorithm: " << compression_algorithm
                   << ", max compressible block size: " << compression_factor;
     }
-
-    PartitionCowCreator cow_creator{
-            .target_metadata = target_metadata.get(),
-            .target_suffix = target_suffix,
-            .target_partition = nullptr,
-            .current_metadata = current_metadata.get(),
-            .current_suffix = current_suffix,
-            .update = nullptr,
-            .extra_extents = {},
-            .using_snapuserd = using_snapuserd,
-            .compression_algorithm = compression_algorithm,
-            .compression_factor = compression_factor,
-    };
+    auto read_ahead_size =
+            android::base::GetUintProperty<uint>("ro.virtual_ab.read_ahead_size", kReadAheadSizeKb);
+    PartitionCowCreator cow_creator{.target_metadata = target_metadata.get(),
+                                    .target_suffix = target_suffix,
+                                    .target_partition = nullptr,
+                                    .current_metadata = current_metadata.get(),
+                                    .current_suffix = current_suffix,
+                                    .update = nullptr,
+                                    .extra_extents = {},
+                                    .using_snapuserd = using_snapuserd,
+                                    .compression_algorithm = compression_algorithm,
+                                    .compression_factor = compression_factor,
+                                    .read_ahead_size = read_ahead_size};
 
     if (dap_metadata.vabc_feature_set().has_threaded()) {
         cow_creator.enable_threading = dap_metadata.vabc_feature_set().threaded();
