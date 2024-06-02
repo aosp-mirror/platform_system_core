@@ -117,3 +117,7 @@ prebuilt_etc {
 llndk_libraries_txt {
     name: "llndk.libraries.txt",
 }
+
+sanitizer_libraries_txt {
+    name: "sanitizer.libraries.txt",
+}
