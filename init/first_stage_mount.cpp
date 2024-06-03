@@ -396,9 +396,10 @@ bool FirstStageMountVBootV2::CreateSnapshotPartitions(SnapshotManager* sm) {
     use_snapuserd_ = sm->IsSnapuserdRequired();
     if (use_snapuserd_) {
         if (sm->UpdateUsesUserSnapshots()) {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_USER);
+            LaunchFirstStageSnapuserd();
         } else {
-            LaunchFirstStageSnapuserd(SnapshotDriver::DM_SNAPSHOT);
+            LOG(FATAL) << "legacy virtual-ab is no longer supported";
+            return false;
         }
     }
 
@@ -555,11 +556,11 @@ static bool MaybeDeriveMicrodroidVendorDiceNode(Fstab* fstab) {
         return true;
     }
     // clang-format off
-    const std::array<const char*, 7> args = {
+    const std::array<const char*, 8> args = {
         "/system/bin/derive_microdroid_vendor_dice_node",
                 "--dice-driver", "/dev/open-dice0",
                 "--microdroid-vendor-disk-image", microdroid_vendor_block_dev->data(),
-                "--output", "/microdroid_resources/dice_chain.raw",
+                "--output", "/microdroid_resources/dice_chain.raw", nullptr,
     };
     // clang-format-on
     // ForkExecveAndWaitForCompletion calls waitpid to wait for the fork-ed process to finish.

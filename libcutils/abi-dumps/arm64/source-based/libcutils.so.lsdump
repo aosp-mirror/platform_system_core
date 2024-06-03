@@ -290,6 +290,9 @@
    "name" : "fs_write_atomic_int"
   },
   {
+   "name" : "get_fs_config"
+  },
+  {
    "name" : "hashmapCreate"
   },
   {
@@ -1272,6 +1275,27 @@
    ],
    "return_type" : "_ZTIi",
    "source_file" : "system/core/libcutils/include/cutils/fs.h"
+  },
+  {
+   "function_name" : "get_fs_config",
+   "linker_set_key" : "get_fs_config",
+   "parameters" :
+   [
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIb"
+    },
+    {
+     "referenced_type" : "_ZTIPKc"
+    },
+    {
+     "referenced_type" : "_ZTIP9fs_config"
+    }
+   ],
+   "return_type" : "_ZTIb",
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
   },
   {
    "function_name" : "hashmapCreate",
@@ -2392,6 +2416,15 @@
   },
   {
    "alignment" : 8,
+   "linker_set_key" : "_ZTIP9fs_config",
+   "name" : "fs_config *",
+   "referenced_type" : "_ZTI9fs_config",
+   "self_type" : "_ZTIP9fs_config",
+   "size" : 8,
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
+  },
+  {
+   "alignment" : 8,
    "linker_set_key" : "_ZTIP9str_parms",
    "name" : "str_parms *",
    "referenced_type" : "_ZTI9str_parms",
@@ -2684,6 +2717,37 @@
    "self_type" : "_ZTI5cnode",
    "size" : 40,
    "source_file" : "system/core/libcutils/include/cutils/config_utils.h"
+  },
+  {
+   "alignment" : 8,
+   "fields" :
+   [
+    {
+     "field_name" : "uid",
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "gid",
+     "field_offset" : 32,
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "mode",
+     "field_offset" : 64,
+     "referenced_type" : "_ZTIj"
+    },
+    {
+     "field_name" : "capabilities",
+     "field_offset" : 128,
+     "referenced_type" : "_ZTIm"
+    }
+   ],
+   "linker_set_key" : "_ZTI9fs_config",
+   "name" : "fs_config",
+   "referenced_type" : "_ZTI9fs_config",
+   "self_type" : "_ZTI9fs_config",
+   "size" : 24,
+   "source_file" : "system/core/libcutils/include/private/fs_config.h"
   }
  ],
  "rvalue_reference_types" : []

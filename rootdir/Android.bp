@@ -101,3 +101,23 @@ prebuilt_etc {
     src: "init.usb.configfs.rc",
     sub_dir: "init/hw",
 }
+
+prebuilt_etc {
+    name: "etc_hosts",
+    src: "etc/hosts",
+    filename: "hosts",
+}
+
+prebuilt_etc {
+    name: "init-debug.rc",
+    src: "init-debug.rc",
+    sub_dir: "init",
+}
+
+llndk_libraries_txt {
+    name: "llndk.libraries.txt",
+}
+
+sanitizer_libraries_txt {
+    name: "sanitizer.libraries.txt",
+}

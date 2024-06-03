@@ -59,9 +59,10 @@ device in. The section takes the below format of
 
 `subsystem_name` is used to match uevent `SUBSYSTEM` value
 
-`devname` takes one of two options
+`devname` takes one of three options
   1. `uevent_devname` specifies that the name of the node will be the uevent `DEVNAME`
-  2. `uevent_devpath` specified that the name of the node will be basename uevent `DEVPATH`
+  2. `uevent_devpath` specifies that the name of the node will be basename uevent `DEVPATH`
+  3. `sys_name` specifies that the name of the node will be the contents of `/sys/DEVPATH/name`
 
 `dirname` is an optional parameter that specifies a directory within `/dev` where the node will be
 created.

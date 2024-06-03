@@ -4,6 +4,10 @@
       "name": "debuggerd_test"
     },
     {
+      "name": "debuggerd_test",
+      "keywords": ["primary-device"]
+    },
+    {
       "name": "libtombstoned_client_rust_test"
     },
     {

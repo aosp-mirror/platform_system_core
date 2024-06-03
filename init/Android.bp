@@ -96,6 +96,7 @@ soong_config_module_type {
     config_namespace: "ANDROID",
     bool_variables: [
         "PRODUCT_INSTALL_DEBUG_POLICY_TO_SYSTEM_EXT",
+        "release_write_appcompat_override_system_properties",
     ],
     properties: [
         "cflags",
@@ -159,6 +160,9 @@ libinit_cc_defaults {
                 "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=1",
             ],
         },
+        release_write_appcompat_override_system_properties: {
+            cflags: ["-DWRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES"],
+        }
     },
     static_libs: [
         "libavb",
@@ -255,7 +259,11 @@ cc_library_static {
 
 cc_library_static {
     name: "libinit.microdroid",
-    defaults: ["libinit_defaults"],
+    defaults: [
+        "avf_build_flags_cc",
+        "libinit_defaults",
+    ],
+    recovery_available: false,
     cflags: ["-DMICRODROID=1"],
 }
 
@@ -273,6 +281,13 @@ cc_defaults {
     defaults: ["init_defaults"],
     srcs: ["main.cpp"],
     symlinks: ["ueventd"],
+}
+
+cc_binary {
+    name: "init_second_stage",
+    defaults: ["init_second_stage_defaults"],
+    static_libs: ["libinit"],
+    visibility: ["//visibility:any_system_partition"],
     target: {
         platform: {
             required: [
@@ -307,17 +322,15 @@ cc_defaults {
 }
 
 cc_binary {
-    name: "init_second_stage",
-    defaults: ["init_second_stage_defaults"],
-    static_libs: ["libinit"],
-}
-
-cc_binary {
     name: "init_second_stage.microdroid",
-    defaults: ["init_second_stage_defaults"],
+    defaults: [
+        "avf_build_flags_cc",
+        "init_second_stage_defaults",
+    ],
+    recovery_available: false,
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
-    installable: false,
+    no_full_install: true,
     visibility: ["//packages/modules/Virtualization/microdroid"],
 }
 
@@ -443,6 +456,7 @@ init_first_stage_cc_defaults {
 
         // First stage init is weird: it may start without stdout/stderr, and no /proc.
         hwaddress: false,
+        memtag_stack: false,
     },
 
     // Install adb_debug.prop into debug ramdisk.
@@ -466,7 +480,7 @@ cc_binary {
         "init_first_stage_defaults",
     ],
     cflags: ["-DMICRODROID=1"],
-    installable: false,
+    no_full_install: true,
 }
 
 phony {

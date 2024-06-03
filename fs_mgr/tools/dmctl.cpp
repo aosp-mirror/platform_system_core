@@ -50,6 +50,7 @@ static int Usage(void) {
     std::cerr << "  create <dm-name> [-ro] <targets...>" << std::endl;
     std::cerr << "  delete <dm-name>" << std::endl;
     std::cerr << "  list <devices | targets> [-v]" << std::endl;
+    std::cerr << "  message <dm-name> <sector> <message>" << std::endl;
     std::cerr << "  getpath <dm-name>" << std::endl;
     std::cerr << "  getuuid <dm-name>" << std::endl;
     std::cerr << "  ima <dm-name>" << std::endl;
@@ -203,6 +204,46 @@ class TargetParser final {
             return std::make_unique<DmTargetUser>(start_sector, num_sectors, control_device);
         } else if (target_type == "error") {
             return std::make_unique<DmTargetError>(start_sector, num_sectors);
+        } else if (target_type == "thin-pool") {
+            if (!HasArgs(4)) {
+                std::cerr << "Expected \"thin-pool\" <metadata dev> <data dev> <data block size> "
+                             "<low water mark> <feature args>"
+                          << std::endl;
+                return nullptr;
+            }
+
+            std::string metadata_dev = NextArg();
+            std::string data_dev = NextArg();
+            std::string data_block_size_str = NextArg();
+            std::string low_water_mark_str = NextArg();
+
+            uint64_t data_block_size;
+            if (!android::base::ParseUint(data_block_size_str, &data_block_size)) {
+                std::cerr << "Data block size must be an unsigned integer.\n";
+                return nullptr;
+            }
+            uint64_t low_water_mark;
+            if (!android::base::ParseUint(low_water_mark_str, &low_water_mark)) {
+                std::cerr << "Low water mark must be an unsigned integer.\n";
+                return nullptr;
+            }
+            return std::make_unique<DmTargetThinPool>(start_sector, num_sectors, metadata_dev,
+                                                      data_dev, data_block_size, low_water_mark);
+        } else if (target_type == "thin") {
+            if (!HasArgs(2)) {
+                std::cerr << "Expected \"thin\" <pool dev> <dev id>" << std::endl;
+                return nullptr;
+            }
+
+            std::string pool_dev = NextArg();
+            std::string dev_id_str = NextArg();
+
+            uint64_t dev_id;
+            if (!android::base::ParseUint(dev_id_str, &dev_id)) {
+                std::cerr << "Dev id must be an unsigned integer.\n";
+                return nullptr;
+            }
+            return std::make_unique<DmTargetThin>(start_sector, num_sectors, pool_dev, dev_id);
         } else {
             std::cerr << "Unrecognized target type: " << target_type << std::endl;
             return nullptr;
@@ -417,6 +458,24 @@ static int DmListCmdHandler(int argc, char** argv) {
     return -EINVAL;
 }
 
+static int DmMessageCmdHandler(int argc, char** argv) {
+    if (argc != 3) {
+        std::cerr << "Usage: dmctl message <name> <sector> <message>" << std::endl;
+        return -EINVAL;
+    }
+    uint64_t sector;
+    if (!android::base::ParseUint(argv[1], &sector)) {
+        std::cerr << "Invalid argument for sector: " << argv[1] << std::endl;
+        return -EINVAL;
+    }
+    DeviceMapper& dm = DeviceMapper::Instance();
+    if (!dm.SendMessage(argv[0], sector, argv[2])) {
+        std::cerr << "Could not send message to " << argv[0] << std::endl;
+        return -EINVAL;
+    }
+    return 0;
+}
+
 static int HelpCmdHandler(int /* argc */, char** /* argv */) {
     Usage();
     return 0;
@@ -576,6 +635,7 @@ static std::map<std::string, std::function<int(int, char**)>> cmdmap = {
         {"delete", DmDeleteCmdHandler},
         {"replace", DmReplaceCmdHandler},
         {"list", DmListCmdHandler},
+        {"message", DmMessageCmdHandler},
         {"help", HelpCmdHandler},
         {"getpath", GetPathCmdHandler},
         {"getuuid", GetUuidCmdHandler},

@@ -17,8 +17,6 @@
     <option name="test-suite-tag" value="init_test_upgrade_mte" />
     <option name="test-suite-tag" value="apct" />
 
-    <!-- For tombstone inspection. -->
-    <target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer"/>
     <target_preparer class="com.android.tradefed.targetprep.PushFilePreparer">
       <option name="cleanup" value="true" />
       <option name="push" value="mte_crash->/data/local/tmp/mte_crash" />

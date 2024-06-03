@@ -78,14 +78,6 @@ bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path) 
     return true;
 }
 
-static std::string ConvertUidToPath(const char* cgroup, uid_t uid) {
-    return StringPrintf("%s/uid_%u", cgroup, uid);
-}
-
-static std::string ConvertUidPidToPath(const char* cgroup, uid_t uid, pid_t pid) {
-    return StringPrintf("%s/uid_%u/pid_%d", cgroup, uid, pid);
-}
-
 static bool CgroupKillAvailable() {
     static std::once_flag f;
     static bool cgroup_kill_available = false;
@@ -528,8 +520,14 @@ static populated_status cgroupIsPopulated(int events_fd) {
 static int KillProcessGroup(
         uid_t uid, pid_t initialPid, int signal, bool once = false,
         std::chrono::steady_clock::time_point until = std::chrono::steady_clock::now() + 2200ms) {
-    CHECK_GE(uid, 0);
-    CHECK_GT(initialPid, 0);
+    if (uid < 0) {
+        LOG(ERROR) << __func__ << ": invalid UID " << uid;
+        return -1;
+    }
+    if (initialPid <= 0) {
+        LOG(ERROR) << __func__ << ": invalid PID " << initialPid;
+        return -1;
+    }
 
     // Always attempt to send a kill signal to at least the initialPid, at least once, regardless of
     // whether its cgroup exists or not. This should only be necessary if a bug results in the
@@ -689,8 +687,14 @@ static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string c
 }
 
 int createProcessGroup(uid_t uid, pid_t initialPid, bool memControl) {
-    CHECK_GE(uid, 0);
-    CHECK_GT(initialPid, 0);
+    if (uid < 0) {
+        LOG(ERROR) << __func__ << ": invalid UID " << uid;
+        return -1;
+    }
+    if (initialPid <= 0) {
+        LOG(ERROR) << __func__ << ": invalid PID " << initialPid;
+        return -1;
+    }
 
     if (memControl && !UsePerAppMemcg()) {
         LOG(ERROR) << "service memory controls are used without per-process memory cgroup support";

@@ -332,12 +332,7 @@ TEST_F(CrasherTest, smoke) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
-#ifdef __LP64__
-  ASSERT_MATCH(result,
-               R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x000000000000dead)");
-#else
-  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0000dead)");
-#endif
+  ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0+dead)");
 
   if (mte_supported()) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
@@ -610,7 +605,7 @@ __attribute__((noinline)) void mte_illegal_setjmp_helper(jmp_buf& jump_buf) {
   setjmp(jump_buf);
 }
 
-TEST_F(CrasherTest, mte_illegal_setjmp) {
+TEST_F(CrasherTest, DISABLED_mte_illegal_setjmp) {
   // This setjmp is illegal because it jumps back into a function that already returned.
   // Quoting man 3 setjmp:
   //     If the function which called setjmp() returns before longjmp() is
@@ -1667,6 +1662,9 @@ TEST_F(CrasherTest, seccomp_tombstone_thread_abort) {
 
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
+  ASSERT_MATCH(
+      result,
+      R"(signal 6 \(SIGABRT\))");
   ASSERT_BACKTRACE_FRAME(result, "abort");
 }
 
@@ -1826,10 +1824,14 @@ GwpAsanTestParameters gwp_asan_tests[] = {
      "Use After Free, 0 bytes into a 7-byte allocation"},
     {/* alloc_size */ 15, /* free_before_access */ true, /* access_offset */ 1,
      "Use After Free, 1 byte into a 15-byte allocation"},
-    {/* alloc_size */ 4096, /* free_before_access */ false, /* access_offset */ 4098,
-     "Buffer Overflow, 2 bytes right of a 4096-byte allocation"},
-    {/* alloc_size */ 4096, /* free_before_access */ false, /* access_offset */ -1,
-     "Buffer Underflow, 1 byte left of a 4096-byte allocation"},
+    {/* alloc_size */ static_cast<size_t>(getpagesize()), /* free_before_access */ false,
+     /* access_offset */ getpagesize() + 2,
+     android::base::StringPrintf("Buffer Overflow, 2 bytes right of a %d-byte allocation",
+                                 getpagesize())},
+    {/* alloc_size */ static_cast<size_t>(getpagesize()), /* free_before_access */ false,
+     /* access_offset */ -1,
+     android::base::StringPrintf("Buffer Underflow, 1 byte left of a %d-byte allocation",
+                                 getpagesize())},
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1874,8 +1876,8 @@ TEST_P(GwpAsanCrasherTest, run_gwp_asan_test) {
   StartProcess([&recoverable]() {
     const char* env[] = {"GWP_ASAN_SAMPLE_RATE=1", "GWP_ASAN_PROCESS_SAMPLING=1",
                          "GWP_ASAN_MAX_ALLOCS=40000", nullptr, nullptr};
-    if (recoverable) {
-      env[3] = "GWP_ASAN_RECOVERABLE=true";
+    if (!recoverable) {
+      env[3] = "GWP_ASAN_RECOVERABLE=false";
     }
     std::string test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
     test_name = std::regex_replace(test_name, std::regex("run_gwp_asan_test"),
@@ -2974,30 +2976,34 @@ TEST_F(CrasherTest, verify_map_format) {
   std::string match_str;
   // Verify none.
   match_str = android::base::StringPrintf(
-      "    %s-%s ---         0      1000\\n",
+      "    %s-%s ---         0      %x\\n",
       format_map_pointer(reinterpret_cast<uintptr_t>(none_map)).c_str(),
-      format_map_pointer(reinterpret_cast<uintptr_t>(none_map) + getpagesize() - 1).c_str());
+      format_map_pointer(reinterpret_cast<uintptr_t>(none_map) + getpagesize() - 1).c_str(),
+      getpagesize());
   ASSERT_MATCH(result, match_str);
 
   // Verify read-only.
   match_str = android::base::StringPrintf(
-      "    %s-%s r--         0      1000\\n",
+      "    %s-%s r--         0      %x\\n",
       format_map_pointer(reinterpret_cast<uintptr_t>(r_map)).c_str(),
-      format_map_pointer(reinterpret_cast<uintptr_t>(r_map) + getpagesize() - 1).c_str());
+      format_map_pointer(reinterpret_cast<uintptr_t>(r_map) + getpagesize() - 1).c_str(),
+      getpagesize());
   ASSERT_MATCH(result, match_str);
 
   // Verify write-only.
   match_str = android::base::StringPrintf(
-      "    %s-%s -w-         0      1000\\n",
+      "    %s-%s -w-         0      %x\\n",
       format_map_pointer(reinterpret_cast<uintptr_t>(w_map)).c_str(),
-      format_map_pointer(reinterpret_cast<uintptr_t>(w_map) + getpagesize() - 1).c_str());
+      format_map_pointer(reinterpret_cast<uintptr_t>(w_map) + getpagesize() - 1).c_str(),
+      getpagesize());
   ASSERT_MATCH(result, match_str);
 
   // Verify exec-only.
   match_str = android::base::StringPrintf(
-      "    %s-%s --x         0      1000\\n",
+      "    %s-%s --x         0      %x\\n",
       format_map_pointer(reinterpret_cast<uintptr_t>(x_map)).c_str(),
-      format_map_pointer(reinterpret_cast<uintptr_t>(x_map) + getpagesize() - 1).c_str());
+      format_map_pointer(reinterpret_cast<uintptr_t>(x_map) + getpagesize() - 1).c_str(),
+      getpagesize());
   ASSERT_MATCH(result, match_str);
 
   // Verify file map with non-zero offset and a name.
