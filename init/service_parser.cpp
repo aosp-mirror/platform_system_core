@@ -52,6 +52,18 @@ using android::base::StartsWith;
 namespace android {
 namespace init {
 
+#ifdef INIT_FULL_SOURCES
+// on full sources, we have better information on device to
+// make this decision
+constexpr bool kAlwaysErrorUserRoot = false;
+#else
+constexpr uint64_t kBuildShippingApiLevel = BUILD_SHIPPING_API_LEVEL + 0 /* +0 if empty */;
+// on partial sources, the host build, we don't have the specific
+// vendor API level, but we can enforce things based on the
+// shipping API level.
+constexpr bool kAlwaysErrorUserRoot = kBuildShippingApiLevel > __ANDROID_API_V__;
+#endif
+
 Result<void> ServiceParser::ParseCapabilities(std::vector<std::string>&& args) {
     service_->capabilities_ = 0;
 
@@ -680,7 +692,8 @@ Result<void> ServiceParser::EndSection() {
     }
 
     if (service_->proc_attr_.parsed_uid == std::nullopt) {
-        if (android::base::GetIntProperty("ro.vendor.api_level", 0) > 202404) {
+        if (kAlwaysErrorUserRoot ||
+            android::base::GetIntProperty("ro.vendor.api_level", 0) > 202404) {
             return Error() << "No user specified for service '" << service_->name()
                            << "', so it would have been root.";
         } else {
