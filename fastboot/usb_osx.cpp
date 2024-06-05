@@ -436,12 +436,7 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
 
     for (;;) {
         if (! IOIteratorIsValid(iterator)) {
-            /*
-             * Apple documentation advises resetting the iterator if
-             * it should become invalid during iteration.
-             */
-            IOIteratorReset(iterator);
-            continue;
+            break;
         }
 
         io_service_t device = IOIteratorNext(iterator);
@@ -474,16 +469,20 @@ static int init_usb(ifc_match_func callback, std::unique_ptr<usb_handle>* handle
 /*
  * Definitions of this file's public functions.
  */
-
-UsbTransport* usb_open(ifc_match_func callback, uint32_t timeout_ms) {
+std::unique_ptr<UsbTransport> usb_open(ifc_match_func callback, uint32_t timeout_ms) {
+    std::unique_ptr<UsbTransport> result;
     std::unique_ptr<usb_handle> handle;
 
     if (init_usb(callback, &handle) < 0) {
         /* Something went wrong initializing USB. */
-        return nullptr;
+        return result;
     }
 
-    return new OsxUsbTransport(std::move(handle), timeout_ms);
+    if (handle) {
+        result = std::make_unique<OsxUsbTransport>(std::move(handle), timeout_ms);
+    }
+
+    return result;
 }
 
 OsxUsbTransport::~OsxUsbTransport() {

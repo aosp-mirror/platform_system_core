@@ -344,11 +344,14 @@ runs the service.
   intended to be used with the `exec_start` builtin for any must-have checks during boot.
 
 `restart_period <seconds>`
-> If a non-oneshot service exits, it will be restarted at its start time plus
-  this period. It defaults to 5s to rate limit crashing services.
-  This can be increased for services that are meant to run periodically. For
-  example, it may be set to 3600 to indicate that the service should run every hour
-  or 86400 to indicate that the service should run every day.
+> If a non-oneshot service exits, it will be restarted at its previous start time plus this period.
+  The default value is 5s. This can be used to implement periodic services together with the
+  `timeout_period` command below. For example, it may be set to 3600 to indicate that the service
+  should run every hour or 86400 to indicate that the service should run every day. This can be set
+  to a value shorter than 5s for example 0, but the minimum 5s delay is enforced if the restart was
+  due to a crash. This is to rate limit persistentally crashing services. In other words,
+  `<seconds>` smaller than 5 is respected only when the service exits deliverately and successfully
+  (i.e. by calling exit(0)).
 
 `rlimit <resource> <cur> <max>`
 > This applies the given rlimit to the service. rlimits are inherited by child
@@ -671,11 +674,12 @@ provides the `aidl_lazy_test_1` interface.
   _options_ include "barrier=1", "noauto\_da\_alloc", "discard", ... as
   a comma separated string, e.g. barrier=1,noauto\_da\_alloc
 
-`perform_apex_config`
+`perform_apex_config [--bootstrap]`
 > Performs tasks after APEXes are mounted. For example, creates data directories
   for the mounted APEXes, parses config file(s) from them, and updates linker
   configurations. Intended to be used only once when apexd notifies the mount
   event by setting `apexd.status` to ready.
+  Use --bootstrap when invoking in the bootstrap mount namespace.
 
 `restart [--only-if-running] <service>`
 > Stops and restarts a running service, does nothing if the service is currently

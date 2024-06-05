@@ -49,7 +49,6 @@ cc_defaults {
     sanitize: {
         misc_undefined: ["integer"],
     },
-    local_include_dirs: ["include/"],
     cflags: [
         "-Wall",
         "-Werror",
@@ -60,7 +59,7 @@ cc_defaults {
     name: "libfs_mgr_defaults",
     defaults: ["fs_mgr_defaults"],
     export_include_dirs: ["include"],
-    include_dirs: ["system/vold"],
+    local_include_dirs: ["include/"],
     cflags: [
         "-D_FILE_OFFSET_BITS=64",
     ],
@@ -70,8 +69,9 @@ cc_defaults {
         "fs_mgr.cpp",
         "fs_mgr_format.cpp",
         "fs_mgr_dm_linear.cpp",
-        "fs_mgr_overlayfs.cpp",
         "fs_mgr_roots.cpp",
+        "fs_mgr_overlayfs_control.cpp",
+        "fs_mgr_overlayfs_mount.cpp",
         "fs_mgr_vendor_overlay.cpp",
         ":libfiemap_srcs",
     ],
@@ -89,8 +89,6 @@ cc_defaults {
     static_libs: [
         "libavb",
         "libfs_avb",
-        "libfstab",
-        "libdm",
         "libgsi",
     ],
     export_static_lib_headers: [
@@ -174,43 +172,22 @@ cc_library {
 }
 
 cc_library_static {
-    // Do not ever make this a shared library as long as it is vendor_available.
-    // It does not have a stable interface.
-    name: "libfstab",
-    vendor_available: true,
+    name: "libfs_mgr_file_wait",
+    defaults: ["fs_mgr_defaults"],
+    export_include_dirs: ["include"],
+    cflags: [
+        "-D_FILE_OFFSET_BITS=64",
+    ],
+    srcs: [
+        "file_wait.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+    ],
+    host_supported: true,
     ramdisk_available: true,
     vendor_ramdisk_available: true,
     recovery_available: true,
-    apex_available: [
-        "//apex_available:anyapex",
-        "//apex_available:platform",
-    ],
-    host_supported: true,
-    defaults: ["fs_mgr_defaults"],
-    srcs: [
-        "fs_mgr_fstab.cpp",
-        "fs_mgr_boot_config.cpp",
-        "fs_mgr_slotselect.cpp",
-    ],
-    target: {
-        darwin: {
-            enabled: false,
-        },
-        vendor: {
-            cflags: [
-                // Skipping entries in fstab should only be done in a system
-                // process as the config file is in /system_ext.
-                // Remove the op from the vendor variant.
-                "-DNO_SKIP_MOUNT",
-            ],
-        },
-    },
-    export_include_dirs: ["include_fstab"],
-    header_libs: [
-        "libbase_headers",
-        "libgsi_headers",
-    ],
-    min_sdk_version: "31",
 }
 
 cc_binary {

@@ -58,9 +58,10 @@ using namespace android::storage_literals;
 namespace fastboot {
 
 /*************************** PUBLIC *******************************/
-FastBootDriver::FastBootDriver(Transport* transport, DriverCallbacks driver_callbacks,
+FastBootDriver::FastBootDriver(std::unique_ptr<Transport> transport,
+                               DriverCallbacks driver_callbacks,
                                bool no_checks)
-    : transport_(transport),
+    : transport_(std::move(transport)),
       prolog_(std::move(driver_callbacks.prolog)),
       epilog_(std::move(driver_callbacks.epilog)),
       info_(std::move(driver_callbacks.info)),
@@ -627,9 +628,8 @@ int FastBootDriver::SparseWriteCallback(std::vector<char>& tpbuf, const char* da
     return 0;
 }
 
-Transport* FastBootDriver::set_transport(Transport* transport) {
-    std::swap(transport_, transport);
-    return transport;
+void FastBootDriver::set_transport(std::unique_ptr<Transport> transport) {
+    transport_ = std::move(transport);
 }
 
 }  // End namespace fastboot

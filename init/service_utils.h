@@ -91,11 +91,13 @@ struct ProcessAttributes {
     IoSchedClass ioprio_class;
     int ioprio_pri;
     std::vector<std::pair<int, rlimit>> rlimits;
-    uid_t uid;
+    std::optional<uid_t> parsed_uid;
     gid_t gid;
     std::vector<gid_t> supp_gids;
     int priority;
     bool stdio_to_kmsg;
+
+    uid_t uid() const { return parsed_uid.value_or(0); }
 };
 
 inline bool RequiresConsole(const ProcessAttributes& attr) {

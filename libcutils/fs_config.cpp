@@ -41,10 +41,6 @@
 
 #include "fs_config.h"
 
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
 using android::base::EndsWith;
 using android::base::StartsWith;
 
@@ -72,10 +68,6 @@ static const struct fs_path_config android_dirs[] = {
     { 01771, AID_SYSTEM,       AID_MISC,         0, "data/misc" },
     { 00775, AID_MEDIA_RW,     AID_MEDIA_RW,     0, "data/media/Music" },
     { 00775, AID_MEDIA_RW,     AID_MEDIA_RW,     0, "data/media" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/nativetest" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/nativetest64" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/benchmarktest" },
-    { 00750, AID_ROOT,         AID_SHELL,        0, "data/benchmarktest64" },
     { 00775, AID_ROOT,         AID_ROOT,         0, "data/preloads" },
     { 00771, AID_SYSTEM,       AID_SYSTEM,       0, "data" },
     { 00755, AID_ROOT,         AID_SYSTEM,       0, "mnt" },
@@ -95,7 +87,7 @@ static const struct fs_path_config android_dirs[] = {
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/bin" },
     { 00751, AID_ROOT,         AID_SHELL,        0, "vendor/apex/*/bin" },
     { 00755, AID_ROOT,         AID_SHELL,        0, "vendor" },
-    { 00755, AID_ROOT,         AID_ROOT,         0, 0 },
+    {},
         // clang-format on
 };
 #ifndef __ANDROID_VNDK__
@@ -147,12 +139,6 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest/tests.txt" },
-    { 00640, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/tests.txt" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/nativetest64/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/benchmarktest/*" },
-    { 00750, AID_ROOT,      AID_SHELL,     0, "data/benchmarktest64/*" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "default.prop" }, // legacy
     { 00600, AID_ROOT,      AID_ROOT,      0, "system/etc/prop.default" },
     { 00600, AID_ROOT,      AID_ROOT,      0, "odm/build.prop" }, // legacy; only for P release
@@ -214,24 +200,41 @@ static const struct fs_path_config android_files[] = {
 #endif
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/resize2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/snapuserd_ramdisk" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/tune2fs" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "first_stage_ramdisk/system/bin/fsck.f2fs" },
     // generic defaults
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "init*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "*.rc" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "odm/bin/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "odm/framework/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "odm/app/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "odm/priv-app/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "product/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "product/apex/*bin/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "product/framework/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "product/app/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "product/priv-app/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/apex/*/bin/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system/framework/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system/app/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system/priv-app/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system_ext/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system_ext/apex/*/bin/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system_ext/framework/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system_ext/app/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "system_ext/priv-app/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/apex/*bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/xbin/*" },
-    { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "vendor/framework/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "vendor/app/*" },
+    { 00644, AID_ROOT,      AID_ROOT,      0, "vendor/priv-app/*" },
+    {},
         // clang-format on
 };
 #ifndef __ANDROID_VNDK__
@@ -256,12 +259,12 @@ static int fs_config_open(int dir, int which, const char* target_out_path) {
         len = strip(target_out_path, len, "/");
         len = strip(target_out_path, len, "/system");
         if (asprintf(&name, "%.*s%s", (int)len, target_out_path, conf[which][dir]) != -1) {
-            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
+            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY));
             free(name);
         }
     }
     if (fd < 0) {
-        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY | O_BINARY));
+        fd = TEMP_FAILURE_RETRY(open(conf[which][dir], O_RDONLY));
     }
     return fd;
 }
@@ -321,8 +324,8 @@ static bool fs_config_cmp(bool dir, const char* prefix, size_t len, const char* 
 auto __for_testing_only__fs_config_cmp = fs_config_cmp;
 #endif
 
-void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
-               unsigned* mode, uint64_t* capabilities) {
+bool get_fs_config(const char* path, bool dir, const char* target_out_path,
+                   struct fs_config* fs_conf) {
     const struct fs_path_config* pc;
     size_t which, plen;
 
@@ -365,11 +368,11 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
             if (fs_config_cmp(dir, prefix, len, path, plen)) {
                 free(prefix);
                 close(fd);
-                *uid = header.uid;
-                *gid = header.gid;
-                *mode = (*mode & (~07777)) | header.mode;
-                *capabilities = header.capabilities;
-                return;
+                fs_conf->uid = header.uid;
+                fs_conf->gid = header.gid;
+                fs_conf->mode = header.mode;
+                fs_conf->capabilities = header.capabilities;
+                return true;
             }
             free(prefix);
         }
@@ -378,11 +381,28 @@ void fs_config(const char* path, int dir, const char* target_out_path, unsigned*
 
     for (pc = dir ? android_dirs : android_files; pc->prefix; pc++) {
         if (fs_config_cmp(dir, pc->prefix, strlen(pc->prefix), path, plen)) {
-            break;
+            fs_conf->uid = pc->uid;
+            fs_conf->gid = pc->gid;
+            fs_conf->mode = pc->mode;
+            fs_conf->capabilities = pc->capabilities;
+            return true;
         }
     }
-    *uid = pc->uid;
-    *gid = pc->gid;
-    *mode = (*mode & (~07777)) | pc->mode;
-    *capabilities = pc->capabilities;
+    return false;
+}
+
+void fs_config(const char* path, int dir, const char* target_out_path, unsigned* uid, unsigned* gid,
+               unsigned* mode, uint64_t* capabilities) {
+    struct fs_config conf;
+    if (get_fs_config(path, dir, target_out_path, &conf)) {
+        *uid = conf.uid;
+        *gid = conf.gid;
+        *mode = (*mode & S_IFMT) | conf.mode;
+        *capabilities = conf.capabilities;
+    } else {
+        *uid = AID_ROOT;
+        *gid = AID_ROOT;
+        *mode = (*mode & S_IFMT) | (dir ? 0755 : 0644);
+        *capabilities = 0;
+    }
 }

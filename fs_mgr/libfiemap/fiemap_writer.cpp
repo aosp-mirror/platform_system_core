@@ -458,9 +458,34 @@ static FiemapStatus AllocateFile(int file_fd, const std::string& file_path, uint
             return FiemapStatus::Error();
     }
 
-    if (fallocate(file_fd, 0, 0, file_size)) {
-        PLOG(ERROR) << "Failed to allocate space for file: " << file_path << " size: " << file_size;
-        return FiemapStatus::FromErrno(errno);
+    // F2FS can return EAGAIN and partially fallocate. Keep trying to fallocate,
+    // and if we don't make forward progress, return ENOSPC.
+    std::optional<off_t> prev_size;
+    while (true) {
+        if (fallocate(file_fd, 0, 0, file_size) == 0) {
+            break;
+        }
+        if (errno != EAGAIN) {
+            PLOG(ERROR) << "Failed to allocate space for file: " << file_path
+                        << " size: " << file_size;
+            return FiemapStatus::FromErrno(errno);
+        }
+
+        struct stat s;
+        if (fstat(file_fd, &s) < 0) {
+            PLOG(ERROR) << "Failed to fstat after fallocate failure: " << file_path;
+            return FiemapStatus::FromErrno(errno);
+        }
+        if (!prev_size) {
+            prev_size = {s.st_size};
+            continue;
+        }
+        if (*prev_size >= s.st_size) {
+            LOG(ERROR) << "Fallocate retry failed, got " << s.st_size << ", asked for "
+                       << file_size;
+            return FiemapStatus(FiemapStatus::ErrorCode::NO_SPACE);
+        }
+        LOG(INFO) << "Retrying fallocate, got " << s.st_size << ", asked for " << file_size;
     }
 
     if (need_explicit_writes) {

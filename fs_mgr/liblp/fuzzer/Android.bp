@@ -1,0 +1,205 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+package {
+    default_team: "trendy_team_android_kernel",
+}
+
+cc_defaults {
+    name: "liblp_fuzz_defaults",
+    header_libs: [
+        "libstorage_literals_headers",
+    ],
+    shared_libs: [
+        "liblp",
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libcutils",
+    ],
+    include_dirs: [
+        "system/core/fs_mgr/liblp",
+    ],
+    fuzz_config: {
+        cc: [
+            "android-systems-storage@google.com",
+        ],
+        componentid: 59148,
+        hotlists: ["4593311"],
+        description: "The fuzzers target the APIs of all liblp modules",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped",
+    },
+}
+
+cc_fuzz {
+    name: "liblp_builder_fuzzer",
+    srcs: ["liblp_builder_fuzzer.cpp"],
+    defaults: ["liblp_fuzz_defaults"],
+}
+
+cc_fuzz {
+    name: "liblp_super_layout_builder_fuzzer",
+    srcs: ["liblp_super_layout_builder_fuzzer.cpp"],
+    defaults: ["liblp_fuzz_defaults"],
+}
+
+python_binary_host {
+    name: "image_gen_rand",
+    srcs: ["image_gen_rand.py"],
+}
+
+genrule_defaults {
+    name: "test_data_gen_defaults",
+    tools: [
+        "image_gen_rand",
+    ],
+}
+
+// Fake dtb image.
+genrule {
+    name: "test_dtb",
+    defaults: ["test_data_gen_defaults"],
+    out: ["test_dtb.img"],
+    cmd: "$(location image_gen_rand) --seed dtb --length 1024 > $(out)",
+}
+
+// Fake bootconfig image.
+genrule {
+    name: "test_bootconfig",
+    defaults: ["test_data_gen_defaults"],
+    out: ["test_bootconfig.img"],
+    cmd: "$(location image_gen_rand) --seed bootconfig --length 1024 > $(out)",
+}
+
+// Fake vendor ramdisk with type "none".
+genrule {
+    name: "test_vendor_ramdisk_none",
+    defaults: ["test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_none.img"],
+    cmd: "$(location image_gen_rand) --seed vendor_ramdisk_none --length 1024 > $(out)",
+}
+
+// Fake vendor ramdisk with type "platform".
+genrule {
+    name: "test_vendor_ramdisk_platform",
+    defaults: ["test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_platform.img"],
+    cmd: "$(location image_gen_rand) --seed vendor_ramdisk_platform --length 1024 > $(out)",
+}
+
+// Fake replacement ramdisk.
+genrule {
+    name: "test_vendor_ramdisk_replace",
+    defaults: ["test_data_gen_defaults"],
+    out: ["test_vendor_ramdisk_replace.img"],
+    cmd: "$(location image_gen_rand) --seed replace --length 3072 > $(out)",
+}
+
+// Genrules for test vendor boot images.
+fastboot_sign_test_image = "$(location avbtool) add_hash_footer --salt 00 --image $(out) " +
+    "--partition_name vendor_boot --partition_size $$(( 1 * 1024 * 1024 ))"
+
+genrule_defaults {
+    name: "test_vendor_boot_gen_defaults",
+    defaults: ["test_data_gen_defaults"],
+    tools: [
+        "avbtool",
+        "mkbootimg",
+    ],
+}
+
+genrule {
+    name: "test_vendor_boot_v3",
+    defaults: ["test_vendor_boot_gen_defaults"],
+    out: ["test_vendor_boot_v3.img"],
+    srcs: [
+        ":test_dtb",
+        ":test_vendor_ramdisk_none",
+    ],
+    cmd: "$(location mkbootimg) --header_version 3 " +
+        "--vendor_ramdisk $(location :test_vendor_ramdisk_none) " +
+        "--dtb $(location :test_dtb) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
+
+genrule {
+    name: "test_vendor_boot_v4_without_frag",
+    defaults: ["test_vendor_boot_gen_defaults"],
+    out: ["test_vendor_boot_v4_without_frag.img"],
+    srcs: [
+        ":test_dtb",
+        ":test_vendor_ramdisk_none",
+        ":test_bootconfig",
+    ],
+    cmd: "$(location mkbootimg) --header_version 4 " +
+        "--vendor_ramdisk $(location :test_vendor_ramdisk_none) " +
+        "--dtb $(location :test_dtb) " +
+        "--vendor_bootconfig $(location :test_bootconfig) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
+
+genrule {
+    name: "test_vendor_boot_v4_with_frag",
+    defaults: ["test_vendor_boot_gen_defaults"],
+    out: ["test_vendor_boot_v4_with_frag.img"],
+    srcs: [
+        ":test_dtb",
+        ":test_vendor_ramdisk_none",
+        ":test_vendor_ramdisk_platform",
+        ":test_bootconfig",
+    ],
+    cmd: "$(location mkbootimg) --header_version 4 " +
+        "--dtb $(location :test_dtb) " +
+        "--vendor_bootconfig $(location :test_bootconfig) " +
+        "--ramdisk_type none --ramdisk_name none_ramdisk " +
+        "--vendor_ramdisk_fragment $(location :test_vendor_ramdisk_none) " +
+        "--ramdisk_type platform --ramdisk_name platform_ramdisk " +
+        "--vendor_ramdisk_fragment $(location :test_vendor_ramdisk_platform) " +
+        "--vendor_boot $(out) && " +
+        fastboot_sign_test_image,
+}
+
+cc_fuzz {
+    name: "liblp_apis_fuzzer",
+    srcs: [
+        "liblp_apis_fuzzer.cpp",
+        ":TestPartitionOpener_group",
+    ],
+    defaults: ["liblp_fuzz_defaults"],
+    shared_libs: [
+        "libsparse",
+    ],
+    data: [
+        ":test_dtb",
+        ":test_bootconfig",
+        ":test_vendor_ramdisk_none",
+        ":test_vendor_ramdisk_platform",
+        ":test_vendor_ramdisk_replace",
+        ":test_vendor_boot_v3",
+        ":test_vendor_boot_v4_without_frag",
+        ":test_vendor_boot_v4_with_frag",
+    ],
+    cflags: [
+        "-Wno-unused-parameter",
+    ],
+}

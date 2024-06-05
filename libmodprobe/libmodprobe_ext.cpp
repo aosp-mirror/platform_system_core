@@ -84,7 +84,7 @@ bool Modprobe::Rmmod(const std::string& module_name) {
 }
 
 bool Modprobe::ModuleExists(const std::string& module_name) {
-    struct stat fileStat;
+    struct stat fileStat {};
     if (blocklist_enabled && module_blocklist_.count(module_name)) {
         LOG(INFO) << "module " << module_name << " is blocklisted";
         return false;
@@ -95,7 +95,7 @@ bool Modprobe::ModuleExists(const std::string& module_name) {
         return false;
     }
     if (stat(deps.front().c_str(), &fileStat)) {
-        LOG(INFO) << "module " << module_name << " does not exist";
+        PLOG(INFO) << "module " << module_name << " can't be loaded; can't access " << deps.front();
         return false;
     }
     if (!S_ISREG(fileStat.st_mode)) {

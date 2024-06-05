@@ -35,8 +35,15 @@ else
     LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.trusty
 endif
 
+ifeq ($(SECRETKEEPER_ENABLED),true)
+    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE := android.hardware.security.secretkeeper.trusty
+else
+    LOCAL_SECRETKEEPER_PRODUCT_PACKAGE :=
+endif
+
 PRODUCT_PACKAGES += \
 	$(LOCAL_KEYMINT_PRODUCT_PACKAGE) \
+	$(LOCAL_SECRETKEEPER_PRODUCT_PACKAGE) \
 	android.hardware.gatekeeper-service.trusty \
 	trusty_apploader \
 

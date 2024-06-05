@@ -53,16 +53,11 @@ Result<void> WriteFile(const std::string& path, const std::string& content);
 Result<uid_t> DecodeUid(const std::string& name);
 
 bool mkdir_recursive(const std::string& pathname, mode_t mode);
-int wait_for_file(const char *filename, std::chrono::nanoseconds timeout);
-void ImportKernelCmdline(const std::function<void(const std::string&, const std::string&)>&);
-void ImportBootconfig(const std::function<void(const std::string&, const std::string&)>&);
+int wait_for_file(const char* filename, std::chrono::nanoseconds timeout);
 bool make_dir(const std::string& path, mode_t mode);
 bool is_dir(const char* pathname);
 Result<std::string> ExpandProps(const std::string& src);
 
-// Returns the platform's Android DT directory as specified in the kernel cmdline.
-// If the platform does not configure a custom DT path, returns the standard one (based in procfs).
-const std::string& get_android_dt_dir();
 // Reads or compares the content of device tree file under the platform's Android DT directory.
 bool read_android_dt_file(const std::string& sub_path, std::string* dt_content);
 bool is_android_dt_value_expected(const std::string& sub_path, const std::string& expected_content);
@@ -105,7 +100,14 @@ bool IsRecoveryMode();
 bool IsDefaultMountNamespaceReady();
 void SetDefaultMountNamespaceReady();
 
-bool IsMicrodroid();
+inline constexpr bool IsMicrodroid() {
+#ifdef MICRODROID
+    return MICRODROID;
+#else
+    return false;
+#endif
+}
+
 bool Has32BitAbi();
 
 std::string GetApexNameFromFileName(const std::string& path);
@@ -115,5 +117,10 @@ std::string GetApexNameFromFileName(const std::string& path);
 // (.rc == .0rc for ranking purposes)
 std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& configs,
                                                   int active_sdk);
+
+// Forks, executes the provided program in the child, and waits for the completion in the parent.
+// Child's stderr is captured and logged using LOG(ERROR).
+bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]);
+
 }  // namespace init
 }  // namespace android

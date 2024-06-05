@@ -130,6 +130,21 @@ bool GetBatteryVoltageHelper(FastbootDevice* device, int32_t* battery_voltage) {
     return true;
 }
 
+bool GetBatterySoCHelper(FastbootDevice* device, int32_t* battery_soc) {
+    using aidl::android::hardware::health::HealthInfo;
+
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    HealthInfo health_info;
+    auto res = health_hal->getHealthInfo(&health_info);
+    if (!res.isOk()) return false;
+    *battery_soc = health_info.batteryLevel;
+    return true;
+}
+
 bool GetBatterySoCOk(FastbootDevice* device, const std::vector<std::string>& /* args */,
                      std::string* message) {
     int32_t battery_voltage = 0;
@@ -182,6 +197,17 @@ bool GetBatteryVoltage(FastbootDevice* device, const std::vector<std::string>& /
         return true;
     }
     *message = "Unable to get battery voltage";
+    return false;
+}
+
+bool GetBatterySoC(FastbootDevice* device, const std::vector<std::string>& /* args */,
+                   std::string* message) {
+    int32_t battery_soc = 0;
+    if (GetBatterySoCHelper(device, &battery_soc)) {
+        *message = std::to_string(battery_soc);
+        return true;
+    }
+    *message = "Unable to get battery soc";
     return false;
 }
 
@@ -542,5 +568,81 @@ bool GetDmesg(FastbootDevice* device) {
         return false;
     }
 
+    return true;
+}
+
+bool GetBatterySerialNumber(FastbootDevice* device, const std::vector<std::string>&,
+                            std::string* message) {
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    if (GetDeviceLockStatus()) {
+        return device->WriteFail("Device is locked");
+    }
+
+    *message = "unsupported";
+
+    int32_t version = 0;
+    auto res = health_hal->getInterfaceVersion(&version);
+    if (!res.isOk()) {
+        return device->WriteFail("Unable to query battery data");
+    }
+    if (version >= 3) {
+        using aidl::android::hardware::health::BatteryHealthData;
+
+        BatteryHealthData data;
+        auto res = health_hal->getBatteryHealthData(&data);
+        if (!res.isOk()) {
+            return device->WriteFail("Unable to query battery data");
+        }
+        if (data.batterySerialNumber) {
+            *message = *data.batterySerialNumber;
+        }
+    }
+    return true;
+}
+
+bool GetBatteryPartStatus(FastbootDevice* device, const std::vector<std::string>&,
+                          std::string* message) {
+    auto health_hal = device->health_hal();
+    if (!health_hal) {
+        return false;
+    }
+
+    using aidl::android::hardware::health::BatteryPartStatus;
+
+    BatteryPartStatus status = BatteryPartStatus::UNSUPPORTED;
+
+    int32_t version = 0;
+    auto res = health_hal->getInterfaceVersion(&version);
+    if (!res.isOk()) {
+        return device->WriteFail("Unable to query battery data");
+    }
+    if (version >= 3) {
+        using aidl::android::hardware::health::BatteryHealthData;
+
+        BatteryHealthData data;
+        auto res = health_hal->getBatteryHealthData(&data);
+        if (!res.isOk()) {
+            return device->WriteFail("Unable to query battery data");
+        }
+        status = data.batteryPartStatus;
+    }
+    switch (status) {
+        case BatteryPartStatus::UNSUPPORTED:
+            *message = "unsupported";
+            break;
+        case BatteryPartStatus::ORIGINAL:
+            *message = "original";
+            break;
+        case BatteryPartStatus::REPLACED:
+            *message = "replaced";
+            break;
+        default:
+            *message = "unknown";
+            break;
+    }
     return true;
 }

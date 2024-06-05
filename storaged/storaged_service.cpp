@@ -38,6 +38,7 @@ using namespace android::base;
 
 extern sp<storaged_t> storaged_sp;
 
+namespace android {
 status_t StoragedService::start() {
     return BinderService<StoragedService>::publish();
 }
@@ -218,3 +219,4 @@ sp<IStoragedPrivate> get_storaged_pri_service() {
 
     return interface_cast<IStoragedPrivate>(binder);
 }
+}  // namespace android

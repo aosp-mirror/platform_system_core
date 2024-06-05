@@ -1,29 +1,34 @@
 # RPMB Mock
-on post-fs-data
-    mkdir /data/vendor/ss
-    chown root system /data/vendor/ss
-    chmod 0770 /data/vendor/ss
-    rm /data/vendor/ss/rpmb_sock
-    start rpmb_mock_init
+on post-fs
+    mkdir /mnt/vendor/persist/ss 0770 root system
+    exec_start rpmb_mock_init
     start rpmb_mock
 
+on post-fs-data
+    mkdir /data/vendor/ss 0770 root system
+    symlink /mnt/vendor/persist/ss /data/vendor/ss/persist
+    chown root system /data/vendor/ss/persist
+    chmod 0770 /data/vendor/ss/persist
+
     # Storage proxy
-    start storageproxyd
+    restart storageproxyd
 
-service storageproxyd /vendor/bin/storageproxyd -d /dev/trusty-ipc-dev0 \
-        -r /data/vendor/ss/rpmb_sock -p /data/vendor/ss -t sock
-    class main
-    disabled
-    user root
+service storageproxyd /vendor/bin/storageproxyd -d ${ro.hardware.trusty_ipc_dev:-/dev/trusty-ipc-dev0} \
+        -r /dev/socket/rpmb_mock -p /data/vendor/ss -t sock
+    class early_hal
+    user system
+    group system
 
-service rpmb_mock_init /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --init --size 2048
+service rpmb_mock_init /vendor/bin/rpmb_dev --dev /mnt/vendor/persist/ss/RPMB_DATA --init --size 2048
     disabled
     user system
     group system
     oneshot
 
-service rpmb_mock /vendor/bin/rpmb_dev --dev /data/vendor/ss/RPMB_DATA --sock /data/vendor/ss/rpmb_sock
+service rpmb_mock /vendor/bin/rpmb_dev --dev /mnt/vendor/persist/ss/RPMB_DATA \
+                          --sock rpmb_mock
     class main
     disabled
     user system
     group system
+    socket rpmb_mock stream 660 system system

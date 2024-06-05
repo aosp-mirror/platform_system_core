@@ -63,14 +63,13 @@ static bool parse_gids(const char* path, size_t line_number, const char* gids, p
 }
 
 static bool parse_line(const char* path, size_t line_number, const char* line, pkg_info* info) {
-  unsigned long uid;
   int debuggable;
   char* gid_list;
   int profileable_from_shell = 0;
-
   int fields =
-      sscanf(line, "%ms %lu %d %ms %ms %ms %d %ld", &info->name, &uid, &debuggable, &info->data_dir,
-             &info->seinfo, &gid_list, &profileable_from_shell, &info->version_code);
+      sscanf(line, "%ms %u %d %ms %ms %ms %d %ld", &info->name, &info->uid,
+             &debuggable, &info->data_dir, &info->seinfo, &gid_list,
+             &profileable_from_shell, &info->version_code);
 
   // Handle the more complicated gids field and free the temporary string.
   bool gids_okay = parse_gids(path, line_number, gid_list, info);
@@ -84,14 +83,7 @@ static bool parse_line(const char* path, size_t line_number, const char* line, p
     return false;
   }
 
-  // Extra validation.
-  if (uid > UID_MAX) {
-    ALOGE("%s:%zu: uid %lu > UID_MAX", path, line_number, uid);
-    return false;
-  }
-  info->uid = uid;
-
-  // Integer to bool conversions.
+  // Convert integers to bools.
   info->debuggable = debuggable;
   info->profileable_from_shell = profileable_from_shell;
 

@@ -61,7 +61,6 @@ enum CrashStatus {
 
 struct CrashArtifact {
   unique_fd fd;
-  std::optional<std::string> temporary_path;
 
   static CrashArtifact devnull() {
     CrashArtifact result;
@@ -97,7 +96,7 @@ struct Crash {
 class CrashQueue {
  public:
   CrashQueue(const std::string& dir_path, const std::string& file_name_prefix, size_t max_artifacts,
-             size_t max_concurrent_dumps, bool supports_proto)
+             size_t max_concurrent_dumps, bool supports_proto, bool world_readable)
       : file_name_prefix_(file_name_prefix),
         dir_path_(dir_path),
         dir_fd_(open(dir_path.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC)),
@@ -105,7 +104,8 @@ class CrashQueue {
         next_artifact_(0),
         max_concurrent_dumps_(max_concurrent_dumps),
         num_concurrent_dumps_(0),
-        supports_proto_(supports_proto) {
+        supports_proto_(supports_proto),
+        world_readable_(world_readable) {
     if (dir_fd_ == -1) {
       PLOG(FATAL) << "failed to open directory: " << dir_path;
     }
@@ -128,14 +128,16 @@ class CrashQueue {
   static CrashQueue* for_tombstones() {
     static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_tombstone_count", 32),
-                            1 /* max_concurrent_dumps */, true /* supports_proto */);
+                            1 /* max_concurrent_dumps */, true /* supports_proto */,
+                            true /* world_readable */);
     return &queue;
   }
 
   static CrashQueue* for_anrs() {
     static CrashQueue queue("/data/anr", "trace_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_anr_count", 64),
-                            4 /* max_concurrent_dumps */, false /* supports_proto */);
+                            4 /* max_concurrent_dumps */, false /* supports_proto */,
+                            false /* world_readable */);
     return &queue;
   }
 
@@ -145,16 +147,15 @@ class CrashQueue {
     std::optional<std::string> path;
     result.fd.reset(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0660));
     if (result.fd == -1) {
-      // We might not have O_TMPFILE. Try creating with an arbitrary filename instead.
-      static size_t counter = 0;
-      std::string tmp_filename = StringPrintf(".temporary%zu", counter++);
-      result.fd.reset(openat(dir_fd_, tmp_filename.c_str(),
-                             O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0660));
-      if (result.fd == -1) {
-        PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
-      }
+      PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
+    }
 
-      result.temporary_path = std::move(tmp_filename);
+    if (world_readable_) {
+      // We need to fchmodat after creating to avoid getting the umask applied.
+      std::string fd_path = StringPrintf("/proc/self/fd/%d", result.fd.get());
+      if (fchmodat(dir_fd_, fd_path.c_str(), 0664, 0) != 0) {
+        PLOG(ERROR) << "Failed to make tombstone world-readable";
+      }
     }
 
     return std::move(result);
@@ -266,6 +267,7 @@ class CrashQueue {
   size_t num_concurrent_dumps_;
 
   bool supports_proto_;
+  bool world_readable_;
 
   std::deque<std::unique_ptr<Crash>> queued_requests_;
 
@@ -283,9 +285,7 @@ static void crash_completed_cb(evutil_socket_t sockfd, short ev, void* arg);
 
 static void perform_request(std::unique_ptr<Crash> crash) {
   unique_fd output_fd;
-  bool intercepted =
-      intercept_manager->GetIntercept(crash->crash_pid, crash->crash_type, &output_fd);
-  if (intercepted) {
+  if (intercept_manager->FindIntercept(crash->crash_pid, crash->crash_type, &output_fd)) {
     if (crash->crash_type == kDebuggerdTombstoneProto) {
       crash->output.proto = CrashArtifact::devnull();
     }
@@ -419,6 +419,7 @@ static bool rename_tombstone_fd(borrowed_fd fd, borrowed_fd dirfd, const std::st
     return false;
   }
 
+  // This fd is created inside of dirfd in CrashQueue::create_temporary_file.
   std::string fd_path = StringPrintf("/proc/self/fd/%d", fd.get());
   rc = linkat(AT_FDCWD, fd_path.c_str(), dirfd.get(), path.c_str(), AT_SYMLINK_FOLLOW);
   if (rc != 0) {
@@ -455,17 +456,6 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
 
   CrashArtifactPaths paths = queue->get_next_artifact_paths();
 
-  if (rename_tombstone_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
-    if (crash->crash_type == kDebuggerdJavaBacktrace) {
-      LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
-    } else {
-      // NOTE: Several tools parse this log message to figure out where the
-      // tombstone associated with a given native crash was written. Any changes
-      // to this message must be carefully considered.
-      LOG(ERROR) << "Tombstone written to: " << paths.text;
-    }
-  }
-
   if (crash->output.proto && crash->output.proto->fd != -1) {
     if (!paths.proto) {
       LOG(ERROR) << "missing path for proto tombstone";
@@ -474,17 +464,14 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
     }
   }
 
-  // If we don't have O_TMPFILE, we need to clean up after ourselves.
-  if (crash->output.text.temporary_path) {
-    rc = unlinkat(queue->dir_fd().get(), crash->output.text.temporary_path->c_str(), 0);
-    if (rc != 0) {
-      PLOG(ERROR) << "failed to unlink temporary tombstone at " << paths.text;
-    }
-  }
-  if (crash->output.proto && crash->output.proto->temporary_path) {
-    rc = unlinkat(queue->dir_fd().get(), crash->output.proto->temporary_path->c_str(), 0);
-    if (rc != 0) {
-      PLOG(ERROR) << "failed to unlink temporary proto tombstone";
+  if (rename_tombstone_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
+    if (crash->crash_type == kDebuggerdJavaBacktrace) {
+      LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
+    } else {
+      // NOTE: Several tools parse this log message to figure out where the
+      // tombstone associated with a given native crash was written. Any changes
+      // to this message must be carefully considered.
+      LOG(ERROR) << "Tombstone written to: " << paths.text;
     }
   }
 }

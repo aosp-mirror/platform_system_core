@@ -85,10 +85,8 @@ bool fs_mgr_vendor_overlay_mount(const std::pair<std::string, std::string>& moun
         return false;
     }
 
-    auto options = kLowerdirOption + source_directory + ":" + vendor_mount_point;
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kOverrideCredsRequired) {
-        options += ",override_creds=off";
-    }
+    const auto options = kLowerdirOption + source_directory + ":" + vendor_mount_point +
+                         android::fs_mgr::CheckOverlayfs().mount_flags;
     auto report = "__mount(source=overlay,target="s + vendor_mount_point + ",type=overlay," +
                   options + ")=";
     auto ret = mount("overlay", vendor_mount_point.c_str(), "overlay", MS_RDONLY | MS_NOATIME,
@@ -114,13 +112,14 @@ bool fs_mgr_vendor_overlay_mount_all() {
     // properties are loaded.
     static const auto vndk_version = android::base::GetProperty(kVndkVersionPropertyName, "");
     if (vndk_version.empty()) {
+        // Vendor overlay is disabled from VNDK deprecated devices.
         LINFO << "vendor overlay: vndk version not defined";
         return false;
     }
 
     const auto vendor_overlay_dirs = fs_mgr_get_vendor_overlay_dirs(vndk_version);
     if (vendor_overlay_dirs.empty()) return true;
-    if (fs_mgr_overlayfs_valid() == OverlayfsValidResult::kNotSupported) {
+    if (!android::fs_mgr::CheckOverlayfs().supported) {
         LINFO << "vendor overlay: kernel does not support overlayfs";
         return false;
     }

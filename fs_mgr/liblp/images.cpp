@@ -123,13 +123,46 @@ bool WriteToImageFile(borrowed_fd fd, const LpMetadata& input) {
     return true;
 }
 
-bool WriteToImageFile(const std::string& file, const LpMetadata& input) {
-    unique_fd fd(open(file.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_BINARY, 0644));
-    if (fd < 0) {
-        PERROR << __PRETTY_FUNCTION__ << " open failed: " << file;
+#if !defined(_WIN32)
+bool FsyncDirectory(const char* dirname) {
+    android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(dirname, O_RDONLY | O_CLOEXEC)));
+    if (fd == -1) {
+        PLOG(ERROR) << "Failed to open " << dirname;
         return false;
     }
-    return WriteToImageFile(fd, input);
+    if (fsync(fd) == -1) {
+        if (errno == EROFS || errno == EINVAL) {
+            PLOG(WARNING) << "Skip fsync " << dirname
+                          << " on a file system does not support synchronization";
+        } else {
+            PLOG(ERROR) << "Failed to fsync " << dirname;
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
+bool WriteToImageFile(const std::string& file, const LpMetadata& input) {
+    const auto parent_dir = base::Dirname(file);
+    TemporaryFile tmpfile(parent_dir);
+    if (!WriteToImageFile(tmpfile.fd, input)) {
+        PLOG(ERROR) << "Failed to write geometry data to tmpfile " << tmpfile.path;
+        return false;
+    }
+
+#if !defined(_WIN32)
+    fsync(tmpfile.fd);
+#endif
+    const auto err = rename(tmpfile.path, file.c_str());
+    if (err != 0) {
+        PLOG(ERROR) << "Failed to rename tmp geometry file " << tmpfile.path << " to " << file;
+        return false;
+    }
+#if !defined(_WIN32)
+    FsyncDirectory(parent_dir.c_str());
+#endif
+    return true;
 }
 
 ImageBuilder::ImageBuilder(const LpMetadata& metadata, uint32_t block_size,
@@ -208,7 +241,8 @@ bool ImageBuilder::ExportFiles(const std::string& output_dir) {
         std::string file_name = "super_" + name + ".img";
         std::string file_path = output_dir + "/" + file_name;
 
-        static const int kOpenFlags = O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
+        static const int kOpenFlags =
+                O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_NOFOLLOW | O_BINARY;
         unique_fd fd(open(file_path.c_str(), kOpenFlags, 0644));
         if (fd < 0) {
             PERROR << "open failed: " << file_path;

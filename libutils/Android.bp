@@ -56,7 +56,7 @@ cc_library_headers {
 }
 
 cc_defaults {
-    name: "libutils_defaults",
+    name: "libutils_defaults_nodeps",
     vendor_available: true,
     product_available: true,
     recovery_available: true,
@@ -68,18 +68,7 @@ cc_defaults {
         "-Wno-exit-time-destructors",
         "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
     ],
-    header_libs: [
-        "libbase_headers",
-        "libutils_headers",
-    ],
-    export_header_lib_headers: [
-        "libutils_headers",
-    ],
 
-    shared_libs: [
-        "libcutils",
-        "liblog",
-    ],
     sanitize: {
         misc_undefined: ["integer"],
     },
@@ -120,8 +109,20 @@ cc_defaults {
         },
     },
     fuzz_config: {
-       cc: ["smoreland@google.com"],
+        cc: ["smoreland@google.com"],
     },
+}
+
+cc_defaults {
+    name: "libutils_defaults",
+    defaults: [
+        "libutils_defaults_nodeps",
+    ],
+
+    shared_libs: [
+        "libcutils",
+        "liblog",
+    ],
 }
 
 cc_defaults {
@@ -132,25 +133,27 @@ cc_defaults {
     ],
     native_bridge_supported: true,
 
+    whole_static_libs: ["libutils_binder"],
+
+    header_libs: [
+        "libbase_headers",
+        "libutils_headers",
+    ],
+    export_header_lib_headers: [
+        "libutils_headers",
+    ],
+
     srcs: [
-        "Errors.cpp",
         "FileMap.cpp",
         "JenkinsHash.cpp",
         "LightRefBase.cpp",
         "NativeHandle.cpp",
         "Printer.cpp",
-        "RefBase.cpp",
-        "SharedBuffer.cpp",
         "StopWatch.cpp",
-        "String8.cpp",
-        "String16.cpp",
-        "StrongPointer.cpp",
         "SystemClock.cpp",
         "Threads.cpp",
         "Timers.cpp",
         "Tokenizer.cpp",
-        "Unicode.cpp",
-        "VectorImpl.cpp",
         "misc.cpp",
     ],
 
@@ -180,15 +183,25 @@ cc_library {
     name: "libutils",
     defaults: ["libutils_impl_defaults"],
 
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
 
-    header_abi_checker: {
-        // AFDO affects weak symbols.
-        diff_flags: ["-allow-adding-removing-weak-symbols"],
-        ref_dump_dirs: ["abi-dumps"],
+    target: {
+        product: {
+            header_abi_checker: {
+                enabled: true,
+                // AFDO affects weak symbols.
+                diff_flags: ["-allow-adding-removing-weak-symbols"],
+                ref_dump_dirs: ["abi-dumps"],
+            },
+        },
+        vendor: {
+            header_abi_checker: {
+                enabled: true,
+                // AFDO affects weak symbols.
+                diff_flags: ["-allow-adding-removing-weak-symbols"],
+                ref_dump_dirs: ["abi-dumps"],
+            },
+        },
     },
 }
 
@@ -197,7 +210,7 @@ cc_library {
     defaults: ["libutils_impl_defaults"],
 
     cflags: [
-        "-DCALLSTACKS=1",
+        "-DDEBUG_CALLBACKS=1",
         "-DDEBUG_POLL_AND_WAKE=1",
         "-DDEBUG_REFS=1",
         "-DDEBUG_TOKENIZER=1",
@@ -212,10 +225,15 @@ cc_library {
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
     min_sdk_version: "29",
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
+
+    header_libs: [
+        "libbase_headers",
+        "libutils_headers",
+    ],
+    export_header_lib_headers: [
+        "libutils_headers",
+    ],
 
     srcs: [
         "CallStack.cpp",
@@ -249,6 +267,17 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
+    fuzz_config: {
+        cc: [
+            "smoreland@google.com",
+        ],
+        componentid: 128577,
+        description: "The fuzzer targets the APIs of libutils",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped",
+    },
 }
 
 cc_fuzz {
@@ -261,24 +290,6 @@ cc_fuzz {
     name: "libutils_fuzz_filemap",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["FileMap_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_string8",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["String8_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_string16",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["String16_fuzz.cpp"],
-}
-
-cc_fuzz {
-    name: "libutils_fuzz_vector",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["Vector_fuzz.cpp"],
 }
 
 cc_fuzz {
@@ -306,12 +317,6 @@ cc_fuzz {
 }
 
 cc_fuzz {
-    name: "libutils_fuzz_refbase",
-    defaults: ["libutils_fuzz_defaults"],
-    srcs: ["RefBase_fuzz.cpp"],
-}
-
-cc_fuzz {
     name: "libutils_fuzz_lrucache",
     defaults: ["libutils_fuzz_defaults"],
     srcs: ["LruCache_fuzz.cpp"],
@@ -330,18 +335,11 @@ cc_test {
     srcs: [
         "BitSet_test.cpp",
         "CallStack_test.cpp",
-        "Errors_test.cpp",
         "FileMap_test.cpp",
         "LruCache_test.cpp",
         "Mutex_test.cpp",
-        "SharedBuffer_test.cpp",
         "Singleton_test.cpp",
-        "String16_test.cpp",
-        "String8_test.cpp",
-        "StrongPointer_test.cpp",
         "Timers_test.cpp",
-        "Unicode_test.cpp",
-        "Vector_test.cpp",
     ],
 
     target: {
@@ -363,7 +361,6 @@ cc_test {
         linux: {
             srcs: [
                 "Looper_test.cpp",
-                "RefBase_test.cpp",
             ],
         },
         host: {
@@ -416,10 +413,4 @@ cc_test_library {
     ],
     shared_libs: ["libutils_test_singleton1"],
     header_libs: ["libutils_headers"],
-}
-
-cc_benchmark {
-    name: "libutils_benchmark",
-    srcs: ["Vector_benchmark.cpp"],
-    shared_libs: ["libutils"],
 }

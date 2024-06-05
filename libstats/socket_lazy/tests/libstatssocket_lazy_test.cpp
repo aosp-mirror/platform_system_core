@@ -21,6 +21,8 @@
 #include "stats_event.h"
 #include "stats_socket.h"
 
+#include "statssocket_lazy.h"
+
 // The tests here are just for the case when libstatssocket.so cannot be loaded by
 // libstatssocket_lazy.
 class LibstatssocketLazyTest : public ::testing::Test {
@@ -47,6 +49,7 @@ TEST_F(LibstatssocketLazyTest, NoLibstatssocketForStatsEvent) {
     EXPECT_DEATH(AStatsEvent_writeBool(event, false), kLoadFailed);
     EXPECT_DEATH(AStatsEvent_writeByteArray(event, NULL, 0), kLoadFailed);
     EXPECT_DEATH(AStatsEvent_writeString(event, NULL), kLoadFailed);
+    EXPECT_DEATH(AStatsEvent_writeStringArray(event, NULL, 0), kLoadFailed);
     EXPECT_DEATH(AStatsEvent_writeAttributionChain(event, NULL, NULL, 0), kLoadFailed);
 
     EXPECT_DEATH(AStatsEvent_addBoolAnnotation(event, 0, false), kLoadFailed);
@@ -55,4 +58,8 @@ TEST_F(LibstatssocketLazyTest, NoLibstatssocketForStatsEvent) {
 
 TEST_F(LibstatssocketLazyTest, NoLibstatssocketForStatsSocket) {
     EXPECT_DEATH(AStatsSocket_close(), kLoadFailed);
+}
+
+TEST_F(LibstatssocketLazyTest, IsAvailableFalse) {
+    EXPECT_FALSE(android::statssocket::lazy::IsAvailable());
 }

@@ -23,6 +23,8 @@
 #include <gtest/gtest.h>
 #include <libdm/dm.h>
 
+#include "../fs_mgr_priv.h"
+
 using testing::Contains;
 using testing::Not;
 
@@ -72,6 +74,7 @@ TEST(fs, ErofsSupported) {
     ASSERT_EQ(access("/sys/fs/erofs", F_OK), 0);
 }
 
+// @VsrTest = 3.7.10
 TEST(fs, PartitionTypes) {
     // Requirements only apply to Android 13+, 5.10+ devices.
     int vsr_level = GetVsrLevel();
@@ -97,12 +100,7 @@ TEST(fs, PartitionTypes) {
     ASSERT_TRUE(android::base::Readlink("/dev/block/by-name/super", &super_bdev));
     ASSERT_TRUE(android::base::Readlink("/dev/block/by-name/userdata", &userdata_bdev));
 
-    std::vector<std::string> must_be_f2fs = {"/data"};
-    if (vsr_level >= __ANDROID_API_U__ &&
-        !DeviceSupportsFeature("android.hardware.type.automotive")) {
-        must_be_f2fs.emplace_back("/metadata");
-    }
-
+    std::vector<std::string> data_fs = {"/data", "/metadata"};
     for (const auto& entry : fstab) {
         std::string parent_bdev = entry.blk_device;
         while (true) {
@@ -136,11 +134,10 @@ TEST(fs, PartitionTypes) {
             std::vector<std::string> allowed = {"erofs", "ext4", "f2fs"};
             EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
                     << entry.mount_point;
-        } else {
-            if (std::find(must_be_f2fs.begin(), must_be_f2fs.end(), entry.mount_point) !=
-                must_be_f2fs.end()) {
-                EXPECT_EQ(entry.fs_type, "f2fs") << entry.mount_point;
-            }
+        } else if (std::find(data_fs.begin(), data_fs.end(), entry.mount_point) != data_fs.end()) {
+            std::vector<std::string> allowed = {"ext4", "f2fs"};
+            EXPECT_NE(std::find(allowed.begin(), allowed.end(), entry.fs_type), allowed.end())
+                    << entry.mount_point << ", " << entry.fs_type;
         }
     }
 }

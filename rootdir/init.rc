@@ -74,9 +74,7 @@ on early-init
     # become available. Note that this is executed as exec_start to ensure that
     # the libraries are available to the processes started after this statement.
     exec_start apexd-bootstrap
-
-    # Generate linker config based on apex mounted in bootstrap namespace
-    update_linker_config
+    perform_apex_config --bootstrap
 
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
@@ -94,6 +92,12 @@ on early-init
     # checker programs.
     mkdir /dev/fscklogs 0770 root system
 
+    # Create tmpfs for use by the shell user.
+    mount tmpfs tmpfs /tmp
+    restorecon /tmp
+    chown shell shell /tmp
+    chmod 0771 /tmp
+
 on init
     sysclktz 0
 
@@ -104,6 +108,9 @@ on init
     symlink /proc/self/fd/0 /dev/stdin
     symlink /proc/self/fd/1 /dev/stdout
     symlink /proc/self/fd/2 /dev/stderr
+
+    # Create socket dir for ot-daemon
+    mkdir /dev/socket/ot-daemon 0770 thread_network thread_network
 
     # Create energy-aware scheduler tuning nodes
     mkdir /dev/stune/foreground
@@ -240,6 +247,8 @@ on init
     write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
+    write /dev/blkio/blkio.prio.class promote-to-rt
+    write /dev/blkio/background/blkio.prio.class restrict-to-be
 
     restorecon_recursive /mnt
 
@@ -294,6 +303,9 @@ on init
     mkdir /mnt/runtime/write/self 0755 root root
     mkdir /mnt/runtime/full 0755 root root
     mkdir /mnt/runtime/full/self 0755 root root
+
+    # For Pre-reboot Dexopt
+    mkdir /mnt/pre_reboot_dexopt 0755 artd artd
 
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /mnt/sdcard
@@ -413,16 +425,6 @@ on init
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
 
-    # qtaguid will limit access to specific data based on group memberships.
-    #   net_bw_acct grants impersonation of socket owners.
-    #   net_bw_stats grants access to other apps' detailed tagged-socket stats.
-    chown root net_bw_acct /proc/net/xt_qtaguid/ctrl
-    chown root net_bw_stats /proc/net/xt_qtaguid/stats
-
-    # Allow everybody to read the xt_qtaguid resource tracking misc dev.
-    # This is needed by any process that uses socket tagging.
-    chmod 0644 /dev/xt_qtaguid
-
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
     # pstore/ramoops previous console log
@@ -481,14 +483,7 @@ on init
     start vndservicemanager
 
 # Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
-on init && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test32
-on init && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test64
-on property:apexd.status=ready && property:ro.product.cpu.abilist32=*
-    exec_start boringssl_self_test_apex32
-on property:apexd.status=ready && property:ro.product.cpu.abilist64=*
-    exec_start boringssl_self_test_apex64
+import /system/etc/init/hw/init.boringssl.${ro.zygote}.rc
 
 service boringssl_self_test32 /system/bin/boringssl_self_test32
     reboot_on_failure reboot,boringssl-self-check-failed
@@ -553,7 +548,7 @@ on late-init
     # Should be before netd, but after apex, properties and logging is available.
     trigger load_bpf_programs
 
-    # Now we can start zygote for devices with file based encryption
+    # Now we can start zygote.
     trigger zygote-start
 
     # Remove a file to wake up anything waiting for firmware.
@@ -624,8 +619,8 @@ on post-fs
     chmod 0700 /metadata/vold
     mkdir /metadata/password_slots 0771 root system
     mkdir /metadata/bootstat 0750 system log
-    mkdir /metadata/ota 0700 root system
-    mkdir /metadata/ota/snapshots 0700 root system
+    mkdir /metadata/ota 0750 root system
+    mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/userspacereboot 0770 root system
     mkdir /metadata/watchdog 0770 root system
 
@@ -639,7 +634,15 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
-    mkdir /metadata/sepolicy 0700 root root
+
+    mkdir /metadata/aconfig 0775 root system
+    mkdir /metadata/aconfig/flags 0770 root system
+    mkdir /metadata/aconfig/maps 0775 root system
+    mkdir /metadata/aconfig/boot 0775 root system
+
+    mkdir /metadata/aconfig_test_missions 0775 root system
+    exec_start aconfigd-platform-init
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -653,10 +656,6 @@ on late-fs
     exec -- /system/bin/fsverity_init --load-verified-keys
 
 # Only enable the bootreceiver tracing instance for kernels 5.10 and above.
-on late-fs && property:ro.kernel.version=4.9
-    setprop bootreceiver.enable 0
-on late-fs && property:ro.kernel.version=4.14
-    setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=4.19
     setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=5.4
@@ -704,7 +703,7 @@ on post-fs-data
 
     # Start tombstoned early to be able to store tombstones.
     mkdir /data/anr 0775 system system encryption=Require
-    mkdir /data/tombstones 0771 system system encryption=Require
+    mkdir /data/tombstones 0775 system system encryption=Require
     mkdir /data/vendor/tombstones 0771 root root
     mkdir /data/vendor/tombstones/wifi 0771 wifi wifi
     start tombstoned
@@ -802,11 +801,11 @@ on post-fs-data
     mkdir /data/misc/apns 0770 system radio
     mkdir /data/misc/emergencynumberdb 0770 system radio
     mkdir /data/misc/network_watchlist 0774 system system
+    mkdir /data/misc/telephonyconfig 0770 system radio
     mkdir /data/misc/textclassifier 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
     mkdir /data/misc/systemkeys 0700 system system
-    mkdir /data/misc/threadnetwork 0770 thread_network thread_network
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
@@ -838,6 +837,7 @@ on post-fs-data
     mkdir /data/misc/apexdata 0711 root root
     mkdir /data/misc/apexrollback 0700 root root
     mkdir /data/misc/appcompat/ 0700 system system
+    mkdir /data/misc/uprobestats-configs/ 0777 uprobestats uprobestats
     mkdir /data/misc/snapshotctl_log 0755 root root
     # create location to store pre-reboot information
     mkdir /data/misc/prereboot 0700 system system
@@ -847,6 +847,8 @@ on post-fs-data
     mkdir /data/misc/odsign 0710 root system
     # directory used for odsign metrics
     mkdir /data/misc/odsign/metrics 0770 root system
+    # directory used for connectivity blob store.
+    mkdir /data/misc/connectivityblobdb 0770 system system
 
     # Directory for VirtualizationService temporary image files.
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
@@ -867,6 +869,9 @@ on post-fs-data
     mkdir /data/app-asec 0700 root root encryption=Require
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
+
+    # Create directory for app metadata files
+    mkdir /data/app-metadata 0700 system system encryption=Require
 
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
@@ -939,15 +944,26 @@ on post-fs-data
     # encryption policies apply recursively.  These directories should never
     # contain any subdirectories other than the per-user ones.  /data/media/obb
     # is an exception that exists for legacy reasons.
-    mkdir /data/media 0770 media_rw media_rw encryption=None
-    mkdir /data/misc_ce 01771 system misc encryption=None
-    mkdir /data/misc_de 01771 system misc encryption=None
-    mkdir /data/system_ce 0770 system system encryption=None
-    mkdir /data/system_de 0770 system system encryption=None
-    mkdir /data/user 0711 system system encryption=None
-    mkdir /data/user_de 0711 system system encryption=None
-    mkdir /data/vendor_ce 0771 root root encryption=None
-    mkdir /data/vendor_de 0771 root root encryption=None
+    #
+    # Don't use any write mode bits (0222) for any of these directories, since
+    # the only process that should write to them directly is vold (since it
+    # needs to set up file-based encryption on the subdirectories), which runs
+    # as root with CAP_DAC_OVERRIDE.  This is also fully enforced via the
+    # SELinux policy.  But we also set the DAC file modes accordingly, to try to
+    # minimize differences in behavior if SELinux is set to permissive mode.
+    mkdir /data/media 0550 media_rw media_rw encryption=None
+    mkdir /data/misc_ce 0551 system misc encryption=None
+    mkdir /data/misc_de 0551 system misc encryption=None
+    mkdir /data/system_ce 0550 system system encryption=None
+    mkdir /data/system_de 0550 system system encryption=None
+    mkdir /data/user 0511 system system encryption=None
+    mkdir /data/user_de 0511 system system encryption=None
+    mkdir /data/vendor_ce 0551 root root encryption=None
+    mkdir /data/vendor_de 0551 root root encryption=None
+
+    # Similar to the top-level CE and DE directories, /data/storage_area must
+    # itself be unencrypted, since it contains encrypted directories.
+    mkdir /data/storage_area 0551 root root encryption=None
 
     # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
     # needed first to relabel the directory from media_rw_data_file.
@@ -962,8 +978,12 @@ on post-fs-data
     mkdir /data_mirror/data_de 0700 root root
     mkdir /data_mirror/misc_ce 0700 root root
     mkdir /data_mirror/misc_de 0700 root root
+    mkdir /data_mirror/storage_area 0700 root root
 
     # Create CE and DE data directory for default volume
+    # Not needed for storage_area directory, since this is
+    # not supported for non-default volumes and the path
+    # does not include the volume ID
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
     mkdir /data_mirror/misc_ce/null 0700 root root
@@ -977,6 +997,9 @@ on post-fs-data
     mount none /data/user_de /data_mirror/data_de/null bind rec
     mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
     mount none /data/misc_de /data_mirror/misc_de/null bind rec
+
+    # Also bind mount for the storage area directory (minus the volume ID)
+    mount none /data/storage_area /data_mirror/storage_area bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
@@ -1008,9 +1031,11 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+    exec_start aconfigd-mainline-init
+    start aconfigd
 
     # Create directories for boot animation.
-    mkdir /data/bootanim 0755 system system encryption=DeleteIfNecessary
+    mkdir /data/misc/bootanim 0755 system system
 
     exec_start derive_sdk
 
@@ -1034,12 +1059,8 @@ on post-fs-data
     # Must start after 'derive_classpath' to have *CLASSPATH variables set.
     start odsign
 
-    # Before we can lock keys and proceed to the next boot stage, wait for
-    # odsign to be done with the key
+    # Wait for odsign to be done with the key.
     wait_for_prop odsign.key.done 1
-
-    # Lock the fs-verity keyring, so no more keys can be added
-    exec -- /system/bin/fsverity_init --lock
 
     # Bump the boot level to 1000000000; this prevents further on-device signing.
     # This is a special value that shuts down the thread which listens for
@@ -1069,28 +1090,10 @@ on post-fs-data
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
-on zygote-start && property:ro.crypto.state=unencrypted
+on zygote-start
     wait_for_prop odsign.verification.done 1
     # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
-    start statsd
-    start netd
-    start zygote
-    start zygote_secondary
-
-on zygote-start && property:ro.crypto.state=unsupported
-    wait_for_prop odsign.verification.done 1
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
-    start statsd
-    start netd
-    start zygote
-    start zygote_secondary
-
-on zygote-start && property:ro.crypto.state=encrypted && property:ro.crypto.type=file
-    wait_for_prop odsign.verification.done 1
-    # A/B update verifier that marks a successful boot.
-    exec_start update_verifier_nonencrypted
+    exec_start update_verifier
     start statsd
     start netd
     start zygote
@@ -1100,6 +1103,9 @@ on boot && property:ro.config.low_ram=true
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
     write /proc/sys/vm/dirty_background_ratio  5
+
+on boot && property:suspend.disable_sync_on_suspend=true
+    write /sys/power/sync_on_suspend 0
 
 on boot
     # basic network init
@@ -1142,7 +1148,7 @@ on boot
     write /dev/sys/fs/by-name/userdata/iostat_enable 1
 
     # set readahead multiplier for POSIX_FADV_SEQUENTIAL files
-    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 16
+    write /dev/sys/fs/by-name/userdata/seq_file_ra_mul 128
 
     # limit discard size to 128MB in order to avoid long IO latency
     # for filesystem tuning first (dm or sda)
@@ -1337,6 +1343,8 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null/0
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
+  umount /data_mirror/storage_area/0
+  umount /data_mirror/storage_area
   umount /data_mirror/cur_profiles
   umount /data_mirror/ref_profiles
   umount /data_mirror
@@ -1364,3 +1372,16 @@ on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_y
   write /sys/kernel/mm/lru_gen/enabled 5
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled 7
+
+# Allow other processes to run `snapshotctl` through `init`. This requires
+# `set_prop` permission on `snapshotctl_prop`.
+on property:sys.snapshotctl.map=requested
+    # "root" is needed to talk to gsid and pass its check on uid.
+    # "system" is needed to write to "/dev/socket/snapuserd" to talk to
+    # snapuserd.
+    exec - root root system -- /system/bin/snapshotctl map
+    setprop sys.snapshotctl.map "finished"
+
+on property:sys.snapshotctl.unmap=requested
+    exec - root root system -- /system/bin/snapshotctl unmap
+    setprop sys.snapshotctl.unmap "finished"

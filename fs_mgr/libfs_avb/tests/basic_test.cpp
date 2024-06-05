@@ -268,10 +268,12 @@ TEST_F(BaseFsAvbTest, GenerateVBMetaImageWithChainDescriptors) {
             "      Partition Name:          boot\n"
             "      Rollback Index Location: 1\n"
             "      Public key (sha1):       cdbb77177f731920bbe0a0f94f84d9038ae0617d\n"
+            "      Flags:                   0\n"
             "    Chain Partition descriptor:\n"
             "      Partition Name:          system\n"
             "      Rollback Index Location: 2\n"
-            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n",
+            "      Public key (sha1):       2597c218aae470a130f61162feaae70afd97f011\n"
+            "      Flags:                   0\n",
             InfoImage("vbmeta.img"));
 }
 

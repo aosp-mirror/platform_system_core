@@ -33,6 +33,8 @@
 #include <json/reader.h>
 #include <json/value.h>
 
+#include <build_flags.h>
+
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 #include <sys/prctl.h>
@@ -126,17 +128,35 @@ void ProfileAttribute::Reset(const CgroupController& controller, const std::stri
     file_v2_name_ = file_v2_name;
 }
 
+static bool isSystemApp(uid_t uid) {
+    return uid < AID_APP_START;
+}
+
+std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid) {
+    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation()) {
+        if (isSystemApp(uid))
+            return StringPrintf("%s/system/uid_%u", root_cgroup_path, uid);
+        else
+            return StringPrintf("%s/apps/uid_%u", root_cgroup_path, uid);
+    }
+    return StringPrintf("%s/uid_%u", root_cgroup_path, uid);
+}
+
+std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid) {
+    const std::string uid_path = ConvertUidToPath(root_cgroup_path, uid);
+    return StringPrintf("%s/pid_%d", uid_path.c_str(), pid);
+}
+
 bool ProfileAttribute::GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const {
     if (controller()->version() == 2) {
-        // all cgroup v2 attributes use the same process group hierarchy
-        *path = StringPrintf("%s/uid_%u/pid_%d/%s", controller()->path(), uid, pid,
-                             file_name().c_str());
+        const std::string cgroup_path = ConvertUidPidToPath(controller()->path(), uid, pid);
+        *path = cgroup_path + "/" + file_name();
         return true;
     }
     return GetPathForTask(pid, path);
 }
 
-bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
+bool ProfileAttribute::GetPathForTask(pid_t tid, std::string* path) const {
     std::string subgroup;
     if (!controller()->GetTaskGroup(tid, &subgroup)) {
         return false;
@@ -155,12 +175,14 @@ bool ProfileAttribute::GetPathForTask(int tid, std::string* path) const {
     return true;
 }
 
+// NOTE: This function is for cgroup v2 only
 bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
     if (path == nullptr) {
         return true;
     }
 
-    *path = StringPrintf("%s/uid_%u/%s", controller()->path(), uid, file_name().c_str());
+    const std::string cgroup_path = ConvertUidToPath(controller()->path(), uid);
+    *path = cgroup_path + "/" + file_name();
     return true;
 }
 
@@ -179,13 +201,13 @@ bool SetClampsAction::ExecuteForTask(int) const {
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 
-bool SetTimerSlackAction::IsTimerSlackSupported(int tid) {
+bool SetTimerSlackAction::IsTimerSlackSupported(pid_t tid) {
     auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
 
     return (access(file.c_str(), W_OK) == 0);
 }
 
-bool SetTimerSlackAction::ExecuteForTask(int tid) const {
+bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
     static bool sys_supports_timerslack = IsTimerSlackSupported(tid);
 
     // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
@@ -250,7 +272,7 @@ bool SetAttributeAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return WriteValueToFile(path);
 }
 
-bool SetAttributeAction::ExecuteForTask(int tid) const {
+bool SetAttributeAction::ExecuteForTask(pid_t tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
@@ -288,7 +310,7 @@ bool SetAttributeAction::IsValidForProcess(uid_t, pid_t pid) const {
     return IsValidForTask(pid);
 }
 
-bool SetAttributeAction::IsValidForTask(int tid) const {
+bool SetAttributeAction::IsValidForTask(pid_t tid) const {
     std::string path;
 
     if (!attribute_->GetPathForTask(tid, &path)) {
@@ -316,7 +338,7 @@ SetCgroupAction::SetCgroupAction(const CgroupController& c, const std::string& p
     FdCacheHelper::Init(controller_.GetProcsFilePath(path_, 0, 0), fd_[ProfileAction::RCT_PROCESS]);
 }
 
-bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_name) {
+bool SetCgroupAction::AddTidToCgroup(pid_t tid, int fd, ResourceCacheType cache_type) const {
     if (tid <= 0) {
         return true;
     }
@@ -332,6 +354,7 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_nam
         return true;
     }
 
+    const char* controller_name = controller()->name();
     // ENOSPC is returned when cpuset cgroup that we are joining has no online cpus
     if (errno == ENOSPC && !strcmp(controller_name, "cpuset")) {
         // This is an abnormal case happening only in testing, so report it only once
@@ -345,7 +368,8 @@ bool SetCgroupAction::AddTidToCgroup(int tid, int fd, const char* controller_nam
                    << "' into cpuset because all cpus in that cpuset are offline";
         empty_cpuset_reported = true;
     } else {
-        PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; fd=" << fd;
+        PLOG(ERROR) << "AddTidToCgroup failed to write '" << value << "'; path=" << path_ << "; "
+                    << (cache_type == RCT_TASK ? "task" : "process");
     }
 
     return false;
@@ -356,7 +380,7 @@ ProfileAction::CacheUseResult SetCgroupAction::UseCachedFd(ResourceCacheType cac
     std::lock_guard<std::mutex> lock(fd_mutex_);
     if (FdCacheHelper::IsCached(fd_[cache_type])) {
         // fd is cached, reuse it
-        if (!AddTidToCgroup(id, fd_[cache_type], controller()->name())) {
+        if (!AddTidToCgroup(id, fd_[cache_type], cache_type)) {
             LOG(ERROR) << "Failed to add task into cgroup";
             return ProfileAction::FAIL;
         }
@@ -391,7 +415,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
         PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << procs_path;
         return false;
     }
-    if (!AddTidToCgroup(pid, tmp_fd, controller()->name())) {
+    if (!AddTidToCgroup(pid, tmp_fd, RCT_PROCESS)) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
@@ -399,7 +423,7 @@ bool SetCgroupAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool SetCgroupAction::ExecuteForTask(int tid) const {
+bool SetCgroupAction::ExecuteForTask(pid_t tid) const {
     CacheUseResult result = UseCachedFd(ProfileAction::RCT_TASK, tid);
     if (result != ProfileAction::UNUSED) {
         return result == ProfileAction::SUCCESS;
@@ -412,7 +436,7 @@ bool SetCgroupAction::ExecuteForTask(int tid) const {
         PLOG(WARNING) << Name() << "::" << __func__ << ": failed to open " << tasks_path;
         return false;
     }
-    if (!AddTidToCgroup(tid, tmp_fd, controller()->name())) {
+    if (!AddTidToCgroup(tid, tmp_fd, RCT_TASK)) {
         LOG(ERROR) << "Failed to add task into cgroup";
         return false;
     }
@@ -487,7 +511,7 @@ WriteFileAction::WriteFileAction(const std::string& task_path, const std::string
 }
 
 bool WriteFileAction::WriteValueToFile(const std::string& value_, ResourceCacheType cache_type,
-                                       int uid, int pid, bool logfailures) const {
+                                       uid_t uid, pid_t pid, bool logfailures) const {
     std::string value(value_);
 
     value = StringReplace(value, "<uid>", std::to_string(uid), true);
@@ -562,7 +586,7 @@ bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     DIR* d;
     struct dirent* de;
     char proc_path[255];
-    int t_pid;
+    pid_t t_pid;
 
     sprintf(proc_path, "/proc/%d/task", pid);
     if (!(d = opendir(proc_path))) {
@@ -588,7 +612,7 @@ bool WriteFileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool WriteFileAction::ExecuteForTask(int tid) const {
+bool WriteFileAction::ExecuteForTask(pid_t tid) const {
     return WriteValueToFile(value_, ProfileAction::RCT_TASK, getuid(), tid, logfailures_);
 }
 
@@ -653,7 +677,7 @@ bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool ApplyProfileAction::ExecuteForTask(int tid) const {
+bool ApplyProfileAction::ExecuteForTask(pid_t tid) const {
     for (const auto& profile : profiles_) {
         profile->ExecuteForTask(tid);
     }
@@ -681,7 +705,7 @@ bool ApplyProfileAction::IsValidForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool ApplyProfileAction::IsValidForTask(int tid) const {
+bool ApplyProfileAction::IsValidForTask(pid_t tid) const {
     for (const auto& profile : profiles_) {
         if (!profile->IsValidForTask(tid)) {
             return false;
@@ -705,7 +729,7 @@ bool TaskProfile::ExecuteForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool TaskProfile::ExecuteForTask(int tid) const {
+bool TaskProfile::ExecuteForTask(pid_t tid) const {
     if (tid == 0) {
         tid = GetThreadId();
     }
@@ -759,7 +783,7 @@ bool TaskProfile::IsValidForProcess(uid_t uid, pid_t pid) const {
     return true;
 }
 
-bool TaskProfile::IsValidForTask(int tid) const {
+bool TaskProfile::IsValidForTask(pid_t tid) const {
     for (const auto& element : elements_) {
         if (!element->IsValidForTask(tid)) return false;
     }
@@ -866,7 +890,13 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
 
                 auto controller = cg_map.FindController(controller_name);
                 if (controller.HasValue()) {
-                    profile->Add(std::make_unique<SetCgroupAction>(controller, path));
+                    if (controller.version() == 1) {
+                        profile->Add(std::make_unique<SetCgroupAction>(controller, path));
+                    } else {
+                        LOG(WARNING) << "A JoinCgroup action in the " << profile_name
+                                     << " profile is used for controller " << controller_name
+                                     << " in the cgroup v2 hierarchy and will be ignored";
+                    }
                 } else {
                     LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
                 }
@@ -1035,7 +1065,7 @@ bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid, std::span<const T> p
 }
 
 template <typename T>
-bool TaskProfiles::SetTaskProfiles(int tid, std::span<const T> profiles, bool use_fd_cache) {
+bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const T> profiles, bool use_fd_cache) {
     bool success = true;
     for (const auto& name : profiles) {
         TaskProfile* profile = GetProfile(name);
@@ -1061,9 +1091,9 @@ template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
 template bool TaskProfiles::SetProcessProfiles(uid_t uid, pid_t pid,
                                                std::span<const std::string_view> profiles,
                                                bool use_fd_cache);
-template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string> profiles,
+template bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const std::string> profiles,
                                             bool use_fd_cache);
-template bool TaskProfiles::SetTaskProfiles(int tid, std::span<const std::string_view> profiles,
+template bool TaskProfiles::SetTaskProfiles(pid_t tid, std::span<const std::string_view> profiles,
                                             bool use_fd_cache);
 template bool TaskProfiles::SetUserProfiles(uid_t uid, std::span<const std::string> profiles,
                                             bool use_fd_cache);

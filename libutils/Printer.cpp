@@ -19,7 +19,7 @@
 
 #include <utils/Printer.h>
 #include <utils/String8.h>
-#include <utils/Log.h>
+#include <log/log.h>
 
 #include <stdlib.h>
 

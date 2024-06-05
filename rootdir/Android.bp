@@ -17,12 +17,30 @@ package {
 }
 
 prebuilt_etc {
+    name: "init.boringssl.zygote64_32.rc",
+    src: "init.boringssl.zygote64_32.rc",
+    sub_dir: "init/hw",
+    symlinks: [
+        "init.boringssl.zygote32.rc",
+        "init.boringssl.no_zygote.rc",
+    ],
+}
+
+prebuilt_etc {
+    name: "init.boringssl.zygote64.rc",
+    src: "init.boringssl.zygote64.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
     name: "init.rc",
     src: "init.rc",
     sub_dir: "init/hw",
     required: [
         "fsverity_init",
         "platform-bootclasspath",
+        "init.boringssl.zygote64.rc",
+        "init.boringssl.zygote64_32.rc",
     ],
 }
 
@@ -52,4 +70,54 @@ prebuilt_root {
     name: "adb_debug.prop",
     src: "adb_debug.prop",
     debug_ramdisk: true,
+}
+
+prebuilt_etc {
+    name: "init.zygote64.rc",
+    src: "init.zygote64.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote32.rc",
+    src: "init.zygote32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote64_32.rc",
+    src: "init.zygote64_32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.rc",
+    src: "init.usb.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.configfs.rc",
+    src: "init.usb.configfs.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "etc_hosts",
+    src: "etc/hosts",
+    filename: "hosts",
+}
+
+prebuilt_etc {
+    name: "init-debug.rc",
+    src: "init-debug.rc",
+    sub_dir: "init",
+}
+
+llndk_libraries_txt {
+    name: "llndk.libraries.txt",
+}
+
+sanitizer_libraries_txt {
+    name: "sanitizer.libraries.txt",
 }

@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -59,7 +60,7 @@
 #define SVC_GENTLE_KILL 0x2000  // This service should be stopped with SIGTERM instead of SIGKILL
                                 // Will still be SIGKILLed after timeout period of 200 ms
 
-#define NR_SVC_SUPP_GIDS 12    // twelve supplementary groups
+#define NR_SVC_SUPP_GIDS 32    // thirty two supplementary groups
 
 namespace android {
 namespace init {
@@ -71,7 +72,7 @@ class Service {
     Service(const std::string& name, Subcontext* subcontext_for_restart_commands,
             const std::string& filename, const std::vector<std::string>& args);
 
-    Service(const std::string& name, unsigned flags, uid_t uid, gid_t gid,
+    Service(const std::string& name, unsigned flags, std::optional<uid_t> uid, gid_t gid,
             const std::vector<gid_t>& supp_gids, int namespace_flags, const std::string& seclabel,
             Subcontext* subcontext_for_restart_commands, const std::string& filename,
             const std::vector<std::string>& args);
@@ -115,7 +116,8 @@ class Service {
     pid_t pid() const { return pid_; }
     android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
-    uid_t uid() const { return proc_attr_.uid; }
+    int was_last_exit_ok() const { return was_last_exit_ok_; }
+    uid_t uid() const { return proc_attr_.uid(); }
     gid_t gid() const { return proc_attr_.gid; }
     int namespace_flags() const { return namespaces_.flags; }
     const std::vector<gid_t>& supp_gids() const { return proc_attr_.supp_gids; }
@@ -130,7 +132,15 @@ class Service {
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
     void set_sigstop(bool value) { sigstop_ = value; }
-    std::chrono::seconds restart_period() const { return restart_period_; }
+    std::chrono::seconds restart_period() const {
+        // If the service exited abnormally or due to timeout, late limit the restart even if
+        // restart_period is set to a very short value.
+        // If not, i.e. restart after a deliberate and successful exit, respect the period.
+        if (!was_last_exit_ok_) {
+            return std::max(restart_period_, default_restart_period_);
+        }
+        return restart_period_;
+    }
     std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
@@ -146,11 +156,15 @@ class Service {
     const Subcontext* subcontext() const { return subcontext_; }
     const std::string& filename() const { return filename_; }
     void set_filename(const std::string& name) { filename_ = name; }
+    static int GetSigchldFd() {
+        static int sigchld_fd = CreateSigchldFd().release();
+        return sigchld_fd;
+    }
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
     void StopOrReset(int how);
-    void KillProcessGroup(int signal, bool report_oneshot = false);
+    void KillProcessGroup(int signal);
     void SetProcessAttributesAndCaps(InterprocessFifo setsid_finished);
     void ResetFlagsForStart();
     Result<void> CheckConsole();
@@ -158,6 +172,8 @@ class Service {
     void RunService(const std::vector<Descriptor>& descriptors, InterprocessFifo cgroups_activated,
                     InterprocessFifo setsid_finished);
     void SetMountNamespace();
+    static ::android::base::unique_fd CreateSigchldFd();
+
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
 
@@ -172,6 +188,8 @@ class Service {
     bool upgraded_mte_ = false;           // whether we upgraded async MTE -> sync MTE before
     std::chrono::minutes fatal_crash_window_ = 4min;  // fatal() when more than 4 crashes in it
     std::optional<std::string> fatal_reboot_target_;  // reboot target of fatal handler
+    bool was_last_exit_ok_ =
+            true;  // true if the service never exited, or exited with status code 0
 
     std::optional<CapSet> capabilities_;
     ProcessAttributes proc_attr_;
@@ -214,7 +232,8 @@ class Service {
 
     bool sigstop_ = false;
 
-    std::chrono::seconds restart_period_ = 5s;
+    const std::chrono::seconds default_restart_period_ = 5s;
+    std::chrono::seconds restart_period_ = default_restart_period_;
     std::optional<std::chrono::seconds> timeout_period_;
 
     bool updatable_ = false;

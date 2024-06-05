@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/perf_event.h>
+#include <math.h>
 #include <selinux/selinux.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -106,27 +107,26 @@ Result<void> SetMmapRndBitsAction(const BuiltinArguments&) {
     // uml does not support mmap_rnd_bits
     return {};
 #elif defined(__aarch64__)
-    // arm64 architecture supports 18 - 33 rnd bits depending on pagesize and
-    // VA_SIZE. However the kernel might have been compiled with a narrower
-    // range using CONFIG_ARCH_MMAP_RND_BITS_MIN/MAX. To use the maximum
-    // supported number of bits, we start from the theoretical maximum of 33
-    // bits and try smaller values until we reach 24 bits which is the
-    // Android-specific minimum. Don't go lower even if the configured maximum
-    // is smaller than 24.
+    // arm64 supports 14 - 33 rnd bits depending on page size and ARM64_VA_BITS.
+    // The kernel (6.5) still defaults to 39 va bits for 4KiB pages, so shipping
+    // devices are only getting 24 bits of randomness in practice.
     if (SetMmapRndBitsMin(33, 24, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
 #elif defined(__riscv)
-    // TODO: sv48 and sv57 were both added to the kernel this year, so we
-    // probably just need some kernel fixes to enable higher ASLR randomization,
-    // but for now 24 is the maximum that the kernel supports.
-    if (SetMmapRndBitsMin(24, 18, false)) {
+    // riscv64 supports 24 rnd bits with Sv39, and starting with the 6.9 kernel,
+    // 33 bits with Sv48 and Sv57.
+    if (SetMmapRndBitsMin(33, 24, false)) {
         return {};
     }
 #elif defined(__x86_64__)
     // x86_64 supports 28 - 32 rnd bits, but Android wants to ensure that the
-    // theoretical maximum of 32 bits is always supported and used.
-    if (SetMmapRndBitsMin(32, 32, false) && (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
+    // theoretical maximum of 32 bits is always supported and used; except in
+    // the case of the x86 page size emulator which supports a maximum
+    // of 30 bits for 16k page size, or 28 bits for 64k page size.
+    int max_bits = 32 - (static_cast<int>(log2(getpagesize())) - 12);
+    if (SetMmapRndBitsMin(max_bits, max_bits, false) &&
+        (!Has32BitAbi() || SetMmapRndBitsMin(16, 16, true))) {
         return {};
     }
 #elif defined(__arm__) || defined(__i386__)

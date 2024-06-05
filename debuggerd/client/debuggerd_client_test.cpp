@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <sys/eventfd.h>
 #include <unistd.h>
 
 #include <chrono>
@@ -51,23 +52,35 @@ static int getThreadCount() {
 
 TEST(debuggerd_client, race) {
   static int THREAD_COUNT = getThreadCount();
+
+  // Semaphore incremented once per thread started.
+  unique_fd barrier(eventfd(0, EFD_SEMAPHORE));
+  ASSERT_NE(-1, barrier.get());
+
   pid_t forkpid = fork();
-
   ASSERT_NE(-1, forkpid);
-
   if (forkpid == 0) {
     // Spawn a bunch of threads, to make crash_dump take longer.
     std::vector<std::thread> threads;
+    threads.reserve(THREAD_COUNT);
     for (int i = 0; i < THREAD_COUNT; ++i) {
-      threads.emplace_back([]() {
-        while (true) {
-          std::this_thread::sleep_for(60s);
+      threads.emplace_back([&barrier]() {
+        uint64_t count = 1;
+        ASSERT_NE(-1, write(barrier.get(), &count, sizeof(count)));
+        for (;;) {
+          pause();
         }
       });
     }
+    for (;;) {
+      pause();
+    }
+  }
 
-    std::this_thread::sleep_for(60s);
-    exit(0);
+  // Wait for the child to spawn all of its threads.
+  for (int i = 0; i < THREAD_COUNT; ++i) {
+    uint64_t count;
+    ASSERT_NE(-1, read(barrier.get(), &count, sizeof(count)));
   }
 
   unique_fd pipe_read, pipe_write;
@@ -76,9 +89,6 @@ TEST(debuggerd_client, race) {
   // 16 MiB should be enough for everyone.
   constexpr int PIPE_SIZE = 16 * 1024 * 1024;
   ASSERT_EQ(PIPE_SIZE, fcntl(pipe_read.get(), F_SETPIPE_SZ, PIPE_SIZE));
-
-  // Wait for a bit to let the child spawn all of its threads.
-  std::this_thread::sleep_for(1s);
 
   ASSERT_TRUE(
       debuggerd_trigger_dump(forkpid, kDebuggerdNativeBacktrace, 60000, std::move(pipe_write)));

@@ -362,14 +362,19 @@ int ifc_act_on_address(int action, const char* name, const char* address, int pr
     return err->error;
 }
 
+// Pass bitwise complement of prefix length to disable DAD, ie. use ~64 instead of 64.
 // Returns zero on success and negative errno on failure.
 int ifc_add_address(const char *name, const char *address, int prefixlen) {
-    return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen, /*nodad*/ false);
+    bool nodad = (prefixlen < 0);
+    if (nodad) prefixlen = ~prefixlen;
+    return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen, nodad);
 }
 
 // Returns zero on success and negative errno on failure.
 int ifc_del_address(const char *name, const char * address, int prefixlen) {
-    return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen, /*nodad*/ false);
+    bool nodad = (prefixlen < 0);
+    if (nodad) prefixlen = ~prefixlen;
+    return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen, nodad);
 }
 
 /*
