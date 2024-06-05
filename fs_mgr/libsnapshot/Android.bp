@@ -126,7 +126,6 @@ cc_library {
         "libprotobuf-cpp-lite",
     ],
     static_libs: [
-        "libc++fs",
         "libsnapshot_cow",
     ],
 }
@@ -269,7 +268,6 @@ cc_defaults {
         "android.hardware.boot@1.1",
         "android.hardware.boot-V1-ndk",
         "libbrotli",
-        "libc++fs",
         "libfs_mgr_binder",
         "libgflags",
         "libgsi",
@@ -350,7 +348,6 @@ cc_binary {
     ],
     static_libs: [
         "libbrotli",
-        "libc++fs",
         "libfstab",
         "libz",
         "update_metadata-protos",
