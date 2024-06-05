@@ -22,6 +22,12 @@ cc_defaults {
         "VectorImpl.cpp",
     ],
 
+    cflags: [
+        "-Winvalid-offsetof",
+        "-Wsequence-point",
+        "-Wzero-as-null-pointer-constant",
+    ],
+
     apex_available: [
         "//apex_available:anyapex",
         "//apex_available:platform",
