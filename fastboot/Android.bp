@@ -190,7 +190,6 @@ cc_binary {
 
     static_libs: [
         "android.hardware.health-translate-ndk",
-        "libc++fs",
         "libhealthhalutils",
         "libhealthshim",
         "libfastbootshim",
@@ -416,7 +415,6 @@ cc_test_host {
     srcs: ["vendor_boot_img_utils_test.cpp"],
     static_libs: [
         "libbase",
-        "libc++fs",
         "libfastboot",
         "libgmock",
         "liblog",
