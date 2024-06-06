@@ -168,7 +168,6 @@ libinit_cc_defaults {
         "libavb",
         "libavf_cc_flags",
         "libbootloader_message",
-        "libc++fs",
         "libcgrouprc_format",
         "liblmkd_utils",
         "liblz4",
@@ -371,7 +370,6 @@ init_first_stage_cc_defaults {
     ],
 
     static_libs: [
-        "libc++fs",
         "libfs_avb",
         "libavf_cc_flags",
         "libfs_mgr",
