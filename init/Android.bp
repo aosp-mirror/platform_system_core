@@ -569,6 +569,11 @@ cc_library_static {
     ],
     export_include_dirs: ["test_utils/include"], // for tests
     header_libs: ["bionic_libc_platform_headers"],
+    product_variables: {
+        shipping_api_level: {
+            cflags: ["-DBUILD_SHIPPING_API_LEVEL=%s"],
+        },
+    },
 }
 
 // Host Verifier
@@ -621,6 +626,11 @@ cc_defaults {
         },
         darwin: {
             enabled: false,
+        },
+    },
+    product_variables: {
+        shipping_api_level: {
+            cflags: ["-DBUILD_SHIPPING_API_LEVEL=%s"],
         },
     },
 }

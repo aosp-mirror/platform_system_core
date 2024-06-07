@@ -32,6 +32,7 @@
 #define __ANDROID_API_S__ 31
 #define __ANDROID_API_T__ 33
 #define __ANDROID_API_U__ 34
+#define __ANDROID_API_V__ 35
 
 // sys/system_properties.h
 #define PROP_VALUE_MAX 92
