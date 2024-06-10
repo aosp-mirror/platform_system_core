@@ -630,7 +630,7 @@ service A something
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
 
-    if (GetIntProperty("ro.vendor.api_level", 0) > __ANDROID_API_V__) {
+    if (GetIntProperty("ro.vendor.api_level", 0) > 202404) {
         ASSERT_EQ(1u, parser.parse_error_count());
     } else {
         ASSERT_EQ(0u, parser.parse_error_count());
