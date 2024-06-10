@@ -449,7 +449,16 @@ static bool GetGuestRegistersFromCrashedProcess([[maybe_unused]] pid_t tid,
 
   if (ptrace(PTRACE_GETREGSET, tid, NT_ARM_TLS, &pt_iov) != 0) {
     PLOG(ERROR) << "failed to read thread register for thread " << tid;
+    return false;
   }
+#elif defined(__riscv)
+  struct user_regs_struct regs;
+  struct iovec pt_iov = {.iov_base = &regs, .iov_len = sizeof(regs)};
+  if (ptrace(PTRACE_GETREGSET, tid, NT_PRSTATUS, &pt_iov) != 0) {
+    PLOG(ERROR) << "failed to read thread register for thread " << tid;
+    return false;
+  }
+  base = reinterpret_cast<uintptr_t>(regs.tp);
 #else
   // TODO(b/339287219): Add case for Riscv host.
   return false;
