@@ -18,33 +18,19 @@
 #define LOG_TAG "libprocessgroup"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <grp.h>
-#include <pwd.h>
-#include <sys/mman.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <regex>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <cgroup_map.h>
-#include <json/reader.h>
-#include <json/value.h>
 #include <processgroup/processgroup.h>
 
-using android::base::GetBoolProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
-using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 static constexpr const char* CGROUP_PROCS_FILE = "/cgroup.procs";
