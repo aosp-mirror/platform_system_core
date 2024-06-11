@@ -62,7 +62,7 @@ prebuilt_etc {
     name: "public.libraries.android.txt",
     src: "etc/public.libraries.android.txt",
     filename: "public.libraries.txt",
-    installable: false,
+    no_full_install: true,
 }
 
 // adb_debug.prop in debug ramdisk

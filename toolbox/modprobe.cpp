@@ -15,9 +15,9 @@
  */
 
 #include <ctype.h>
-#include <fcntl.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <string>
 
@@ -28,7 +28,6 @@
 #include <modprobe/modprobe.h>
 
 #include <sys/utsname.h>
-#include <unistd.h>
 
 namespace {
 
@@ -87,6 +86,20 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
     }
 }
 
+static bool ModDirMatchesKernelPageSize(const char* mod_dir) {
+    static const unsigned int kernel_pgsize_kb = getpagesize() / 1024;
+    const char* mod_sfx = strrchr(mod_dir, '_');
+    unsigned int mod_pgsize_kb;
+    int mod_sfx_len;
+
+    if (mod_sfx == NULL || sscanf(mod_sfx, "_%uk%n", &mod_pgsize_kb, &mod_sfx_len) != 1 ||
+        strlen(mod_sfx) != mod_sfx_len) {
+        mod_pgsize_kb = 4;
+    }
+
+    return kernel_pgsize_kb == mod_pgsize_kb;
+}
+
 // Find directories in format of "/lib/modules/x.y.z-*".
 static int KernelVersionNameFilter(const dirent* de) {
     unsigned int major, minor;
@@ -102,14 +115,9 @@ static int KernelVersionNameFilter(const dirent* de) {
     }
 
     if (android::base::StartsWith(de->d_name, kernel_version)) {
-        return 1;
+        return ModDirMatchesKernelPageSize(de->d_name);
     }
     return 0;
-}
-
-std::string GetPageSizeSuffix() {
-    static const size_t page_size = sysconf(_SC_PAGE_SIZE);
-    return android::base::StringPrintf("_%zuk", page_size / 1024);
 }
 
 }  // anonymous namespace
@@ -239,19 +247,6 @@ extern "C" int modprobe_main(int argc, char** argv) {
 
         // Allow modules to be directly inside /lib/modules
         mod_dirs.emplace_back(LIB_MODULES_PREFIX);
-    }
-    if (getpagesize() != 4096) {
-        struct utsname uts {};
-        if (uname(&uts)) {
-            PLOG(FATAL) << "Failed to get kernel version";
-        }
-        const auto module_dir = android::base::StringPrintf("/lib/modules/%s%s", uts.release,
-                                                            GetPageSizeSuffix().c_str());
-        struct stat st {};
-        if (stat(module_dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
-            mod_dirs.clear();
-            mod_dirs.emplace_back(module_dir);
-        }
     }
 
     LOG(DEBUG) << "mode is " << mode;
