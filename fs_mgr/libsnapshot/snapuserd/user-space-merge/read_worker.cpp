@@ -17,10 +17,8 @@
 #include <libsnapshot/cow_format.h>
 #include <pthread.h>
 
-#include "android-base/properties.h"
 #include "read_worker.h"
 #include "snapuserd_core.h"
-#include "user-space-merge/worker.h"
 #include "utility.h"
 
 namespace android {
@@ -261,10 +259,8 @@ bool ReadWorker::Run() {
     SNAP_LOG(INFO) << "Processing snapshot I/O requests....";
 
     pthread_setname_np(pthread_self(), "ReadWorker");
-    auto worker_thread_priority = android::base::GetUintProperty<uint>(
-            "ro.virtual_ab.worker_thread_priority", ANDROID_PRIORITY_NORMAL);
 
-    if (!SetThreadPriority(worker_thread_priority)) {
+    if (!SetThreadPriority(ANDROID_PRIORITY_NORMAL)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
