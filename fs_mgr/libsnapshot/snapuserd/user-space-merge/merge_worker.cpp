@@ -577,10 +577,8 @@ bool MergeWorker::Run() {
         SNAP_LOG(ERROR) << "Merge terminated early...";
         return true;
     }
-    auto merge_thread_priority = android::base::GetUintProperty<uint>(
-            "ro.virtual_ab.merge_thread_priority", ANDROID_PRIORITY_BACKGROUND);
 
-    if (!SetThreadPriority(merge_thread_priority)) {
+    if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 
