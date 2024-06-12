@@ -410,6 +410,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, CreateSnapshot);
     FRIEND_TEST(SnapshotTest, FirstStageMountAfterRollback);
     FRIEND_TEST(SnapshotTest, FirstStageMountAndMerge);
+    FRIEND_TEST(SnapshotTest, FlagCheck);
     FRIEND_TEST(SnapshotTest, FlashSuperDuringMerge);
     FRIEND_TEST(SnapshotTest, FlashSuperDuringUpdate);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
@@ -425,6 +426,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, DataWipeAfterRollback);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeRollbackInRecovery);
     FRIEND_TEST(SnapshotUpdateTest, DataWipeWithStaleSnapshots);
+    FRIEND_TEST(SnapshotUpdateTest, FlagCheck);
     FRIEND_TEST(SnapshotUpdateTest, FullUpdateFlow);
     FRIEND_TEST(SnapshotUpdateTest, MergeCannotRemoveCow);
     FRIEND_TEST(SnapshotUpdateTest, MergeInRecovery);
@@ -821,6 +823,9 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Check if io_uring API's need to be used
     bool UpdateUsesIouring(LockedFile* lock);
+
+    // Check if direct reads are enabled for the source image
+    bool UpdateUsesODirect(LockedFile* lock);
 
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
