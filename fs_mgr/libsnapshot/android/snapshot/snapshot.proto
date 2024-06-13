@@ -124,8 +124,7 @@ message SnapshotStatus {
     // Default value is 32, can be set lower for low mem devices
     uint32 read_ahead_size = 17;
 
-    // Enable direct reads on source device
-    bool o_direct = 18;
+    reserved 18;
 
     // Blocks size to be verified at once
     uint64 verify_block_size = 19;
@@ -227,6 +226,9 @@ message SnapshotUpdateStatus {
 
     // legacy dm-snapshot based snapuserd
     bool legacy_snapuserd = 11;
+
+    // Enable direct reads from source device
+    bool o_direct = 12;
 }
 
 // Next: 10
