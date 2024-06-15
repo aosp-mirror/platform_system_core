@@ -83,7 +83,7 @@ using android::base::unique_fd;
 
 // This stores guest architecture. When the architecture is supported, tombstone file will output
 // guest state information.
-static Architecture g_guest_arch;
+static Architecture g_guest_arch = Architecture::NONE;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -789,10 +789,6 @@ int main(int argc, char** argv) {
       ATRACE_NAME("engrave_tombstone");
       unwindstack::ArchEnum regs_arch = unwindstack::ARCH_UNKNOWN;
       switch (g_guest_arch) {
-        case Architecture::ARM32: {
-          regs_arch = unwindstack::ARCH_ARM;
-          break;
-        }
         case Architecture::ARM64: {
           regs_arch = unwindstack::ARCH_ARM64;
           break;
