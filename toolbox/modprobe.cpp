@@ -245,8 +245,10 @@ extern "C" int modprobe_main(int argc, char** argv) {
         }
         free(kernel_dirs);
 
-        // Allow modules to be directly inside /lib/modules
-        mod_dirs.emplace_back(LIB_MODULES_PREFIX);
+        if (mod_dirs.empty() || getpagesize() == 4096) {
+            // Allow modules to be directly inside /lib/modules
+            mod_dirs.emplace_back(LIB_MODULES_PREFIX);
+        }
     }
 
     LOG(DEBUG) << "mode is " << mode;

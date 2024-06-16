@@ -19,6 +19,7 @@
 #define LOG_TAG "SchedPolicy"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <android-base/logging.h>
