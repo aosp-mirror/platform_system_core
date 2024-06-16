@@ -16,10 +16,10 @@
 
 #pragma once
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
-#include <functional>
+
 #include <map>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>

@@ -17,7 +17,9 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "libprocessgroup"
 
+#include <dirent.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <task_profiles.h>
 #include <string>
 
