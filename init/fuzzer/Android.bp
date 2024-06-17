@@ -20,7 +20,6 @@ package {
 cc_defaults {
     name: "libinit_fuzzer_defaults",
     static_libs: [
-        "libc++fs",
         "liblmkd_utils",
         "libmodprobe",
         "libprotobuf-cpp-lite",
