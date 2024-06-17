@@ -145,6 +145,14 @@ cc_defaults {
     ],
 
     include_dirs: ["bionic/libc/kernel"],
+    system_shared_libs: [],
+
+    // snapuserd is started during early boot by first-stage init. At that
+    // point, /system is mounted using the "dm-user" device-mapper kernel
+    // module. dm-user routes all I/O to userspace to be handled by
+    // snapuserd, which would lead to deadlock if we had to handle page
+    // faults for its code pages.
+    static_executable: true,
 }
 
 cc_binary {
@@ -157,10 +165,10 @@ cc_binary {
         "libsnapuserd_client",
     ],
     ramdisk_available: false,
-    vendor_ramdisk_available: false,
+    vendor_ramdisk_available: true,
 }
 
-// This target will install to /system/bin/snapuserd_ramdisk
+// This target will install to /system/bin/snapuserd_ramdisk 
 // It will also create a symblink on /system/bin/snapuserd that point to
 // /system/bin/snapuserd_ramdisk .
 // This way, init can check if generic ramdisk copy exists.
@@ -176,15 +184,6 @@ cc_binary {
     vendor_ramdisk_available: false,
     ramdisk: true,
     symlinks: ["snapuserd"],
-
-    system_shared_libs: [],
-
-    // snapuserd is started during early boot by first-stage init. At that
-    // point, /system is mounted using the "dm-user" device-mapper kernel
-    // module. dm-user routes all I/O to userspace to be handled by
-    // snapuserd, which would lead to deadlock if we had to handle page
-    // faults for its code pages.
-    static_executable: true,
 }
 
 cc_defaults {
