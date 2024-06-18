@@ -133,6 +133,7 @@ bool GetLegacyCompressionEnabledProperty();
 bool GetUserspaceSnapshotsEnabledProperty();
 bool GetIouringEnabledProperty();
 bool GetXorCompressionEnabledProperty();
+bool GetODirectEnabledProperty();
 
 bool CanUseUserspaceSnapshots();
 bool IsDmSnapshotTestingEnabled();
