@@ -29,6 +29,7 @@ DEFINE_bool(socket_handoff, false,
             "If true, perform a socket hand-off with an existing snapuserd instance, then exit.");
 DEFINE_bool(user_snapshot, false, "If true, user-space snapshots are used");
 DEFINE_bool(io_uring, false, "If true, io_uring feature is enabled");
+DEFINE_bool(o_direct, false, "If true, enable direct reads on source device");
 
 namespace android {
 namespace snapshot {
@@ -67,7 +68,6 @@ bool Daemon::StartDaemon(int argc, char** argv) {
     if (!user_snapshots) {
         user_snapshots = IsUserspaceSnapshotsEnabled();
     }
-
     if (user_snapshots) {
         LOG(INFO) << "Starting daemon for user-space snapshots.....";
         return StartServerForUserspaceSnapshots(arg_start, argc, argv);
@@ -109,11 +109,13 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
 
     for (int i = arg_start; i < argc; i++) {
         auto parts = android::base::Split(argv[i], ",");
+
         if (parts.size() != 4) {
-            LOG(ERROR) << "Malformed message, expected four sub-arguments.";
+            LOG(ERROR) << "Malformed message, expected at least four sub-arguments.";
             return false;
         }
-        auto handler = user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3]);
+        auto handler =
+                user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3], FLAGS_o_direct);
         if (!handler || !user_server_.StartHandler(parts[0])) {
             return false;
         }
