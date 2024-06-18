@@ -162,7 +162,7 @@ libinit_cc_defaults {
         },
         release_write_appcompat_override_system_properties: {
             cflags: ["-DWRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES"],
-        }
+        },
     },
     static_libs: [
         "libavb",
@@ -662,4 +662,24 @@ sh_binary {
     name: "extra_free_kbytes",
     src: "extra_free_kbytes.sh",
     filename_from_src: true,
+}
+
+soong_config_module_type {
+    name: "board_use_recovery_as_boot_phony",
+    module_type: "phony",
+    config_namespace: "ANDROID",
+    bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
+    properties: ["required"],
+}
+
+board_use_recovery_as_boot_phony {
+    name: "init_vendor",
+    soong_config_variables: {
+        BOARD_USES_RECOVERY_AS_BOOT: {
+            required: [],
+            conditions_default: {
+                required: ["init_first_stage"],
+            },
+        },
+    },
 }
