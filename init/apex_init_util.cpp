@@ -107,8 +107,9 @@ static Result<void> ParseRcScripts(const std::vector<std::string>& files) {
     }
     // APEXes can have versioned RC files. These should be filtered based on
     // SDK version.
-    auto filtered = FilterVersionedConfigs(
-            files, android::base::GetIntProperty("ro.build.version.sdk", INT_MAX));
+    int sdk = android::base::GetIntProperty("ro.build.version.sdk", INT_MAX);
+    if (sdk < 35) sdk = 35;  // aosp/main merges only into sdk=35+ (ie. __ANDROID_API_V__+)
+    auto filtered = FilterVersionedConfigs(files, sdk);
     if (filtered.empty()) {
         return {};
     }
