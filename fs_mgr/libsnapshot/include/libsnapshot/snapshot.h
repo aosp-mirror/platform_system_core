@@ -335,6 +335,9 @@ class SnapshotManager final : public ISnapshotManager {
     // after loading selinux policy.
     bool PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv);
 
+    // If snapuserd from first stage init was started from system partition.
+    bool MarkSnapuserdFromSystem();
+
     // Detach dm-user devices from the first stage snapuserd. Load
     // new dm-user tables after loading selinux policy.
     bool DetachFirstStageSnapuserdForSelinux();
@@ -670,6 +673,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetForwardMergeIndicatorPath();
     std::string GetOldPartitionMetadataPath();
     std::string GetBootSnapshotsWithoutSlotSwitchPath();
+    std::string GetSnapuserdFromSystemPath();
 
     const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
 
