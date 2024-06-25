@@ -47,6 +47,11 @@ cc_library {
         "libstatssocket",
     ],
     export_include_dirs: ["include"],
+    min_sdk_version: "33",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.btservices",
+    ],
 }
 
 genrule {
@@ -74,6 +79,11 @@ cc_library_static {
     export_generated_headers: ["statslog_express.h"],
     shared_libs: [
         "libstatssocket",
+    ],
+    min_sdk_version: "33",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.btservices",
     ],
 }
 
