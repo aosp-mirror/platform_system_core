@@ -16,3 +16,10 @@ LIBCGROUPRC_30 { # introduced=30
   local:
     *;
 };
+
+LIBCGROUPRC_36 { # introduced=36
+  global:
+    ACgroupController_getMaxActivationDepth; # llndk=202504 systemapi
+  local:
+    *;
+};
