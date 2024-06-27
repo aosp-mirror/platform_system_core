@@ -62,6 +62,9 @@ struct PartitionCowCreator {
     uint64_t compression_factor;
     uint32_t read_ahead_size;
 
+    // Enable direct reads on source device
+    bool o_direct;
+
     // True if multi-threaded compression should be enabled
     bool enable_threading;
 
