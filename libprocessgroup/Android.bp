@@ -84,6 +84,7 @@ cc_library {
     header_libs: [
         "libcutils_headers",
         "libprocessgroup_headers",
+        "libprocessgroup_util",
     ],
     export_include_dirs: ["include"],
     export_header_lib_headers: [

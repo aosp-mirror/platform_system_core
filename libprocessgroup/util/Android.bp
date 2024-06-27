@@ -15,32 +15,33 @@
 //
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_library_shared {
-    name: "libprocessgroup_setup",
+cc_library_headers {
+    name: "libprocessgroup_util",
+    vendor_available: true,
+    product_available: true,
+    ramdisk_available: true,
+    vendor_ramdisk_available: true,
     recovery_available: true,
-    srcs: [
-        "cgroup_map_write.cpp",
+    host_supported: true,
+    native_bridge_supported: true,
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
     ],
+    min_sdk_version: "30",
     export_include_dirs: [
         "include",
     ],
-    shared_libs: [
-        "libbase",
-        "libcgrouprc",
-        "libjsoncpp",
-    ],
-    static_libs: [
-        "libcgrouprc_format",
-    ],
-    header_libs: [
-        "libprocessgroup_headers",
-        "libprocessgroup_util",
-    ],
-    export_header_lib_headers: [
-        "libprocessgroup_headers",
-    ],
     defaults: ["libprocessgroup_build_flags_cc"],
+}
+
+cc_test {
+    name: "libprocessgroup_util_test",
+    header_libs: ["libprocessgroup_util"],
+    srcs: ["tests/util.cpp"],
+    test_suites: ["general-tests"],
 }
