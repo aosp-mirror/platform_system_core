@@ -168,7 +168,7 @@ cc_binary {
     vendor_ramdisk_available: true,
 }
 
-// This target will install to /system/bin/snapuserd_ramdisk 
+// This target will install to /system/bin/snapuserd_ramdisk
 // It will also create a symblink on /system/bin/snapuserd that point to
 // /system/bin/snapuserd_ramdisk .
 // This way, init can check if generic ramdisk copy exists.
@@ -249,6 +249,14 @@ cc_test {
     test_suites: [
         "device-tests",
     ],
+    test_options: {
+        test_runner_options: [
+            {
+                name: "force-no-test-error",
+                value: "false",
+            },
+        ],
+    },
 }
 
 // vts tests cannot be host_supported.
