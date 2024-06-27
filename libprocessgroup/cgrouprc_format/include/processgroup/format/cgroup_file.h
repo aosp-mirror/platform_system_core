@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <processgroup/format/cgroup_controller.h>
 
 namespace android {
