@@ -24,7 +24,7 @@ message Cgroups {
     Cgroups2 cgroups2 = 2 [json_name = "Cgroups2"];
 }
 
-// Next: 8
+// Next: 9
 message Cgroup {
     string controller = 1 [json_name = "Controller"];
     string path = 2 [json_name = "Path"];
@@ -36,6 +36,7 @@ message Cgroup {
 // https://developers.google.com/protocol-buffers/docs/proto3#default
     bool needs_activation = 6 [json_name = "NeedsActivation"];
     bool is_optional = 7 [json_name = "Optional"];
+    uint32 max_activation_depth = 8 [json_name = "MaxActivationDepth"];
 }
 
 // Next: 6

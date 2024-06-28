@@ -171,11 +171,12 @@ bool VerifyCheckpointing() {
         }
         if (show_help) {
             show_help = false;
-            std::cerr << "WARNING: Userdata checkpoint is in progress. To force end checkpointing, "
-                         "call 'vdc checkpoint commitChanges'. This can lead to data corruption if "
-                         "rolled back."
+            std::cerr << "WARNING: Userdata checkpoint is in progress. "
+                         "To forcibly end checkpointing, "
+                         "call 'vdc checkpoint commitChanges'. "
+                         "This can lead to data corruption if rolled back."
                       << std::endl;
-            LOG(INFO) << "Waiting for checkpoint to complete and then continue remount.";
+            LOG(INFO) << "Waiting for checkpoint to complete before remounting...";
         }
         std::this_thread::sleep_for(4s);
     }
