@@ -16,7 +16,8 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace android {
@@ -26,12 +27,13 @@ namespace format {
 // Minimal controller description to be mmapped into process address space
 struct CgroupController {
   public:
-    CgroupController();
+    CgroupController() = default;
     CgroupController(uint32_t version, uint32_t flags, const std::string& name,
-                     const std::string& path);
+                     const std::string& path, uint32_t max_activation_depth);
 
     uint32_t version() const;
     uint32_t flags() const;
+    uint32_t max_activation_depth() const;
     const char* name() const;
     const char* path() const;
 
@@ -41,10 +43,11 @@ struct CgroupController {
     static constexpr size_t CGROUP_NAME_BUF_SZ = 16;
     static constexpr size_t CGROUP_PATH_BUF_SZ = 32;
 
-    uint32_t version_;
-    uint32_t flags_;
-    char name_[CGROUP_NAME_BUF_SZ];
-    char path_[CGROUP_PATH_BUF_SZ];
+    uint32_t version_ = 0;
+    uint32_t flags_ = 0;
+    uint32_t max_activation_depth_ = UINT32_MAX;
+    char name_[CGROUP_NAME_BUF_SZ] = {};
+    char path_[CGROUP_PATH_BUF_SZ] = {};
 };
 
 }  // namespace format
