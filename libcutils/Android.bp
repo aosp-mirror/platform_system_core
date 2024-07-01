@@ -47,6 +47,8 @@ cc_library_headers {
     defaults: ["libcutils_defaults"],
 
     export_include_dirs: ["include"],
+    header_libs: ["libprocessgroup_headers"],
+    export_header_lib_headers: ["libprocessgroup_headers"],
     target: {
         vendor: {
             override_export_include_dirs: ["include_outside_system"],
