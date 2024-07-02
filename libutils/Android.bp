@@ -371,6 +371,7 @@ cc_test {
                 "libunwindstack_no_dex",
                 "libutils",
                 "libutilscallstack",
+                "libz",
             ],
         },
     },
