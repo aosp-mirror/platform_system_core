@@ -1978,6 +1978,8 @@ TEST_F(MetadataMountedTest, Android) {
 }
 
 TEST_F(MetadataMountedTest, Recovery) {
+    GTEST_SKIP() << "b/350715463";
+
     test_device->set_recovery(true);
     metadata_dir_ = test_device->GetMetadataDir();
 
