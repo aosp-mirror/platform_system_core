@@ -42,6 +42,7 @@
 #include <processgroup/format/cgroup_file.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
+#include <processgroup/util.h>
 
 #include "../build_flags.h"
 #include "cgroup_descriptor.h"
@@ -173,9 +174,15 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
         controller_flags |= CGROUPRC_CONTROLLER_FLAG_OPTIONAL;
     }
 
+    uint32_t max_activation_depth = UINT32_MAX;
+    if (cgroup.isMember("MaxActivationDepth")) {
+        max_activation_depth = cgroup["MaxActivationDepth"].asUInt();
+    }
+
     CgroupDescriptor descriptor(
             cgroups_version, name, path, std::strtoul(cgroup["Mode"].asString().c_str(), 0, 8),
-            cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags);
+            cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags,
+            max_activation_depth);
 
     auto iter = descriptors->find(name);
     if (iter == descriptors->end()) {
@@ -324,7 +331,8 @@ static bool ActivateV2CgroupController(const CgroupDescriptor& descriptor) {
         return false;
     }
 
-    if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+    if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION &&
+        controller->max_activation_depth() > 0) {
         std::string str = "+";
         str += controller->name();
         std::string path = controller->path();
@@ -433,8 +441,12 @@ static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descripto
 
 CgroupDescriptor::CgroupDescriptor(uint32_t version, const std::string& name,
                                    const std::string& path, mode_t mode, const std::string& uid,
-                                   const std::string& gid, uint32_t flags = 0)
-    : controller_(version, flags, name, path), mode_(mode), uid_(uid), gid_(gid) {}
+                                   const std::string& gid, uint32_t flags,
+                                   uint32_t max_activation_depth)
+    : controller_(version, flags, name, path, max_activation_depth),
+      mode_(mode),
+      uid_(uid),
+      gid_(gid) {}
 
 void CgroupDescriptor::set_mounted(bool mounted) {
     uint32_t flags = controller_.flags();
@@ -502,8 +514,11 @@ static bool CreateV2SubHierarchy(
     for (const auto& [name, descriptor] : descriptors) {
         const format::CgroupController* controller = descriptor.controller();
         std::uint32_t flags = controller->flags();
+        std::uint32_t max_activation_depth = controller->max_activation_depth();
+        const int depth = util::GetCgroupDepth(controller->path(), path);
+
         if (controller->version() == 2 && name != CGROUPV2_HIERARCHY_NAME &&
-            flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+            flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
             std::string str("+");
             str += controller->name();
             if (!android::base::WriteStringToFile(str, path + "/cgroup.subtree_control")) {

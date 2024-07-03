@@ -199,7 +199,7 @@ bool WriteStringToFileAtomic(const std::string& content, const std::string& path
 }
 
 std::ostream& operator<<(std::ostream& os, const Now&) {
-    struct tm now {};
+    struct tm now{};
     time_t t = time(nullptr);
     localtime_r(&t, &now);
     return os << std::put_time(&now, "%Y%m%d-%H%M%S");
@@ -270,6 +270,11 @@ bool GetIouringEnabledProperty() {
 bool GetXorCompressionEnabledProperty() {
     auto fetcher = IPropertyFetcher::GetInstance();
     return fetcher->GetBoolProperty("ro.virtual_ab.compression.xor.enabled", false);
+}
+
+bool GetODirectEnabledProperty() {
+    auto fetcher = IPropertyFetcher::GetInstance();
+    return fetcher->GetBoolProperty("ro.virtual_ab.o_direct.enabled", false);
 }
 
 std::string GetOtherPartitionName(const std::string& name) {

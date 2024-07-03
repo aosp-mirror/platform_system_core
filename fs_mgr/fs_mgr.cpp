@@ -1556,6 +1556,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.mount_point, wiped ? "true" : "false",
                                    attempted_entry.fs_type,
                                    attempted_entry.fs_mgr_flags.is_zoned ? "true" : "false",
+                                   std::to_string(attempted_entry.length),
                                    android::base::Join(attempted_entry.user_devices, ' ')},
                                   nullptr)) {
                         LERROR << "Encryption failed";
@@ -1601,6 +1602,7 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                current_entry.mount_point, "true" /* shouldFormat */,
                                current_entry.fs_type,
                                current_entry.fs_mgr_flags.is_zoned ? "true" : "false",
+                               std::to_string(current_entry.length),
                                android::base::Join(current_entry.user_devices, ' ')},
                               nullptr)) {
                     LERROR << "Encryption failed";
