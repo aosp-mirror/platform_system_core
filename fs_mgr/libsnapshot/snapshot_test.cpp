@@ -2102,10 +2102,10 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
-    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_TRUE(test_device->IsSlotUnbootable(1));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
 }
@@ -2127,6 +2127,7 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
@@ -2135,10 +2136,6 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
-    if (ShouldSkipLegacyMerging()) {
-        GTEST_SKIP() << "Skipping legacy merge in test";
-    }
-
     AddOperationForPartitions();
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2157,6 +2154,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
@@ -2178,10 +2176,6 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
-    if (ShouldSkipLegacyMerging()) {
-        GTEST_SKIP() << "Skipping legacy merge in test";
-    }
-
     AddOperationForPartitions();
 
     // Execute the update.
@@ -2222,6 +2216,7 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
