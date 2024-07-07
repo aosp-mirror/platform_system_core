@@ -338,7 +338,7 @@ soong_config_module_type {
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
     bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
-    properties: ["installable"],
+    properties: ["no_full_install"],
 }
 
 // Do not install init_first_stage even with mma if we're system-as-root.
@@ -347,7 +347,7 @@ init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
         BOARD_USES_RECOVERY_AS_BOOT: {
-            installable: false,
+            no_full_install: true,
         },
     },
 
