@@ -499,8 +499,6 @@ private:
     void rebuildEpollLocked();
     void scheduleEpollRebuildLocked();
 
-    static void initTLSKey();
-    static void threadDestructor(void *st);
     static void initEpollEvent(struct epoll_event* eventItem);
 };
 

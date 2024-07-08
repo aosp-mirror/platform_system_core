@@ -17,6 +17,8 @@
 #include <libsnapshot/cow_format.h>
 #include <pthread.h>
 
+#include <android-base/properties.h>
+
 #include "merge_worker.h"
 #include "snapuserd_core.h"
 #include "utility.h"
@@ -179,8 +181,8 @@ bool MergeWorker::MergeReplaceZeroOps() {
         bufsink_.ResetBufferOffset();
 
         if (snapuserd_->IsIOTerminated()) {
-            SNAP_LOG(ERROR)
-                    << "MergeReplaceZeroOps: MergeWorker threads terminated - shutting down merge";
+            SNAP_LOG(ERROR) << "MergeReplaceZeroOps: MergeWorker threads terminated - shutting "
+                               "down merge";
             return false;
         }
     }
@@ -577,8 +579,10 @@ bool MergeWorker::Run() {
         SNAP_LOG(ERROR) << "Merge terminated early...";
         return true;
     }
+    auto merge_thread_priority = android::base::GetUintProperty<uint32_t>(
+            "ro.virtual_ab.merge_thread_priority", ANDROID_PRIORITY_BACKGROUND);
 
-    if (!SetThreadPriority(ANDROID_PRIORITY_BACKGROUND)) {
+    if (!SetThreadPriority(merge_thread_priority)) {
         SNAP_PLOG(ERROR) << "Failed to set thread priority";
     }
 

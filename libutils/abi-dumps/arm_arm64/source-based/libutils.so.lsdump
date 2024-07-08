@@ -514,9 +514,6 @@
    "name" : "_ZN7android47LightRefBase_reportIncStrongRequireStrongFailedEPKv"
   },
   {
-   "name" : "_ZN7android6Looper10initTLSKeyEv"
-  },
-  {
    "name" : "_ZN7android6Looper11sendMessageERKNS_2spINS_14MessageHandlerEEERKNS_7MessageE"
   },
   {
@@ -530,9 +527,6 @@
   },
   {
    "name" : "_ZN7android6Looper14removeMessagesERKNS_2spINS_14MessageHandlerEEEi"
-  },
-  {
-   "name" : "_ZN7android6Looper16threadDestructorEPv"
   },
   {
    "name" : "_ZN7android6Looper17sendMessageAtTimeExRKNS_2spINS_14MessageHandlerEEERKNS_7MessageE"
@@ -6950,13 +6944,6 @@
    "source_file" : "system/core/libutils/include/utils/LightRefBase.h"
   },
   {
-   "access" : "private",
-   "function_name" : "android::Looper::initTLSKey",
-   "linker_set_key" : "_ZN7android6Looper10initTLSKeyEv",
-   "return_type" : "_ZTIv",
-   "source_file" : "system/core/libutils/include/utils/Looper.h"
-  },
-  {
    "function_name" : "android::Looper::sendMessage",
    "linker_set_key" : "_ZN7android6Looper11sendMessageERKNS_2spINS_14MessageHandlerEEERKNS_7MessageE",
    "parameters" :
@@ -7023,19 +7010,6 @@
     },
     {
      "referenced_type" : "_ZTIi"
-    }
-   ],
-   "return_type" : "_ZTIv",
-   "source_file" : "system/core/libutils/include/utils/Looper.h"
-  },
-  {
-   "access" : "private",
-   "function_name" : "android::Looper::threadDestructor",
-   "linker_set_key" : "_ZN7android6Looper16threadDestructorEPv",
-   "parameters" :
-   [
-    {
-     "referenced_type" : "_ZTIPv"
     }
    ],
    "return_type" : "_ZTIv",
