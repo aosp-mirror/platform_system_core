@@ -88,6 +88,7 @@ static constexpr char kBootSnapshotsWithoutSlotSwitch[] =
         "/metadata/ota/snapshot-boot-without-slot-switch";
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
+static constexpr char kSnapuserdFromSystem[] = "/metadata/ota/snapuserd-from-system";
 static constexpr auto kUpdateStateCheckInterval = 2s;
 /*
  * The readahead size is set to 32kb so that
@@ -318,7 +319,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     std::vector<std::string> files = {
             GetSnapshotBootIndicatorPath(),          GetRollbackIndicatorPath(),
             GetForwardMergeIndicatorPath(),          GetOldPartitionMetadataPath(),
-            GetBootSnapshotsWithoutSlotSwitchPath(),
+            GetBootSnapshotsWithoutSlotSwitchPath(), GetSnapuserdFromSystemPath(),
     };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
@@ -1457,6 +1458,10 @@ std::string SnapshotManager::GetRollbackIndicatorPath() {
     return metadata_dir_ + "/" + android::base::Basename(kRollbackIndicatorPath);
 }
 
+std::string SnapshotManager::GetSnapuserdFromSystemPath() {
+    return metadata_dir_ + "/" + android::base::Basename(kSnapuserdFromSystem);
+}
+
 std::string SnapshotManager::GetForwardMergeIndicatorPath() {
     return metadata_dir_ + "/allow-forward-merge";
 }
@@ -1696,6 +1701,9 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         snapuserd_argv->emplace_back("-user_snapshot");
         if (UpdateUsesIouring(lock.get())) {
             snapuserd_argv->emplace_back("-io_uring");
+        }
+        if (UpdateUsesODirect(lock.get())) {
+            snapuserd_argv->emplace_back("-o_direct");
         }
     }
 
@@ -2114,6 +2122,21 @@ bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
     return update_status.io_uring_enabled();
 }
 
+bool SnapshotManager::UpdateUsesODirect(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.o_direct();
+}
+
+bool SnapshotManager::MarkSnapuserdFromSystem() {
+    auto path = GetSnapuserdFromSystemPath();
+
+    if (!android::base::WriteStringToFile("1", path)) {
+        PLOG(ERROR) << "Unable to write to vendor update path: " << path;
+        return false;
+    }
+    return true;
+}
+
 /*
  * Please see b/304829384 for more details.
  *
@@ -2150,11 +2173,26 @@ bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
  *         iii: If both (i) and (ii) are true, then use the dm-snapshot based
  *         approach.
  *
+ * 3: Post OTA reboot, if the vendor partition was updated from Android 12 to
+ * any other release post Android 12, then snapuserd binary will be "system"
+ * partition as post Android 12, init_boot will contain a copy of snapuserd
+ * binary. Thus, during first stage init, if init is able to communicate to
+ * daemon, that gives us a signal that the binary is from "system" copy. Hence,
+ * there is no need to fallback to legacy dm-snapshot. Thus, init will use a
+ * marker in /metadata to signal that the snapuserd binary from first stage init
+ * can handle userspace snapshots.
+ *
  */
 bool SnapshotManager::IsLegacySnapuserdPostReboot() {
     if (is_legacy_snapuserd_.has_value() && is_legacy_snapuserd_.value() == true) {
         auto slot = GetCurrentSlot();
         if (slot == Slot::Target) {
+            // If this marker is present, then daemon can handle userspace
+            // snapshots; also, it indicates that the vendor partition was
+            // updated from Android 12.
+            if (access(GetSnapuserdFromSystemPath().c_str(), F_OK) == 0) {
+                return false;
+            }
             return true;
         }
     }
@@ -3016,6 +3054,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_userspace_snapshots(old_status.userspace_snapshots());
         status.set_io_uring_enabled(old_status.io_uring_enabled());
         status.set_legacy_snapuserd(old_status.legacy_snapuserd());
+        status.set_o_direct(old_status.o_direct());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3310,17 +3349,19 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
     }
     auto read_ahead_size =
             android::base::GetUintProperty<uint>("ro.virtual_ab.read_ahead_size", kReadAheadSizeKb);
-    PartitionCowCreator cow_creator{.target_metadata = target_metadata.get(),
-                                    .target_suffix = target_suffix,
-                                    .target_partition = nullptr,
-                                    .current_metadata = current_metadata.get(),
-                                    .current_suffix = current_suffix,
-                                    .update = nullptr,
-                                    .extra_extents = {},
-                                    .using_snapuserd = using_snapuserd,
-                                    .compression_algorithm = compression_algorithm,
-                                    .compression_factor = compression_factor,
-                                    .read_ahead_size = read_ahead_size};
+    PartitionCowCreator cow_creator{
+            .target_metadata = target_metadata.get(),
+            .target_suffix = target_suffix,
+            .target_partition = nullptr,
+            .current_metadata = current_metadata.get(),
+            .current_suffix = current_suffix,
+            .update = nullptr,
+            .extra_extents = {},
+            .using_snapuserd = using_snapuserd,
+            .compression_algorithm = compression_algorithm,
+            .compression_factor = compression_factor,
+            .read_ahead_size = read_ahead_size,
+    };
 
     if (dap_metadata.vabc_feature_set().has_threaded()) {
         cow_creator.enable_threading = dap_metadata.vabc_feature_set().threaded();
@@ -3388,10 +3429,13 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             status.set_io_uring_enabled(true);
             LOG(INFO) << "io_uring for snapshots enabled";
         }
-
+        if (GetODirectEnabledProperty()) {
+            status.set_o_direct(true);
+            LOG(INFO) << "o_direct for source image enabled";
+        }
         if (is_legacy_snapuserd) {
-            LOG(INFO) << "Setting legacy_snapuserd to true";
             status.set_legacy_snapuserd(true);
+            LOG(INFO) << "Setting legacy_snapuserd to true";
         }
     } else if (legacy_compression) {
         LOG(INFO) << "Virtual A/B using legacy snapuserd";
@@ -3827,6 +3871,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
     ss << "Using snapuserd: " << update_status.using_snapuserd() << std::endl;
     ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
+    ss << "Using o_direct: " << update_status.o_direct() << std::endl;
     ss << "Using XOR compression: " << GetXorCompressionEnabledProperty() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;

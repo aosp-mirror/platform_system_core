@@ -32,6 +32,11 @@ uint32_t ACgroupController_getFlags(const ACgroupController* controller) {
     return controller->flags();
 }
 
+uint32_t ACgroupController_getMaxActivationDepth(const ACgroupController* controller) {
+    CHECK(controller != nullptr);
+    return controller->max_activation_depth();
+}
+
 const char* ACgroupController_getName(const ACgroupController* controller) {
     CHECK(controller != nullptr);
     return controller->name();
