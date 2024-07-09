@@ -166,6 +166,7 @@ cc_binary {
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
+    recovery_available: true,
 }
 
 // This target will install to /system/bin/snapuserd_ramdisk 
