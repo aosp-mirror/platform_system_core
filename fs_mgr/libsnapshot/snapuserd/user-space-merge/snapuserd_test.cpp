@@ -79,6 +79,8 @@ class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
     std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
     std::unique_ptr<ICowWriter> CreateV3Cow();
 
+    unique_fd GetCowFd() { return unique_fd{dup(cow_system_->fd)}; }
+
     std::unique_ptr<ITestHarness> harness_;
     size_t size_ = 10_MiB;
     int total_base_size_ = 0;
@@ -101,7 +103,9 @@ void SnapuserdTestBase::SetUp() {
 #endif
 }
 
-void SnapuserdTestBase::TearDown() {}
+void SnapuserdTestBase::TearDown() {
+    cow_system_ = nullptr;
+}
 
 void SnapuserdTestBase::CreateBaseDevice() {
     total_base_size_ = (size_ * 5);
@@ -132,10 +136,7 @@ std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
     CowOptions options;
     options.compression = "gz";
 
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(2, options, std::move(fd));
+    return CreateCowWriter(2, options, GetCowFd());
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
@@ -151,10 +152,7 @@ std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
     std::string path = android::base::GetExecutableDirectory();
     cow_system_ = std::make_unique<TemporaryFile>(path);
 
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(3, options, std::move(fd));
+    return CreateCowWriter(3, options, GetCowFd());
 }
 
 void SnapuserdTestBase::CreateCowDevice() {
