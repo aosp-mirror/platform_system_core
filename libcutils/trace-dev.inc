@@ -49,17 +49,17 @@
 
 constexpr uint32_t kSeqNoNotInit = static_cast<uint32_t>(-1);
 
-atomic_bool              atrace_is_ready      = ATOMIC_VAR_INIT(false);
+atomic_bool              atrace_is_ready      = false;
 int                      atrace_marker_fd     = -1;
 uint64_t                 atrace_enabled_tags  = ATRACE_TAG_NOT_READY;
-static atomic_bool       atrace_is_enabled    = ATOMIC_VAR_INIT(true);
+static atomic_bool       atrace_is_enabled    = true;
 static pthread_mutex_t   atrace_tags_mutex    = PTHREAD_MUTEX_INITIALIZER;
 
 /**
  * Sequence number of debug.atrace.tags.enableflags the last time the enabled
  * tags were reloaded.
  **/
-static _Atomic(uint32_t) last_sequence_number = ATOMIC_VAR_INIT(kSeqNoNotInit);
+static _Atomic(uint32_t) last_sequence_number = kSeqNoNotInit;
 
 #if defined(__BIONIC__)
 // All zero prop_info that has a sequence number of 0. This is easier than
