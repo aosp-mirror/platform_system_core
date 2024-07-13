@@ -2876,6 +2876,7 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
             return false;
         }
     }
+    LOG(INFO) << "Unmapped " << snapshots.size() << " partitions with snapshots";
 
     // Terminate the daemon and release the snapuserd_client_ object.
     // If we need to re-connect with the daemon, EnsureSnapuserdConnected()
