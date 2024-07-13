@@ -499,7 +499,7 @@ int32_t BootReasonStrToEnum(const std::string& boot_reason) {
 }
 
 // Canonical list of supported primary reboot reasons.
-const std::vector<const std::string> knownReasons = {
+const std::vector<std::string> knownReasons = {
     // clang-format off
     // kernel
     "watchdog",
