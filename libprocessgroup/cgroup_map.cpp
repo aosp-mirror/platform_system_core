@@ -18,33 +18,20 @@
 #define LOG_TAG "libprocessgroup"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <grp.h>
-#include <pwd.h>
-#include <sys/mman.h>
-#include <sys/mount.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <regex>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
-#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-#include <android-base/unique_fd.h>
 #include <cgroup_map.h>
-#include <json/reader.h>
-#include <json/value.h>
 #include <processgroup/processgroup.h>
+#include <processgroup/util.h>
 
-using android::base::GetBoolProperty;
 using android::base::StartsWith;
 using android::base::StringPrintf;
-using android::base::unique_fd;
 using android::base::WriteStringToFile;
 
 static constexpr const char* CGROUP_PROCS_FILE = "/cgroup.procs";
@@ -230,7 +217,13 @@ int CgroupMap::ActivateControllers(const std::string& path) const {
         for (uint32_t i = 0; i < controller_count; ++i) {
             const ACgroupController* controller = ACgroupFile_getController(i);
             const uint32_t flags = ACgroupController_getFlags(controller);
-            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+            uint32_t max_activation_depth = UINT32_MAX;
+            if (__builtin_available(android 36, *)) {
+                max_activation_depth = ACgroupController_getMaxActivationDepth(controller);
+            }
+            const int depth = util::GetCgroupDepth(ACgroupController_getPath(controller), path);
+
+            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
                 std::string str("+");
                 str.append(ACgroupController_getName(controller));
                 if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {

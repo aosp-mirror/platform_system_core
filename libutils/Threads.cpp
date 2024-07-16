@@ -37,11 +37,6 @@
 #include <log/log.h>
 
 #if defined(__ANDROID__)
-#include <processgroup/processgroup.h>
-#include <processgroup/sched_policy.h>
-#endif
-
-#if defined(__ANDROID__)
 # define __android_unused
 #else
 # define __android_unused __attribute__((__unused__))
