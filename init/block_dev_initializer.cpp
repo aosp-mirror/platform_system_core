@@ -139,6 +139,10 @@ bool BlockDevInitializer::InitPlatformDevice(const std::string& dev_name) {
     return InitDevice("/sys/devices/platform", dev_name);
 }
 
+bool BlockDevInitializer::InitHvcDevice(const std::string& dev_name) {
+    return InitDevice("/sys/devices/virtual/tty", dev_name);
+}
+
 bool BlockDevInitializer::InitDevice(const std::string& syspath, const std::string& device_name) {
     bool found = false;
 
