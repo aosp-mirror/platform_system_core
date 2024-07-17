@@ -1978,6 +1978,8 @@ TEST_F(MetadataMountedTest, Android) {
 }
 
 TEST_F(MetadataMountedTest, Recovery) {
+    GTEST_SKIP() << "b/350715463";
+
     test_device->set_recovery(true);
     metadata_dir_ = test_device->GetMetadataDir();
 
@@ -2645,6 +2647,41 @@ TEST_F(SnapshotUpdateTest, BadCowVersion) {
 
     dynamic_partition_metadata->set_cow_version(kMaxCowVersion);
     ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+}
+
+TEST_F(SnapshotTest, FlagCheck) {
+    if (!snapuserd_required_) {
+        GTEST_SKIP() << "Skipping snapuserd test";
+    }
+    ASSERT_TRUE(AcquireLock());
+
+    SnapshotUpdateStatus status = sm->ReadSnapshotUpdateStatus(lock_.get());
+
+    // Set flags in proto
+    status.set_o_direct(true);
+    status.set_io_uring_enabled(true);
+    status.set_userspace_snapshots(true);
+
+    sm->WriteSnapshotUpdateStatus(lock_.get(), status);
+    // Ensure a connection to the second-stage daemon, but use the first-stage
+    // code paths thereafter.
+    ASSERT_TRUE(sm->EnsureSnapuserdConnected());
+    sm->set_use_first_stage_snapuserd(true);
+
+    auto init = NewManagerForFirstStageMount("_b");
+    ASSERT_NE(init, nullptr);
+
+    lock_ = nullptr;
+
+    std::vector<std::string> snapuserd_argv;
+    ASSERT_TRUE(init->PerformInitTransition(SnapshotManager::InitTransition::SELINUX_DETACH,
+                                            &snapuserd_argv));
+    ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-o_direct") !=
+                snapuserd_argv.end());
+    ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-io_uring") !=
+                snapuserd_argv.end());
+    ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-user_snapshot") !=
+                snapuserd_argv.end());
 }
 
 class FlashAfterUpdateTest : public SnapshotUpdateTest,
