@@ -2866,10 +2866,12 @@ bool SnapshotManager::UnmapAllSnapshots() {
 }
 
 bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
+    LOG(INFO) << "Lock acquired for " << __FUNCTION__;
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
         return false;
     }
+    LOG(INFO) << "Found " << snapshots.size() << " partitions with snapshots";
 
     for (const auto& snapshot : snapshots) {
         if (!UnmapPartitionWithSnapshot(lock, snapshot)) {
