@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <thread>
@@ -88,6 +89,7 @@ static constexpr char kBootSnapshotsWithoutSlotSwitch[] =
         "/metadata/ota/snapshot-boot-without-slot-switch";
 static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
+static constexpr char kSnapuserdFromSystem[] = "/metadata/ota/snapuserd-from-system";
 static constexpr auto kUpdateStateCheckInterval = 2s;
 /*
  * The readahead size is set to 32kb so that
@@ -318,7 +320,7 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
     std::vector<std::string> files = {
             GetSnapshotBootIndicatorPath(),          GetRollbackIndicatorPath(),
             GetForwardMergeIndicatorPath(),          GetOldPartitionMetadataPath(),
-            GetBootSnapshotsWithoutSlotSwitchPath(),
+            GetBootSnapshotsWithoutSlotSwitchPath(), GetSnapuserdFromSystemPath(),
     };
     for (const auto& file : files) {
         RemoveFileIfExists(file);
@@ -1457,6 +1459,10 @@ std::string SnapshotManager::GetRollbackIndicatorPath() {
     return metadata_dir_ + "/" + android::base::Basename(kRollbackIndicatorPath);
 }
 
+std::string SnapshotManager::GetSnapuserdFromSystemPath() {
+    return metadata_dir_ + "/" + android::base::Basename(kSnapuserdFromSystem);
+}
+
 std::string SnapshotManager::GetForwardMergeIndicatorPath() {
     return metadata_dir_ + "/allow-forward-merge";
 }
@@ -2122,6 +2128,16 @@ bool SnapshotManager::UpdateUsesODirect(LockedFile* lock) {
     return update_status.o_direct();
 }
 
+bool SnapshotManager::MarkSnapuserdFromSystem() {
+    auto path = GetSnapuserdFromSystemPath();
+
+    if (!android::base::WriteStringToFile("1", path)) {
+        PLOG(ERROR) << "Unable to write to vendor update path: " << path;
+        return false;
+    }
+    return true;
+}
+
 /*
  * Please see b/304829384 for more details.
  *
@@ -2158,11 +2174,26 @@ bool SnapshotManager::UpdateUsesODirect(LockedFile* lock) {
  *         iii: If both (i) and (ii) are true, then use the dm-snapshot based
  *         approach.
  *
+ * 3: Post OTA reboot, if the vendor partition was updated from Android 12 to
+ * any other release post Android 12, then snapuserd binary will be "system"
+ * partition as post Android 12, init_boot will contain a copy of snapuserd
+ * binary. Thus, during first stage init, if init is able to communicate to
+ * daemon, that gives us a signal that the binary is from "system" copy. Hence,
+ * there is no need to fallback to legacy dm-snapshot. Thus, init will use a
+ * marker in /metadata to signal that the snapuserd binary from first stage init
+ * can handle userspace snapshots.
+ *
  */
 bool SnapshotManager::IsLegacySnapuserdPostReboot() {
     if (is_legacy_snapuserd_.has_value() && is_legacy_snapuserd_.value() == true) {
         auto slot = GetCurrentSlot();
         if (slot == Slot::Target) {
+            // If this marker is present, then daemon can handle userspace
+            // snapshots; also, it indicates that the vendor partition was
+            // updated from Android 12.
+            if (access(GetSnapuserdFromSystemPath().c_str(), F_OK) == 0) {
+                return false;
+            }
             return true;
         }
     }
@@ -2835,10 +2866,12 @@ bool SnapshotManager::UnmapAllSnapshots() {
 }
 
 bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
+    LOG(INFO) << "Lock acquired for " << __FUNCTION__;
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
         return false;
     }
+    LOG(INFO) << "Found " << snapshots.size() << " partitions with snapshots";
 
     for (const auto& snapshot : snapshots) {
         if (!UnmapPartitionWithSnapshot(lock, snapshot)) {
@@ -2846,6 +2879,7 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
             return false;
         }
     }
+    LOG(INFO) << "Unmapped " << snapshots.size() << " partitions with snapshots";
 
     // Terminate the daemon and release the snapuserd_client_ object.
     // If we need to re-connect with the daemon, EnsureSnapuserdConnected()
@@ -2861,6 +2895,7 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
 
 auto SnapshotManager::OpenFile(const std::string& file,
                                int lock_flags) -> std::unique_ptr<LockedFile> {
+    const auto start = std::chrono::system_clock::now();
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
@@ -2873,6 +2908,11 @@ auto SnapshotManager::OpenFile(const std::string& file,
     // For simplicity, we want to CHECK that lock_mode == LOCK_EX, in some
     // calls, so strip extra flags.
     int lock_mode = lock_flags & (LOCK_EX | LOCK_SH);
+    const auto end = std::chrono::system_clock::now();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    if (duration_ms >= 1000ms) {
+        LOG(INFO) << "Taking lock on " << file << " took " << duration_ms.count() << "ms";
+    }
     return std::make_unique<LockedFile>(file, std::move(fd), lock_mode);
 }
 
