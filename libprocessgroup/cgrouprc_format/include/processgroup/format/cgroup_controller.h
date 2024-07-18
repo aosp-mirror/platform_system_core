@@ -29,10 +29,11 @@ struct CgroupController {
   public:
     CgroupController() = default;
     CgroupController(uint32_t version, uint32_t flags, const std::string& name,
-                     const std::string& path);
+                     const std::string& path, uint32_t max_activation_depth);
 
     uint32_t version() const;
     uint32_t flags() const;
+    uint32_t max_activation_depth() const;
     const char* name() const;
     const char* path() const;
 
@@ -44,6 +45,7 @@ struct CgroupController {
 
     uint32_t version_ = 0;
     uint32_t flags_ = 0;
+    uint32_t max_activation_depth_ = UINT32_MAX;
     char name_[CGROUP_NAME_BUF_SZ] = {};
     char path_[CGROUP_PATH_BUF_SZ] = {};
 };
