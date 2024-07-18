@@ -114,6 +114,19 @@ prebuilt_etc {
     sub_dir: "init",
 }
 
+prebuilt_etc {
+    name: "asan.options",
+    src: "asan.options",
+}
+
+sh_binary {
+    name: "asan_extract",
+    src: "asan_extract.sh",
+    init_rc: ["asan_extract.rc"],
+    // We need bzip2 on device for extraction.
+    required: ["bzip2"],
+}
+
 llndk_libraries_txt {
     name: "llndk.libraries.txt",
 }
