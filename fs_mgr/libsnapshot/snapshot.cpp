@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <thread>
@@ -2865,10 +2866,12 @@ bool SnapshotManager::UnmapAllSnapshots() {
 }
 
 bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
+    LOG(INFO) << "Lock acquired for " << __FUNCTION__;
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
         return false;
     }
+    LOG(INFO) << "Found " << snapshots.size() << " partitions with snapshots";
 
     for (const auto& snapshot : snapshots) {
         if (!UnmapPartitionWithSnapshot(lock, snapshot)) {
@@ -2892,6 +2895,7 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
 
 auto SnapshotManager::OpenFile(const std::string& file,
                                int lock_flags) -> std::unique_ptr<LockedFile> {
+    const auto start = std::chrono::system_clock::now();
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
@@ -2904,6 +2908,11 @@ auto SnapshotManager::OpenFile(const std::string& file,
     // For simplicity, we want to CHECK that lock_mode == LOCK_EX, in some
     // calls, so strip extra flags.
     int lock_mode = lock_flags & (LOCK_EX | LOCK_SH);
+    const auto end = std::chrono::system_clock::now();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    if (duration_ms >= 1000ms) {
+        LOG(INFO) << "Taking lock on " << file << " took " << duration_ms.count() << "ms";
+    }
     return std::make_unique<LockedFile>(file, std::move(fd), lock_mode);
 }
 
