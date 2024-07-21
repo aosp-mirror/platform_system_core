@@ -55,7 +55,7 @@ static const char *ssdir_name;
 static struct storage_mapping_node* storage_mapping_head;
 
 /*
- * Property set to 1 after we have opened a file under ssdir_name. The backing
+ * Properties set to 1 after we have opened a file under ssdir_name. The backing
  * files for both TD and TDP are currently located under /data/vendor/ss and can
  * only be opened once userdata is mounted. This storageproxyd service is
  * restarted when userdata is available, which causes the Trusty storage service
@@ -64,11 +64,16 @@ static struct storage_mapping_node* storage_mapping_head;
  * ports will be available (although they may block if still being initialized),
  * and connections will not be reset after this point (assuming the
  * storageproxyd service stays running).
+ *
+ * fs_ready - secure storage is read-only (due to checkpointing after upgrade)
+ * fs_ready_rw - secure storage is readable and writable
  */
 #define FS_READY_PROPERTY "ro.vendor.trusty.storage.fs_ready"
+#define FS_READY_RW_PROPERTY "ro.vendor.trusty.storage.fs_ready_rw"
 
 /* has FS_READY_PROPERTY been set? */
-static bool fs_ready_initialized = false;
+static bool fs_ready_set = false;
+static bool fs_ready_rw_set = false;
 
 static enum sync_state fs_state;
 static enum sync_state fd_state[FD_TBL_SIZE];
@@ -79,6 +84,17 @@ static struct {
    struct storage_file_read_resp hdr;
    uint8_t data[MAX_READ_SIZE];
 }  read_rsp;
+
+static bool property_set_helper(const char* prop) {
+    int rc = property_set(prop, "1");
+    if (rc == 0) {
+        ALOGI("Set property %s\n", prop);
+    } else {
+        ALOGE("Could not set property %s, rc: %d\n", prop, rc);
+    }
+
+    return rc == 0;
+}
 
 static uint32_t insert_fd(int open_flags, int fd, struct storage_mapping_node* node) {
     uint32_t handle = fd;
@@ -520,12 +536,20 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len,
     path = NULL;
 
     /* a backing file has been opened, notify any waiting init steps */
-    if (!fs_ready_initialized) {
-        rc = property_set(FS_READY_PROPERTY, "1");
-        if (rc == 0) {
-            fs_ready_initialized = true;
+    if (!fs_ready_set || !fs_ready_rw_set) {
+        bool is_checkpoint_active = false;
+
+        rc = is_data_checkpoint_active(&is_checkpoint_active);
+        if (rc != 0) {
+            ALOGE("is_data_checkpoint_active() failed (%d)\n", rc);
         } else {
-            ALOGE("Could not set property %s, rc: %d\n", FS_READY_PROPERTY, rc);
+            if (!fs_ready_rw_set && !is_checkpoint_active) {
+                fs_ready_rw_set = property_set_helper(FS_READY_RW_PROPERTY);
+            }
+
+            if (!fs_ready_set) {
+                fs_ready_set = property_set_helper(FS_READY_PROPERTY);
+            }
         }
     }
 
