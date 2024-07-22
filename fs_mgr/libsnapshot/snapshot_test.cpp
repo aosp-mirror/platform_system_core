@@ -122,6 +122,7 @@ class SnapshotTest : public ::testing::Test {
         LOG(INFO) << "Starting test: " << test_name_;
 
         SKIP_IF_NON_VIRTUAL_AB();
+        SKIP_IF_VENDOR_ON_ANDROID_S();
 
         SetupProperties();
         if (!DeviceSupportsMode()) {
@@ -168,6 +169,7 @@ class SnapshotTest : public ::testing::Test {
 
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+        RETURN_IF_VENDOR_ON_ANDROID_S();
 
         LOG(INFO) << "Tearing down SnapshotTest test: " << test_name_;
 
@@ -1015,6 +1017,7 @@ class SnapshotUpdateTest : public SnapshotTest {
   public:
     void SetUp() override {
         SKIP_IF_NON_VIRTUAL_AB();
+        SKIP_IF_VENDOR_ON_ANDROID_S();
 
         SnapshotTest::SetUp();
         if (!image_manager_) {
@@ -1097,6 +1100,7 @@ class SnapshotUpdateTest : public SnapshotTest {
     }
     void TearDown() override {
         RETURN_IF_NON_VIRTUAL_AB();
+        RETURN_IF_VENDOR_ON_ANDROID_S();
 
         LOG(INFO) << "Tearing down SnapshotUpdateTest test: " << test_name_;
 
@@ -2833,6 +2837,7 @@ void SnapshotTestEnvironment::SetUp() {
     // that is fixed, don't call GTEST_SKIP here, but instead call GTEST_SKIP in individual test
     // suites.
     RETURN_IF_NON_VIRTUAL_AB_MSG("Virtual A/B is not enabled, skipping global setup.\n");
+    RETURN_IF_VENDOR_ON_ANDROID_S_MSG("Test not enabled for Vendor on Android S.\n");
 
     std::vector<std::string> paths = {
             // clang-format off
@@ -2887,6 +2892,8 @@ void SnapshotTestEnvironment::SetUp() {
 
 void SnapshotTestEnvironment::TearDown() {
     RETURN_IF_NON_VIRTUAL_AB();
+    RETURN_IF_VENDOR_ON_ANDROID_S();
+
     if (super_images_ != nullptr) {
         DeleteBackingImage(super_images_.get(), "fake-super");
     }
