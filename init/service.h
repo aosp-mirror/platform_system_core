@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -115,6 +116,7 @@ class Service {
     pid_t pid() const { return pid_; }
     android::base::boot_clock::time_point time_started() const { return time_started_; }
     int crash_count() const { return crash_count_; }
+    int was_last_exit_ok() const { return was_last_exit_ok_; }
     uid_t uid() const { return proc_attr_.uid; }
     gid_t gid() const { return proc_attr_.gid; }
     int namespace_flags() const { return namespaces_.flags; }
@@ -130,7 +132,15 @@ class Service {
     bool process_cgroup_empty() const { return process_cgroup_empty_; }
     unsigned long start_order() const { return start_order_; }
     void set_sigstop(bool value) { sigstop_ = value; }
-    std::chrono::seconds restart_period() const { return restart_period_; }
+    std::chrono::seconds restart_period() const {
+        // If the service exited abnormally or due to timeout, late limit the restart even if
+        // restart_period is set to a very short value.
+        // If not, i.e. restart after a deliberate and successful exit, respect the period.
+        if (!was_last_exit_ok_) {
+            return std::max(restart_period_, default_restart_period_);
+        }
+        return restart_period_;
+    }
     std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
@@ -172,6 +182,8 @@ class Service {
     bool upgraded_mte_ = false;           // whether we upgraded async MTE -> sync MTE before
     std::chrono::minutes fatal_crash_window_ = 4min;  // fatal() when more than 4 crashes in it
     std::optional<std::string> fatal_reboot_target_;  // reboot target of fatal handler
+    bool was_last_exit_ok_ =
+            true;  // true if the service never exited, or exited with status code 0
 
     std::optional<CapSet> capabilities_;
     ProcessAttributes proc_attr_;
@@ -214,7 +226,8 @@ class Service {
 
     bool sigstop_ = false;
 
-    std::chrono::seconds restart_period_ = 5s;
+    const std::chrono::seconds default_restart_period_ = 5s;
+    std::chrono::seconds restart_period_ = default_restart_period_;
     std::optional<std::chrono::seconds> timeout_period_;
 
     bool updatable_ = false;
