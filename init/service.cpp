@@ -307,6 +307,7 @@ void Service::Reap(const siginfo_t& siginfo) {
     pid_ = 0;
     flags_ &= (~SVC_RUNNING);
     start_order_ = 0;
+    was_last_exit_ok_ = siginfo.si_code == CLD_EXITED && siginfo.si_status == 0;
 
     // Oneshot processes go into the disabled state on exit,
     // except when manually restarted.
@@ -360,7 +361,8 @@ void Service::Reap(const siginfo_t& siginfo) {
     // If we crash > 4 times in 'fatal_crash_window_' minutes or before boot_completed,
     // reboot into bootloader or set crashing property
     boot_clock::time_point now = boot_clock::now();
-    if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART)) {
+    if (((flags_ & SVC_CRITICAL) || is_process_updatable) && !(flags_ & SVC_RESTART) &&
+        !was_last_exit_ok_) {
         bool boot_completed = GetBoolProperty("sys.boot_completed", false);
         if (now < time_crashed_ + fatal_crash_window_ || !boot_completed) {
             if (++crash_count_ > 4) {
