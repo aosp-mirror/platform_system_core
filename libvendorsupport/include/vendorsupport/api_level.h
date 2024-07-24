@@ -44,4 +44,22 @@ int AVendorSupport_getVendorApiLevelOf(int sdkApiLevel);
  */
 int AVendorSupport_getSdkApiLevelOf(int vendorApiLevel);
 
+#if !defined(__ANDROID_VENDOR__)
+/**
+ * @brief Provide vendor API level to system modules.
+ *
+ * @details
+ * Before deprecating VNDK, system modules read ro.vndk.version to find the
+ * API level that vendor image had implemented. With the VNDK deprecation, this
+ * must be replaced with ro.board.api_level. However, there still are devices
+ * keeping old vendor partitions with the new system upgraded. In this case, the
+ * VNDK version can be used as before.
+ * This API is for platform only.
+ *
+ * @return ro.vndk.version if exist. Otherwise fallback to ro.board.api_level.
+ * 0 if none of these properties are found. This is unexpected, though.
+ */
+int AVendorSupport_getVendorApiLevel();
+#endif  // __ANDROID_VENDOR__
+
 __END_DECLS

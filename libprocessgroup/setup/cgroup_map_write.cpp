@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <regex>
+#include <optional>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -42,7 +42,9 @@
 #include <processgroup/format/cgroup_file.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/setup.h>
+#include <processgroup/util.h>
 
+#include "../build_flags.h"
 #include "cgroup_descriptor.h"
 
 using android::base::GetUintProperty;
@@ -56,6 +58,8 @@ static constexpr const char* CGROUPS_DESC_FILE = "/etc/cgroups.json";
 static constexpr const char* CGROUPS_DESC_VENDOR_FILE = "/vendor/etc/cgroups.json";
 
 static constexpr const char* TEMPLATE_CGROUPS_DESC_API_FILE = "/etc/task_profiles/cgroups_%u.json";
+
+static const std::string CGROUP_V2_ROOT_DEFAULT = "/sys/fs/cgroup";
 
 static bool ChangeDirModeAndOwner(const std::string& path, mode_t mode, const std::string& uid,
                                   const std::string& gid, bool permissive_mode = false) {
@@ -170,9 +174,15 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
         controller_flags |= CGROUPRC_CONTROLLER_FLAG_OPTIONAL;
     }
 
+    uint32_t max_activation_depth = UINT32_MAX;
+    if (cgroup.isMember("MaxActivationDepth")) {
+        max_activation_depth = cgroup["MaxActivationDepth"].asUInt();
+    }
+
     CgroupDescriptor descriptor(
             cgroups_version, name, path, std::strtoul(cgroup["Mode"].asString().c_str(), 0, 8),
-            cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags);
+            cgroup["UID"].asString(), cgroup["GID"].asString(), controller_flags,
+            max_activation_depth);
 
     auto iter = descriptors->find(name);
     if (iter == descriptors->end()) {
@@ -181,6 +191,8 @@ static void MergeCgroupToDescriptors(std::map<std::string, CgroupDescriptor>* de
         iter->second = descriptor;
     }
 }
+
+static const bool force_memcg_v2 = android::libprocessgroup_flags::force_memcg_v2();
 
 static bool ReadDescriptorsFromFile(const std::string& file_name,
                                     std::map<std::string, CgroupDescriptor>* descriptors) {
@@ -205,20 +217,39 @@ static bool ReadDescriptorsFromFile(const std::string& file_name,
         const Json::Value& cgroups = root["Cgroups"];
         for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
             std::string name = cgroups[i]["Controller"].asString();
+
+            if (force_memcg_v2 && name == "memory") continue;
+
             MergeCgroupToDescriptors(descriptors, cgroups[i], name, "", 1);
         }
     }
 
+    bool memcgv2_present = false;
+    std::string root_path;
     if (root.isMember("Cgroups2")) {
         const Json::Value& cgroups2 = root["Cgroups2"];
-        std::string root_path = cgroups2["Path"].asString();
+        root_path = cgroups2["Path"].asString();
         MergeCgroupToDescriptors(descriptors, cgroups2, CGROUPV2_HIERARCHY_NAME, "", 2);
 
         const Json::Value& childGroups = cgroups2["Controllers"];
         for (Json::Value::ArrayIndex i = 0; i < childGroups.size(); ++i) {
             std::string name = childGroups[i]["Controller"].asString();
+
+            if (force_memcg_v2 && name == "memory") memcgv2_present = true;
+
             MergeCgroupToDescriptors(descriptors, childGroups[i], name, root_path, 2);
         }
+    }
+
+    if (force_memcg_v2 && !memcgv2_present) {
+        LOG(INFO) << "Forcing memcg to v2 hierarchy";
+        Json::Value memcgv2;
+        memcgv2["Controller"] = "memory";
+        memcgv2["NeedsActivation"] = true;
+        memcgv2["Path"] = ".";
+        memcgv2["Optional"] = true;  // In case of cgroup_disabled=memory, so we can still boot
+        MergeCgroupToDescriptors(descriptors, memcgv2, "memory",
+                                 root_path.empty() ? CGROUP_V2_ROOT_DEFAULT : root_path, 2);
     }
 
     return true;
@@ -300,7 +331,8 @@ static bool ActivateV2CgroupController(const CgroupDescriptor& descriptor) {
         return false;
     }
 
-    if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
+    if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION &&
+        controller->max_activation_depth() > 0) {
         std::string str = "+";
         str += controller->name();
         std::string path = controller->path();
@@ -308,7 +340,8 @@ static bool ActivateV2CgroupController(const CgroupDescriptor& descriptor) {
 
         if (!base::WriteStringToFile(str, path)) {
             if (IsOptionalController(controller)) {
-                PLOG(INFO) << "Failed to activate optional controller " << controller->name();
+                PLOG(INFO) << "Failed to activate optional controller " << controller->name()
+                           << " at " << path;
                 return true;
             }
             PLOG(ERROR) << "Failed to activate controller " << controller->name();
@@ -408,8 +441,12 @@ static bool WriteRcFile(const std::map<std::string, CgroupDescriptor>& descripto
 
 CgroupDescriptor::CgroupDescriptor(uint32_t version, const std::string& name,
                                    const std::string& path, mode_t mode, const std::string& uid,
-                                   const std::string& gid, uint32_t flags = 0)
-    : controller_(version, flags, name, path), mode_(mode), uid_(uid), gid_(gid) {}
+                                   const std::string& gid, uint32_t flags,
+                                   uint32_t max_activation_depth)
+    : controller_(version, flags, name, path, max_activation_depth),
+      mode_(mode),
+      uid_(uid),
+      gid_(gid) {}
 
 void CgroupDescriptor::set_mounted(bool mounted) {
     uint32_t flags = controller_.flags();
@@ -423,6 +460,79 @@ void CgroupDescriptor::set_mounted(bool mounted) {
 
 }  // namespace cgrouprc
 }  // namespace android
+
+static std::optional<bool> MGLRUDisabled() {
+    const std::string file_name = "/sys/kernel/mm/lru_gen/enabled";
+    std::string content;
+    if (!android::base::ReadFileToString(file_name, &content)) {
+        PLOG(ERROR) << "Failed to read MGLRU state from " << file_name;
+        return {};
+    }
+
+    return content == "0x0000";
+}
+
+static std::optional<bool> MEMCGDisabled(
+        const std::map<std::string, android::cgrouprc::CgroupDescriptor>& descriptors) {
+    std::string cgroup_v2_root = android::cgrouprc::CGROUP_V2_ROOT_DEFAULT;
+    const auto it = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+    if (it == descriptors.end()) {
+        LOG(WARNING) << "No Cgroups2 path found in cgroups.json. Vendor has modified Android, and "
+                     << "kernel memory use will be higher than intended.";
+    } else if (it->second.controller()->path() != cgroup_v2_root) {
+        cgroup_v2_root = it->second.controller()->path();
+    }
+
+    const std::string file_name = cgroup_v2_root + "/cgroup.controllers";
+    std::string content;
+    if (!android::base::ReadFileToString(file_name, &content)) {
+        PLOG(ERROR) << "Failed to read cgroup controllers from " << file_name;
+        return {};
+    }
+
+    // If we've forced memcg to v2 and it's not available, then it could only have been disabled
+    // on the kernel command line (GKI sets CONFIG_MEMCG).
+    return content.find("memory") == std::string::npos;
+}
+
+static bool CreateV2SubHierarchy(
+        const std::string& path,
+        const std::map<std::string, android::cgrouprc::CgroupDescriptor>& descriptors) {
+    using namespace android::cgrouprc;
+
+    const auto cgv2_iter = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+    if (cgv2_iter == descriptors.end()) return false;
+    const android::cgrouprc::CgroupDescriptor cgv2_descriptor = cgv2_iter->second;
+
+    if (!Mkdir(path, cgv2_descriptor.mode(), cgv2_descriptor.uid(), cgv2_descriptor.gid())) {
+        PLOG(ERROR) << "Failed to create directory for " << path;
+        return false;
+    }
+
+    // Activate all v2 controllers in path so they can be activated in
+    // children as they are created.
+    for (const auto& [name, descriptor] : descriptors) {
+        const format::CgroupController* controller = descriptor.controller();
+        std::uint32_t flags = controller->flags();
+        std::uint32_t max_activation_depth = controller->max_activation_depth();
+        const int depth = util::GetCgroupDepth(controller->path(), path);
+
+        if (controller->version() == 2 && name != CGROUPV2_HIERARCHY_NAME &&
+            flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
+            std::string str("+");
+            str += controller->name();
+            if (!android::base::WriteStringToFile(str, path + "/cgroup.subtree_control")) {
+                if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
+                    PLOG(WARNING) << "Activation of cgroup controller " << str << " failed in path "
+                                  << path;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
 
 bool CgroupSetup() {
     using namespace android::cgrouprc;
@@ -454,6 +564,32 @@ bool CgroupSetup() {
         } else {
             // issue a warning and proceed with the next cgroup
             LOG(WARNING) << "Failed to setup " << name << " cgroup";
+        }
+    }
+
+    if (force_memcg_v2) {
+        if (MGLRUDisabled().value_or(false)) {
+            LOG(WARNING) << "Memcg forced to v2 hierarchy with MGLRU disabled! "
+                         << "Global reclaim performance will suffer.";
+        }
+        if (MEMCGDisabled(descriptors).value_or(false)) {
+            LOG(WARNING) << "Memcg forced to v2 hierarchy while memcg is disabled by kernel "
+                         << "command line!";
+        }
+    }
+
+    // System / app isolation.
+    // This really belongs in early-init in init.rc, but we cannot use the flag there.
+    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation()) {
+        const auto it = descriptors.find(CGROUPV2_HIERARCHY_NAME);
+        const std::string cgroup_v2_root = (it == descriptors.end())
+                                                   ? CGROUP_V2_ROOT_DEFAULT
+                                                   : it->second.controller()->path();
+
+        LOG(INFO) << "Using system/app isolation under: " << cgroup_v2_root;
+        if (!CreateV2SubHierarchy(cgroup_v2_root + "/apps", descriptors) ||
+            !CreateV2SubHierarchy(cgroup_v2_root + "/system", descriptors)) {
+            return false;
         }
     }
 

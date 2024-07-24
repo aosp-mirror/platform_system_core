@@ -82,6 +82,7 @@ class Subsystem {
     enum DevnameSource {
         DEVNAME_UEVENT_DEVNAME,
         DEVNAME_UEVENT_DEVPATH,
+        DEVNAME_SYS_NAME,
     };
 
     Subsystem() {}
@@ -92,10 +93,18 @@ class Subsystem {
     // Returns the full path for a uevent of a device that is a member of this subsystem,
     // according to the rules parsed from ueventd.rc
     std::string ParseDevPath(const Uevent& uevent) const {
-        std::string devname = devname_source_ == DEVNAME_UEVENT_DEVNAME
-                                      ? uevent.device_name
-                                      : android::base::Basename(uevent.path);
-
+        std::string devname;
+        if (devname_source_ == DEVNAME_UEVENT_DEVNAME) {
+            devname = uevent.device_name;
+        } else if (devname_source_ == DEVNAME_UEVENT_DEVPATH) {
+            devname = android::base::Basename(uevent.path);
+        } else if (devname_source_ == DEVNAME_SYS_NAME) {
+            if (android::base::ReadFileToString("/sys/" + uevent.path + "/name", &devname)) {
+                devname.pop_back();  // Remove terminating newline
+            } else {
+                devname = uevent.device_name;
+            }
+        }
         return dir_name_ + "/" + devname;
     }
 
@@ -118,9 +127,6 @@ class DeviceHandler : public UeventHandler {
     virtual ~DeviceHandler() = default;
 
     void HandleUevent(const Uevent& uevent) override;
-    void ColdbootDone() override;
-
-    std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
 
     // `androidboot.partition_map` allows associating a partition name for a raw block device
     // through a comma separated and semicolon deliminated list. For example,
@@ -129,11 +135,13 @@ class DeviceHandler : public UeventHandler {
     static std::string GetPartitionNameForDevice(const std::string& device);
 
   private:
+    void ColdbootDone() override;
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, bool block, int major, int minor,
                     const std::vector<std::string>& links) const;
+    std::vector<std::string> GetBlockDeviceSymlinks(const Uevent& uevent) const;
     void HandleDevice(const std::string& action, const std::string& devpath, bool block, int major,
                       int minor, const std::vector<std::string>& links) const;
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;

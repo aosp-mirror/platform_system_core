@@ -103,7 +103,7 @@ message SnapshotStatus {
     // The old partition size (if none existed, this will be zero).
     uint64 old_partition_size = 10;
 
-    // Compression algorithm (none, gz, lz4, zstd, or brotli).
+    // Compression algorithm (none, lz4, zstd).
     string compression_algorithm = 11;
 
     // Estimated COW size from OTA manifest.
@@ -120,6 +120,17 @@ message SnapshotStatus {
 
     // Max bytes to be compressed at once (4k, 8k, 16k, 32k, 64k, 128k)
     uint64 compression_factor = 16;
+
+    // Default value is 32, can be set lower for low mem devices
+    uint32 read_ahead_size = 17;
+
+    reserved 18;
+
+    // Blocks size to be verified at once
+    uint64 verify_block_size = 19;
+
+    // Default value is 2, configures threads to do verification phase
+    uint32 num_verify_threads = 20;
 }
 
 // Next: 8
@@ -212,6 +223,12 @@ message SnapshotUpdateStatus {
 
     // io_uring support
     bool io_uring_enabled = 10;
+
+    // legacy dm-snapshot based snapuserd
+    bool legacy_snapuserd = 11;
+
+    // Enable direct reads from source device
+    bool o_direct = 12;
 }
 
 // Next: 10

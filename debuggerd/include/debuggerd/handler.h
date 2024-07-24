@@ -47,7 +47,7 @@ struct __attribute__((packed)) debugger_process_info {
   const char* scudo_ring_buffer;
   size_t scudo_ring_buffer_size;
   size_t scudo_stack_depot_size;
-  bool recoverable_gwp_asan_crash;
+  bool recoverable_crash;
   struct crash_detail_page_t* crash_detail_page;
 };
 

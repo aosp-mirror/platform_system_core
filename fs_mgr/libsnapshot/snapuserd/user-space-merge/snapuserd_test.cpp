@@ -79,6 +79,8 @@ class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
     std::unique_ptr<ICowWriter> CreateCowDeviceInternal();
     std::unique_ptr<ICowWriter> CreateV3Cow();
 
+    unique_fd GetCowFd() { return unique_fd{dup(cow_system_->fd)}; }
+
     std::unique_ptr<ITestHarness> harness_;
     size_t size_ = 10_MiB;
     int total_base_size_ = 0;
@@ -101,7 +103,9 @@ void SnapuserdTestBase::SetUp() {
 #endif
 }
 
-void SnapuserdTestBase::TearDown() {}
+void SnapuserdTestBase::TearDown() {
+    cow_system_ = nullptr;
+}
 
 void SnapuserdTestBase::CreateBaseDevice() {
     total_base_size_ = (size_ * 5);
@@ -126,15 +130,13 @@ void SnapuserdTestBase::CreateBaseDevice() {
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateCowDeviceInternal() {
-    cow_system_ = std::make_unique<TemporaryFile>();
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
 
     CowOptions options;
     options.compression = "gz";
 
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(kDefaultCowVersion, options, std::move(fd));
+    return CreateCowWriter(2, options, GetCowFd());
 }
 
 std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
@@ -147,12 +149,10 @@ std::unique_ptr<ICowWriter> SnapuserdTestBase::CreateV3Cow() {
     options.batch_write = true;
     options.compression_factor = params.block_size;
 
-    cow_system_ = std::make_unique<TemporaryFile>();
+    std::string path = android::base::GetExecutableDirectory();
+    cow_system_ = std::make_unique<TemporaryFile>(path);
 
-    unique_fd fd(cow_system_->fd);
-    cow_system_->fd = -1;
-
-    return CreateCowWriter(3, options, std::move(fd));
+    return CreateCowWriter(3, options, GetCowFd());
 }
 
 void SnapuserdTestBase::CreateCowDevice() {
@@ -989,6 +989,7 @@ void SnapuserdVariableBlockSizeTest::SetupCowV3ForVariableBlockSize() {
 void SnapuserdVariableBlockSizeTest::CreateV3CowDeviceForVariableBlockSize() {
     auto writer = CreateV3Cow();
 
+    ASSERT_NE(writer, nullptr);
     size_t total_data_to_write = size_;
 
     size_t total_blocks_to_write = total_data_to_write / BLOCK_SZ;
@@ -1337,6 +1338,7 @@ void HandlerTestV3::TearDown() {
 void HandlerTestV3::SetUpV3Cow() {
     auto writer = CreateV3Cow();
 
+    ASSERT_NE(writer, nullptr);
     size_t total_data_to_write = size_;
 
     size_t total_blocks_to_write = total_data_to_write / BLOCK_SZ;

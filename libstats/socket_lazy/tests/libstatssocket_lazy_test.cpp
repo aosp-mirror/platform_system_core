@@ -21,6 +21,8 @@
 #include "stats_event.h"
 #include "stats_socket.h"
 
+#include "statssocket_lazy.h"
+
 // The tests here are just for the case when libstatssocket.so cannot be loaded by
 // libstatssocket_lazy.
 class LibstatssocketLazyTest : public ::testing::Test {
@@ -56,4 +58,8 @@ TEST_F(LibstatssocketLazyTest, NoLibstatssocketForStatsEvent) {
 
 TEST_F(LibstatssocketLazyTest, NoLibstatssocketForStatsSocket) {
     EXPECT_DEATH(AStatsSocket_close(), kLoadFailed);
+}
+
+TEST_F(LibstatssocketLazyTest, IsAvailableFalse) {
+    EXPECT_FALSE(android::statssocket::lazy::IsAvailable());
 }

@@ -102,8 +102,7 @@ class ProfileAttributeMock : public IProfileAttribute {
   public:
     ProfileAttributeMock(const std::string& file_name) : file_name_(file_name) {}
     ~ProfileAttributeMock() override = default;
-    void Reset(const CgroupController& controller, const std::string& file_name,
-               const std::string& file_v2_name) override {
+    void Reset(const CgroupController&, const std::string&, const std::string&) override {
         CHECK(false);
     }
     const CgroupController* controller() const override {
@@ -111,10 +110,10 @@ class ProfileAttributeMock : public IProfileAttribute {
         return {};
     }
     const std::string& file_name() const override { return file_name_; }
-    bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const override {
+    bool GetPathForProcess(uid_t, pid_t pid, std::string* path) const override {
         return GetPathForTask(pid, path);
     }
-    bool GetPathForTask(int tid, std::string* path) const override {
+    bool GetPathForTask(int, std::string* path) const override {
 #ifdef __ANDROID__
         CHECK(CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, path));
         CHECK_GT(path->length(), 0);

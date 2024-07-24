@@ -16,6 +16,10 @@
 
 #include <log/log.h>
 
+#if !defined(__ANDROID_VENDOR__)
+#include <android-base/properties.h>
+#endif
+
 int AVendorSupport_getVendorApiLevelOf(int sdkApiLevel) {
     if (sdkApiLevel < __ANDROID_API_V__) {
         return sdkApiLevel;
@@ -39,3 +43,13 @@ int AVendorSupport_getSdkApiLevelOf(int vendorApiLevel) {
     ALOGE("Unexpected vendor api level: %d", vendorApiLevel);
     return __INVALID_API_LEVEL;
 }
+
+#if !defined(__ANDROID_VENDOR__)
+int AVendorSupport_getVendorApiLevel() {
+    int vendorApiLevel = android::base::GetIntProperty("ro.vndk.version", 0);
+    if (vendorApiLevel) {
+        return vendorApiLevel;
+    }
+    return android::base::GetIntProperty("ro.board.api_level", 0);
+}
+#endif  // __ANDROID_VENDOR__

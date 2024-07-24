@@ -240,9 +240,14 @@ cc_library_static {
         "libdebuggerd/backtrace.cpp",
         "libdebuggerd/gwp_asan.cpp",
         "libdebuggerd/open_files_list.cpp",
+        "libdebuggerd/scudo.cpp",
         "libdebuggerd/tombstone.cpp",
         "libdebuggerd/tombstone_proto.cpp",
         "libdebuggerd/utility.cpp",
+    ],
+
+    cflags: [
+        "-DUSE_SCUDO",
     ],
 
     local_include_dirs: ["libdebuggerd/include"],
@@ -256,6 +261,7 @@ cc_library_static {
         "bionic_libc_platform_headers",
         "gwp_asan_headers",
         "liblog_headers",
+        "scudo_headers",
     ],
 
     static_libs: [
@@ -273,6 +279,7 @@ cc_library_static {
         "libtombstone_proto",
         "libprocinfo",
         "libprotobuf-cpp-lite",
+        "libscudo",
     ],
 
     target: {
@@ -312,11 +319,9 @@ cc_library_static {
             cflags: ["-DROOT_POSSIBLE"],
         },
 
-        malloc_not_svelte: {
-            cflags: ["-DUSE_SCUDO"],
-            whole_static_libs: ["libscudo"],
-            srcs: ["libdebuggerd/scudo.cpp"],
-            header_libs: ["scudo_headers"],
+        malloc_low_memory: {
+            cflags: ["-UUSE_SCUDO"],
+            exclude_static_libs: ["libscudo"],
         },
     },
     apex_available: [
@@ -369,6 +374,10 @@ cc_test {
                 "libtombstoned_client_static",
             ],
         },
+    },
+
+    sanitize: {
+        memtag_heap: true,
     },
 
     shared_libs: [
@@ -443,6 +452,7 @@ cc_binary {
 
     header_libs: [
         "bionic_libc_platform_headers",
+        "libnative_bridge_support_accessor_headers",
     ],
 
     static_libs: [
@@ -452,6 +462,8 @@ cc_binary {
 
         "libtombstone_proto",
         "libprotobuf-cpp-lite",
+
+        "libnative_bridge_guest_state_accessor",
     ],
 
     shared_libs: [
@@ -467,6 +479,15 @@ cc_binary {
 
     // Required for tests.
     required: ["crash_dump.policy"],
+
+    target: {
+        android: {
+            header_libs: [
+                "libnative_bridge_support_accessor_headers", // For dlext_namespaces.h
+            ],
+            shared_libs: ["libdl_android"], // For android_get_exported_namespace implementation
+        },
+    },
 }
 
 cc_binary {

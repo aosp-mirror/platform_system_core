@@ -62,7 +62,7 @@ prebuilt_etc {
     name: "public.libraries.android.txt",
     src: "etc/public.libraries.android.txt",
     filename: "public.libraries.txt",
-    installable: false,
+    no_full_install: true,
 }
 
 // adb_debug.prop in debug ramdisk
@@ -70,4 +70,67 @@ prebuilt_root {
     name: "adb_debug.prop",
     src: "adb_debug.prop",
     debug_ramdisk: true,
+}
+
+prebuilt_etc {
+    name: "init.zygote64.rc",
+    src: "init.zygote64.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote32.rc",
+    src: "init.zygote32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.zygote64_32.rc",
+    src: "init.zygote64_32.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.rc",
+    src: "init.usb.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "init.usb.configfs.rc",
+    src: "init.usb.configfs.rc",
+    sub_dir: "init/hw",
+}
+
+prebuilt_etc {
+    name: "etc_hosts",
+    src: "etc/hosts",
+    filename: "hosts",
+}
+
+prebuilt_etc {
+    name: "init-debug.rc",
+    src: "init-debug.rc",
+    sub_dir: "init",
+}
+
+prebuilt_etc {
+    name: "asan.options",
+    src: "asan.options",
+}
+
+sh_binary {
+    name: "asan_extract",
+    src: "asan_extract.sh",
+    init_rc: ["asan_extract.rc"],
+    // We need bzip2 on device for extraction.
+    required: ["bzip2"],
+}
+
+llndk_libraries_txt {
+    name: "llndk.libraries.txt",
+}
+
+sanitizer_libraries_txt {
+    name: "sanitizer.libraries.txt",
 }

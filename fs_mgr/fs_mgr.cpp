@@ -40,6 +40,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -1553,7 +1554,10 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                     fs_mgr_set_blk_ro(attempted_entry.blk_device, false);
                     if (!call_vdc({"cryptfs", "encryptFstab", attempted_entry.blk_device,
                                    attempted_entry.mount_point, wiped ? "true" : "false",
-                                   attempted_entry.fs_type, attempted_entry.zoned_device},
+                                   attempted_entry.fs_type,
+                                   attempted_entry.fs_mgr_flags.is_zoned ? "true" : "false",
+                                   std::to_string(attempted_entry.length),
+                                   android::base::Join(attempted_entry.user_devices, ' ')},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1596,7 +1600,10 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
 
                 if (!call_vdc({"cryptfs", "encryptFstab", current_entry.blk_device,
                                current_entry.mount_point, "true" /* shouldFormat */,
-                               current_entry.fs_type, current_entry.zoned_device},
+                               current_entry.fs_type,
+                               current_entry.fs_mgr_flags.is_zoned ? "true" : "false",
+                               std::to_string(current_entry.length),
+                               android::base::Join(current_entry.user_devices, ' ')},
                               nullptr)) {
                     LERROR << "Encryption failed";
                 } else {
@@ -1621,7 +1628,9 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
         if (mount_errno != EBUSY && mount_errno != EACCES &&
             should_use_metadata_encryption(attempted_entry)) {
             if (!call_vdc({"cryptfs", "mountFstab", attempted_entry.blk_device,
-                           attempted_entry.mount_point, attempted_entry.zoned_device},
+                           attempted_entry.mount_point,
+                           current_entry.fs_mgr_flags.is_zoned ? "true" : "false",
+                           android::base::Join(current_entry.user_devices, ' ')},
                           nullptr)) {
                 ++error_count;
             } else if (current_entry.mount_point == "/data") {
@@ -1647,6 +1656,19 @@ MountAllResult fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                 ++error_count;
             }
             continue;
+        }
+    }
+    if (userdata_mounted) {
+        Fstab mounted_fstab;
+        if (!ReadFstabFromFile("/proc/mounts", &mounted_fstab)) {
+            LOG(ERROR) << "Could't load fstab from /proc/mounts , unable to set ro.fstype.data . "
+                          "init.rc actions depending on this prop would not run, boot might fail.";
+        } else {
+            for (const auto& entry : mounted_fstab) {
+                if (entry.mount_point == "/data") {
+                    android::base::SetProperty("ro.fstype.data", entry.fs_type);
+                }
+            }
         }
     }
 

@@ -27,6 +27,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -569,6 +570,8 @@ Result<std::pair<int, std::vector<std::string>>> ParseRestorecon(
             {"--recursive", SELINUX_ANDROID_RESTORECON_RECURSE},
             {"--skip-ce", SELINUX_ANDROID_RESTORECON_SKIPCE},
             {"--cross-filesystems", SELINUX_ANDROID_RESTORECON_CROSS_FILESYSTEMS},
+            {"--force", SELINUX_ANDROID_RESTORECON_FORCE},
+            {"--data-data", SELINUX_ANDROID_RESTORECON_DATADATA},
             {0, 0}};
 
     int flag = 0;
@@ -745,6 +748,97 @@ std::vector<std::string> FilterVersionedConfigs(const std::vector<std::string>& 
         filtered_configs.push_back(m.second.first);
     }
     return filtered_configs;
+}
+
+// Forks, executes the provided program in the child, and waits for the completion in the parent.
+// Child's stderr is captured and logged using LOG(ERROR).
+bool ForkExecveAndWaitForCompletion(const char* filename, char* const argv[]) {
+    // Create a pipe used for redirecting child process's output.
+    // * pipe_fds[0] is the FD the parent will use for reading.
+    // * pipe_fds[1] is the FD the child will use for writing.
+    int pipe_fds[2];
+    if (pipe(pipe_fds) == -1) {
+        PLOG(ERROR) << "Failed to create pipe";
+        return false;
+    }
+
+    pid_t child_pid = fork();
+    if (child_pid == -1) {
+        PLOG(ERROR) << "Failed to fork for " << filename;
+        return false;
+    }
+
+    if (child_pid == 0) {
+        // fork succeeded -- this is executing in the child process
+
+        // Close the pipe FD not used by this process
+        close(pipe_fds[0]);
+
+        // Redirect stderr to the pipe FD provided by the parent
+        if (TEMP_FAILURE_RETRY(dup2(pipe_fds[1], STDERR_FILENO)) == -1) {
+            PLOG(ERROR) << "Failed to redirect stderr of " << filename;
+            _exit(127);
+            return false;
+        }
+        close(pipe_fds[1]);
+
+        if (execv(filename, argv) == -1) {
+            PLOG(ERROR) << "Failed to execve " << filename;
+            return false;
+        }
+        // Unreachable because execve will have succeeded and replaced this code
+        // with child process's code.
+        _exit(127);
+        return false;
+    } else {
+        // fork succeeded -- this is executing in the original/parent process
+
+        // Close the pipe FD not used by this process
+        close(pipe_fds[1]);
+
+        // Log the redirected output of the child process.
+        // It's unfortunate that there's no standard way to obtain an istream for a file descriptor.
+        // As a result, we're buffering all output and logging it in one go at the end of the
+        // invocation, instead of logging it as it comes in.
+        const int child_out_fd = pipe_fds[0];
+        std::string child_output;
+        if (!android::base::ReadFdToString(child_out_fd, &child_output)) {
+            PLOG(ERROR) << "Failed to capture full output of " << filename;
+        }
+        close(child_out_fd);
+        if (!child_output.empty()) {
+            // Log captured output, line by line, because LOG expects to be invoked for each line
+            std::istringstream in(child_output);
+            std::string line;
+            while (std::getline(in, line)) {
+                LOG(ERROR) << filename << ": " << line;
+            }
+        }
+
+        // Wait for child to terminate
+        int status;
+        if (TEMP_FAILURE_RETRY(waitpid(child_pid, &status, 0)) != child_pid) {
+            PLOG(ERROR) << "Failed to wait for " << filename;
+            return false;
+        }
+
+        if (WIFEXITED(status)) {
+            int status_code = WEXITSTATUS(status);
+            if (status_code == 0) {
+                return true;
+            } else {
+                LOG(ERROR) << filename << " exited with status " << status_code;
+            }
+        } else if (WIFSIGNALED(status)) {
+            LOG(ERROR) << filename << " killed by signal " << WTERMSIG(status);
+        } else if (WIFSTOPPED(status)) {
+            LOG(ERROR) << filename << " stopped by signal " << WSTOPSIG(status);
+        } else {
+            LOG(ERROR) << "waitpid for " << filename << " returned unexpected status: " << status;
+        }
+
+        return false;
+    }
 }
 
 }  // namespace init

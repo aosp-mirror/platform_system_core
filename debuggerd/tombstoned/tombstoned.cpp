@@ -96,7 +96,7 @@ struct Crash {
 class CrashQueue {
  public:
   CrashQueue(const std::string& dir_path, const std::string& file_name_prefix, size_t max_artifacts,
-             size_t max_concurrent_dumps, bool supports_proto)
+             size_t max_concurrent_dumps, bool supports_proto, bool world_readable)
       : file_name_prefix_(file_name_prefix),
         dir_path_(dir_path),
         dir_fd_(open(dir_path.c_str(), O_DIRECTORY | O_RDONLY | O_CLOEXEC)),
@@ -104,7 +104,8 @@ class CrashQueue {
         next_artifact_(0),
         max_concurrent_dumps_(max_concurrent_dumps),
         num_concurrent_dumps_(0),
-        supports_proto_(supports_proto) {
+        supports_proto_(supports_proto),
+        world_readable_(world_readable) {
     if (dir_fd_ == -1) {
       PLOG(FATAL) << "failed to open directory: " << dir_path;
     }
@@ -127,14 +128,16 @@ class CrashQueue {
   static CrashQueue* for_tombstones() {
     static CrashQueue queue("/data/tombstones", "tombstone_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_tombstone_count", 32),
-                            1 /* max_concurrent_dumps */, true /* supports_proto */);
+                            1 /* max_concurrent_dumps */, true /* supports_proto */,
+                            true /* world_readable */);
     return &queue;
   }
 
   static CrashQueue* for_anrs() {
     static CrashQueue queue("/data/anr", "trace_" /* file_name_prefix */,
                             GetIntProperty("tombstoned.max_anr_count", 64),
-                            4 /* max_concurrent_dumps */, false /* supports_proto */);
+                            4 /* max_concurrent_dumps */, false /* supports_proto */,
+                            false /* world_readable */);
     return &queue;
   }
 
@@ -147,10 +150,12 @@ class CrashQueue {
       PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
     }
 
-    // We need to fchmodat after creating to avoid getting the umask applied.
-    std::string fd_path = StringPrintf("/proc/self/fd/%d", result.fd.get());
-    if (fchmodat(dir_fd_, fd_path.c_str(), 0664, 0) != 0) {
-      PLOG(ERROR) << "Failed to make tombstone world-readable";
+    if (world_readable_) {
+      // We need to fchmodat after creating to avoid getting the umask applied.
+      std::string fd_path = StringPrintf("/proc/self/fd/%d", result.fd.get());
+      if (fchmodat(dir_fd_, fd_path.c_str(), 0664, 0) != 0) {
+        PLOG(ERROR) << "Failed to make tombstone world-readable";
+      }
     }
 
     return std::move(result);
@@ -262,6 +267,7 @@ class CrashQueue {
   size_t num_concurrent_dumps_;
 
   bool supports_proto_;
+  bool world_readable_;
 
   std::deque<std::unique_ptr<Crash>> queued_requests_;
 
@@ -450,6 +456,14 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
 
   CrashArtifactPaths paths = queue->get_next_artifact_paths();
 
+  if (crash->output.proto && crash->output.proto->fd != -1) {
+    if (!paths.proto) {
+      LOG(ERROR) << "missing path for proto tombstone";
+    } else {
+      rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
+    }
+  }
+
   if (rename_tombstone_fd(crash->output.text.fd, queue->dir_fd(), paths.text)) {
     if (crash->crash_type == kDebuggerdJavaBacktrace) {
       LOG(ERROR) << "Traces for pid " << crash->crash_pid << " written to: " << paths.text;
@@ -458,14 +472,6 @@ static void crash_completed(borrowed_fd sockfd, std::unique_ptr<Crash> crash) {
       // tombstone associated with a given native crash was written. Any changes
       // to this message must be carefully considered.
       LOG(ERROR) << "Tombstone written to: " << paths.text;
-    }
-  }
-
-  if (crash->output.proto && crash->output.proto->fd != -1) {
-    if (!paths.proto) {
-      LOG(ERROR) << "missing path for proto tombstone";
-    } else {
-      rename_tombstone_fd(crash->output.proto->fd, queue->dir_fd(), *paths.proto);
     }
   }
 }

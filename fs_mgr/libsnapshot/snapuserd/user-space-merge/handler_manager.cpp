@@ -19,6 +19,7 @@
 
 #include <android-base/logging.h>
 
+#include "android-base/properties.h"
 #include "merge_worker.h"
 #include "read_worker.h"
 #include "snapuserd_core.h"
@@ -235,8 +236,10 @@ void SnapshotHandlerManager::MonitorMerge() {
 
         LOG(INFO) << "MonitorMerge: active-merge-threads: " << active_merge_threads_;
         {
+            auto num_merge_threads = android::base::GetUintProperty<uint>(
+                    "ro.virtual_ab.num_merge_threads", kMaxMergeThreads);
             std::lock_guard<std::mutex> lock(lock_);
-            while (active_merge_threads_ < kMaxMergeThreads && merge_handlers_.size() > 0) {
+            while (active_merge_threads_ < num_merge_threads && merge_handlers_.size() > 0) {
                 auto handler = merge_handlers_.front();
                 merge_handlers_.pop();
 

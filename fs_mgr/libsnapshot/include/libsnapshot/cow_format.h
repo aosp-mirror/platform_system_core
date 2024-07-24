@@ -31,14 +31,8 @@ static constexpr uint64_t kCowMagicNumber = 0x436f77634f572121ULL;
 static constexpr uint32_t kCowVersionMajor = 2;
 static constexpr uint32_t kCowVersionMinor = 0;
 
-static constexpr uint32_t kCowVersionManifest = 2;
-
 static constexpr uint32_t kMinCowVersion = 1;
 static constexpr uint32_t kMaxCowVersion = 3;
-
-// Normally, this should be kMaxCowVersion. When a new version is under testing
-// it may be the previous value of kMaxCowVersion.
-static constexpr uint32_t kDefaultCowVersion = 2;
 
 // This header appears as the first sequence of bytes in the COW. All fields
 // in the layout are little-endian encoded. The on-disk layout is:
@@ -293,7 +287,7 @@ enum CowCompressionAlgorithm : uint8_t {
 };
 struct CowCompression {
     CowCompressionAlgorithm algorithm = kCowCompressNone;
-    uint32_t compression_level = 0;
+    int32_t compression_level = 0;
 };
 
 static constexpr uint8_t kCowReadAheadNotStarted = 0;
