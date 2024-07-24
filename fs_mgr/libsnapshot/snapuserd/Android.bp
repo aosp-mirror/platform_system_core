@@ -238,9 +238,19 @@ cc_defaults {
     test_options: {
         min_shipping_api_level: 30,
     },
+
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
+
     auto_gen_config: true,
     require_root: true,
-    compile_multilib: "first",
 }
 
 cc_test {
