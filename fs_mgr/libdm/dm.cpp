@@ -39,6 +39,9 @@
 #ifndef DM_DEFERRED_REMOVE
 #define DM_DEFERRED_REMOVE (1 << 17)
 #endif
+#ifndef DM_IMA_MEASUREMENT_FLAG
+#define DM_IMA_MEASUREMENT_FLAG (1 << 19)
+#endif
 
 namespace android {
 namespace dm {
@@ -540,6 +543,10 @@ bool DeviceMapper::GetTableStatus(const std::string& name, std::vector<TargetInf
     return GetTable(name, 0, table);
 }
 
+bool DeviceMapper::GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) {
+    return GetTable(name, DM_IMA_MEASUREMENT_FLAG, table);
+}
+
 bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>* table) {
     return GetTable(name, DM_STATUS_TABLE_FLAG, table);
 }
@@ -758,6 +765,26 @@ bool DeviceMapper::CreatePlaceholderDevice(const std::string& name) {
         if (!LoadTable(name, table)) {
             return false;
         }
+    }
+    return true;
+}
+
+bool DeviceMapper::SendMessage(const std::string& name, uint64_t sector,
+                               const std::string& message) {
+    std::string ioctl_buffer(sizeof(struct dm_ioctl) + sizeof(struct dm_target_msg), 0);
+    ioctl_buffer += message;
+    ioctl_buffer.push_back('\0');
+
+    struct dm_ioctl* io = reinterpret_cast<struct dm_ioctl*>(&ioctl_buffer[0]);
+    InitIo(io, name);
+    io->data_size = ioctl_buffer.size();
+    io->data_start = sizeof(struct dm_ioctl);
+    struct dm_target_msg* msg =
+            reinterpret_cast<struct dm_target_msg*>(&ioctl_buffer[sizeof(struct dm_ioctl)]);
+    msg->sector = sector;
+    if (ioctl(fd_, DM_TARGET_MSG, io)) {
+        PLOG(ERROR) << "DM_TARGET_MSG failed";
+        return false;
     }
     return true;
 }

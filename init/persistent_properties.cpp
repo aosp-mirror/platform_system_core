@@ -23,6 +23,7 @@
 #include <sys/types.h>
 
 #include <memory>
+#include <unordered_map>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -235,6 +236,9 @@ void WritePersistentProperty(const std::string& name, const std::string& value) 
                            persistent_properties->mutable_properties()->end(),
                            [&name](const auto& record) { return record.name() == name; });
     if (it != persistent_properties->mutable_properties()->end()) {
+        if (it->value() == value) {
+            return;
+        }
         it->set_name(name);
         it->set_value(value);
     } else {

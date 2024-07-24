@@ -33,14 +33,12 @@ cc_library_headers {
         "libbase_headers",
         "libcutils_headers",
         "liblog_headers",
-        "libprocessgroup_headers",
         "libsystem_headers",
     ],
     export_header_lib_headers: [
         "libbase_headers",
         "libcutils_headers",
         "liblog_headers",
-        "libprocessgroup_headers",
         "libsystem_headers",
     ],
     export_include_dirs: ["include"],
@@ -109,7 +107,7 @@ cc_defaults {
         },
     },
     fuzz_config: {
-       cc: ["smoreland@google.com"],
+        cc: ["smoreland@google.com"],
     },
 }
 
@@ -183,10 +181,7 @@ cc_library {
     name: "libutils",
     defaults: ["libutils_impl_defaults"],
 
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
 
     target: {
         product: {
@@ -228,10 +223,7 @@ cc_library {
     // TODO(b/153609531): remove when no longer needed.
     native_bridge_supported: true,
     min_sdk_version: "29",
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
 
     header_libs: [
         "libbase_headers",
@@ -273,6 +265,17 @@ cc_defaults {
         "libbase",
         "liblog",
     ],
+    fuzz_config: {
+        cc: [
+            "smoreland@google.com",
+        ],
+        componentid: 128577,
+        description: "The fuzzer targets the APIs of libutils",
+        vector: "local_no_privileges_required",
+        service_privilege: "privileged",
+        users: "multi_user",
+        fuzzed_code_usage: "shipped",
+    },
 }
 
 cc_fuzz {
@@ -366,6 +369,7 @@ cc_test {
                 "libunwindstack_no_dex",
                 "libutils",
                 "libutilscallstack",
+                "libz",
             ],
         },
     },

@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <limits>
 #include <map>
 #include <memory>
@@ -42,6 +43,7 @@
 #include <android-base/unique_fd.h>
 #include <bionic/macros.h>
 #include <bionic/reserved_signals.h>
+#include <bionic/tls_defines.h>
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
@@ -52,7 +54,18 @@
 
 #include <unwindstack/AndroidUnwinder.h>
 #include <unwindstack/Error.h>
+#include <unwindstack/MachineArm.h>
+#include <unwindstack/MachineArm64.h>
+#include <unwindstack/MachineRiscv64.h>
 #include <unwindstack/Regs.h>
+#include <unwindstack/RegsArm.h>
+#include <unwindstack/RegsArm64.h>
+#include <unwindstack/RegsRiscv64.h>
+#include <unwindstack/UserArm.h>
+#include <unwindstack/UserArm64.h>
+#include <unwindstack/UserRiscv64.h>
+
+#include <native_bridge_support/guest_state_accessor/accessor.h>
 
 #include "libdebuggerd/backtrace.h"
 #include "libdebuggerd/tombstone.h"
@@ -67,6 +80,10 @@
 using android::base::ErrnoRestorer;
 using android::base::StringPrintf;
 using android::base::unique_fd;
+
+// This stores guest architecture. When the architecture is supported, tombstone file will output
+// guest state information.
+static Architecture g_guest_arch = Architecture::NONE;
 
 static bool pid_contains_tid(int pid_proc_fd, pid_t tid) {
   struct stat st;
@@ -143,7 +160,7 @@ static bool ptrace_interrupt(pid_t tid, int* received_signal) {
 }
 
 static bool activity_manager_notify(pid_t pid, int signal, const std::string& amfd_data,
-                                    bool recoverable_gwp_asan_crash) {
+                                    bool recoverable_crash) {
   ATRACE_CALL();
   android::base::unique_fd amfd(socket_local_client(
       "/data/system/ndebugsocket", ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM));
@@ -169,7 +186,7 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
   // Activity Manager protocol:
   //  - 32-bit network-byte-order: pid
   //  - 32-bit network-byte-order: signal number
-  //  - byte: recoverable_gwp_asan_crash
+  //  - byte: recoverable_crash
   //  - bytes: raw text of the dump
   //  - null terminator
 
@@ -185,10 +202,9 @@ static bool activity_manager_notify(pid_t pid, int signal, const std::string& am
     return false;
   }
 
-  uint8_t recoverable_gwp_asan_crash_byte = recoverable_gwp_asan_crash ? 1 : 0;
-  if (!android::base::WriteFully(amfd, &recoverable_gwp_asan_crash_byte,
-                                 sizeof(recoverable_gwp_asan_crash_byte))) {
-    PLOG(ERROR) << "AM recoverable_gwp_asan_crash_byte write failed";
+  uint8_t recoverable_crash_byte = recoverable_crash ? 1 : 0;
+  if (!android::base::WriteFully(amfd, &recoverable_crash_byte, sizeof(recoverable_crash_byte))) {
+    PLOG(ERROR) << "AM recoverable_crash_byte write failed";
     return false;
   }
 
@@ -280,35 +296,34 @@ static void ParseArgs(int argc, char** argv, pid_t* pseudothread_tid, DebuggerdD
 
 static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
                           std::unique_ptr<unwindstack::Regs>* regs, ProcessInfo* process_info,
-                          bool* recoverable_gwp_asan_crash) {
+                          bool* recoverable_crash) {
   std::aligned_storage<sizeof(CrashInfo) + 1, alignof(CrashInfo)>::type buf;
   CrashInfo* crash_info = reinterpret_cast<CrashInfo*>(&buf);
   ssize_t rc = TEMP_FAILURE_RETRY(read(fd.get(), &buf, sizeof(buf)));
-  *recoverable_gwp_asan_crash = false;
+  *recoverable_crash = false;
   if (rc == -1) {
     PLOG(FATAL) << "failed to read target ucontext";
-  } else {
-    ssize_t expected_size = 0;
-    switch (crash_info->header.version) {
-      case 1:
-      case 2:
-      case 3:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
-        break;
+  }
+  ssize_t expected_size = 0;
+  switch (crash_info->header.version) {
+    case 1:
+    case 2:
+    case 3:
+      expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataStatic);
+      break;
 
-      case 4:
-        expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
-        break;
+    case 4:
+      expected_size = sizeof(CrashInfoHeader) + sizeof(CrashInfoDataDynamic);
+      break;
 
-      default:
-        LOG(FATAL) << "unexpected CrashInfo version: " << crash_info->header.version;
-        break;
-    };
+    default:
+      LOG(FATAL) << "unexpected CrashInfo version: " << crash_info->header.version;
+      break;
+  }
 
-    if (rc < expected_size) {
-      LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
-                 << expected_size;
-    }
+  if (rc < expected_size) {
+    LOG(FATAL) << "read " << rc << " bytes when reading target crash information, expected "
+                << expected_size;
   }
 
   switch (crash_info->header.version) {
@@ -321,7 +336,7 @@ static void ReadCrashInfo(unique_fd& fd, siginfo_t* siginfo,
       process_info->scudo_region_info = crash_info->data.d.scudo_region_info;
       process_info->scudo_ring_buffer = crash_info->data.d.scudo_ring_buffer;
       process_info->scudo_ring_buffer_size = crash_info->data.d.scudo_ring_buffer_size;
-      *recoverable_gwp_asan_crash = crash_info->data.d.recoverable_gwp_asan_crash;
+      *recoverable_crash = crash_info->data.d.recoverable_crash;
       process_info->crash_detail_page = crash_info->data.d.crash_detail_page;
       FALLTHROUGH_INTENDED;
     case 1:
@@ -402,6 +417,116 @@ static void InstallSigPipeHandler() {
   action.sa_handler = SIG_IGN;
   action.sa_flags = SA_RESTART;
   sigaction(SIGPIPE, &action, nullptr);
+}
+
+static bool PtracePeek(int request, pid_t tid, uintptr_t addr, void* data, std::string_view err_msg,
+                       uintptr_t* result) {
+  errno = 0;
+  *result = ptrace(request, tid, addr, data);
+  if (errno != 0) {
+    PLOG(ERROR) << err_msg;
+    return false;
+  }
+  return true;
+}
+
+static bool GetGuestRegistersFromCrashedProcess([[maybe_unused]] pid_t tid,
+                                                NativeBridgeGuestRegs* guest_regs) {
+  auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(tid);
+
+  uintptr_t header_ptr = 0;
+  uintptr_t base = 0;
+#if defined(__x86_64__)
+  if (!PtracePeek(PTRACE_PEEKUSER, tid, offsetof(user_regs_struct, fs_base), nullptr,
+                  "failed to read thread register for thread " + std::to_string(tid), &base)) {
+    return false;
+  }
+#elif defined(__aarch64__)
+  // base is implicitly casted to uint64_t.
+  struct iovec pt_iov {
+    .iov_base = &base, .iov_len = sizeof(base),
+  };
+
+  if (ptrace(PTRACE_GETREGSET, tid, NT_ARM_TLS, &pt_iov) != 0) {
+    PLOG(ERROR) << "failed to read thread register for thread " << tid;
+    return false;
+  }
+#elif defined(__riscv)
+  struct user_regs_struct regs;
+  struct iovec pt_iov = {.iov_base = &regs, .iov_len = sizeof(regs)};
+  if (ptrace(PTRACE_GETREGSET, tid, NT_PRSTATUS, &pt_iov) != 0) {
+    PLOG(ERROR) << "failed to read thread register for thread " << tid;
+    return false;
+  }
+  base = reinterpret_cast<uintptr_t>(regs.tp);
+#else
+  // TODO(b/339287219): Add case for Riscv host.
+  return false;
+#endif
+  auto ptr_to_guest_slot = base + TLS_SLOT_NATIVE_BRIDGE_GUEST_STATE * sizeof(uintptr_t);
+  if (!process_memory->ReadFully(ptr_to_guest_slot, &header_ptr, sizeof(uintptr_t))) {
+    PLOG(ERROR) << "failed to get guest state TLS slot content for thread " << tid;
+    return false;
+  }
+
+  NativeBridgeGuestStateHeader header;
+  if (!process_memory->ReadFully(header_ptr, &header, sizeof(NativeBridgeGuestStateHeader))) {
+    PLOG(ERROR) << "failed to get the guest state header for thread " << tid;
+    return false;
+  }
+  if (header.signature != NATIVE_BRIDGE_GUEST_STATE_SIGNATURE) {
+    // Return when ptr points to unmapped memory or no valid guest state.
+    return false;
+  }
+  auto guest_state_data_copy = std::make_unique<unsigned char[]>(header.guest_state_data_size);
+  if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(header.guest_state_data),
+                                 guest_state_data_copy.get(), header.guest_state_data_size)) {
+    PLOG(ERROR) << "failed to read the guest state data for thread " << tid;
+    return false;
+  }
+
+  LoadGuestStateRegisters(guest_state_data_copy.get(), header.guest_state_data_size, guest_regs);
+  return true;
+}
+
+static void ReadGuestRegisters([[maybe_unused]] std::unique_ptr<unwindstack::Regs>* regs,
+                               pid_t tid) {
+  // TODO: remove [[maybe_unused]], when the ARM32 case is removed from the native bridge support.
+  NativeBridgeGuestRegs guest_regs;
+  if (!GetGuestRegistersFromCrashedProcess(tid, &guest_regs)) {
+    return;
+  }
+
+  switch (guest_regs.guest_arch) {
+#if defined(__LP64__)
+    case NATIVE_BRIDGE_ARCH_ARM64: {
+      unwindstack::arm64_user_regs arm64_user_regs = {};
+      for (size_t i = 0; i < unwindstack::ARM64_REG_R31; i++) {
+        arm64_user_regs.regs[i] = guest_regs.regs_arm64.x[i];
+      }
+      arm64_user_regs.sp = guest_regs.regs_arm64.sp;
+      arm64_user_regs.pc = guest_regs.regs_arm64.ip;
+      regs->reset(unwindstack::RegsArm64::Read(&arm64_user_regs));
+
+      g_guest_arch = Architecture::ARM64;
+      break;
+    }
+    case NATIVE_BRIDGE_ARCH_RISCV64: {
+      unwindstack::riscv64_user_regs riscv64_user_regs = {};
+      // RISCV64_REG_PC is at the first position.
+      riscv64_user_regs.regs[0] = guest_regs.regs_riscv64.ip;
+      for (size_t i = 1; i < unwindstack::RISCV64_REG_REAL_COUNT; i++) {
+        riscv64_user_regs.regs[i] = guest_regs.regs_riscv64.x[i];
+      }
+      regs->reset(unwindstack::RegsRiscv64::Read(&riscv64_user_regs, tid));
+
+      g_guest_arch = Architecture::RISCV64;
+      break;
+    }
+#endif
+    default:
+      break;
+  }
 }
 
 int main(int argc, char** argv) {
@@ -487,7 +612,7 @@ int main(int argc, char** argv) {
   std::map<pid_t, ThreadInfo> thread_info;
   siginfo_t siginfo;
   std::string error;
-  bool recoverable_gwp_asan_crash = false;
+  bool recoverable_crash = false;
 
   {
     ATRACE_NAME("ptrace");
@@ -539,8 +664,7 @@ int main(int argc, char** argv) {
 
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
-        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info,
-                      &recoverable_gwp_asan_crash);
+        ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info, &recoverable_crash);
         info.siginfo = &siginfo;
         info.signo = info.siginfo->si_signo;
 
@@ -553,6 +677,7 @@ int main(int argc, char** argv) {
           continue;
         }
       }
+      ReadGuestRegisters(&info.guest_registers, thread);
 
       thread_info[thread] = std::move(info);
     }
@@ -662,15 +787,35 @@ int main(int argc, char** argv) {
 
     {
       ATRACE_NAME("engrave_tombstone");
-      engrave_tombstone(std::move(g_output_fd), std::move(g_proto_fd), &unwinder, thread_info,
-                        g_target_thread, process_info, &open_files, &amfd_data);
+      unwindstack::ArchEnum regs_arch = unwindstack::ARCH_UNKNOWN;
+      switch (g_guest_arch) {
+        case Architecture::ARM64: {
+          regs_arch = unwindstack::ARCH_ARM64;
+          break;
+        }
+        case Architecture::RISCV64: {
+          regs_arch = unwindstack::ARCH_RISCV64;
+          break;
+        }
+        default: {
+        }
+      }
+      if (regs_arch == unwindstack::ARCH_UNKNOWN) {
+        engrave_tombstone(std::move(g_output_fd), std::move(g_proto_fd), &unwinder, thread_info,
+                          g_target_thread, process_info, &open_files, &amfd_data);
+      } else {
+        unwindstack::AndroidRemoteUnwinder guest_unwinder(vm_pid, regs_arch);
+        engrave_tombstone(std::move(g_output_fd), std::move(g_proto_fd), &unwinder, thread_info,
+                          g_target_thread, process_info, &open_files, &amfd_data, &g_guest_arch,
+                          &guest_unwinder);
+      }
     }
   }
 
   if (fatal_signal) {
     // Don't try to notify ActivityManager if it just crashed, or we might hang until timeout.
     if (thread_info[target_process].thread_name != "system_server") {
-      activity_manager_notify(target_process, signo, amfd_data, recoverable_gwp_asan_crash);
+      activity_manager_notify(target_process, signo, amfd_data, recoverable_crash);
     }
   }
 

@@ -47,6 +47,8 @@ cc_library_headers {
     defaults: ["libcutils_defaults"],
 
     export_include_dirs: ["include"],
+    header_libs: ["libprocessgroup_headers"],
+    export_header_lib_headers: ["libprocessgroup_headers"],
     target: {
         vendor: {
             override_export_include_dirs: ["include_outside_system"],
@@ -116,27 +118,6 @@ cc_library {
     },
 }
 
-cc_test {
-    name: "libcutils_sockets_test",
-    test_suites: ["device-tests"],
-    static_libs: ["libbase", "libcutils_sockets"],
-    cflags: [
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-    ],
-
-    srcs: ["sockets_test.cpp"],
-    target: {
-        android: {
-            srcs: [
-                "android_get_control_file_test.cpp",
-                "android_get_control_socket_test.cpp",
-            ],
-        },
-    },
-}
-
 // some files must not be compiled when building against Mingw
 // they correspond to features not used by our host development tools
 // which are also hard or even impossible to port to native Win32
@@ -150,10 +131,7 @@ libcutils_nonwindows_sources = [
 cc_library {
     name: "libcutils",
     defaults: ["libcutils_defaults"],
-    vndk: {
-        enabled: true,
-        support_system_process: true,
-    },
+    double_loadable: true,
     srcs: [
         "config_utils.cpp",
         "iosched_policy.cpp",
@@ -177,23 +155,18 @@ cc_library {
                 "fs_config.cpp",
             ],
         },
-        not_windows: {
-            srcs: libcutils_nonwindows_sources + [
-                "ashmem-host.cpp",
-                "trace-host.cpp",
-            ],
-        },
-        windows: {
-            host_ldlibs: ["-lws2_32"],
-
+        host: {
             srcs: [
                 "trace-host.cpp",
+                "ashmem-host.cpp",
             ],
-
+        },
+        not_windows: {
+            srcs: libcutils_nonwindows_sources,
+        },
+        windows: {
             enabled: true,
-            cflags: [
-                "-D_GNU_SOURCE",
-            ],
+            host_ldlibs: ["-lws2_32"],
         },
         android: {
             sanitize: {
@@ -262,6 +235,7 @@ cc_library {
 cc_defaults {
     name: "libcutils_test_default",
     srcs: [
+        "ashmem_base_test.cpp",
         "native_handle_test.cpp",
         "properties_test.cpp",
         "sockets_test.cpp",
@@ -320,20 +294,26 @@ cc_test {
 cc_defaults {
     name: "libcutils_test_static_defaults",
     defaults: ["libcutils_test_default"],
-    static_libs: [
-        "libc",
-        "libcgrouprc_format",
-    ] + test_libraries + always_static_test_libraries,
     stl: "libc++_static",
     require_root: true,
 
     target: {
         android: {
             static_executable: true,
+            static_libs: [
+                "libcgrouprc_format",
+            ] + test_libraries + always_static_test_libraries,
+        },
+        not_windows: {
+            static_libs: test_libraries + always_static_test_libraries,
         },
         windows: {
+            static_libs: [
+                "libbase",
+                "libcutils",
+                "libcutils_sockets",
+            ],
             host_ldlibs: ["-lws2_32"],
-
             enabled: true,
         },
     },
@@ -341,13 +321,17 @@ cc_defaults {
 
 cc_test {
     name: "libcutils_test_static",
+    host_supported: true,
     test_suites: ["device-tests"],
     defaults: ["libcutils_test_static_defaults"],
 }
 
 cc_test {
     name: "KernelLibcutilsTest",
-    test_suites: ["general-tests", "vts"],
+    test_suites: [
+        "general-tests",
+        "vts",
+    ],
     defaults: ["libcutils_test_static_defaults"],
     test_config: "KernelLibcutilsTest.xml",
 }

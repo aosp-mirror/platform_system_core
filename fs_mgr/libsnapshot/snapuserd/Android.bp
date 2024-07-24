@@ -59,9 +59,6 @@ cc_library_static {
     ],
     local_include_dirs: ["include/"],
     srcs: [
-        "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_readahead.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
         "dm_user_block_server.cpp",
         "snapuserd_buffer.cpp",
         "user-space-merge/handler_manager.cpp",
@@ -109,7 +106,6 @@ cc_defaults {
         "fs_mgr_defaults",
     ],
     srcs: [
-        "dm-snapshot-merge/snapuserd_server.cpp",
         "snapuserd_daemon.cpp",
         "user-space-merge/snapuserd_server.cpp",
     ],
@@ -170,9 +166,10 @@ cc_binary {
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
+    recovery_available: true,
 }
 
-// This target will install to /system/bin/snapuserd_ramdisk 
+// This target will install to /system/bin/snapuserd_ramdisk
 // It will also create a symblink on /system/bin/snapuserd that point to
 // /system/bin/snapuserd_ramdisk .
 // This way, init can check if generic ramdisk copy exists.
@@ -188,45 +185,6 @@ cc_binary {
     vendor_ramdisk_available: false,
     ramdisk: true,
     symlinks: ["snapuserd"],
-}
-
-cc_test {
-    name: "snapuserd_test_legacy",
-    defaults: [
-        "fs_mgr_defaults",
-        "libsnapshot_cow_defaults",
-    ],
-    srcs: [
-        "dm-snapshot-merge/cow_snapuserd_test.cpp",
-        "dm-snapshot-merge/snapuserd.cpp",
-        "dm-snapshot-merge/snapuserd_worker.cpp",
-        "snapuserd_buffer.cpp",
-    ],
-    shared_libs: [
-        "libbase",
-        "liblog",
-    ],
-    static_libs: [
-        "libbrotli",
-        "libgtest",
-        "libsnapshot_cow",
-        "libsnapuserd_client",
-        "libcutils_sockets",
-        "libz",
-        "libdm",
-        "libext2_uuid",
-        "libext4_utils",
-        "libfs_mgr_file_wait",
-    ],
-    header_libs: [
-        "libstorage_literals_headers",
-        "libfiemap_headers",
-    ],
-    test_options: {
-        min_shipping_api_level: 30,
-    },
-    auto_gen_config: true,
-    require_root: false,
 }
 
 cc_defaults {
@@ -292,6 +250,14 @@ cc_test {
     test_suites: [
         "device-tests",
     ],
+    test_options: {
+        test_runner_options: [
+            {
+                name: "force-no-test-error",
+                value: "false",
+            },
+        ],
+    },
 }
 
 // vts tests cannot be host_supported.

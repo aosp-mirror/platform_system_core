@@ -147,6 +147,29 @@ void ParseMountFlags(const std::string& flags, FstabEntry* entry) {
     entry->fs_options = std::move(fs_options);
 }
 
+void ParseUserDevices(const std::string& arg, FstabEntry* entry) {
+    auto param = Split(arg, ":");
+    if (param.size() != 2) {
+        LWARNING << "Warning: device= malformed: " << arg;
+        return;
+    }
+
+    if (access(param[1].c_str(), F_OK) != 0) {
+        LWARNING << "Warning: device does not exist : " << param[1];
+        return;
+    }
+
+    if (param[0] == "zoned") {
+        // atgc in f2fs does not support a zoned device
+        auto options = Split(entry->fs_options, ",");
+        options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
+        entry->fs_options = android::base::Join(options, ",");
+        LINFO << "Removed ATGC in fs_options as " << entry->fs_options << " for zoned device";
+        entry->fs_mgr_flags.is_zoned = true;
+    }
+    entry->user_devices.push_back(param[1]);
+}
+
 bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
     for (const auto& flag : Split(flags, ",")) {
         if (flag.empty() || flag == "defaults") continue;
@@ -311,17 +334,8 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!ParseByteCount(arg, &entry->zram_backingdev_size)) {
                 LWARNING << "Warning: zram_backingdev_size= flag malformed: " << arg;
             }
-        } else if (flag == "zoned_device") {
-            if (access("/dev/block/by-name/zoned_device", F_OK) == 0) {
-                entry->zoned_device = "/dev/block/by-name/zoned_device";
-
-                // atgc in f2fs does not support a zoned device
-                auto options = Split(entry->fs_options, ",");
-                options.erase(std::remove(options.begin(), options.end(), "atgc"), options.end());
-                entry->fs_options = android::base::Join(options, ",");
-                LINFO << "Removed ATGC in fs_options as " << entry->fs_options
-                      << " for zoned device=" << entry->zoned_device;
-            }
+        } else if (StartsWith(flag, "device=")) {
+            ParseUserDevices(arg, entry);
         } else {
             LWARNING << "Warning: unknown flag: " << flag;
         }
@@ -506,6 +520,24 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 
 }  // namespace
 
+// Return the path to the recovery fstab file.  There may be multiple fstab files;
+// the one that is returned will be the first that exists of recovery.fstab.<fstab_suffix>,
+// recovery.fstab.<hardware>, and recovery.fstab.<hardware.platform>.
+std::string GetRecoveryFstabPath() {
+    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+        std::string suffix;
+
+        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
+
+        std::string fstab_path = "/etc/recovery.fstab." + suffix;
+        if (access(fstab_path.c_str(), F_OK) == 0) {
+            return fstab_path;
+        }
+    }
+
+    return "/etc/recovery.fstab";
+}
+
 // Return the path to the fstab file.  There may be multiple fstab files; the
 // one that is returned will be the first that exists of fstab.<fstab_suffix>,
 // fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
@@ -515,7 +547,7 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 // the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
     if (InRecovery()) {
-        return "/etc/recovery.fstab";
+        return GetRecoveryFstabPath();
     }
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;
@@ -847,6 +879,14 @@ bool ReadDefaultFstab(Fstab* fstab) {
 std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string& path) {
     return GetEntriesByPred(fstab,
                             [&path](const FstabEntry& entry) { return entry.mount_point == path; });
+}
+
+FstabEntry* GetEntryForMountPoint(Fstab* fstab, const std::string_view path,
+                                  const std::string_view fstype) {
+    auto&& vec = GetEntriesByPred(fstab, [&path, fstype](const FstabEntry& entry) {
+        return entry.mount_point == path && entry.fs_type == fstype;
+    });
+    return vec.empty() ? nullptr : vec.front();
 }
 
 std::vector<const FstabEntry*> GetEntriesForMountPoint(const Fstab* fstab,

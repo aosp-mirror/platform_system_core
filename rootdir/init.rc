@@ -303,6 +303,9 @@ on init
     mkdir /mnt/runtime/full 0755 root root
     mkdir /mnt/runtime/full/self 0755 root root
 
+    # For Pre-reboot Dexopt
+    mkdir /mnt/pre_reboot_dexopt 0755 artd artd
+
     # Symlink to keep legacy apps working in multi-user world
     symlink /storage/self/primary /mnt/sdcard
     symlink /mnt/user/0/primary /mnt/runtime/default/self/primary
@@ -420,16 +423,6 @@ on init
     # make the PSI monitor accessible to others
     chown system system /proc/pressure/memory
     chmod 0664 /proc/pressure/memory
-
-    # qtaguid will limit access to specific data based on group memberships.
-    #   net_bw_acct grants impersonation of socket owners.
-    #   net_bw_stats grants access to other apps' detailed tagged-socket stats.
-    chown root net_bw_acct /proc/net/xt_qtaguid/ctrl
-    chown root net_bw_stats /proc/net/xt_qtaguid/stats
-
-    # Allow everybody to read the xt_qtaguid resource tracking misc dev.
-    # This is needed by any process that uses socket tagging.
-    chmod 0644 /dev/xt_qtaguid
 
     mount bpf bpf /sys/fs/bpf nodev noexec nosuid
 
@@ -643,7 +636,11 @@ on post-fs
 
     mkdir /metadata/aconfig 0775 root system
     mkdir /metadata/aconfig/flags 0770 root system
+    mkdir /metadata/aconfig/maps 0775 root system
     mkdir /metadata/aconfig/boot 0775 root system
+
+    mkdir /metadata/aconfig_test_missions 0775 root system
+    exec_start aconfigd-platform-init
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
@@ -658,10 +655,6 @@ on late-fs
     exec -- /system/bin/fsverity_init --load-verified-keys
 
 # Only enable the bootreceiver tracing instance for kernels 5.10 and above.
-on late-fs && property:ro.kernel.version=4.9
-    setprop bootreceiver.enable 0
-on late-fs && property:ro.kernel.version=4.14
-    setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=4.19
     setprop bootreceiver.enable 0
 on late-fs && property:ro.kernel.version=5.4
@@ -853,6 +846,8 @@ on post-fs-data
     mkdir /data/misc/odsign 0710 root system
     # directory used for odsign metrics
     mkdir /data/misc/odsign/metrics 0770 root system
+    # directory used for connectivity blob store.
+    mkdir /data/misc/connectivityblobdb 0770 system system
 
     # Directory for VirtualizationService temporary image files.
     # Delete any stale files owned by the old virtualizationservice uid (b/230056726).
@@ -873,6 +868,9 @@ on post-fs-data
     mkdir /data/app-asec 0700 root root encryption=Require
     mkdir /data/app-lib 0771 system system encryption=Require
     mkdir /data/app 0771 system system encryption=Require
+
+    # Create directory for app metadata files
+    mkdir /data/app-metadata 0700 system system encryption=Require
 
     # create directory for updated font files.
     mkdir /data/fonts/ 0771 root root encryption=Require
@@ -962,6 +960,10 @@ on post-fs-data
     mkdir /data/vendor_ce 0551 root root encryption=None
     mkdir /data/vendor_de 0551 root root encryption=None
 
+    # Similar to the top-level CE and DE directories, /data/storage_area must
+    # itself be unencrypted, since it contains encrypted directories.
+    mkdir /data/storage_area 0551 root root encryption=None
+
     # Set the casefold flag on /data/media.  For upgrades, a restorecon can be
     # needed first to relabel the directory from media_rw_data_file.
     restorecon /data/media
@@ -975,8 +977,12 @@ on post-fs-data
     mkdir /data_mirror/data_de 0700 root root
     mkdir /data_mirror/misc_ce 0700 root root
     mkdir /data_mirror/misc_de 0700 root root
+    mkdir /data_mirror/storage_area 0700 root root
 
     # Create CE and DE data directory for default volume
+    # Not needed for storage_area directory, since this is
+    # not supported for non-default volumes and the path
+    # does not include the volume ID
     mkdir /data_mirror/data_ce/null 0700 root root
     mkdir /data_mirror/data_de/null 0700 root root
     mkdir /data_mirror/misc_ce/null 0700 root root
@@ -990,6 +996,9 @@ on post-fs-data
     mount none /data/user_de /data_mirror/data_de/null bind rec
     mount none /data/misc_ce /data_mirror/misc_ce/null bind rec
     mount none /data/misc_de /data_mirror/misc_de/null bind rec
+
+    # Also bind mount for the storage area directory (minus the volume ID)
+    mount none /data/storage_area /data_mirror/storage_area bind rec
 
     # Create mirror directory for jit profiles
     mkdir /data_mirror/cur_profiles 0700 root root
@@ -1021,9 +1030,11 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+    exec_start aconfigd-mainline-init
+    start aconfigd
 
     # Create directories for boot animation.
-    mkdir /data/misc/bootanim 0755 system system encryption=DeleteIfNecessary
+    mkdir /data/misc/bootanim 0755 system system
 
     exec_start derive_sdk
 
@@ -1075,6 +1086,9 @@ on post-fs-data
 
     # Update dm-verity state and set partition.*.verified properties.
     verity_update_state
+
+on property:vold.checkpoint_committed=1
+    trigger post-fs-data-checkpointed
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
@@ -1331,6 +1345,8 @@ on userspace-reboot-fs-remount
   umount /data_mirror/data_ce/null/0
   umount /data_mirror/data_ce/null
   umount /data_mirror/data_de/null
+  umount /data_mirror/storage_area/0
+  umount /data_mirror/storage_area
   umount /data_mirror/cur_profiles
   umount /data_mirror/ref_profiles
   umount /data_mirror
@@ -1358,3 +1374,16 @@ on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_y
   write /sys/kernel/mm/lru_gen/enabled 5
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled 7
+
+# Allow other processes to run `snapshotctl` through `init`. This requires
+# `set_prop` permission on `snapshotctl_prop`.
+on property:sys.snapshotctl.map=requested
+    # "root" is needed to talk to gsid and pass its check on uid.
+    # "system" is needed to write to "/dev/socket/snapuserd" to talk to
+    # snapuserd.
+    exec - root root system -- /system/bin/snapshotctl map
+    setprop sys.snapshotctl.map "finished"
+
+on property:sys.snapshotctl.unmap=requested
+    exec - root root system -- /system/bin/snapshotctl unmap
+    setprop sys.snapshotctl.unmap "finished"

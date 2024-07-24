@@ -30,6 +30,8 @@
 #include <storage_literals/storage_literals.h>
 #include <update_engine/update_metadata.pb.h>
 
+#include "utility.h"
+
 namespace android {
 namespace snapshot {
 
@@ -155,6 +157,9 @@ class DeviceMapperWrapper : public android::dm::IDeviceMapper {
     virtual bool GetTableStatus(const std::string& name, std::vector<TargetInfo>* table) {
         return impl_.GetTableStatus(name, table);
     }
+    virtual bool GetTableStatusIma(const std::string& name, std::vector<TargetInfo>* table) {
+        return impl_.GetTableStatusIma(name, table);
+    }
     virtual bool GetDmDevicePathByName(const std::string& name, std::string* path) {
         return impl_.GetDmDevicePathByName(name, path);
     }
@@ -230,6 +235,22 @@ bool IsVirtualAbEnabled();
     } while (0)
 
 #define RETURN_IF_NON_VIRTUAL_AB() RETURN_IF_NON_VIRTUAL_AB_MSG("")
+
+#define SKIP_IF_VENDOR_ON_ANDROID_S()                                        \
+    do {                                                                     \
+        if (IsVendorFromAndroid12())                                         \
+            GTEST_SKIP() << "Skip test as Vendor partition is on Android S"; \
+    } while (0)
+
+#define RETURN_IF_VENDOR_ON_ANDROID_S_MSG(msg) \
+    do {                                       \
+        if (IsVendorFromAndroid12()) {         \
+            std::cerr << (msg);                \
+            return;                            \
+        }                                      \
+    } while (0)
+
+#define RETURN_IF_VENDOR_ON_ANDROID_S() RETURN_IF_VENDOR_ON_ANDROID_S_MSG("")
 
 }  // namespace snapshot
 }  // namespace android

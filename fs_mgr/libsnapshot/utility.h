@@ -133,9 +133,11 @@ bool GetLegacyCompressionEnabledProperty();
 bool GetUserspaceSnapshotsEnabledProperty();
 bool GetIouringEnabledProperty();
 bool GetXorCompressionEnabledProperty();
+bool GetODirectEnabledProperty();
 
 bool CanUseUserspaceSnapshots();
 bool IsDmSnapshotTestingEnabled();
+bool IsVendorFromAndroid12();
 
 // Swap the suffix of a partition name.
 std::string GetOtherPartitionName(const std::string& name);

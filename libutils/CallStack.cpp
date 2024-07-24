@@ -89,7 +89,8 @@ void CallStack::print(Printer& printer) const {
 // The following four functions may be used via weak symbol references from libutils.
 // Clients assume that if any of these symbols are available, then deleteStack() is.
 
-#ifdef WEAKS_AVAILABLE
+// Apple and Windows does not support this, so only compile on other platforms.
+#if !defined(__APPLE__) && !defined(_WIN32)
 
 CallStack::CallStackUPtr CallStack::getCurrentInternal(int ignoreDepth) {
     CallStack::CallStackUPtr stack(new CallStack());
@@ -110,6 +111,6 @@ void CallStack::deleteStack(CallStack* stack) {
     delete stack;
 }
 
-#endif // WEAKS_AVAILABLE
+#endif  // !defined(__APPLE__) && !defined(_WIN32)
 
 }; // namespace android

@@ -75,7 +75,7 @@ SharedBuffer* SharedBuffer::editResize(size_t newSize) const
         LOG_ALWAYS_FATAL_IF((newSize >= (SIZE_MAX - sizeof(SharedBuffer))),
                             "Invalid buffer size %zu", newSize);
 
-        buf = (SharedBuffer*)realloc(buf, sizeof(SharedBuffer) + newSize);
+        buf = (SharedBuffer*)realloc(reinterpret_cast<void*>(buf), sizeof(SharedBuffer) + newSize);
         if (buf != nullptr) {
             buf->mSize = newSize;
             return buf;

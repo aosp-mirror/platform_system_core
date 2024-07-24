@@ -3,52 +3,12 @@ LOCAL_PATH:= $(call my-dir)
 $(eval $(call declare-1p-copy-files,system/core/rootdir,))
 
 #######################################
-# init-debug.rc
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := init-debug.rc
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/init
-
-include $(BUILD_PREBUILT)
-
-#######################################
-# asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := asan.options
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_MODULE_CLASS := ETC
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_PATH := $(TARGET_OUT)
-
-include $(BUILD_PREBUILT)
-
-# ASAN extration.
 ASAN_EXTRACT_FILES :=
 ifeq ($(SANITIZE_TARGET_SYSTEM),true)
-include $(CLEAR_VARS)
-LOCAL_MODULE:= asan_extract
-LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS:= notice
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_SRC_FILES := asan_extract.sh
-LOCAL_INIT_RC := asan_extract.rc
-# We need bzip2 on device for extraction.
-LOCAL_REQUIRED_MODULES := bzip2
-include $(BUILD_PREBUILT)
 ASAN_EXTRACT_FILES := asan_extract
 endif
-
 endif
-
 #######################################
 # init.environ.rc
 
@@ -222,33 +182,6 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
 	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
-
-# Append PLATFORM_VNDK_VERSION to base name.
-define append_vndk_version
-$(strip \
-  $(basename $(1)).$(PLATFORM_VNDK_VERSION)$(suffix $(1)) \
-)
-endef
-
-#######################################
-# sanitizer.libraries.txt
-include $(CLEAR_VARS)
-LOCAL_MODULE := sanitizer.libraries.txt
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_MODULE_CLASS := ETC
-LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)
-LOCAL_MODULE_STEM := $(LOCAL_MODULE)
-include $(BUILD_SYSTEM)/base_rules.mk
-$(LOCAL_BUILT_MODULE): PRIVATE_SANITIZER_RUNTIME_LIBRARIES := \
-    $(SANITIZER_STEMS) \
-    $(2ND_SANITIZER_STEMS)
-$(LOCAL_BUILT_MODULE):
-	@echo "Generate: $@"
-	@mkdir -p $(dir $@)
-	$(hide) echo -n > $@
-	$(hide) $(foreach lib,$(PRIVATE_SANITIZER_RUNTIME_LIBRARIES), \
-		echo $(lib) >> $@;)
 
 #######################################
 # ramdisk_node_list

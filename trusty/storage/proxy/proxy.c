@@ -41,8 +41,12 @@ static const char* ss_data_root;
 static const char* trusty_devname;
 static const char* rpmb_devname;
 static const char* ss_srv_name = STORAGE_DISK_PROXY_PORT;
+static const char* max_file_size_from;
 
 static enum dev_type dev_type = MMC_RPMB;
+
+/* List head for storage mapping, elements added at init, and never removed */
+static struct storage_mapping_node* storage_mapping_head;
 
 static enum dev_type parse_dev_type(const char* dev_type_name) {
     if (!strcmp(dev_type_name, "mmc")) {
@@ -58,17 +62,61 @@ static enum dev_type parse_dev_type(const char* dev_type_name) {
     }
 }
 
-static const char* _sopts = "hp:d:r:t:";
+static int parse_and_append_file_mapping(const char* file_mapping) {
+    if (file_mapping == NULL) {
+        ALOGE("Provided file mapping is null\n");
+        return -1;
+    }
+    char* file_mapping_dup = strdup(file_mapping);
+    if (file_mapping_dup == NULL) {
+        ALOGE("Couldn't duplicate string: %s\n", file_mapping);
+        return -1;
+    }
+    const char* file_name = strtok(file_mapping_dup, ":");
+    if (file_name == NULL) {
+        ALOGE("No file name found\n");
+        return -1;
+    }
+    const char* backing_storage = strtok(NULL, ":");
+    if (backing_storage == NULL) {
+        ALOGE("No backing storage found\n");
+        return -1;
+    }
+
+    struct storage_mapping_node* new_node = malloc(sizeof(struct storage_mapping_node));
+    if (new_node == NULL) {
+        ALOGE("Couldn't allocate additional storage_mapping_node\n");
+        return -1;
+    }
+    *new_node = (struct storage_mapping_node){.file_name = file_name,
+                                              .backing_storage = backing_storage,
+                                              .next = storage_mapping_head,
+                                              .fd = -1};
+    storage_mapping_head = new_node;
+    return 0;
+}
+
+static const char* _sopts = "hp:d:r:t:m:f:";
 static const struct option _lopts[] = {{"help", no_argument, NULL, 'h'},
                                        {"trusty_dev", required_argument, NULL, 'd'},
                                        {"data_path", required_argument, NULL, 'p'},
                                        {"rpmb_dev", required_argument, NULL, 'r'},
                                        {"dev_type", required_argument, NULL, 't'},
+                                       {"max_file_size_from", required_argument, NULL, 'm'},
+                                       {"file_storage_mapping", required_argument, NULL, 'f'},
                                        {0, 0, 0, 0}};
 
 static void show_usage_and_exit(int code) {
-    ALOGE("usage: storageproxyd -d <trusty_dev> -p <data_path> -r <rpmb_dev> -t <dev_type>\n");
+    ALOGE("usage: storageproxyd -d <trusty_dev> -p <data_path> -r <rpmb_dev> -t <dev_type>  [-m "
+          "<file>] [-f <file>:<mapping>]\n");
     ALOGE("Available dev types: mmc, virt\n");
+    ALOGE("-f = Maps secure storage files like `0` and `persist/0`\n"
+          "to block devices.  Storageproxyd will handle creating the\n"
+          "appropriate symlinks in the root datapath.\n");
+    ALOGE("-m = Specifies the max size constraint for file backed storages.\n"
+          "The constraint is chosen by giving a file, this allows for passing a\n"
+          "block device for which a max file size can be queried.  File based\n"
+          "storages will be constrained to that size as well.\n");
     exit(code);
 }
 
@@ -187,6 +235,7 @@ static int proxy_loop(void) {
 static void parse_args(int argc, char* argv[]) {
     int opt;
     int oidx = 0;
+    int rc = 0;
 
     while ((opt = getopt_long(argc, argv, _sopts, _lopts, &oidx)) != -1) {
         switch (opt) {
@@ -210,6 +259,18 @@ static void parse_args(int argc, char* argv[]) {
                 }
                 break;
 
+            case 'f':
+                rc = parse_and_append_file_mapping(optarg);
+                if (rc < 0) {
+                    ALOGE("Failed to parse file mapping: %s\n", optarg);
+                    show_usage_and_exit(EXIT_FAILURE);
+                }
+                break;
+
+            case 'm':
+                max_file_size_from = strdup(optarg);
+                break;
+
             default:
                 ALOGE("unrecognized option (%c):\n", opt);
                 show_usage_and_exit(EXIT_FAILURE);
@@ -225,6 +286,12 @@ static void parse_args(int argc, char* argv[]) {
     ALOGI("storage data root: %s\n", ss_data_root);
     ALOGI("trusty dev: %s\n", trusty_devname);
     ALOGI("rpmb dev: %s\n", rpmb_devname);
+    ALOGI("File Mappings: \n");
+    const struct storage_mapping_node* curr = storage_mapping_head;
+    for (; curr != NULL; curr = curr->next) {
+        ALOGI("\t%s -> %s\n", curr->file_name, curr->backing_storage);
+    }
+    ALOGI("max file size from: %s\n", max_file_size_from ? max_file_size_from : "(unset)");
 }
 
 int main(int argc, char* argv[]) {
@@ -252,7 +319,7 @@ int main(int argc, char* argv[]) {
     ABinderProcess_startThreadPool();
 
     /* initialize secure storage directory */
-    rc = storage_init(ss_data_root);
+    rc = storage_init(ss_data_root, storage_mapping_head, max_file_size_from);
     if (rc < 0) return EXIT_FAILURE;
 
     /* open rpmb device */

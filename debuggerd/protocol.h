@@ -100,7 +100,7 @@ struct __attribute__((__packed__)) CrashInfoDataDynamic : public CrashInfoDataSt
   uintptr_t scudo_ring_buffer;
   size_t scudo_ring_buffer_size;
   size_t scudo_stack_depot_size;
-  bool recoverable_gwp_asan_crash;
+  bool recoverable_crash;
   uintptr_t crash_detail_page;
 };
 

@@ -39,14 +39,18 @@
  * repository. They must be kept in sync.
  */
 
-#define METRICS_PORT "com.android.trusty.metrics"
+#define METRICS_PORT "com.android.trusty.metrics.consumer"
+
+#define UUID_STR_SIZE (37)
 
 /**
  * enum metrics_cmd - command identifiers for metrics interface
- * @METRICS_CMD_RESP_BIT:          message is a response
- * @METRICS_CMD_REQ_SHIFT:         number of bits used by @METRICS_CMD_RESP_BIT
- * @METRICS_CMD_REPORT_EVENT_DROP: report gaps in the event stream
- * @METRICS_CMD_REPORT_CRASH:      report an app crash event
+ * @METRICS_CMD_RESP_BIT:             message is a response
+ * @METRICS_CMD_REQ_SHIFT:            number of bits used by @METRICS_CMD_RESP_BIT
+ * @METRICS_CMD_REPORT_EVENT_DROP:    report gaps in the event stream
+ * @METRICS_CMD_REPORT_CRASH:         report an app crash event
+ * @METRICS_CMD_REPORT_EXIT:          report an app exit
+ * @METRICS_CMD_REPORT_STORAGE_ERROR: report trusty storage error
  */
 enum metrics_cmd {
     METRICS_CMD_RESP_BIT = 1,
@@ -54,6 +58,8 @@ enum metrics_cmd {
 
     METRICS_CMD_REPORT_EVENT_DROP = (1 << METRICS_CMD_REQ_SHIFT),
     METRICS_CMD_REPORT_CRASH = (2 << METRICS_CMD_REQ_SHIFT),
+    METRICS_CMD_REPORT_EXIT = (3 << METRICS_CMD_REQ_SHIFT),
+    METRICS_CMD_REPORT_STORAGE_ERROR = (4 << METRICS_CMD_REQ_SHIFT),
 };
 
 /**
@@ -88,19 +94,86 @@ struct metrics_resp {
 } __attribute__((__packed__));
 
 /**
+ * struct metrics_report_exit_req - arguments of %METRICS_CMD_REPORT_EXIT
+ *                                   requests
+ * @app_id: app_id in the form UUID in ascii format
+ *          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ * @exit_code: architecture-specific exit code
+ */
+struct metrics_report_exit_req {
+    char app_id[UUID_STR_SIZE];
+    uint32_t exit_code;
+} __attribute__((__packed__));
+
+/**
  * struct metrics_report_crash_req - arguments of %METRICS_CMD_REPORT_CRASH
  *                                   requests
- * @app_id_len: length of app ID that follows this structure
+ * @app_id: app_id in the form UUID in ascii format
+ *          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
  * @crash_reason: architecture-specific code representing the reason for the
  *                crash
  */
 struct metrics_report_crash_req {
-    uint32_t app_id_len;
+    char app_id[UUID_STR_SIZE];
     uint32_t crash_reason;
 } __attribute__((__packed__));
 
-#define METRICS_MAX_APP_ID_LEN 256
+enum TrustyStorageErrorType {
+  TRUSTY_STORAGE_ERROR_UNKNOWN = 0,
+  TRUSTY_STORAGE_ERROR_SUPERBLOCK_INVALID = 1,
+  TRUSTY_STORAGE_ERROR_BLOCK_MAC_MISMATCH = 2,
+  TRUSTY_STORAGE_ERROR_BLOCK_HEADER_INVALID = 3,
+  TRUSTY_STORAGE_ERROR_RPMB_COUNTER_MISMATCH = 4,
+  TRUSTY_STORAGE_ERROR_RPMB_COUNTER_MISMATCH_RECOVERED = 5,
+  TRUSTY_STORAGE_ERROR_RPMB_COUNTER_READ_FAILURE = 6,
+  TRUSTY_STORAGE_ERROR_RPMB_MAC_MISMATCH = 7,
+  TRUSTY_STORAGE_ERROR_RPMB_ADDR_MISMATCH = 8,
+  TRUSTY_STORAGE_ERROR_RPMB_FAILURE_RESPONSE = 9,
+  TRUSTY_STORAGE_ERROR_RPMB_UNKNOWN = 10,
+  TRUSTY_STORAGE_ERROR_RPMB_SCSI_ERROR = 11,
+  TRUSTY_STORAGE_ERROR_IO_ERROR = 12,
+  TRUSTY_STORAGE_ERROR_PROXY_COMMUNICATION_FAILURE = 13,
+};
 
-#define METRICS_MAX_MSG_SIZE                                                \
-    (sizeof(struct metrics_req) + sizeof(struct metrics_report_crash_req) + \
-     METRICS_MAX_APP_ID_LEN)
+enum TrustyFileSystem {
+  TRUSTY_FS_UNKNOWN = 0,
+  TRUSTY_FS_TP = 1,
+  TRUSTY_FS_TD = 2,
+  TRUSTY_FS_TDP = 3,
+  TRUSTY_FS_TDEA = 4,
+  TRUSTY_FS_NSP = 5,
+};
+
+enum TrustyBlockType {
+  TRUSTY_BLOCKTYPE_UNKNOWN = 0,
+  TRUSTY_BLOCKTYPE_FILES_ROOT = 1,
+  TRUSTY_BLOCKTYPE_FREE_ROOT = 2,
+  TRUSTY_BLOCKTYPE_FILES_INTERNAL = 3,
+  TRUSTY_BLOCKTYPE_FREE_INTERNAL = 4,
+  TRUSTY_BLOCKTYPE_FILE_ENTRY = 5,
+  TRUSTY_BLOCKTYPE_FILE_BLOCK_MAP = 6,
+  TRUSTY_BLOCKTYPE_FILE_DATA = 7,
+  TRUSTY_BLOCKTYPE_CHECKPOINT_ROOT = 8,
+  TRUSTY_BLOCKTYPE_CHECKPOINT_FILES_ROOT = 9,
+  TRUSTY_BLOCKTYPE_CHECKPOINT_FREE_ROOT = 10,
+};
+
+struct metrics_report_storage_error_req {
+    enum TrustyStorageErrorType error;
+    char app_id[UUID_STR_SIZE];
+    char client_app_id[UUID_STR_SIZE];
+    uint32_t write;
+    enum TrustyFileSystem file_system;
+    uint64_t file_path_hash;
+    enum TrustyBlockType block_type;
+    uint64_t repair_counter;
+} __attribute__((__packed__));
+
+struct metrics_msg {
+    struct metrics_req req;
+    union {
+        struct metrics_report_crash_req crash_args;
+        struct metrics_report_exit_req exit_args;
+        struct metrics_report_storage_error_req storage_args;
+    };
+} __attribute__((__packed__));

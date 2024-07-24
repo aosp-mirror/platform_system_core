@@ -174,7 +174,7 @@ Result<void> CoverageRecord::SaveFile(const std::string& filename) {
     }
 
     uintptr_t* begin = (uintptr_t*)((char *)shm_ + sizeof(struct control));
-    bool ret = WriteFully(output_fd, begin, record_len_);
+    bool ret = WriteFully(output_fd, begin, record_len_ - sizeof(struct control));
     if(!ret) {
         fprintf(stderr, "Coverage write to file failed\n");
     }

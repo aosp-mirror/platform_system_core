@@ -79,8 +79,8 @@ static std::string describe_pac_enabled_keys(long value) {
   return describe_end(value, desc);
 }
 
-static const char* abi_string(const Tombstone& tombstone) {
-  switch (tombstone.arch()) {
+static const char* abi_string(const Architecture& arch) {
+  switch (arch) {
     case Architecture::ARM32:
       return "arm";
     case Architecture::ARM64:
@@ -578,13 +578,37 @@ void print_logs(CallbackType callback, const Tombstone& tombstone, int tail) {
   }
 }
 
+static void print_guest_thread(CallbackType callback, const Tombstone& tombstone,
+                               const Thread& guest_thread, pid_t tid, bool should_log) {
+  CBS("--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---");
+  CBS("Guest thread information for tid: %d", tid);
+  print_thread_registers(callback, tombstone, guest_thread, should_log);
+
+  CBS("");
+  CB(true, "%d total frames", guest_thread.current_backtrace().size());
+  CB(true, "backtrace:");
+  print_backtrace(callback, tombstone, guest_thread.current_backtrace(), should_log);
+
+  print_thread_memory_dump(callback, tombstone, guest_thread);
+}
+
 bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) {
   CBL("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
   CBL("Build fingerprint: '%s'", tombstone.build_fingerprint().c_str());
   CBL("Revision: '%s'", tombstone.revision().c_str());
-  CBL("ABI: '%s'", abi_string(tombstone));
+  CBL("ABI: '%s'", abi_string(tombstone.arch()));
+  if (tombstone.guest_arch() != Architecture::NONE) {
+    CBL("Guest architecture: '%s'", abi_string(tombstone.guest_arch()));
+  }
   CBL("Timestamp: %s", tombstone.timestamp().c_str());
   CBL("Process uptime: %ds", tombstone.process_uptime());
+
+  // only print this info if the page size is not 4k or has been in 16k mode
+  if (tombstone.page_size() != 4096) {
+    CBL("Page size: %d bytes", tombstone.page_size());
+  } else if (tombstone.has_been_16kb_mode()) {
+    CBL("Has been in 16kb mode: yes");
+  }
 
   // Process header
   const auto& threads = tombstone.threads();
@@ -600,6 +624,12 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
 
   print_logs(callback, tombstone, 50);
 
+  const auto& guest_threads = tombstone.guest_threads();
+  auto main_guest_thread_it = guest_threads.find(tombstone.tid());
+  if (main_guest_thread_it != threads.end()) {
+    print_guest_thread(callback, tombstone, main_guest_thread_it->second, tombstone.tid(), true);
+  }
+
   // protobuf's map is unordered, so sort the keys first.
   std::set<int> thread_ids;
   for (const auto& [tid, _] : threads) {
@@ -611,6 +641,10 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback) 
   for (const auto& tid : thread_ids) {
     CBS("--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---");
     print_thread(callback, tombstone, threads.find(tid)->second);
+    auto guest_thread_it = guest_threads.find(tid);
+    if (guest_thread_it != guest_threads.end()) {
+      print_guest_thread(callback, tombstone, guest_thread_it->second, tid, false);
+    }
   }
 
   if (tombstone.open_fds().size() > 0) {
