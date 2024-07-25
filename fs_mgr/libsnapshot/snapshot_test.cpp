@@ -2665,6 +2665,7 @@ TEST_F(SnapshotTest, FlagCheck) {
     status.set_o_direct(true);
     status.set_io_uring_enabled(true);
     status.set_userspace_snapshots(true);
+    status.set_cow_op_merge_size(16);
 
     sm->WriteSnapshotUpdateStatus(lock_.get(), status);
     // Ensure a connection to the second-stage daemon, but use the first-stage
@@ -2685,6 +2686,8 @@ TEST_F(SnapshotTest, FlagCheck) {
     ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-io_uring") !=
                 snapuserd_argv.end());
     ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-user_snapshot") !=
+                snapuserd_argv.end());
+    ASSERT_TRUE(std::find(snapuserd_argv.begin(), snapuserd_argv.end(), "-cow_op_merge_size=16") !=
                 snapuserd_argv.end());
 }
 
