@@ -32,12 +32,18 @@ using android::base::unique_fd;
 
 MergeWorker::MergeWorker(const std::string& cow_device, const std::string& misc_name,
                          const std::string& base_path_merge,
-                         std::shared_ptr<SnapshotHandler> snapuserd)
-    : Worker(cow_device, misc_name, base_path_merge, snapuserd) {}
+                         std::shared_ptr<SnapshotHandler> snapuserd, uint32_t cow_op_merge_size)
+    : Worker(cow_device, misc_name, base_path_merge, snapuserd),
+      cow_op_merge_size_(cow_op_merge_size) {}
 
 int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
                               std::vector<const CowOperation*>* replace_zero_vec) {
     int num_ops = *pending_ops;
+    // 0 indicates ro.virtual_ab.cow_op_merge_size was not set in the build
+    if (cow_op_merge_size_ != 0) {
+        num_ops = std::min(cow_op_merge_size_, static_cast<uint32_t>(*pending_ops));
+    }
+
     int nr_consecutive = 0;
     bool checkOrderedOp = (replace_zero_vec == nullptr);
     size_t num_blocks = 1;
