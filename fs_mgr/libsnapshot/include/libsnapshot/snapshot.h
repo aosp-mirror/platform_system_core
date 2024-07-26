@@ -335,6 +335,9 @@ class SnapshotManager final : public ISnapshotManager {
     // after loading selinux policy.
     bool PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv);
 
+    // If snapuserd from first stage init was started from system partition.
+    bool MarkSnapuserdFromSystem();
+
     // Detach dm-user devices from the first stage snapuserd. Load
     // new dm-user tables after loading selinux policy.
     bool DetachFirstStageSnapuserdForSelinux();
@@ -670,6 +673,7 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetForwardMergeIndicatorPath();
     std::string GetOldPartitionMetadataPath();
     std::string GetBootSnapshotsWithoutSlotSwitchPath();
+    std::string GetSnapuserdFromSystemPath();
 
     const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
 
@@ -827,6 +831,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Check if direct reads are enabled for the source image
     bool UpdateUsesODirect(LockedFile* lock);
 
+    // Get value of maximum cow op merge size
+    uint32_t GetUpdateCowOpMergeSize(LockedFile* lock);
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
                               const std::chrono::milliseconds& timeout_ms = {});

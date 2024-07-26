@@ -74,7 +74,7 @@ bool fs_mgr_is_dsu_running() {
     return android::gsi::IsGsiRunning();
 }
 
-std::vector<const std::string> OverlayMountPoints() {
+std::vector<std::string> OverlayMountPoints() {
     // Never fallback to legacy cache mount point if within a DSU system,
     // because running a DSU system implies the device supports dynamic
     // partitions, which means legacy cache mustn't be used.

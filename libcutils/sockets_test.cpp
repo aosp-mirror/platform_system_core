@@ -19,8 +19,6 @@
 // should be the case for loopback communication, but is not guaranteed.
 
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <time.h>
 
 #include <cutils/sockets.h>
