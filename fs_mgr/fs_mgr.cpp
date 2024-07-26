@@ -215,10 +215,6 @@ static void check_fs(const std::string& blk_device, const std::string& fs_type,
          */
         if (!(*fs_stat & FS_STAT_FULL_MOUNT_FAILED)) {  // already tried if full mount failed
             errno = 0;
-            if (fs_type == "ext4") {
-                // This option is only valid with ext4
-                tmpmnt_opts += ",nomblk_io_submit";
-            }
             ret = mount(blk_device.c_str(), target.c_str(), fs_type.c_str(), tmpmnt_flags,
                         tmpmnt_opts.c_str());
             PINFO << __FUNCTION__ << "(): mount(" << blk_device << "," << target << "," << fs_type
