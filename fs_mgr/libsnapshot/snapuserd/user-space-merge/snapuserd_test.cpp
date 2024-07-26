@@ -67,6 +67,7 @@ struct TestParam {
     std::string compression;
     int block_size;
     int num_threads;
+    uint32_t cow_op_merge_size;
 };
 
 class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
@@ -708,9 +709,9 @@ void SnapuserdTest::InitCowDevice() {
     auto opener = factory->CreateOpener(system_device_ctrl_name_);
     handlers_->DisableVerification();
     const TestParam params = GetParam();
-    auto handler = handlers_->AddHandler(system_device_ctrl_name_, cow_system_->path,
-                                         base_dev_->GetPath(), base_dev_->GetPath(), opener, 1,
-                                         params.io_uring, params.o_direct);
+    auto handler = handlers_->AddHandler(
+            system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(), base_dev_->GetPath(),
+            opener, 1, params.io_uring, params.o_direct, params.cow_op_merge_size);
     ASSERT_NE(handler, nullptr);
     ASSERT_NE(handler->snapuserd(), nullptr);
 #ifdef __ANDROID__
@@ -1227,9 +1228,9 @@ void HandlerTest::InitializeDevice() {
     ASSERT_NE(opener_, nullptr);
 
     const TestParam params = GetParam();
-    handler_ = std::make_shared<SnapshotHandler>(system_device_ctrl_name_, cow_system_->path,
-                                                 base_dev_->GetPath(), base_dev_->GetPath(),
-                                                 opener_, 1, false, false, params.o_direct);
+    handler_ = std::make_shared<SnapshotHandler>(
+            system_device_ctrl_name_, cow_system_->path, base_dev_->GetPath(), base_dev_->GetPath(),
+            opener_, 1, false, false, params.o_direct, params.cow_op_merge_size);
     ASSERT_TRUE(handler_->InitCowDevice());
     ASSERT_TRUE(handler_->InitializeWorkers());
 
@@ -1507,6 +1508,7 @@ std::vector<TestParam> GetVariableBlockTestConfigs() {
                     param.num_threads = thread;
                     param.io_uring = io_uring;
                     param.o_direct = false;
+                    param.cow_op_merge_size = 0;
                     testParams.push_back(std::move(param));
                 }
             }
