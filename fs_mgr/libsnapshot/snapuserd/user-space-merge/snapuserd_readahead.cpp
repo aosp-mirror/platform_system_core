@@ -18,6 +18,7 @@
 
 #include <pthread.h>
 
+#include "android-base/properties.h"
 #include "snapuserd_core.h"
 #include "utility.h"
 
@@ -29,11 +30,13 @@ using namespace android::dm;
 using android::base::unique_fd;
 
 ReadAhead::ReadAhead(const std::string& cow_device, const std::string& backing_device,
-                     const std::string& misc_name, std::shared_ptr<SnapshotHandler> snapuserd) {
+                     const std::string& misc_name, std::shared_ptr<SnapshotHandler> snapuserd,
+                     uint32_t cow_op_merge_size) {
     cow_device_ = cow_device;
     backing_store_device_ = backing_device;
     misc_name_ = misc_name;
     snapuserd_ = snapuserd;
+    cow_op_merge_size_ = cow_op_merge_size;
 }
 
 void ReadAhead::CheckOverlap(const CowOperation* cow_op) {
@@ -62,8 +65,11 @@ int ReadAhead::PrepareNextReadAhead(uint64_t* source_offset, int* pending_ops,
                                     std::vector<uint64_t>& blocks,
                                     std::vector<const CowOperation*>& xor_op_vec) {
     int num_ops = *pending_ops;
-    int nr_consecutive = 0;
+    if (cow_op_merge_size_ != 0) {
+        num_ops = std::min(static_cast<int>(cow_op_merge_size_), *pending_ops);
+    }
 
+    int nr_consecutive = 0;
     bool is_ops_present = (!RAIterDone() && num_ops);
 
     if (!is_ops_present) {
