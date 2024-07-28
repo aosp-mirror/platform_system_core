@@ -306,8 +306,8 @@ void Charger::UpdateScreenState(int64_t now) {
 
     if (!batt_anim_.run || now < next_screen_transition_) return;
 
-    // If battery level is not ready, keep checking in the defined time
-    if (health_info_.battery_level == 0 && health_info_.battery_status == BatteryStatus::UNKNOWN) {
+    // If battery status is not ready, keep checking in the defined time
+    if (health_info_.battery_status == BatteryStatus::UNKNOWN) {
         if (wait_batt_level_timestamp_ == 0) {
             // Set max delay time and skip drawing screen
             wait_batt_level_timestamp_ = now + MAX_BATT_LEVEL_WAIT_TIME;
@@ -317,7 +317,7 @@ void Charger::UpdateScreenState(int64_t now) {
             // Do nothing, keep waiting
             return;
         }
-        // If timeout and battery level is still not ready, draw unknown battery
+        // If timeout and battery status is still not ready, draw unknown battery
     }
 
     if (healthd_draw_ == nullptr) return;
