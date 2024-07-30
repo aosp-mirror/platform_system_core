@@ -1,0 +1,71 @@
+// Copyright (C) 2024 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+soong_config_module_type {
+    name: "avb_keys_prebuilt_avb",
+    module_type: "prebuilt_avb",
+    config_namespace: "ANDROID",
+    bool_variables: [
+        "BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT",
+    ],
+    properties: [
+        "ramdisk",
+        "vendor_ramdisk",
+    ],
+}
+
+avb_keys_prebuilt_avb {
+    name: "q-developer-gsi.avbpubkey",
+    src: "q-developer-gsi.avbpubkey",
+    soong_config_variables: {
+        BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT: {
+            ramdisk: false,
+            vendor_ramdisk: true,
+            conditions_default: {
+                ramdisk: true,
+                vendor_ramdisk: false,
+            },
+        },
+    },
+}
+
+avb_keys_prebuilt_avb {
+    name: "r-developer-gsi.avbpubkey",
+    src: "r-developer-gsi.avbpubkey",
+    soong_config_variables: {
+        BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT: {
+            ramdisk: false,
+            vendor_ramdisk: true,
+            conditions_default: {
+                ramdisk: true,
+                vendor_ramdisk: false,
+            },
+        },
+    },
+}
+
+avb_keys_prebuilt_avb {
+    name: "s-developer-gsi.avbpubkey",
+    src: "s-developer-gsi.avbpubkey",
+    soong_config_variables: {
+        BOARD_MOVE_GSI_AVB_KEYS_TO_VENDOR_BOOT: {
+            ramdisk: false,
+            vendor_ramdisk: true,
+            conditions_default: {
+                ramdisk: true,
+                vendor_ramdisk: false,
+            },
+        },
+    },
+}

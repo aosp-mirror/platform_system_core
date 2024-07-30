@@ -247,7 +247,6 @@ on init
     write /dev/blkio/background/blkio.bfq.weight 10
     write /dev/blkio/blkio.group_idle 0
     write /dev/blkio/background/blkio.group_idle 0
-    write /dev/blkio/blkio.prio.class promote-to-rt
     write /dev/blkio/background/blkio.prio.class restrict-to-be
 
     restorecon_recursive /mnt
@@ -1087,6 +1086,9 @@ on post-fs-data
 
     # Update dm-verity state and set partition.*.verified properties.
     verity_update_state
+
+on property:vold.checkpoint_committed=1
+    trigger post-fs-data-checkpointed
 
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.

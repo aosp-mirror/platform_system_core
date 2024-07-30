@@ -16,6 +16,11 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+
+#include <sys/stat.h>
+
 #include <processgroup/format/cgroup_controller.h>
 
 namespace android {
@@ -25,7 +30,8 @@ namespace cgrouprc {
 class CgroupDescriptor {
   public:
     CgroupDescriptor(uint32_t version, const std::string& name, const std::string& path,
-                     mode_t mode, const std::string& uid, const std::string& gid, uint32_t flags);
+                     mode_t mode, const std::string& uid, const std::string& gid, uint32_t flags,
+                     uint32_t max_activation_depth);
 
     const format::CgroupController* controller() const { return &controller_; }
     mode_t mode() const { return mode_; }
