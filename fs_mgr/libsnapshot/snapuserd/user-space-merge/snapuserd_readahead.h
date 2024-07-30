@@ -35,7 +35,8 @@ class SnapshotHandler;
 class ReadAhead {
   public:
     ReadAhead(const std::string& cow_device, const std::string& backing_device,
-              const std::string& misc_name, std::shared_ptr<SnapshotHandler> snapuserd);
+              const std::string& misc_name, std::shared_ptr<SnapshotHandler> snapuserd,
+              uint32_t cow_op_merge_size);
     bool RunThread();
 
   private:
@@ -106,6 +107,7 @@ class ReadAhead {
     // syscalls and fallback to synchronous I/O, we
     // don't want huge queue depth
     int queue_depth_ = 8;
+    uint32_t cow_op_merge_size_;
     std::unique_ptr<struct io_uring> ring_;
 };
 

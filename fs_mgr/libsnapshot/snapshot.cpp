@@ -1709,6 +1709,10 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         if (UpdateUsesODirect(lock.get())) {
             snapuserd_argv->emplace_back("-o_direct");
         }
+        uint cow_op_merge_size = GetUpdateCowOpMergeSize(lock.get());
+        if (cow_op_merge_size != 0) {
+            snapuserd_argv->emplace_back("-cow_op_merge_size=" + std::to_string(cow_op_merge_size));
+        }
     }
 
     size_t num_cows = 0;
@@ -2129,6 +2133,11 @@ bool SnapshotManager::UpdateUsesIouring(LockedFile* lock) {
 bool SnapshotManager::UpdateUsesODirect(LockedFile* lock) {
     SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
     return update_status.o_direct();
+}
+
+uint32_t SnapshotManager::GetUpdateCowOpMergeSize(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.cow_op_merge_size();
 }
 
 bool SnapshotManager::MarkSnapuserdFromSystem() {
@@ -3092,6 +3101,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_io_uring_enabled(old_status.io_uring_enabled());
         status.set_legacy_snapuserd(old_status.legacy_snapuserd());
         status.set_o_direct(old_status.o_direct());
+        status.set_cow_op_merge_size(old_status.cow_op_merge_size());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3474,6 +3484,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             status.set_legacy_snapuserd(true);
             LOG(INFO) << "Setting legacy_snapuserd to true";
         }
+        status.set_cow_op_merge_size(
+                android::base::GetUintProperty<uint32_t>("ro.virtual_ab.cow_op_merge_size", 0));
     } else if (legacy_compression) {
         LOG(INFO) << "Virtual A/B using legacy snapuserd";
     } else {
@@ -3909,6 +3921,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
     ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
     ss << "Using o_direct: " << update_status.o_direct() << std::endl;
+    ss << "Cow op merge size (0 for uncapped): " << update_status.cow_op_merge_size() << std::endl;
     ss << "Using XOR compression: " << GetXorCompressionEnabledProperty() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
