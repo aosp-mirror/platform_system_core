@@ -41,7 +41,7 @@ Extractor::Extractor(const std::string& base_path, const std::string& cow_path)
 bool Extractor::Init() {
     auto opener = factory_.CreateTestOpener(control_name_);
     handler_ = std::make_shared<SnapshotHandler>(control_name_, cow_path_, base_path_, base_path_,
-                                                 opener, 1, false, false, false);
+                                                 opener, 1, false, false, false, 0);
     if (!handler_->InitCowDevice()) {
         return false;
     }
