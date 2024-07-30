@@ -826,9 +826,6 @@ static int __mount(const std::string& source, const std::string& target, const F
     if (read_only) {
         mountflags |= MS_RDONLY;
     }
-    if (!fs_mgr_set_blk_ro(source, read_only)) {
-        PLOG(ERROR) << "Failed to set " << source << " as " << (read_only ? "RO" : "RW");
-    }
     int ret = 0;
     int save_errno = 0;
     int gc_allowance = 0;
@@ -883,6 +880,9 @@ static int __mount(const std::string& source, const std::string& target, const F
     }
     PINFO << __FUNCTION__ << "(source=" << source << source_missing << ",target=" << target
           << target_missing << ",type=" << entry.fs_type << ")=" << ret;
+    if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
+        fs_mgr_set_blk_ro(source);
+    }
     if (ret == 0) {
         android::base::SetProperty("ro.boottime.init.mount." + Basename(target),
                                    std::to_string(t.duration().count()));
