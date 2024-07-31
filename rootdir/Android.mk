@@ -11,7 +11,6 @@ endif
 endif
 #######################################
 # init.environ.rc
-# TODO(b/353429422): move LOCAL_POST_INSTALL_CMD to other rules and remove Android.mk module.
 
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := ETC
@@ -20,8 +19,36 @@ LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
 LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
+EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
-  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_EXTRACT_FILES)
+  EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
+  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES) $(ASAN_EXTRACT_FILES)
+endif
+
+EXPORT_GLOBAL_HWASAN_OPTIONS :=
+ifneq ($(filter hwaddress,$(SANITIZE_TARGET)),)
+  ifneq ($(HWADDRESS_SANITIZER_GLOBAL_OPTIONS),)
+    EXPORT_GLOBAL_HWASAN_OPTIONS := export HWASAN_OPTIONS $(HWADDRESS_SANITIZER_GLOBAL_OPTIONS)
+  endif
+endif
+
+EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE :=
+ifneq ($(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE),)
+  EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE := export SCUDO_ALLOCATION_RING_BUFFER_SIZE $(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE)
+endif
+
+EXPORT_GLOBAL_GCOV_OPTIONS :=
+ifeq ($(NATIVE_COVERAGE),true)
+  EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
+endif
+
+EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
+ifeq ($(CLANG_COVERAGE),true)
+  ifeq ($(CLANG_COVERAGE_CONTINUOUS_MODE),true)
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw
+  else
+    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
+  endif
 endif
 
 # Put it here instead of in init.rc module definition,
@@ -146,10 +173,15 @@ ALL_DEFAULT_INSTALLED_MODULES += $(ALL_ROOTDIR_SYMLINKS)
 include $(BUILD_SYSTEM)/base_rules.mk
 
 $(ALL_ROOTDIR_SYMLINKS): $(LOCAL_BUILT_MODULE)
-
-init.environ.rc-soong := $(call intermediates-dir-for,ETC,init.environ.rc-soong)/init.environ.rc-soong
-$(eval $(call copy-one-file,$(init.environ.rc-soong),$(LOCAL_BUILT_MODULE)))
-init.environ.rc-soong :=
+$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
+	@echo "Generate: $< -> $@"
+	@mkdir -p $(dir $@)
+	$(hide) cp $< $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
+	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
 
 #######################################
 # ramdisk_node_list
