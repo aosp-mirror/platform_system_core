@@ -1087,6 +1087,9 @@ on post-fs-data
     # Update dm-verity state and set partition.*.verified properties.
     verity_update_state
 
+on property:vold.checkpoint_committed=1
+    trigger post-fs-data-checkpointed
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start
