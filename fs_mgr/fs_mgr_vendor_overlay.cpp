@@ -36,7 +36,7 @@ namespace {
 
 // The order of the list means the priority to show the files in the directory.
 // The last one has the highest priority.
-const std::vector<const std::string> kVendorOverlaySourceDirs = {
+const std::vector<std::string> kVendorOverlaySourceDirs = {
         "/system/vendor_overlay/",
         "/product/vendor_overlay/",
 };
