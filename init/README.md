@@ -499,9 +499,11 @@ have been omitted.
    4. `late-fs` - Mount partitions marked as latemounted.
    5. `post-fs-data` - Mount and configure `/data`; set up encryption. `/metadata` is
       reformatted here if it couldn't mount in first-stage init.
-   6. `zygote-start` - Start the zygote.
-   7. `early-boot` - After zygote has started.
-   8. `boot` - After `early-boot` actions have completed.
+   6. `post-fs-data-checkpointed` - Triggered when vold has completed committing a checkpoint
+      after an OTA update. Not triggered if checkpointing is not needed or supported.
+   7. `zygote-start` - Start the zygote.
+   8. `early-boot` - After zygote has started.
+   9. `boot` - After `early-boot` actions have completed.
 
 Commands
 --------
