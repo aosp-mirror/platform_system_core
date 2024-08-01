@@ -16,6 +16,7 @@
 
 __BEGIN_DECLS
 
+void trusty_gatekeeper_set_dev_name(const char* device_name);
 int trusty_gatekeeper_connect();
 int trusty_gatekeeper_call(uint32_t cmd, void *in, uint32_t in_size, uint8_t *out,
                            uint32_t *out_size);
