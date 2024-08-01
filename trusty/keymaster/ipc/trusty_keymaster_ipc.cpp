@@ -36,15 +36,18 @@
 #include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 #include <utils/Timers.h>
 
-#define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
+static const char* trusty_device_name = "/dev/trusty-ipc-dev0";
 
 static int handle_ = -1;
 
 static const int timeout_ms = 10 * 1000;
 static const int max_timeout_ms = 60 * 1000;
 
+void trusty_keymaster_set_dev_name(const char* device_name) {
+    trusty_device_name = device_name;
+}
 int trusty_keymaster_connect() {
-    int rc = tipc_connect(TRUSTY_DEVICE_NAME, KEYMASTER_PORT);
+    int rc = tipc_connect(trusty_device_name, KEYMASTER_PORT);
     if (rc < 0) {
         return rc;
     }
