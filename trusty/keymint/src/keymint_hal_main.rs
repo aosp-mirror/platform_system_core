@@ -14,6 +14,7 @@
 // limitations under the License.
 
 //! This module implements the HAL service for Keymint (Rust) in Trusty.
+use clap::Parser;
 use kmr_hal::{
     extract_rsp, keymint, rpc, secureclock, send_hal_info, sharedsecret, SerializedChannel,
 };
@@ -81,6 +82,13 @@ impl SerializedChannel for TipcChannel {
     }
 }
 
+#[derive(Parser, Debug)]
+struct Args {
+    /// Tipc device path
+    #[arg(short, long, default_value_t = DEFAULT_DEVICE.to_string())]
+    dev: String,
+}
+
 fn main() {
     if let Err(HalServiceError(e)) = inner_main() {
         panic!("HAL service failed: {:?}", e);
@@ -88,6 +96,7 @@ fn main() {
 }
 
 fn inner_main() -> Result<(), HalServiceError> {
+    let args = Args::parse();
     // Initialize Android logging.
     android_logger::init_once(
         android_logger::Config::default()
@@ -106,10 +115,15 @@ fn inner_main() -> Result<(), HalServiceError> {
     binder::ProcessState::start_thread_pool();
 
     // Create connection to the TA
-    let connection = trusty::TipcChannel::connect(DEFAULT_DEVICE, TRUSTY_KEYMINT_RUST_SERVICE_NAME)
-        .map_err(|e| {
-            HalServiceError(format!("Failed to connect to Trusty Keymint TA because of {:?}.", e))
-        })?;
+    let connection =
+        trusty::TipcChannel::connect(args.dev.as_str(), TRUSTY_KEYMINT_RUST_SERVICE_NAME).map_err(
+            |e| {
+                HalServiceError(format!(
+                    "Failed to connect to Trusty Keymint TA at {} because of {:?}.",
+                    args.dev, e
+                ))
+            },
+        )?;
     let tipc_channel = Arc::new(Mutex::new(TipcChannel(connection)));
 
     // Register the Keymint service
