@@ -144,3 +144,7 @@ bool fs_mgr_create_canonical_mount_point(const std::string& mount_point);
 // Unlike fs_mgr_overlayfs, mount overlayfs without upperdir and workdir, so the
 // filesystem cannot be remount read-write.
 bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry);
+
+// File name used to track if encryption was interrupted, leading to a known bad fs state
+std::string fs_mgr_metadata_encryption_in_progress_file_name(
+        const android::fs_mgr::FstabEntry& entry);
