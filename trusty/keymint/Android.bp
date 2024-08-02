@@ -24,11 +24,12 @@ rust_binary {
     init_rc: ["android.hardware.security.keymint-service.rust.trusty.rc"],
     vintf_fragments: ["android.hardware.security.keymint-service.rust.trusty.xml"],
     srcs: [
-        "src/keymint_hal_main.rs"
+        "src/keymint_hal_main.rs",
     ],
     rustlibs: [
         "libandroid_logger",
         "libbinder_rs",
+        "libclap",
         "libkmr_wire",
         "libkmr_hal",
         "libtrusty-rs",
