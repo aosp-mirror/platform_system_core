@@ -26,6 +26,7 @@ const uint32_t TRUSTY_KEYMASTER_RECV_BUF_SIZE = 2 * 4096;
 const uint32_t TRUSTY_KEYMASTER_SEND_BUF_SIZE =
         (4096 - sizeof(struct keymaster_message) - 16 /* tipc header */);
 
+void trusty_keymaster_set_dev_name(const char* device_name);
 int trusty_keymaster_connect(void);
 int trusty_keymaster_call(uint32_t cmd, void* in, uint32_t in_size, uint8_t* out,
                           uint32_t* out_size);
