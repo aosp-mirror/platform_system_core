@@ -28,12 +28,15 @@
 #include "trusty_gatekeeper_ipc.h"
 #include "gatekeeper_ipc.h"
 
-#define TRUSTY_DEVICE_NAME "/dev/trusty-ipc-dev0"
-
+static const char* trusty_device_name = "/dev/trusty-ipc-dev0";
 static int handle_ = 0;
 
+void trusty_gatekeeper_set_dev_name(const char* device_name) {
+    trusty_device_name = device_name;
+}
+
 int trusty_gatekeeper_connect() {
-    int rc = tipc_connect(TRUSTY_DEVICE_NAME, GATEKEEPER_PORT);
+    int rc = tipc_connect(trusty_device_name, GATEKEEPER_PORT);
     if (rc < 0) {
         return rc;
     }
