@@ -19,7 +19,7 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_library_headers {
+cc_library_static {
     name: "libprocessgroup_util",
     vendor_available: true,
     product_available: true,
@@ -36,12 +36,15 @@ cc_library_headers {
     export_include_dirs: [
         "include",
     ],
+    srcs: [
+        "util.cpp",
+    ],
     defaults: ["libprocessgroup_build_flags_cc"],
 }
 
 cc_test {
     name: "libprocessgroup_util_test",
-    header_libs: ["libprocessgroup_util"],
+    static_libs: ["libprocessgroup_util"],
     srcs: ["tests/util.cpp"],
     test_suites: ["general-tests"],
 }
