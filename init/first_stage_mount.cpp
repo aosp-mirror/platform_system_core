@@ -305,6 +305,11 @@ bool FirstStageMountVBootV2::InitDevices() {
             return false;
         }
     }
+
+    if (IsArcvm() && !block_dev_init_.InitHvcDevice("hvc1")) {
+        return false;
+    }
+
     return true;
 }
 
