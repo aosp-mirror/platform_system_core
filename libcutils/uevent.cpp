@@ -92,20 +92,22 @@ out:
     return -1;
 }
 
-int uevent_open_socket(int buf_sz, bool passcred) {
-    struct sockaddr_nl addr;
-    int on = passcred;
+/*
+ * Creates an unbound netlink socket for receiving uevent messages.
+ * @buf_sz: socket receive buffer size.
+ * @passcred: whether or not to enable receiving the SCM_CREDENTIALS control
+ *	message.
+ *
+ * Returns: a socket descriptor upon success or -1 upon failure.
+ */
+int uevent_create_socket(int buf_sz, bool passcred) {
+    int s = socket(PF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
+    if (s < 0) {
+        return -1;
+    }
+
     int buf_sz_readback = 0;
     socklen_t optlen = sizeof(buf_sz_readback);
-    int s;
-
-    memset(&addr, 0, sizeof(addr));
-    addr.nl_family = AF_NETLINK;
-    addr.nl_pid = 0;
-    addr.nl_groups = 0xffffffff;
-
-    s = socket(PF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
-    if (s < 0) return -1;
 
     if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &buf_sz, sizeof(buf_sz)) < 0 ||
           getsockopt(s, SOL_SOCKET, SO_RCVBUF, &buf_sz_readback, &optlen) < 0) {
@@ -123,9 +125,43 @@ int uevent_open_socket(int buf_sz, bool passcred) {
         }
     }
 
+    int on = passcred;
+
     setsockopt(s, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on));
 
-    if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    return s;
+}
+
+/*
+ * Binds a netlink socket. Binding a netlink socket makes the kernel start
+ * sending netlink messages to that netlink socket.
+ *
+ * Returns: 0 upon success; -1 upon error.
+ */
+int uevent_bind(int socket) {
+    struct sockaddr_nl addr = {
+            .nl_family = AF_NETLINK,
+            .nl_pid = 0,
+            .nl_groups = 0xffffffff,
+    };
+    return bind(socket, (struct sockaddr*)&addr, sizeof(addr));
+}
+
+/*
+ * Creates a bound netlink socket for receiving uevent messages.
+ * @buf_sz: socket receive buffer size.
+ * @passcred: whether or not to enable receiving the SCM_CREDENTIALS control
+ *	message.
+ *
+ * Returns: a socket descriptor upon success or -1 upon failure.
+ */
+int uevent_open_socket(int buf_sz, bool passcred) {
+    int s = uevent_create_socket(buf_sz, passcred);
+    if (s < 0) {
+        return -1;
+    }
+
+    if (uevent_bind(s) < 0) {
         close(s);
         return -1;
     }
