@@ -53,9 +53,6 @@ class CgroupControllerWrapper {
 
 class CgroupMap {
   public:
-    // Selinux policy ensures only init process can successfully use this function
-    static bool SetupCgroups();
-
     static CgroupMap& GetInstance();
     CgroupControllerWrapper FindController(const std::string& name) const;
     CgroupControllerWrapper FindControllerByPath(const std::string& path) const;
