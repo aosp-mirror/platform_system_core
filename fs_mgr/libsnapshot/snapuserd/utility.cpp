@@ -14,11 +14,14 @@
 
 #include "utility.h"
 
+#include <android-base/properties.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
 #include <android-base/file.h>
+#include <android-base/logging.h>
+#include <libdm/dm.h>
 #include <processgroup/processgroup.h>
 
 #include <private/android_filesystem_config.h>
@@ -27,6 +30,7 @@ namespace android {
 namespace snapshot {
 
 using android::base::unique_fd;
+using android::dm::DeviceMapper;
 
 bool SetThreadPriority([[maybe_unused]] int priority) {
 #ifdef __ANDROID__
@@ -59,6 +63,39 @@ bool KernelSupportsIoUring() {
     // We will only support kernels from 5.6 onwards as IOSQE_ASYNC flag and
     // IO_URING_OP_READ/WRITE opcodes were introduced only on 5.6 kernel
     return major > 5 || (major == 5 && minor >= 6);
+}
+
+bool GetUserspaceSnapshotsEnabledProperty() {
+    return android::base::GetBoolProperty("ro.virtual_ab.userspace.snapshots.enabled", false);
+}
+
+bool KernelSupportsCompressedSnapshots() {
+    auto& dm = DeviceMapper::Instance();
+    return dm.GetTargetByName("user", nullptr);
+}
+
+bool IsVendorFromAndroid12() {
+    const std::string UNKNOWN = "unknown";
+    const std::string vendor_release =
+            android::base::GetProperty("ro.vendor.build.version.release_or_codename", UNKNOWN);
+
+    if (vendor_release.find("12") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+bool CanUseUserspaceSnapshots() {
+    if (!GetUserspaceSnapshotsEnabledProperty()) {
+        LOG(INFO) << "Virtual A/B - Userspace snapshots disabled";
+        return false;
+    }
+
+    if (!KernelSupportsCompressedSnapshots()) {
+        LOG(ERROR) << "Userspace snapshots requested, but no kernel support is available.";
+        return false;
+    }
+    return true;
 }
 
 }  // namespace snapshot
