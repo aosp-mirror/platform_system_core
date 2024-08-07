@@ -26,7 +26,7 @@
 
 __BEGIN_DECLS
 
-static constexpr const char* CGROUPV2_HIERARCHY_NAME = "cgroup2";
+static constexpr std::string CGROUPV2_HIERARCHY_NAME = "cgroup2";
 
 bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
