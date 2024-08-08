@@ -24,5 +24,10 @@ bool SetThreadPriority(int priority);
 bool SetProfiles(std::initializer_list<std::string_view> profiles);
 bool KernelSupportsIoUring();
 
+bool GetUserspaceSnapshotsEnabledProperty();
+bool KernelSupportsCompressedSnapshots();
+bool CanUseUserspaceSnapshots();
+bool IsVendorFromAndroid12();
+
 }  // namespace snapshot
 }  // namespace android
