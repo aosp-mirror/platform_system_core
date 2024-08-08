@@ -22,8 +22,9 @@
 namespace android {
 namespace snapshot {
 
-void BufferSink::Initialize(size_t size) {
-    buffer_size_ = size + sizeof(struct dm_user_header);
+void BufferSink::Initialize(size_t header_size, size_t size) {
+    header_size_ = header_size;
+    buffer_size_ = size + header_size;
     buffer_offset_ = 0;
     buffer_ = std::make_unique<uint8_t[]>(buffer_size_);
 }
@@ -41,11 +42,11 @@ void* BufferSink::AcquireBuffer(size_t size, size_t to_write) {
 
 void* BufferSink::GetPayloadBuffer(size_t size) {
     char* buffer = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_message* msg = (struct dm_user_message*)(&(buffer[0]));
-    if ((buffer_size_ - buffer_offset_ - sizeof(msg->header)) < size) {
+
+    if ((buffer_size_ - buffer_offset_ - header_size_) < size) {
         return nullptr;
     }
-    return (char*)msg->payload.buf + buffer_offset_;
+    return (char*)(&buffer[0] + header_size_ + buffer_offset_);
 }
 
 void* BufferSink::GetBuffer(size_t requested, size_t* actual) {
@@ -58,19 +59,18 @@ void* BufferSink::GetBuffer(size_t requested, size_t* actual) {
     return buf;
 }
 
-struct dm_user_header* BufferSink::GetHeaderPtr() {
-    if (!(sizeof(struct dm_user_header) <= buffer_size_)) {
+void* BufferSink::GetHeaderPtr() {
+    // If no sufficient space or header not reserved
+    if (!(header_size_ <= buffer_size_) || !header_size_) {
         return nullptr;
     }
     char* buf = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_header* header = (struct dm_user_header*)(&(buf[0]));
-    return header;
+    return (void*)(&(buf[0]));
 }
 
 void* BufferSink::GetPayloadBufPtr() {
     char* buffer = reinterpret_cast<char*>(GetBufPtr());
-    struct dm_user_message* msg = reinterpret_cast<struct dm_user_message*>(&(buffer[0]));
-    return msg->payload.buf;
+    return &buffer[header_size_];
 }
 
 }  // namespace snapshot
