@@ -2840,7 +2840,6 @@ void SnapshotTestEnvironment::SetUp() {
     // that is fixed, don't call GTEST_SKIP here, but instead call GTEST_SKIP in individual test
     // suites.
     RETURN_IF_NON_VIRTUAL_AB_MSG("Virtual A/B is not enabled, skipping global setup.\n");
-    RETURN_IF_VENDOR_ON_ANDROID_S_MSG("Test not enabled for Vendor on Android S.\n");
 
     std::vector<std::string> paths = {
             // clang-format off
