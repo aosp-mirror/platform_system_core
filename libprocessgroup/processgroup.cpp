@@ -94,7 +94,7 @@ static bool CgroupKillAvailable() {
 }
 
 static bool CgroupGetMemcgAppsPath(std::string* path) {
-    CgroupController controller = CgroupMap::GetInstance().FindController("memory");
+    CgroupControllerWrapper controller = CgroupMap::GetInstance().FindController("memory");
 
     if (!controller.HasValue()) {
         return false;
