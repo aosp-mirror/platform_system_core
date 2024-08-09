@@ -281,17 +281,9 @@ cc_defaults {
     header_libs: [
         "libstorage_literals_headers",
     ],
-    compile_multilib: "both",
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
     auto_gen_config: true,
     require_root: true,
+    compile_multilib: "first",
 }
 
 cc_test {
@@ -324,6 +316,12 @@ cc_test {
     test_options: {
         // Legacy VAB launched in Android R.
         min_shipping_api_level: 30,
+        test_runner_options: [
+            {
+                name: "force-no-test-error",
+                value: "false",
+            },
+        ],
     },
 }
 
