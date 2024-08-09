@@ -82,12 +82,6 @@ TEST(property_service, userspace_reboot_not_supported) {
         GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
-    const std::string original_value = GetProperty("init.userspace_reboot.is_supported", "");
-    auto guard = android::base::make_scope_guard([&original_value]() {
-        SetProperty("init.userspace_reboot.is_supported", original_value);
-    });
-
-    ASSERT_TRUE(SetProperty("init.userspace_reboot.is_supported", "false"));
     EXPECT_FALSE(SetProperty("sys.powerctl", "reboot,userspace"));
 }
 
