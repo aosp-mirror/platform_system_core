@@ -102,7 +102,8 @@ INSTANTIATE_TEST_CASE_P(
     "lmkd",
     "ueventd",
     "hwservicemanager",
-    "servicemanager"
+    "servicemanager",
+    "system_suspend"
 // END AOSP ONLY
 
                 // clang-format on
