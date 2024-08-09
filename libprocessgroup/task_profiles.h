@@ -32,9 +32,9 @@
 class IProfileAttribute {
   public:
     virtual ~IProfileAttribute() = 0;
-    virtual void Reset(const CgroupController& controller, const std::string& file_name,
+    virtual void Reset(const CgroupControllerWrapper& controller, const std::string& file_name,
                        const std::string& file_v2_name) = 0;
-    virtual const CgroupController* controller() const = 0;
+    virtual const CgroupControllerWrapper* controller() const = 0;
     virtual const std::string& file_name() const = 0;
     virtual bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const = 0;
     virtual bool GetPathForTask(pid_t tid, std::string* path) const = 0;
@@ -46,14 +46,14 @@ class ProfileAttribute : public IProfileAttribute {
     // Cgroup attributes may have different names in the v1 and v2 hierarchies. If `file_v2_name` is
     // not empty, `file_name` is the name for the v1 hierarchy and `file_v2_name` is the name for
     // the v2 hierarchy. If `file_v2_name` is empty, `file_name` is used for both hierarchies.
-    ProfileAttribute(const CgroupController& controller, const std::string& file_name,
+    ProfileAttribute(const CgroupControllerWrapper& controller, const std::string& file_name,
                      const std::string& file_v2_name)
         : controller_(controller), file_name_(file_name), file_v2_name_(file_v2_name) {}
     ~ProfileAttribute() = default;
 
-    const CgroupController* controller() const override { return &controller_; }
+    const CgroupControllerWrapper* controller() const override { return &controller_; }
     const std::string& file_name() const override;
-    void Reset(const CgroupController& controller, const std::string& file_name,
+    void Reset(const CgroupControllerWrapper& controller, const std::string& file_name,
                const std::string& file_v2_name) override;
 
     bool GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const override;
@@ -61,7 +61,7 @@ class ProfileAttribute : public IProfileAttribute {
     bool GetPathForUID(uid_t uid, std::string* path) const override;
 
   private:
-    CgroupController controller_;
+    CgroupControllerWrapper controller_;
     std::string file_name_;
     std::string file_v2_name_;
 };
@@ -142,7 +142,7 @@ class SetAttributeAction : public ProfileAction {
 // Set cgroup profile element
 class SetCgroupAction : public ProfileAction {
   public:
-    SetCgroupAction(const CgroupController& c, const std::string& p);
+    SetCgroupAction(const CgroupControllerWrapper& c, const std::string& p);
 
     const char* Name() const override { return "SetCgroup"; }
     bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
@@ -152,10 +152,10 @@ class SetCgroupAction : public ProfileAction {
     bool IsValidForProcess(uid_t uid, pid_t pid) const override;
     bool IsValidForTask(pid_t tid) const override;
 
-    const CgroupController* controller() const { return &controller_; }
+    const CgroupControllerWrapper* controller() const { return &controller_; }
 
   private:
-    CgroupController controller_;
+    CgroupControllerWrapper controller_;
     std::string path_;
     android::base::unique_fd fd_[ProfileAction::RCT_COUNT];
     mutable std::mutex fd_mutex_;
