@@ -23,10 +23,10 @@
 #include <android/cgrouprc.h>
 
 // Convenient wrapper of an ACgroupController pointer.
-class CgroupController {
+class CgroupControllerWrapper {
   public:
     // Does not own controller
-    explicit CgroupController(const ACgroupController* controller)
+    explicit CgroupControllerWrapper(const ACgroupController* controller)
         : controller_(controller) {}
 
     uint32_t version() const;
@@ -53,12 +53,9 @@ class CgroupController {
 
 class CgroupMap {
   public:
-    // Selinux policy ensures only init process can successfully use this function
-    static bool SetupCgroups();
-
     static CgroupMap& GetInstance();
-    CgroupController FindController(const std::string& name) const;
-    CgroupController FindControllerByPath(const std::string& path) const;
+    CgroupControllerWrapper FindController(const std::string& name) const;
+    CgroupControllerWrapper FindControllerByPath(const std::string& path) const;
     int ActivateControllers(const std::string& path) const;
 
   private:
