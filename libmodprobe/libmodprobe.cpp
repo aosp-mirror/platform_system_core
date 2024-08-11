@@ -447,7 +447,7 @@ bool Modprobe::IsBlocklisted(const std::string& module_name) {
 // Softdeps are taken care in InsmodWithDeps().
 bool Modprobe::LoadModulesParallel(int num_threads) {
     bool ret = true;
-    std::unordered_map<std::string, std::vector<std::string>> mod_with_deps;
+    std::map<std::string, std::vector<std::string>> mod_with_deps;
 
     // Get dependencies
     for (const auto& module : module_load_) {
