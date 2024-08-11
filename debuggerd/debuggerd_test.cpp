@@ -18,6 +18,7 @@
 #include <dlfcn.h>
 #include <err.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/prctl.h>
 #include <malloc.h>
 #include <pthread.h>
@@ -69,7 +70,6 @@
 #include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "gtest/gtest.h"
-#include "libdebuggerd/utility.h"
 #include "protocol.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
@@ -86,6 +86,7 @@ using ::testing::HasSubstr;
 #define ARCH_SUFFIX ""
 #endif
 
+constexpr size_t kTagGranuleSize = 16;
 constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 
 #define TIMEOUT(seconds, expr)                                     \
