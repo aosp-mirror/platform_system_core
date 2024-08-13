@@ -61,12 +61,18 @@
 //! ```
 
 use crate::sys::tipc_connect;
+use log::{trace, warn};
+use nix::sys::socket;
+use std::convert::From;
 use std::ffi::CString;
 use std::fs::File;
+use std::io;
 use std::io::prelude::*;
 use std::io::{ErrorKind, Result};
 use std::os::unix::prelude::AsRawFd;
 use std::path::Path;
+use std::thread;
+use std::time;
 
 mod sys;
 
@@ -98,7 +104,89 @@ impl TipcChannel {
     /// bytes. This is handled with a panic because the service names are all
     /// hard-coded constants, and so such an error should always be indicative of a
     /// bug in the calling code.
-    pub fn connect(device: impl AsRef<Path>, service: &str) -> Result<Self> {
+    pub fn connect(device: &str, service: &str) -> Result<Self> {
+        if let Some(cid_port_str) = device.strip_prefix("VSOCK:") {
+            Self::connect_vsock(cid_port_str, service)
+        } else {
+            Self::connect_tipc(device, service)
+        }
+    }
+
+    fn connect_vsock(type_cid_port_str: &str, service: &str) -> Result<Self> {
+        let cid_port_str;
+        let socket_type;
+        if let Some(stream_cid_port_str) = type_cid_port_str.strip_prefix("STREAM:") {
+            socket_type = socket::SockType::Stream;
+            cid_port_str = stream_cid_port_str;
+        } else if let Some(seqpacket_cid_port_str) = type_cid_port_str.strip_prefix("SEQPACKET:") {
+            socket_type = socket::SockType::SeqPacket;
+            cid_port_str = seqpacket_cid_port_str;
+        } else {
+            /*
+             * Default to SOCK_STREAM if neither type is specified.
+             *
+             * TODO: use SOCK_SEQPACKET by default instead of SOCK_STREAM when SOCK_SEQPACKET is fully
+             * supported since it matches tipc better. At the moment SOCK_SEQPACKET is not supported by
+             * crosvm. It is also significantly slower since the Linux kernel implementation (as of
+             * v6.7-rc1) sends credit update packets every time it receives a data packet while the
+             * SOCK_STREAM version skips these unless the remaining buffer space is "low".
+             */
+            socket_type = socket::SockType::Stream;
+            cid_port_str = type_cid_port_str;
+        }
+
+        let [cid, port]: [u32; 2] = cid_port_str
+            .split(':')
+            .map(|v| v.parse::<u32>().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e)))
+            .collect::<Result<Vec<u32>>>()?
+            .try_into()
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidInput, format!("Wrong number of args: {e:?}"))
+            })?;
+
+        trace!("got cid, port: {cid}, {port}");
+        let s = socket::socket(
+            socket::AddressFamily::Vsock,
+            socket_type,
+            socket::SockFlag::SOCK_CLOEXEC,
+            None,
+        )?;
+        trace!("got socket");
+        let sa = socket::VsockAddr::new(cid, port);
+        trace!("got sa");
+
+        //let connect_timeout = libc::timeval {tv_sec: 60, tv_usec: 0};
+        // TODO: Set AF_VSOCK/SO_VM_SOCKETS_CONNECT_TIMEOUT sockopt.
+
+        let mut retry = 10;
+        loop {
+            let res = socket::connect(s.as_raw_fd(), &sa);
+            if res.is_ok() || retry <= 0 {
+                res?;
+                break;
+            }
+            warn!("vsock:{cid}:{port} connect failed {res:?}, {retry} retries remaining");
+            retry -= 1;
+            thread::sleep(time::Duration::from_secs(5));
+        }
+        trace!("connected");
+        // TODO: Current vsock tipc bridge in trusty expects a port name in the
+        // first packet. We need to replace this with a protocol that also does DICE
+        // based authentication.
+        // `s` is a valid file descriptor because it came from socket::socket.
+        let mut channel = Self(File::from(s));
+        channel.send(service.as_bytes())?;
+        trace!("sent tipc port name");
+
+        // Work around lack of seq packet support. Read a status byte to prevent
+        // the caller from sending more data until srv_name has been read.
+        let mut status = [0; 1];
+        channel.recv_no_alloc(&mut status)?;
+        trace!("got status byte: {status:?}");
+        Ok(channel)
+    }
+
+    fn connect_tipc(device: impl AsRef<Path>, service: &str) -> Result<Self> {
         let file = File::options().read(true).write(true).open(device)?;
 
         let srv_name = CString::new(service).expect("Service name contained null bytes");
@@ -108,7 +196,7 @@ impl TipcChannel {
             tipc_connect(file.as_raw_fd(), srv_name.as_ptr())?;
         }
 
-        Ok(TipcChannel(file))
+        Ok(Self(file))
     }
 
     /// Sends a message to the connected service.

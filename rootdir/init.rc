@@ -620,7 +620,6 @@ on post-fs
     mkdir /metadata/bootstat 0750 system log
     mkdir /metadata/ota 0750 root system
     mkdir /metadata/ota/snapshots 0750 root system
-    mkdir /metadata/userspacereboot 0770 root system
     mkdir /metadata/watchdog 0770 root system
 
     mkdir /metadata/apex 0700 root system
@@ -647,6 +646,14 @@ on late-fs
     # This does not work correctly if it is called in post-fs.
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
+
+    # Early HALs may use early VM. Mount /mnt/vm before starting such HALs.
+    mkdir /mnt/vm 0755 root root
+    mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw
+    restorecon /mnt/vm
+    chown system system /mnt/vm
+    chmod 0770 /mnt/vm
+    mkdir /mnt/vm/early 0770 system system
 
     # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
@@ -1322,46 +1329,6 @@ on property:ro.debuggable=1
 
 on init && property:ro.debuggable=1
     start console
-
-on userspace-reboot-requested
-  # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.boot_completed ""
-  setprop dev.bootcomplete ""
-  setprop sys.init.updatable_crashing ""
-  setprop sys.init.updatable_crashing_process_name ""
-  setprop sys.user.0.ce_available ""
-  setprop sys.shutdown.requested ""
-  setprop service.bootanim.exit ""
-  setprop service.bootanim.progress ""
-
-on userspace-reboot-fs-remount
-  # Make sure that vold is running.
-  # This is mostly a precaution measure in case vold for some reason wasn't running when
-  # userspace reboot was initiated.
-  start vold
-  exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
-  exec - system system -- /system/bin/vdc checkpoint markBootAttempt
-  # Unmount /data_mirror mounts in the reverse order of corresponding mounts.
-  umount /data_mirror/data_ce/null/0
-  umount /data_mirror/data_ce/null
-  umount /data_mirror/data_de/null
-  umount /data_mirror/storage_area/0
-  umount /data_mirror/storage_area
-  umount /data_mirror/cur_profiles
-  umount /data_mirror/ref_profiles
-  umount /data_mirror
-  remount_userdata
-  start bootanim
-
-on userspace-reboot-resume
-  trigger userspace-reboot-fs-remount
-  trigger post-fs-data
-  trigger zygote-start
-  trigger early-boot
-  trigger boot
-
-on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
-  setprop sys.init.userspace_reboot.in_progress ""
 
 # Multi-Gen LRU Experiment
 on property:persist.device_config.mglru_native.lru_gen_config=none
