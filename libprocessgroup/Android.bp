@@ -79,12 +79,12 @@ cc_library {
     ],
     static_libs: [
         "libjsoncpp",
+        "libprocessgroup_util",
     ],
     // for cutils/android_filesystem_config.h
     header_libs: [
         "libcutils_headers",
         "libprocessgroup_headers",
-        "libprocessgroup_util",
     ],
     export_include_dirs: ["include"],
     export_header_lib_headers: [
