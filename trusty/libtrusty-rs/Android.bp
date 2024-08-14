@@ -21,9 +21,10 @@ rust_library {
     crate_name: "trusty",
     vendor_available: true,
     srcs: [
-        "src/lib.rs"
+        "src/lib.rs",
     ],
     rustlibs: [
+        "liblog_rust",
         "libnix",
         "liblibc",
     ],
@@ -36,5 +37,5 @@ rust_test {
     rustlibs: [
         "libtrusty-rs",
         "liblibc",
-    ]
+    ],
 }
