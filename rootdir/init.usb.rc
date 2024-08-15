@@ -139,7 +139,3 @@ on property:sys.usb.typec.power_role=source
 on property:sys.usb.typec.power_role=sink
     write /sys/class/dual_role_usb/otg_default/power_role ${sys.usb.typec.power_role}
     setprop sys.usb.typec.state ${sys.usb.typec.power_role}
-
-on userspace-reboot-requested
-  setprop sys.usb.config ""
-  setprop sys.usb.state ""
