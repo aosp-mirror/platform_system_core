@@ -34,6 +34,7 @@ cc_library_shared {
     ],
     static_libs: [
         "libcgrouprc_format",
+        "libprocessgroup_util",
     ],
     header_libs: [
         "libprocessgroup_headers",

@@ -20,19 +20,12 @@ namespace android {
 namespace cgrouprc {
 namespace format {
 
-CgroupController::CgroupController() : version_(0), flags_(0) {
-    memset(name_, 0, sizeof(name_));
-    memset(path_, 0, sizeof(path_));
-}
-
 CgroupController::CgroupController(uint32_t version, uint32_t flags, const std::string& name,
-                                   const std::string& path)
-    : CgroupController() {
+                                   const std::string& path, uint32_t max_activation_depth)
+    : version_(version), flags_(flags), max_activation_depth_(max_activation_depth) {
     // strlcpy isn't available on host. Although there is an implementation
     // in licutils, libcutils itself depends on libcgrouprc_format, causing
     // a circular dependency.
-    version_ = version;
-    flags_ = flags;
     strncpy(name_, name.c_str(), sizeof(name_) - 1);
     name_[sizeof(name_) - 1] = '\0';
     strncpy(path_, path.c_str(), sizeof(path_) - 1);
@@ -45,6 +38,10 @@ uint32_t CgroupController::version() const {
 
 uint32_t CgroupController::flags() const {
     return flags_;
+}
+
+uint32_t CgroupController::max_activation_depth() const {
+    return max_activation_depth_;
 }
 
 const char* CgroupController::name() const {

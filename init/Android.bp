@@ -96,6 +96,7 @@ soong_config_module_type {
     config_namespace: "ANDROID",
     bool_variables: [
         "PRODUCT_INSTALL_DEBUG_POLICY_TO_SYSTEM_EXT",
+        "release_write_appcompat_override_system_properties",
     ],
     properties: [
         "cflags",
@@ -159,12 +160,14 @@ libinit_cc_defaults {
                 "-DINSTALL_DEBUG_POLICY_TO_SYSTEM_EXT=1",
             ],
         },
+        release_write_appcompat_override_system_properties: {
+            cflags: ["-DWRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES"],
+        },
     },
     static_libs: [
         "libavb",
         "libavf_cc_flags",
         "libbootloader_message",
-        "libc++fs",
         "libcgrouprc_format",
         "liblmkd_utils",
         "liblz4",
@@ -223,7 +226,6 @@ cc_defaults {
     ],
     whole_static_libs: [
         "libcap",
-        "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
@@ -327,7 +329,7 @@ cc_binary {
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     no_full_install: true,
-    visibility: ["//packages/modules/Virtualization/microdroid"],
+    visibility: ["//packages/modules/Virtualization/build/microdroid"],
 }
 
 soong_config_module_type {
@@ -335,7 +337,7 @@ soong_config_module_type {
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
     bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
-    properties: ["installable"],
+    properties: ["no_full_install"],
 }
 
 // Do not install init_first_stage even with mma if we're system-as-root.
@@ -344,7 +346,7 @@ init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
         BOARD_USES_RECOVERY_AS_BOOT: {
-            installable: false,
+            no_full_install: true,
         },
     },
 
@@ -367,7 +369,6 @@ init_first_stage_cc_defaults {
     ],
 
     static_libs: [
-        "libc++fs",
         "libfs_avb",
         "libavf_cc_flags",
         "libfs_mgr",
@@ -567,6 +568,11 @@ cc_library_static {
     ],
     export_include_dirs: ["test_utils/include"], // for tests
     header_libs: ["bionic_libc_platform_headers"],
+    product_variables: {
+        shipping_api_level: {
+            cflags: ["-DBUILD_SHIPPING_API_LEVEL=%s"],
+        },
+    },
 }
 
 // Host Verifier
@@ -621,6 +627,11 @@ cc_defaults {
             enabled: false,
         },
     },
+    product_variables: {
+        shipping_api_level: {
+            cflags: ["-DBUILD_SHIPPING_API_LEVEL=%s"],
+        },
+    },
 }
 
 cc_binary {
@@ -650,4 +661,12 @@ sh_binary {
     name: "extra_free_kbytes",
     src: "extra_free_kbytes.sh",
     filename_from_src: true,
+}
+
+phony {
+    name: "init_vendor",
+    required: select(soong_config_variable("ANDROID", "BOARD_USES_RECOVERY_AS_BOOT"), {
+        true: [],
+        default: ["init_first_stage"],
+    }),
 }

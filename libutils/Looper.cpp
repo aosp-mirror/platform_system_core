@@ -70,8 +70,7 @@ int SimpleLooperCallback::handleEvent(int fd, int events, void* data) {
 // Maximum number of file descriptors for which to retrieve poll events each iteration.
 static const int EPOLL_MAX_EVENTS = 16;
 
-static pthread_once_t gTLSOnce = PTHREAD_ONCE_INIT;
-static pthread_key_t gTLSKey = 0;
+thread_local static sp<Looper> gThreadLocalLooper;
 
 Looper::Looper(bool allowNonCallbacks)
     : mAllowNonCallbacks(allowNonCallbacks),
@@ -91,38 +90,12 @@ Looper::Looper(bool allowNonCallbacks)
 Looper::~Looper() {
 }
 
-void Looper::initTLSKey() {
-    int error = pthread_key_create(&gTLSKey, threadDestructor);
-    LOG_ALWAYS_FATAL_IF(error != 0, "Could not allocate TLS key: %s", strerror(error));
-}
-
-void Looper::threadDestructor(void *st) {
-    Looper* const self = static_cast<Looper*>(st);
-    if (self != nullptr) {
-        self->decStrong((void*)threadDestructor);
-    }
-}
-
 void Looper::setForThread(const sp<Looper>& looper) {
-    sp<Looper> old = getForThread(); // also has side-effect of initializing TLS
-
-    if (looper != nullptr) {
-        looper->incStrong((void*)threadDestructor);
-    }
-
-    pthread_setspecific(gTLSKey, looper.get());
-
-    if (old != nullptr) {
-        old->decStrong((void*)threadDestructor);
-    }
+    gThreadLocalLooper = looper;
 }
 
 sp<Looper> Looper::getForThread() {
-    int result = pthread_once(& gTLSOnce, initTLSKey);
-    LOG_ALWAYS_FATAL_IF(result != 0, "pthread_once failed");
-
-    Looper* looper = (Looper*)pthread_getspecific(gTLSKey);
-    return sp<Looper>::fromExisting(looper);
+    return gThreadLocalLooper;
 }
 
 sp<Looper> Looper::prepare(int opts) {

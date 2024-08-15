@@ -23,7 +23,8 @@ namespace snapshot {
 class MergeWorker : public Worker {
   public:
     MergeWorker(const std::string& cow_device, const std::string& misc_name,
-                const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd);
+                const std::string& base_path_merge, std::shared_ptr<SnapshotHandler> snapuserd,
+                uint32_t cow_op_merge_size);
     bool Run();
 
   private:
@@ -53,6 +54,7 @@ class MergeWorker : public Worker {
     // syscalls and fallback to synchronous I/O, we
     // don't want huge queue depth
     int queue_depth_ = 8;
+    uint32_t cow_op_merge_size_ = 0;
 };
 
 }  // namespace snapshot

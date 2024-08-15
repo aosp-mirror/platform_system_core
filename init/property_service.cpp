@@ -31,13 +31,11 @@
 #include <sys/mman.h>
 #include <sys/poll.h>
 #include <sys/select.h>
+#include <sys/system_properties.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <wchar.h>
-
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
 
 #include <map>
 #include <memory>
@@ -48,7 +46,6 @@
 #include <thread>
 #include <vector>
 
-#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -102,7 +99,6 @@ using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
 using android::properties::PropertyInfoAreaFile;
 using android::properties::PropertyInfoEntry;
-using android::sysprop::InitProperties::is_userspace_reboot_supported;
 
 namespace android {
 namespace init {
@@ -569,8 +565,8 @@ std::optional<uint32_t> HandlePropertySet(const std::string& name, const std::st
         }
         LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
                   << process_log_string;
-        if (value == "reboot,userspace" && !is_userspace_reboot_supported().value_or(false)) {
-            *error = "Userspace reboot is not supported by this device";
+        if (value == "reboot,userspace") {
+            *error = "Userspace reboot is deprecated.";
             return {PROP_ERROR_INVALID_VALUE};
         }
     }
@@ -1323,12 +1319,14 @@ void CreateSerializedPropertyInfo() {
     }
     selinux_android_restorecon(PROP_TREE_FILE, 0);
 
+#ifdef WRITE_APPCOMPAT_OVERRIDE_SYSTEM_PROPERTIES
     mkdir(APPCOMPAT_OVERRIDE_PROP_FOLDERNAME, S_IRWXU | S_IXGRP | S_IXOTH);
     if (!WriteStringToFile(serialized_contexts, APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0444, 0, 0,
                            false)) {
         PLOG(ERROR) << "Unable to write appcompat override property infos to file";
     }
     selinux_android_restorecon(APPCOMPAT_OVERRIDE_PROP_TREE_FILE, 0);
+#endif
 }
 
 static void ExportKernelBootProps() {

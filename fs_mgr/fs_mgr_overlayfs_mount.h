@@ -54,7 +54,7 @@ const std::string fs_mgr_mount_point(const std::string& mount_point);
 bool OverlayfsSetupAllowed(bool verbose = false);
 bool MountScratch(const std::string& device_path, bool readonly = false);
 bool fs_mgr_overlayfs_umount_scratch();
-std::vector<const std::string> OverlayMountPoints();
+std::vector<std::string> OverlayMountPoints();
 bool fs_mgr_overlayfs_already_mounted(const std::string& mount_point, bool overlay_only = true);
 bool fs_mgr_wants_overlayfs(android::fs_mgr::FstabEntry* entry);
 android::fs_mgr::Fstab fs_mgr_overlayfs_candidate_list(const android::fs_mgr::Fstab& fstab);
