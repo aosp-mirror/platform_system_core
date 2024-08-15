@@ -226,7 +226,6 @@ cc_defaults {
     ],
     whole_static_libs: [
         "libcap",
-        "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
