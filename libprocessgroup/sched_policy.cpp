@@ -58,6 +58,8 @@ int set_cpuset_policy(pid_t tid, SchedPolicy policy) {
             return SetTaskProfiles(tid, {"CPUSET_SP_SYSTEM"}, true) ? 0 : -1;
         case SP_RESTRICTED:
             return SetTaskProfiles(tid, {"CPUSET_SP_RESTRICTED"}, true) ? 0 : -1;
+        case SP_FOREGROUND_WINDOW:
+            return SetTaskProfiles(tid, {"CPUSET_SP_FOREGROUND_WINDOW"}, true) ? 0 : -1;
         default:
             break;
     }
@@ -110,6 +112,9 @@ int set_sched_policy(pid_t tid, SchedPolicy policy) {
         case SP_RT_APP:
             SLOGD("RT  tid %d (%s)", tid, thread_name);
             break;
+        case SP_FOREGROUND_WINDOW:
+            SLOGD("WI  tid %d (%s)", tid, thread_name);
+            break;
         default:
             SLOGD("??? tid %d (%s)", tid, thread_name);
             break;
@@ -129,6 +134,8 @@ int set_sched_policy(pid_t tid, SchedPolicy policy) {
             return SetTaskProfiles(tid, {"SCHED_SP_SYSTEM"}, true) ? 0 : -1;
         case SP_RT_APP:
             return SetTaskProfiles(tid, {"SCHED_SP_RT_APP"}, true) ? 0 : -1;
+        case SP_FOREGROUND_WINDOW:
+            return SetTaskProfiles(tid, {"SCHED_SP_FOREGROUND_WINDOW"}, true) ? 0 : -1;
         default:
             return SetTaskProfiles(tid, {"SCHED_SP_DEFAULT"}, true) ? 0 : -1;
     }
@@ -179,6 +186,8 @@ static int get_sched_policy_from_group(const std::string& group, SchedPolicy* po
         *policy = SP_TOP_APP;
     } else if (group == "restricted") {
         *policy = SP_RESTRICTED;
+    } else if (group == "foreground_window") {
+        *policy = SP_FOREGROUND_WINDOW;
     } else {
         errno = ERANGE;
         return -1;
@@ -235,7 +244,7 @@ const char* get_sched_policy_name(SchedPolicy policy) {
     static const char* const kSchedPolicyNames[] = {
             [SP_BACKGROUND] = "bg", [SP_FOREGROUND] = "fg", [SP_SYSTEM] = "  ",
             [SP_AUDIO_APP] = "aa",  [SP_AUDIO_SYS] = "as",  [SP_TOP_APP] = "ta",
-            [SP_RT_APP] = "rt",     [SP_RESTRICTED] = "rs",
+            [SP_RT_APP] = "rt",     [SP_RESTRICTED] = "rs", [SP_FOREGROUND_WINDOW] = "wi",
     };
     static_assert(arraysize(kSchedPolicyNames) == SP_CNT, "missing name");
     if (policy < SP_BACKGROUND || policy >= SP_CNT) {
@@ -249,14 +258,16 @@ const char* get_cpuset_policy_profile_name(SchedPolicy policy) {
      *  cpuset profile array for:
      *  SP_DEFAULT(-1), SP_BACKGROUND(0), SP_FOREGROUND(1),
      *  SP_SYSTEM(2), SP_AUDIO_APP(3), SP_AUDIO_SYS(4),
-     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7)
+     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7),
+     *  SP_FOREGROUND_WINDOW(8)
      *  index is policy + 1
      *  this need keep in sync with SchedPolicy enum
      */
     static constexpr const char* kCpusetProfiles[SP_CNT + 1] = {
-            "CPUSET_SP_DEFAULT", "CPUSET_SP_BACKGROUND", "CPUSET_SP_FOREGROUND",
-            "CPUSET_SP_SYSTEM",  "CPUSET_SP_FOREGROUND", "CPUSET_SP_FOREGROUND",
-            "CPUSET_SP_TOP_APP", "CPUSET_SP_DEFAULT",    "CPUSET_SP_RESTRICTED"};
+            "CPUSET_SP_DEFAULT",      "CPUSET_SP_BACKGROUND", "CPUSET_SP_FOREGROUND",
+            "CPUSET_SP_SYSTEM",       "CPUSET_SP_FOREGROUND", "CPUSET_SP_FOREGROUND",
+            "CPUSET_SP_TOP_APP",      "CPUSET_SP_DEFAULT",    "CPUSET_SP_RESTRICTED",
+            "CPUSET_SP_FOREGROUND_WINDOW"};
     if (policy < SP_DEFAULT || policy >= SP_CNT) {
         return nullptr;
     }
@@ -268,14 +279,16 @@ const char* get_sched_policy_profile_name(SchedPolicy policy) {
      *  sched profile array for:
      *  SP_DEFAULT(-1), SP_BACKGROUND(0), SP_FOREGROUND(1),
      *  SP_SYSTEM(2), SP_AUDIO_APP(3), SP_AUDIO_SYS(4),
-     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7)
+     *  SP_TOP_APP(5), SP_RT_APP(6), SP_RESTRICTED(7),
+     *  SP_FOREGROUND_WINDOW(8)
      *  index is policy + 1
      *  this need keep in sync with SchedPolicy enum
      */
     static constexpr const char* kSchedProfiles[SP_CNT + 1] = {
-            "SCHED_SP_DEFAULT", "SCHED_SP_BACKGROUND", "SCHED_SP_FOREGROUND",
-            "SCHED_SP_SYSTEM",  "SCHED_SP_FOREGROUND", "SCHED_SP_FOREGROUND",
-            "SCHED_SP_TOP_APP", "SCHED_SP_RT_APP",     "SCHED_SP_DEFAULT"};
+            "SCHED_SP_DEFAULT",      "SCHED_SP_BACKGROUND", "SCHED_SP_FOREGROUND",
+            "SCHED_SP_SYSTEM",       "SCHED_SP_FOREGROUND", "SCHED_SP_FOREGROUND",
+            "SCHED_SP_TOP_APP",      "SCHED_SP_RT_APP",     "SCHED_SP_DEFAULT",
+            "SCHED_SP_FOREGROUND_WINDOW"};
     if (policy < SP_DEFAULT || policy >= SP_CNT) {
         return nullptr;
     }
