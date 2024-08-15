@@ -104,6 +104,24 @@ bool DeviceInfo::IsFirstStageInit() const {
     return first_stage_init_;
 }
 
+bool DeviceInfo::SetActiveBootSlot([[maybe_unused]] unsigned int slot) {
+#ifdef LIBSNAPSHOT_USE_HAL
+    if (!EnsureBootHal()) {
+        return false;
+    }
+
+    CommandResult result = boot_control_->SetActiveBootSlot(slot);
+    if (!result.success) {
+        LOG(ERROR) << "Error setting slot " << slot << " active: " << result.errMsg;
+        return false;
+    }
+    return true;
+#else
+    LOG(ERROR) << "HAL support not enabled.";
+    return false;
+#endif
+}
+
 bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {
 #ifdef LIBSNAPSHOT_USE_HAL
     if (!EnsureBootHal()) {

@@ -87,6 +87,25 @@ static inline std::string PrintName(const testing::TestParamInfo<std::string>& i
     return info.param;
 }
 
-INSTANTIATE_TEST_CASE_P(DeathTest, InitKillServicesTest,
-                        ::testing::Values("lmkd", "ueventd", "hwservicemanager", "servicemanager"),
-                        PrintName);
+INSTANTIATE_TEST_CASE_P(
+        DeathTest, InitKillServicesTest,
+        ::testing::Values(
+                // clang-format off
+
+// TODO: we may want a more automatic way of testing this for services based on some
+// criteria (e.g. not disabled), but for now adding core services one at a time
+
+// BEGIN INTERNAL ONLY MERGE GUARD (add things here if internal only, move down later)
+// END INTERNAL ONLY MERGE GUARD
+
+// BEGIN AOSP ONLY (add things here if adding to AOSP)
+    "lmkd",
+    "ueventd",
+    "hwservicemanager",
+    "servicemanager",
+    "system_suspend"
+// END AOSP ONLY
+
+                // clang-format on
+                ),
+        PrintName);
