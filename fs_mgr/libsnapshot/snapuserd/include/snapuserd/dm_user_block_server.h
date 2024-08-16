@@ -20,6 +20,7 @@
 
 #include <snapuserd/block_server.h>
 #include <snapuserd/snapuserd_buffer.h>
+#include <snapuserd/snapuserd_kernel.h>
 
 namespace android {
 namespace snapshot {
