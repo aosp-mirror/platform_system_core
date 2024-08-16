@@ -104,6 +104,7 @@ class ISnapshotManager {
         virtual const android::fs_mgr::IPartitionOpener& GetPartitionOpener() const = 0;
         virtual bool IsOverlayfsSetup() const = 0;
         virtual bool SetBootControlMergeStatus(MergeStatus status) = 0;
+        virtual bool SetActiveBootSlot(unsigned int slot) = 0;
         virtual bool SetSlotAsUnbootable(unsigned int slot) = 0;
         virtual bool IsRecovery() const = 0;
         virtual bool IsTestDevice() const { return false; }
@@ -675,6 +676,8 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetBootSnapshotsWithoutSlotSwitchPath();
     std::string GetSnapuserdFromSystemPath();
 
+    bool HasForwardMergeIndicator();
+
     const LpMetadata* ReadOldPartitionMetadata(LockedFile* lock);
 
     bool MapAllPartitions(LockedFile* lock, const std::string& super_device, uint32_t slot,
@@ -785,11 +788,8 @@ class SnapshotManager final : public ISnapshotManager {
     bool UpdateForwardMergeIndicator(bool wipe);
 
     // Helper for HandleImminentDataWipe.
-    // Call ProcessUpdateState and handle states with special rules before data wipe. Specifically,
-    // if |allow_forward_merge| and allow-forward-merge indicator exists, initiate merge if
-    // necessary.
-    UpdateState ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
-                                             const std::function<bool()>& callback);
+    // Call ProcessUpdateState and handle states with special rules before data wipe.
+    UpdateState ProcessUpdateStateOnDataWipe(const std::function<bool()>& callback);
 
     // Return device string of a mapped image, or if it is not available, the mapped image path.
     bool GetMappedImageDeviceStringOrPath(const std::string& device_name,
@@ -831,6 +831,8 @@ class SnapshotManager final : public ISnapshotManager {
     // Check if direct reads are enabled for the source image
     bool UpdateUsesODirect(LockedFile* lock);
 
+    // Get value of maximum cow op merge size
+    uint32_t GetUpdateCowOpMergeSize(LockedFile* lock);
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
                               const std::chrono::milliseconds& timeout_ms = {});
@@ -846,7 +848,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::string metadata_dir_;
     std::unique_ptr<IImageManager> images_;
     bool use_first_stage_snapuserd_ = false;
-    bool in_factory_data_reset_ = false;
     std::function<bool(const std::string&)> uevent_regen_callback_;
     std::unique_ptr<SnapuserdClient> snapuserd_client_;
     std::unique_ptr<LpMetadata> old_partition_metadata_;

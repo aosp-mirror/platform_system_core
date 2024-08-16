@@ -138,7 +138,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
 
     auto remaining = end - std::chrono::steady_clock::now();
     if (remaining < decltype(remaining)::zero()) {
-      log_error(output_fd, 0, "timeout expired");
+      log_error(output_fd, 0, "timeout expired (update_timeout)");
       return false;
     }
 
@@ -254,7 +254,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
     if (timeout_ms <= 0) {
       remaining_ms = -1;
     } else if (remaining_ms < 0) {
-      log_error(output_fd, 0, "timeout expired");
+      log_error(output_fd, 0, "timeout expired before poll");
       return false;
     }
 
@@ -271,7 +271,7 @@ bool debuggerd_trigger_dump(pid_t tid, DebuggerdDumpType dump_type, unsigned int
         return false;
       }
     } else if (rc == 0) {
-      log_error(output_fd, 0, "timeout expired");
+      log_error(output_fd, 0, "poll timeout expired");
       return false;
     }
 

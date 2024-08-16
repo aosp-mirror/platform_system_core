@@ -520,6 +520,24 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 
 }  // namespace
 
+// Return the path to the recovery fstab file.  There may be multiple fstab files;
+// the one that is returned will be the first that exists of recovery.fstab.<fstab_suffix>,
+// recovery.fstab.<hardware>, and recovery.fstab.<hardware.platform>.
+std::string GetRecoveryFstabPath() {
+    for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
+        std::string suffix;
+
+        if (!fs_mgr_get_boot_config(prop, &suffix)) continue;
+
+        std::string fstab_path = "/etc/recovery.fstab." + suffix;
+        if (access(fstab_path.c_str(), F_OK) == 0) {
+            return fstab_path;
+        }
+    }
+
+    return "/etc/recovery.fstab";
+}
+
 // Return the path to the fstab file.  There may be multiple fstab files; the
 // one that is returned will be the first that exists of fstab.<fstab_suffix>,
 // fstab.<hardware>, and fstab.<hardware.platform>.  The fstab is searched for
@@ -529,7 +547,7 @@ std::vector<FstabPtrEntryType*> GetEntriesByPred(FstabPtr fstab, const Pred& pre
 // the system/etc directory is supported too and is the preferred location.
 std::string GetFstabPath() {
     if (InRecovery()) {
-        return "/etc/recovery.fstab";
+        return GetRecoveryFstabPath();
     }
     for (const char* prop : {"fstab_suffix", "hardware", "hardware.platform"}) {
         std::string suffix;

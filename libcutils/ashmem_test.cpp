@@ -69,28 +69,6 @@ void FillData(std::vector<uint8_t>& data) {
     }
 }
 
-TEST(AshmemTest, BasicTest) {
-    const size_t size = getpagesize();
-    std::vector<uint8_t> data(size);
-    FillData(data);
-
-    unique_fd fd;
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
-
-    void* region1 = nullptr;
-    ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ | PROT_WRITE, &region1));
-
-    memcpy(region1, data.data(), size);
-    ASSERT_EQ(0, memcmp(region1, data.data(), size));
-
-    EXPECT_EQ(0, munmap(region1, size));
-
-    void *region2;
-    ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ, &region2));
-    ASSERT_EQ(0, memcmp(region2, data.data(), size));
-    EXPECT_EQ(0, munmap(region2, size));
-}
-
 TEST(AshmemTest, ForkTest) {
     const size_t size = getpagesize();
     std::vector<uint8_t> data(size);

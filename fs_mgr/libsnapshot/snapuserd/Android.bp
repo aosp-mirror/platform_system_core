@@ -166,6 +166,7 @@ cc_binary {
     ],
     ramdisk_available: false,
     vendor_ramdisk_available: true,
+    recovery_available: true,
 }
 
 // This target will install to /system/bin/snapuserd_ramdisk
@@ -266,6 +267,10 @@ cc_test {
     test_suites: [
         "vts",
     ],
+    test_options: {
+        // VABC mandatory in Android T per VSR.
+        min_shipping_api_level: 32,
+    },
 }
 
 cc_binary_host {

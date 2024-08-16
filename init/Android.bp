@@ -226,7 +226,6 @@ cc_defaults {
     ],
     whole_static_libs: [
         "libcap",
-        "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
@@ -330,7 +329,7 @@ cc_binary {
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     no_full_install: true,
-    visibility: ["//packages/modules/Virtualization/microdroid"],
+    visibility: ["//packages/modules/Virtualization/build/microdroid"],
 }
 
 soong_config_module_type {
@@ -338,7 +337,7 @@ soong_config_module_type {
     module_type: "cc_defaults",
     config_namespace: "ANDROID",
     bool_variables: ["BOARD_USES_RECOVERY_AS_BOOT"],
-    properties: ["installable"],
+    properties: ["no_full_install"],
 }
 
 // Do not install init_first_stage even with mma if we're system-as-root.
@@ -347,7 +346,7 @@ init_first_stage_cc_defaults {
     name: "init_first_stage_defaults",
     soong_config_variables: {
         BOARD_USES_RECOVERY_AS_BOOT: {
-            installable: false,
+            no_full_install: true,
         },
     },
 
