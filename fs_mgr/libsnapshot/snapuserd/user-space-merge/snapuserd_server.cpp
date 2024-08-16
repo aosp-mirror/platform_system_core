@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/system_properties.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -34,9 +35,6 @@
 #include <snapuserd/dm_user_block_server.h>
 #include <snapuserd/snapuserd_client.h>
 #include "snapuserd_server.h"
-
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
 
 namespace android {
 namespace snapshot {
@@ -347,7 +345,8 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
                                                               const std::string& cow_device_path,
                                                               const std::string& backing_device,
                                                               const std::string& base_path_merge,
-                                                              const bool o_direct) {
+                                                              const bool o_direct,
+                                                              uint32_t cow_op_merge_size) {
     // We will need multiple worker threads only during
     // device boot after OTA. For all other purposes,
     // one thread is sufficient. We don't want to consume
@@ -369,7 +368,8 @@ std::shared_ptr<HandlerThread> UserSnapshotServer::AddHandler(const std::string&
     auto opener = block_server_factory_->CreateOpener(misc_name);
 
     return handlers_->AddHandler(misc_name, cow_device_path, backing_device, base_path_merge,
-                                 opener, num_worker_threads, io_uring_enabled_, o_direct);
+                                 opener, num_worker_threads, io_uring_enabled_, o_direct,
+                                 cow_op_merge_size);
 }
 
 bool UserSnapshotServer::WaitForSocket() {

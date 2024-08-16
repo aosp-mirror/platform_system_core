@@ -226,7 +226,6 @@ cc_defaults {
     ],
     whole_static_libs: [
         "libcap",
-        "libcom.android.sysprop.init",
     ],
     header_libs: ["bootimg_headers"],
     proto: {
@@ -330,7 +329,7 @@ cc_binary {
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     no_full_install: true,
-    visibility: ["//packages/modules/Virtualization/microdroid"],
+    visibility: ["//packages/modules/Virtualization/build/microdroid"],
 }
 
 soong_config_module_type {

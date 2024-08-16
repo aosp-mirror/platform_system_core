@@ -20,7 +20,9 @@
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/unistd.h>
+#include <sys/xattr.h>
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <thread>
@@ -90,6 +92,8 @@ static constexpr char kBootIndicatorPath[] = "/metadata/ota/snapshot-boot";
 static constexpr char kRollbackIndicatorPath[] = "/metadata/ota/rollback-indicator";
 static constexpr char kSnapuserdFromSystem[] = "/metadata/ota/snapuserd-from-system";
 static constexpr auto kUpdateStateCheckInterval = 2s;
+static constexpr char kOtaFileContext[] = "u:object_r:ota_metadata_file:s0";
+
 /*
  * The readahead size is set to 32kb so that
  * there is no significant memory pressure (/proc/pressure/memory) during boot.
@@ -1705,6 +1709,10 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         if (UpdateUsesODirect(lock.get())) {
             snapuserd_argv->emplace_back("-o_direct");
         }
+        uint cow_op_merge_size = GetUpdateCowOpMergeSize(lock.get());
+        if (cow_op_merge_size != 0) {
+            snapuserd_argv->emplace_back("-cow_op_merge_size=" + std::to_string(cow_op_merge_size));
+        }
     }
 
     size_t num_cows = 0;
@@ -2127,6 +2135,11 @@ bool SnapshotManager::UpdateUsesODirect(LockedFile* lock) {
     return update_status.o_direct();
 }
 
+uint32_t SnapshotManager::GetUpdateCowOpMergeSize(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.cow_op_merge_size();
+}
+
 bool SnapshotManager::MarkSnapuserdFromSystem() {
     auto path = GetSnapuserdFromSystemPath();
 
@@ -2134,6 +2147,24 @@ bool SnapshotManager::MarkSnapuserdFromSystem() {
         PLOG(ERROR) << "Unable to write to vendor update path: " << path;
         return false;
     }
+
+    unique_fd fd(open(path.c_str(), O_PATH));
+    if (fd < 0) {
+        PLOG(ERROR) << "Failed to open file: " << path;
+        return false;
+    }
+
+    /*
+     * This function is invoked by first stage init and hence we need to
+     * explicitly set the correct selinux label for this file as update_engine
+     * will try to remove this file later on once the snapshot merge is
+     * complete.
+     */
+    if (fsetxattr(fd.get(), XATTR_NAME_SELINUX, kOtaFileContext, strlen(kOtaFileContext) + 1, 0) <
+        0) {
+        PLOG(ERROR) << "fsetxattr for the path: " << path << " failed";
+    }
+
     return true;
 }
 
@@ -2184,18 +2215,24 @@ bool SnapshotManager::MarkSnapuserdFromSystem() {
  *
  */
 bool SnapshotManager::IsLegacySnapuserdPostReboot() {
-    if (is_legacy_snapuserd_.has_value() && is_legacy_snapuserd_.value() == true) {
-        auto slot = GetCurrentSlot();
-        if (slot == Slot::Target) {
-            // If this marker is present, then daemon can handle userspace
-            // snapshots; also, it indicates that the vendor partition was
-            // updated from Android 12.
-            if (access(GetSnapuserdFromSystemPath().c_str(), F_OK) == 0) {
-                return false;
-            }
+    auto slot = GetCurrentSlot();
+    if (slot == Slot::Target) {
+        /*
+            If this marker is present, the daemon can handle userspace snapshots.
+            During post-OTA reboot, this implies that the vendor partition is
+            Android 13 or higher. If the snapshots were created on an
+            Android 12 vendor, this means the vendor partition has been updated.
+        */
+        if (access(GetSnapuserdFromSystemPath().c_str(), F_OK) == 0) {
+            is_snapshot_userspace_ = true;
+            return false;
+        }
+        // If the marker isn't present and if the vendor is still in Android 12
+        if (is_legacy_snapuserd_.has_value() && is_legacy_snapuserd_.value() == true) {
             return true;
         }
     }
+
     return false;
 }
 
@@ -2865,10 +2902,12 @@ bool SnapshotManager::UnmapAllSnapshots() {
 }
 
 bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
+    LOG(INFO) << "Lock acquired for " << __FUNCTION__;
     std::vector<std::string> snapshots;
     if (!ListSnapshots(lock, &snapshots)) {
         return false;
     }
+    LOG(INFO) << "Found " << snapshots.size() << " partitions with snapshots";
 
     for (const auto& snapshot : snapshots) {
         if (!UnmapPartitionWithSnapshot(lock, snapshot)) {
@@ -2892,6 +2931,7 @@ bool SnapshotManager::UnmapAllSnapshots(LockedFile* lock) {
 
 auto SnapshotManager::OpenFile(const std::string& file,
                                int lock_flags) -> std::unique_ptr<LockedFile> {
+    const auto start = std::chrono::system_clock::now();
     unique_fd fd(open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (fd < 0) {
         PLOG(ERROR) << "Open failed: " << file;
@@ -2904,6 +2944,11 @@ auto SnapshotManager::OpenFile(const std::string& file,
     // For simplicity, we want to CHECK that lock_mode == LOCK_EX, in some
     // calls, so strip extra flags.
     int lock_mode = lock_flags & (LOCK_EX | LOCK_SH);
+    const auto end = std::chrono::system_clock::now();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    if (duration_ms >= 1000ms) {
+        LOG(INFO) << "Taking lock on " << file << " took " << duration_ms.count() << "ms";
+    }
     return std::make_unique<LockedFile>(file, std::move(fd), lock_mode);
 }
 
@@ -3056,6 +3101,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_io_uring_enabled(old_status.io_uring_enabled());
         status.set_legacy_snapuserd(old_status.legacy_snapuserd());
         status.set_o_direct(old_status.o_direct());
+        status.set_cow_op_merge_size(old_status.cow_op_merge_size());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3438,6 +3484,8 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
             status.set_legacy_snapuserd(true);
             LOG(INFO) << "Setting legacy_snapuserd to true";
         }
+        status.set_cow_op_merge_size(
+                android::base::GetUintProperty<uint32_t>("ro.virtual_ab.cow_op_merge_size", 0));
     } else if (legacy_compression) {
         LOG(INFO) << "Virtual A/B using legacy snapuserd";
     } else {
@@ -3873,6 +3921,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
     ss << "Using userspace snapshots: " << update_status.userspace_snapshots() << std::endl;
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
     ss << "Using o_direct: " << update_status.o_direct() << std::endl;
+    ss << "Cow op merge size (0 for uncapped): " << update_status.cow_op_merge_size() << std::endl;
     ss << "Using XOR compression: " << GetXorCompressionEnabledProperty() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
@@ -3956,44 +4005,90 @@ bool SnapshotManager::HandleImminentDataWipe(const std::function<void()>& callba
         // We allow the wipe to continue, because if we can't mount /metadata,
         // it is unlikely the device would have booted anyway. If there is no
         // metadata partition, then the device predates Virtual A/B.
+        LOG(INFO) << "/metadata not found; allowing wipe.";
         return true;
     }
 
-    // Check this early, so we don't accidentally start trying to populate
-    // the state file in recovery. Note we don't call GetUpdateState since
-    // we want errors in acquiring the lock to be propagated, instead of
-    // returning UpdateState::None.
-    auto state_file = GetStateFilePath();
-    if (access(state_file.c_str(), F_OK) != 0 && errno == ENOENT) {
-        return true;
-    }
-
-    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
-    auto super_path = device_->GetSuperDevice(slot_number);
-    if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
-        LOG(ERROR) << "Unable to map partitions to complete merge.";
-        return false;
-    }
-
-    auto process_callback = [&]() -> bool {
-        if (callback) {
-            callback();
+    // This could happen if /metadata mounted but there is no filesystem
+    // structure. Weird, but we have to assume there's no OTA pending, and
+    // thus we let the wipe proceed.
+    UpdateState state;
+    {
+        auto lock = LockExclusive();
+        if (!lock) {
+            LOG(ERROR) << "Unable to determine update state; allowing wipe.";
+            return true;
         }
-        return true;
-    };
 
-    in_factory_data_reset_ = true;
-    UpdateState state =
-            ProcessUpdateStateOnDataWipe(true /* allow_forward_merge */, process_callback);
-    in_factory_data_reset_ = false;
-
-    if (state == UpdateState::MergeFailed) {
-        return false;
+        state = ReadUpdateState(lock.get());
+        LOG(INFO) << "Update state before wipe: " << state << "; slot: " << GetCurrentSlot()
+                  << "; suffix: " << device_->GetSlotSuffix();
     }
 
-    // Nothing should be depending on partitions now, so unmap them all.
-    if (!UnmapAllPartitionsInRecovery()) {
-        LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+    bool try_merge = false;
+    switch (state) {
+        case UpdateState::None:
+        case UpdateState::Initiated:
+            LOG(INFO) << "Wipe is not impacted by update state; allowing wipe.";
+            break;
+        case UpdateState::Unverified:
+            if (GetCurrentSlot() != Slot::Target) {
+                LOG(INFO) << "Wipe is not impacted by rolled back update; allowing wipe";
+                break;
+            }
+            if (!HasForwardMergeIndicator()) {
+                auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+                auto other_slot_number = SlotNumberForSlotSuffix(device_->GetOtherSlotSuffix());
+
+                // We're not allowed to forward merge, so forcefully rollback the
+                // slot switch.
+                LOG(INFO) << "Allowing wipe due to lack of forward merge indicator; reverting to "
+                             "old slot since update will be deleted.";
+                device_->SetSlotAsUnbootable(slot_number);
+                device_->SetActiveBootSlot(other_slot_number);
+                break;
+            }
+
+            // Forward merge indicator means we have to mount snapshots and try to merge.
+            LOG(INFO) << "Forward merge indicator is present.";
+            try_merge = true;
+            break;
+        case UpdateState::Merging:
+        case UpdateState::MergeFailed:
+            try_merge = true;
+            break;
+        case UpdateState::MergeNeedsReboot:
+        case UpdateState::Cancelled:
+            LOG(INFO) << "Unexpected update state in recovery; allowing wipe.";
+            break;
+        default:
+            break;
+    }
+
+    if (try_merge) {
+        auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
+        auto super_path = device_->GetSuperDevice(slot_number);
+        if (!CreateLogicalAndSnapshotPartitions(super_path, 20s)) {
+            LOG(ERROR) << "Unable to map partitions to complete merge.";
+            return false;
+        }
+
+        auto process_callback = [&]() -> bool {
+            if (callback) {
+                callback();
+            }
+            return true;
+        };
+
+        state = ProcessUpdateStateOnDataWipe(process_callback);
+        if (state == UpdateState::MergeFailed) {
+            return false;
+        }
+
+        // Nothing should be depending on partitions now, so unmap them all.
+        if (!UnmapAllPartitionsInRecovery()) {
+            LOG(ERROR) << "Unable to unmap all partitions; fastboot may fail to flash.";
+        }
     }
 
     if (state != UpdateState::None) {
@@ -4039,58 +4134,40 @@ bool SnapshotManager::FinishMergeInRecovery() {
     return true;
 }
 
-UpdateState SnapshotManager::ProcessUpdateStateOnDataWipe(bool allow_forward_merge,
-                                                          const std::function<bool()>& callback) {
-    auto slot_number = SlotNumberForSlotSuffix(device_->GetSlotSuffix());
-    UpdateState state = ProcessUpdateState(callback);
-    LOG(INFO) << "Update state in recovery: " << state;
-    switch (state) {
-        case UpdateState::MergeFailed:
-            LOG(ERROR) << "Unrecoverable merge failure detected.";
-            return state;
-        case UpdateState::Unverified: {
-            // If an OTA was just applied but has not yet started merging:
-            //
-            // - if forward merge is allowed, initiate merge and call
-            // ProcessUpdateState again.
-            //
-            // - if forward merge is not allowed, we
-            // have no choice but to revert slots, because the current slot will
-            // immediately become unbootable. Rather than wait for the device
-            // to reboot N times until a rollback, we proactively disable the
-            // new slot instead.
-            //
-            // Since the rollback is inevitable, we don't treat a HAL failure
-            // as an error here.
-            auto slot = GetCurrentSlot();
-            if (slot == Slot::Target) {
-                if (allow_forward_merge &&
-                    access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0) {
-                    LOG(INFO) << "Forward merge allowed, initiating merge now.";
-
-                    if (!InitiateMerge()) {
-                        LOG(ERROR) << "Failed to initiate merge on data wipe.";
-                        return UpdateState::MergeFailed;
-                    }
-                    return ProcessUpdateStateOnDataWipe(false /* allow_forward_merge */, callback);
+UpdateState SnapshotManager::ProcessUpdateStateOnDataWipe(const std::function<bool()>& callback) {
+    while (true) {
+        UpdateState state = ProcessUpdateState(callback);
+        LOG(INFO) << "Processed updated state in recovery: " << state;
+        switch (state) {
+            case UpdateState::MergeFailed:
+                LOG(ERROR) << "Unrecoverable merge failure detected.";
+                return state;
+            case UpdateState::Unverified: {
+                // Unverified was already handled earlier, in HandleImminentDataWipe,
+                // but it will fall through here if a forward merge is required.
+                //
+                // If InitiateMerge fails, we early return. If it succeeds, then we
+                // are guaranteed that the next call to ProcessUpdateState will not
+                // return Unverified.
+                if (!InitiateMerge()) {
+                    LOG(ERROR) << "Failed to initiate merge on data wipe.";
+                    return UpdateState::MergeFailed;
                 }
-
-                LOG(ERROR) << "Reverting to old slot since update will be deleted.";
-                device_->SetSlotAsUnbootable(slot_number);
-            } else {
-                LOG(INFO) << "Booting from " << slot << " slot, no action is taken.";
+                continue;
             }
-            break;
+            case UpdateState::MergeNeedsReboot:
+                // We shouldn't get here, because nothing is depending on
+                // logical partitions.
+                LOG(ERROR) << "Unexpected merge-needs-reboot state in recovery.";
+                return state;
+            default:
+                return state;
         }
-        case UpdateState::MergeNeedsReboot:
-            // We shouldn't get here, because nothing is depending on
-            // logical partitions.
-            LOG(ERROR) << "Unexpected merge-needs-reboot state in recovery.";
-            break;
-        default:
-            break;
     }
-    return state;
+}
+
+bool SnapshotManager::HasForwardMergeIndicator() {
+    return access(GetForwardMergeIndicatorPath().c_str(), F_OK) == 0;
 }
 
 bool SnapshotManager::EnsureNoOverflowSnapshot(LockedFile* lock) {
