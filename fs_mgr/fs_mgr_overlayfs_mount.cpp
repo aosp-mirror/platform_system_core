@@ -74,7 +74,7 @@ bool fs_mgr_is_dsu_running() {
     return android::gsi::IsGsiRunning();
 }
 
-std::vector<const std::string> OverlayMountPoints() {
+std::vector<std::string> OverlayMountPoints() {
     // Never fallback to legacy cache mount point if within a DSU system,
     // because running a DSU system implies the device supports dynamic
     // partitions, which means legacy cache mustn't be used.
@@ -412,6 +412,8 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
     bool retval = true;
     bool move_dir_shared = true;
     bool parent_shared = true;
+    bool parent_have_parent = false;
+    bool parent_made_private = false;
     bool root_shared = true;
     bool root_made_private = false;
 
@@ -443,6 +445,10 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
         if (entry.mount_point == "/") {
             root_shared = entry.shared_flag;
         }
+        // Ignore "/" as we don't overlay "/" directly.
+        if (entry.mount_point != "/") {
+            parent_have_parent |= android::base::StartsWith(mount_point, entry.mount_point + "/");
+        }
     }
 
     // Precondition is that kMoveMountTempDir is MS_PRIVATE, otherwise don't try to move any
@@ -453,11 +459,13 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
 
     // Need to make the original mountpoint MS_PRIVATE, so that the overlayfs can be MS_MOVE.
     // This could happen if its parent mount is remounted later.
-    if (!fs_mgr_overlayfs_set_shared_mount(mount_point, false)) {
-        // If failed to set "/system" mount type, it might be due to "/system" not being a valid
-        // mountpoint after switch root. Retry with "/" in this case.
-        if (errno == EINVAL && mount_point == "/system") {
-            root_made_private = fs_mgr_overlayfs_set_shared_mount("/", false);
+    if (parent_have_parent) {
+        parent_made_private |= fs_mgr_overlayfs_set_shared_mount(mount_point, false);
+        if (!parent_made_private && errno == EINVAL && mount_point == "/system") {
+            // If failed to set "/system" mount type, it might be due to "/system" not being a valid
+            // mountpoint after switch root. Retry with "/" in this case.
+            parent_made_private |= fs_mgr_overlayfs_set_shared_mount("/", false);
+            root_made_private |= parent_made_private;
         }
     }
 
@@ -496,6 +504,15 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
                 continue;
             }
         }
+        if (!parent_made_private) {
+            parent_made_private |= fs_mgr_overlayfs_set_shared_mount(mount_point, false);
+            if (!parent_made_private && errno == EINVAL && mount_point == "/system") {
+                // If failed to set "/system" mount type, it might be due to "/system" not being a
+                // valid mountpoint after switch root. Retry with "/" in this case.
+                parent_made_private |= fs_mgr_overlayfs_set_shared_mount("/", false);
+                root_made_private |= parent_made_private;
+            }
+        }
 
         if (new_entry.shared_flag) {
             new_entry.shared_flag = fs_mgr_overlayfs_set_shared_mount(new_entry.mount_point, false);
@@ -524,7 +541,7 @@ static bool fs_mgr_overlayfs_mount_one(const FstabEntry& fstab_entry) {
         rmdir(entry.dir.c_str());
     }
     // If the original (overridden) mount was MS_SHARED, then set the overlayfs mount to MS_SHARED.
-    if (parent_shared) {
+    if (parent_shared && parent_made_private) {
         fs_mgr_overlayfs_set_shared_mount(mount_point, true);
     }
     if (root_shared && root_made_private) {

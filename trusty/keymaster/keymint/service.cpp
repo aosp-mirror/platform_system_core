@@ -18,11 +18,13 @@
 #include <android-base/logging.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
+#include <getopt.h>
 
 #include <trusty_keymaster/TrustyKeyMintDevice.h>
 #include <trusty_keymaster/TrustyRemotelyProvisionedComponentDevice.h>
 #include <trusty_keymaster/TrustySecureClock.h>
 #include <trusty_keymaster/TrustySharedSecret.h>
+#include <trusty_keymaster/ipc/trusty_keymaster_ipc.h>
 
 using aidl::android::hardware::security::keymint::trusty::TrustyKeyMintDevice;
 using aidl::android::hardware::security::keymint::trusty::TrustyRemotelyProvisionedComponentDevice;
@@ -39,7 +41,58 @@ std::shared_ptr<T> addService(Args&&... args) {
     return service;
 }
 
-int main() {
+static const char* _sopts = "hD:";
+static const struct option _lopts[] = {
+        {"help", no_argument, 0, 'h'},
+        {"dev", required_argument, 0, 'D'},
+        {0, 0, 0, 0},
+};
+
+static const char* usage =
+        "Usage: %s [options]\n"
+        "\n"
+        "options:\n"
+        "  -h, --help            prints this message and exit\n"
+        "  -D, --dev name        Trusty device name\n"
+        "\n";
+
+static const char* usage_long = "\n";
+
+static void print_usage_and_exit(const char* prog, int code, bool verbose) {
+    fprintf(stderr, usage, prog);
+    if (verbose) {
+        fprintf(stderr, "%s", usage_long);
+    }
+    exit(code);
+}
+
+static void parse_options(int argc, char** argv) {
+    int c;
+    int oidx = 0;
+
+    while (1) {
+        c = getopt_long(argc, argv, _sopts, _lopts, &oidx);
+        if (c == -1) {
+            break; /* done */
+        }
+
+        switch (c) {
+            case 'D':
+                trusty_keymaster_set_dev_name(optarg);
+                break;
+
+            case 'h':
+                print_usage_and_exit(argv[0], EXIT_SUCCESS, true);
+                break;
+
+            default:
+                print_usage_and_exit(argv[0], EXIT_FAILURE, false);
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    parse_options(argc, argv);
     auto trustyKeymaster = std::make_shared<keymaster::TrustyKeymaster>();
     int err = trustyKeymaster->Initialize(keymaster::KmVersion::KEYMINT_3);
     if (err != 0) {

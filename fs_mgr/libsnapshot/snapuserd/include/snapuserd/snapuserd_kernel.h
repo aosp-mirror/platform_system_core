@@ -92,15 +92,5 @@ struct dm_user_header {
     __u64 len;
 } __attribute__((packed));
 
-struct dm_user_payload {
-    __u8 buf[];
-};
-
-// Message comprising both header and payload
-struct dm_user_message {
-    struct dm_user_header header;
-    struct dm_user_payload payload;
-};
-
 }  // namespace snapshot
 }  // namespace android

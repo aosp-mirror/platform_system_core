@@ -16,23 +16,18 @@
 
 #pragma once
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
 
-#include <map>
-#include <memory>
-#include <mutex>
 #include <string>
-#include <vector>
 
 #include <android/cgrouprc.h>
 
 // Convenient wrapper of an ACgroupController pointer.
-class CgroupController {
+class CgroupControllerWrapper {
   public:
     // Does not own controller
-    explicit CgroupController(const ACgroupController* controller)
-        : controller_(controller), state_(UNKNOWN) {}
+    explicit CgroupControllerWrapper(const ACgroupController* controller)
+        : controller_(controller) {}
 
     uint32_t version() const;
     const char* name() const;
@@ -53,17 +48,14 @@ class CgroupController {
     };
 
     const ACgroupController* controller_ = nullptr;
-    ControllerState state_;
+    ControllerState state_ = ControllerState::UNKNOWN;
 };
 
 class CgroupMap {
   public:
-    // Selinux policy ensures only init process can successfully use this function
-    static bool SetupCgroups();
-
     static CgroupMap& GetInstance();
-    CgroupController FindController(const std::string& name) const;
-    CgroupController FindControllerByPath(const std::string& path) const;
+    CgroupControllerWrapper FindController(const std::string& name) const;
+    CgroupControllerWrapper FindControllerByPath(const std::string& path) const;
     int ActivateControllers(const std::string& path) const;
 
   private:

@@ -58,13 +58,8 @@ enum mount_mode {
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 4
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTABLE 0
 #define FS_MGR_MNTALL_FAIL (-1)
-
-struct MountAllResult {
-    // One of the FS_MGR_MNTALL_* returned code defined above.
-    int code;
-    // Whether userdata was mounted as a result of |fs_mgr_mount_all| call.
-    bool userdata_mounted;
-};
+// fs_mgr_mount_all() updates fstab entries that reference device-mapper.
+int fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 
 struct HashtreeInfo {
     // The hash algorithm used to build the merkle tree.
@@ -74,13 +69,6 @@ struct HashtreeInfo {
     // If check_at_most_once is enabled.
     bool check_at_most_once;
 };
-
-// fs_mgr_mount_all() updates fstab entries that reference device-mapper.
-// Returns a |MountAllResult|. The first element is one of the FS_MNG_MNTALL_* return codes
-// defined above, and the second element tells whether this call to fs_mgr_mount_all was responsible
-// for mounting userdata. Later is required for init to correctly enqueue fs-related events as part
-// of userdata remount during userspace reboot.
-MountAllResult fs_mgr_mount_all(android::fs_mgr::Fstab* fstab, int mount_mode);
 
 #define FS_MGR_DOMNT_FAILED (-1)
 #define FS_MGR_DOMNT_BUSY (-2)
@@ -127,11 +115,6 @@ enum FsMgrUmountStatus : int {
 // it destroys verity devices from device mapper after the device is unmounted.
 int fs_mgr_umount_all(android::fs_mgr::Fstab* fstab);
 
-// Finds a entry in |fstab| that was used to mount a /data on |data_block_device|.
-android::fs_mgr::FstabEntry* fs_mgr_get_mounted_entry_for_userdata(
-        android::fs_mgr::Fstab* fstab, const std::string& data_block_device);
-int fs_mgr_remount_userdata_into_checkpointing(android::fs_mgr::Fstab* fstab);
-
 // Finds the dm_bow device on which this block device is stacked, or returns
 // empty string
 std::string fs_mgr_find_bow_device(const std::string& block_device);
@@ -144,3 +127,7 @@ bool fs_mgr_create_canonical_mount_point(const std::string& mount_point);
 // Unlike fs_mgr_overlayfs, mount overlayfs without upperdir and workdir, so the
 // filesystem cannot be remount read-write.
 bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry);
+
+// File name used to track if encryption was interrupted, leading to a known bad fs state
+std::string fs_mgr_metadata_encryption_in_progress_file_name(
+        const android::fs_mgr::FstabEntry& entry);
