@@ -189,3 +189,9 @@ prebuilt_root {
         (default, default): [],
     }),
 }
+
+filegroup {
+    name: "ramdisk_node_list",
+    srcs: ["ramdisk_node_list"],
+    export_to_make_var: "RAMDISK_NODE_LIST",
+}
