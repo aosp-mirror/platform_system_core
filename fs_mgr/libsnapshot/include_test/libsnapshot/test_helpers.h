@@ -92,6 +92,7 @@ class TestDeviceInfo : public SnapshotManager::IDeviceInfo {
     }
     bool IsOverlayfsSetup() const override { return false; }
     bool IsRecovery() const override { return recovery_; }
+    bool SetActiveBootSlot([[maybe_unused]] unsigned int slot) override { return true; }
     bool SetSlotAsUnbootable(unsigned int slot) override {
         unbootable_slots_.insert(slot);
         return true;
