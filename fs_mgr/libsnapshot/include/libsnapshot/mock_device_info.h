@@ -29,6 +29,7 @@ class MockDeviceInfo : public SnapshotManager::IDeviceInfo {
     MOCK_METHOD(const android::fs_mgr::IPartitionOpener&, GetPartitionOpener, (), (const));
     MOCK_METHOD(bool, IsOverlayfsSetup, (), (const, override));
     MOCK_METHOD(bool, SetBootControlMergeStatus, (MergeStatus status), (override));
+    MOCK_METHOD(bool, SetActiveBootSlot, (unsigned int slot), (override));
     MOCK_METHOD(bool, SetSlotAsUnbootable, (unsigned int slot), (override));
     MOCK_METHOD(bool, IsRecovery, (), (const, override));
     MOCK_METHOD(bool, IsFirstStageInit, (), (const, override));

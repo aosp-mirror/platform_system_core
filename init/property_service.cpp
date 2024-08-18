@@ -46,7 +46,6 @@
 #include <thread>
 #include <vector>
 
-#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -100,7 +99,6 @@ using android::properties::BuildTrie;
 using android::properties::ParsePropertyInfoFile;
 using android::properties::PropertyInfoAreaFile;
 using android::properties::PropertyInfoEntry;
-using android::sysprop::InitProperties::is_userspace_reboot_supported;
 
 namespace android {
 namespace init {
@@ -567,8 +565,8 @@ std::optional<uint32_t> HandlePropertySet(const std::string& name, const std::st
         }
         LOG(INFO) << "Received sys.powerctl='" << value << "' from pid: " << cr.pid
                   << process_log_string;
-        if (value == "reboot,userspace" && !is_userspace_reboot_supported().value_or(false)) {
-            *error = "Userspace reboot is not supported by this device";
+        if (value == "reboot,userspace") {
+            *error = "Userspace reboot is deprecated.";
             return {PROP_ERROR_INVALID_VALUE};
         }
     }
