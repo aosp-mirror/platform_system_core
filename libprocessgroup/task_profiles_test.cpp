@@ -102,10 +102,10 @@ class ProfileAttributeMock : public IProfileAttribute {
   public:
     ProfileAttributeMock(const std::string& file_name) : file_name_(file_name) {}
     ~ProfileAttributeMock() override = default;
-    void Reset(const CgroupController&, const std::string&, const std::string&) override {
+    void Reset(const CgroupControllerWrapper&, const std::string&, const std::string&) override {
         CHECK(false);
     }
-    const CgroupController* controller() const override {
+    const CgroupControllerWrapper* controller() const override {
         CHECK(false);
         return {};
     }

@@ -93,8 +93,7 @@ int property_get(const char* key, char* value, const char* default_value) {
 
 #if __has_include(<sys/system_properties.h>)
 
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
+#include <sys/system_properties.h>
 
 struct callback_data {
     void (*callback)(const char* name, const char* value, void* cookie);
