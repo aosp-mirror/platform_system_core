@@ -44,7 +44,7 @@ cc_binary {
         "libtrusty",
         "libkeymaster_messages",
         "libkeymaster3device",
-        "android.hardware.keymaster@3.0"
+        "android.hardware.keymaster@3.0",
     ],
 }
 
@@ -74,7 +74,7 @@ cc_binary {
         "libtrusty",
         "libkeymaster_messages",
         "libkeymaster4",
-        "android.hardware.keymaster@4.0"
+        "android.hardware.keymaster@4.0",
     ],
 
     vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
@@ -202,6 +202,39 @@ cc_binary {
         "libhardware",
         "libkeymaster_messages",
         "libutils",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+}
+
+prebuilt_etc {
+    name: "rkp_uds_cert_test.xml",
+    vendor: true,
+    src: "set_uds_certs/rkp_uds_cert_test.xml",
+}
+
+cc_binary {
+    name: "trusty_rkp_set_uds_cert",
+    vendor: true,
+
+    srcs: [
+        "set_uds_certs/set_uds_certificates.cpp",
+        "ipc/trusty_keymaster_ipc.cpp",
+    ],
+
+    local_include_dirs: ["include"],
+
+    shared_libs: [
+        "libc",
+        "libcrypto",
+        "liblog",
+        "libtrusty",
+        "libhardware",
+        "libkeymaster_messages",
+        "libutils",
+        "libxml2",
     ],
     cflags: [
         "-Wall",
