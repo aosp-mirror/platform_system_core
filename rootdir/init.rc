@@ -145,6 +145,7 @@ on init
 
     # cpuctl hierarchy for devices using utilclamp
     mkdir /dev/cpuctl/foreground
+    mkdir /dev/cpuctl/foreground_window
     mkdir /dev/cpuctl/background
     mkdir /dev/cpuctl/top-app
     mkdir /dev/cpuctl/rt
@@ -153,6 +154,7 @@ on init
     mkdir /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/foreground
+    chown system system /dev/cpuctl/foreground_window
     chown system system /dev/cpuctl/background
     chown system system /dev/cpuctl/top-app
     chown system system /dev/cpuctl/rt
@@ -161,6 +163,7 @@ on init
     chown system system /dev/cpuctl/dex2oat
     chown system system /dev/cpuctl/tasks
     chown system system /dev/cpuctl/foreground/tasks
+    chown system system /dev/cpuctl/foreground_window/tasks
     chown system system /dev/cpuctl/background/tasks
     chown system system /dev/cpuctl/top-app/tasks
     chown system system /dev/cpuctl/rt/tasks
@@ -169,6 +172,7 @@ on init
     chown system system /dev/cpuctl/dex2oat/tasks
     chown system system /dev/cpuctl/cgroup.procs
     chown system system /dev/cpuctl/foreground/cgroup.procs
+    chown system system /dev/cpuctl/foreground_window/cgroup.procs
     chown system system /dev/cpuctl/background/cgroup.procs
     chown system system /dev/cpuctl/top-app/cgroup.procs
     chown system system /dev/cpuctl/rt/cgroup.procs
@@ -177,6 +181,7 @@ on init
     chown system system /dev/cpuctl/dex2oat/cgroup.procs
     chmod 0664 /dev/cpuctl/tasks
     chmod 0664 /dev/cpuctl/foreground/tasks
+    chmod 0664 /dev/cpuctl/foreground_window/tasks
     chmod 0664 /dev/cpuctl/background/tasks
     chmod 0664 /dev/cpuctl/top-app/tasks
     chmod 0664 /dev/cpuctl/rt/tasks
@@ -185,6 +190,7 @@ on init
     chmod 0664 /dev/cpuctl/dex2oat/tasks
     chmod 0664 /dev/cpuctl/cgroup.procs
     chmod 0664 /dev/cpuctl/foreground/cgroup.procs
+    chmod 0664 /dev/cpuctl/foreground_window/cgroup.procs
     chmod 0664 /dev/cpuctl/background/cgroup.procs
     chmod 0664 /dev/cpuctl/top-app/cgroup.procs
     chmod 0664 /dev/cpuctl/rt/cgroup.procs
@@ -354,6 +360,9 @@ on init
     mkdir /dev/cpuset/foreground
     copy /dev/cpuset/cpus /dev/cpuset/foreground/cpus
     copy /dev/cpuset/mems /dev/cpuset/foreground/mems
+    mkdir /dev/cpuset/foreground_window
+    copy /dev/cpuset/cpus /dev/cpuset/foreground_window/cpus
+    copy /dev/cpuset/mems /dev/cpuset/foreground_window/mems
     mkdir /dev/cpuset/background
     copy /dev/cpuset/cpus /dev/cpuset/background/cpus
     copy /dev/cpuset/mems /dev/cpuset/background/mems
@@ -382,6 +391,7 @@ on init
     # change permissions for all cpusets we'll touch at runtime
     chown system system /dev/cpuset
     chown system system /dev/cpuset/foreground
+    chown system system /dev/cpuset/foreground_window
     chown system system /dev/cpuset/background
     chown system system /dev/cpuset/system-background
     chown system system /dev/cpuset/top-app
@@ -389,6 +399,7 @@ on init
     chown system system /dev/cpuset/camera-daemon
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/foreground/tasks
+    chown system system /dev/cpuset/foreground_window/tasks
     chown system system /dev/cpuset/background/tasks
     chown system system /dev/cpuset/system-background/tasks
     chown system system /dev/cpuset/top-app/tasks
@@ -396,6 +407,7 @@ on init
     chown system system /dev/cpuset/camera-daemon/tasks
     chown system system /dev/cpuset/cgroup.procs
     chown system system /dev/cpuset/foreground/cgroup.procs
+    chown system system /dev/cpuset/foreground_window/cgroup.procs
     chown system system /dev/cpuset/background/cgroup.procs
     chown system system /dev/cpuset/system-background/cgroup.procs
     chown system system /dev/cpuset/top-app/cgroup.procs
@@ -406,6 +418,7 @@ on init
     chmod 0775 /dev/cpuset/system-background
 
     chmod 0664 /dev/cpuset/foreground/tasks
+    chmod 0664 /dev/cpuset/foreground_window/tasks
     chmod 0664 /dev/cpuset/background/tasks
     chmod 0664 /dev/cpuset/system-background/tasks
     chmod 0664 /dev/cpuset/top-app/tasks
@@ -413,6 +426,7 @@ on init
     chmod 0664 /dev/cpuset/tasks
     chmod 0664 /dev/cpuset/camera-daemon/tasks
     chmod 0664 /dev/cpuset/foreground/cgroup.procs
+    chmod 0664 /dev/cpuset/foreground_window/cgroup.procs
     chmod 0664 /dev/cpuset/background/cgroup.procs
     chmod 0664 /dev/cpuset/system-background/cgroup.procs
     chmod 0664 /dev/cpuset/top-app/cgroup.procs
@@ -620,7 +634,6 @@ on post-fs
     mkdir /metadata/bootstat 0750 system log
     mkdir /metadata/ota 0750 root system
     mkdir /metadata/ota/snapshots 0750 root system
-    mkdir /metadata/userspacereboot 0770 root system
     mkdir /metadata/watchdog 0770 root system
 
     mkdir /metadata/apex 0700 root system
@@ -648,6 +661,14 @@ on late-fs
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
 
+    # Early HALs may use early VM. Mount /mnt/vm before starting such HALs.
+    mkdir /mnt/vm 0755 root root
+    mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw
+    restorecon /mnt/vm
+    chown system system /mnt/vm
+    chmod 0770 /mnt/vm
+    mkdir /mnt/vm/early 0770 system system
+
     # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
 
@@ -674,8 +695,6 @@ on property:ro.product.cpu.abilist64=* && property:bootreceiver.enable=1
     write /sys/kernel/tracing/instances/bootreceiver/events/error_report/error_report_end/enable 1
 
 on post-fs-data
-
-    mark_post_data
 
     # Start checkpoint before we touch data
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
@@ -1322,46 +1341,6 @@ on property:ro.debuggable=1
 
 on init && property:ro.debuggable=1
     start console
-
-on userspace-reboot-requested
-  # TODO(b/135984674): reset all necessary properties here.
-  setprop sys.boot_completed ""
-  setprop dev.bootcomplete ""
-  setprop sys.init.updatable_crashing ""
-  setprop sys.init.updatable_crashing_process_name ""
-  setprop sys.user.0.ce_available ""
-  setprop sys.shutdown.requested ""
-  setprop service.bootanim.exit ""
-  setprop service.bootanim.progress ""
-
-on userspace-reboot-fs-remount
-  # Make sure that vold is running.
-  # This is mostly a precaution measure in case vold for some reason wasn't running when
-  # userspace reboot was initiated.
-  start vold
-  exec - system system -- /system/bin/vdc checkpoint resetCheckpoint
-  exec - system system -- /system/bin/vdc checkpoint markBootAttempt
-  # Unmount /data_mirror mounts in the reverse order of corresponding mounts.
-  umount /data_mirror/data_ce/null/0
-  umount /data_mirror/data_ce/null
-  umount /data_mirror/data_de/null
-  umount /data_mirror/storage_area/0
-  umount /data_mirror/storage_area
-  umount /data_mirror/cur_profiles
-  umount /data_mirror/ref_profiles
-  umount /data_mirror
-  remount_userdata
-  start bootanim
-
-on userspace-reboot-resume
-  trigger userspace-reboot-fs-remount
-  trigger post-fs-data
-  trigger zygote-start
-  trigger early-boot
-  trigger boot
-
-on property:sys.boot_completed=1 && property:sys.init.userspace_reboot.in_progress=1
-  setprop sys.init.userspace_reboot.in_progress ""
 
 # Multi-Gen LRU Experiment
 on property:persist.device_config.mglru_native.lru_gen_config=none

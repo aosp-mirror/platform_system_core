@@ -27,11 +27,12 @@ using android::base::unique_fd;
 DmUserBlockServer::DmUserBlockServer(const std::string& misc_name, unique_fd&& ctrl_fd,
                                      Delegate* delegate, size_t buffer_size)
     : misc_name_(misc_name), ctrl_fd_(std::move(ctrl_fd)), delegate_(delegate) {
-    buffer_.Initialize(buffer_size);
+    buffer_.Initialize(sizeof(struct dm_user_header), buffer_size);
 }
 
 bool DmUserBlockServer::ProcessRequests() {
-    struct dm_user_header* header = buffer_.GetHeaderPtr();
+    struct dm_user_header* header =
+            reinterpret_cast<struct dm_user_header*>(buffer_.GetHeaderPtr());
     if (!android::base::ReadFully(ctrl_fd_, header, sizeof(*header))) {
         if (errno != ENOTBLK) {
             SNAP_PLOG(ERROR) << "Control-read failed";
@@ -90,7 +91,8 @@ bool DmUserBlockServer::SendBufferedIo() {
 }
 
 void DmUserBlockServer::SendError() {
-    struct dm_user_header* header = buffer_.GetHeaderPtr();
+    struct dm_user_header* header =
+            reinterpret_cast<struct dm_user_header*>(buffer_.GetHeaderPtr());
     header->type = DM_USER_RESP_ERROR;
     // This is an issue with the dm-user interface. There
     // is no way to propagate the I/O error back to dm-user

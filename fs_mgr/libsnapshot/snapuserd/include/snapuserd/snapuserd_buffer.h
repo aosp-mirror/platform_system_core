@@ -27,13 +27,17 @@ namespace snapshot {
 
 class BufferSink final {
   public:
-    void Initialize(size_t size);
+    // Do not reserve any space of header by default
+    void Initialize(size_t size) { return Initialize(0, size); };
+    // This allows to set const header_size_ to be used if caller needs it
+    // for example, while working with dm_user
+    void Initialize(size_t header_size, size_t size);
     void* GetBufPtr() { return buffer_.get(); }
     void Clear() { memset(GetBufPtr(), 0, buffer_size_); }
     void* GetPayloadBuffer(size_t size);
     void* GetBuffer(size_t requested, size_t* actual);
     void UpdateBufferOffset(size_t size) { buffer_offset_ += size; }
-    struct dm_user_header* GetHeaderPtr();
+    void* GetHeaderPtr();
     void ResetBufferOffset() { buffer_offset_ = 0; }
     void* GetPayloadBufPtr();
     loff_t GetPayloadBytesWritten() { return buffer_offset_; }
@@ -56,6 +60,7 @@ class BufferSink final {
     std::unique_ptr<uint8_t[]> buffer_;
     loff_t buffer_offset_;
     size_t buffer_size_;
+    size_t header_size_;
 };
 
 }  // namespace snapshot
