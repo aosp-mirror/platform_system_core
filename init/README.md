@@ -636,7 +636,7 @@ provides the `aidl_lazy_test_1` interface.
   Properties are expanded within _level_.
 
 `mark_post_data`
-> Used to mark the point right after /data is mounted.
+> (This action is deprecated and no-op.)
 
 `mkdir <path> [<mode>] [<owner>] [<group>] [encryption=<action>] [key=<key>]`
 > Create a directory at _path_, optionally with the given mode, owner, and

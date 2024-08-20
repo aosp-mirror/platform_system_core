@@ -46,7 +46,6 @@
 #include <thread>
 #include <vector>
 
-#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
