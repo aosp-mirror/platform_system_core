@@ -36,6 +36,7 @@ class DeviceInfo final : public SnapshotManager::IDeviceInfo {
     std::string GetSuperDevice(uint32_t slot) const override;
     bool IsOverlayfsSetup() const override;
     bool SetBootControlMergeStatus(MergeStatus status) override;
+    bool SetActiveBootSlot(unsigned int slot) override;
     bool SetSlotAsUnbootable(unsigned int slot) override;
     bool IsRecovery() const override;
     std::unique_ptr<IImageManager> OpenImageManager() const override;

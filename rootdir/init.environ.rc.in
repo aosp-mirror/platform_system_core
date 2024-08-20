@@ -10,8 +10,5 @@ on early-init
     export ANDROID_TZDATA_ROOT /apex/com.android.tzdata
     export EXTERNAL_STORAGE /sdcard
     export ASEC_MOUNTPOINT /mnt/asec
-    %EXPORT_GLOBAL_ASAN_OPTIONS%
-    %EXPORT_GLOBAL_GCOV_OPTIONS%
-    %EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%
-    %EXPORT_GLOBAL_HWASAN_OPTIONS%
-    %EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%
+    # Additional environment variables will be appended here during build (see Android.bp).
+    # DO NOT ADD additional sections like 'on <event>' here.
