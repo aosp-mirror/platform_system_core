@@ -696,8 +696,6 @@ on property:ro.product.cpu.abilist64=* && property:bootreceiver.enable=1
 
 on post-fs-data
 
-    mark_post_data
-
     # Start checkpoint before we touch data
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
 
