@@ -297,8 +297,7 @@ int main(int argc, char** argv) {
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&sl, GetSubcontext(), std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&sl, GetSubcontext()));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, GetSubcontext()));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
