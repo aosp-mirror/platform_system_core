@@ -511,6 +511,19 @@ static void print_main_thread(CallbackType callback, const Tombstone& tombstone,
         "order of likelihood.");
   }
 
+  if (tombstone.has_stack_history_buffer()) {
+    for (const StackHistoryBufferEntry& shbe : tombstone.stack_history_buffer().entries()) {
+      std::string stack_record_str = StringPrintf(
+          "stack_record fp:0x%" PRIx64 " tag:0x%" PRIx64 " pc:%s+0x%" PRIx64, shbe.fp(), shbe.tag(),
+          shbe.addr().file_name().c_str(), shbe.addr().rel_pc());
+      if (!shbe.addr().build_id().empty()) {
+        StringAppendF(&stack_record_str, " (BuildId: %s)", shbe.addr().build_id().c_str());
+      }
+
+      CBL("%s", stack_record_str.c_str());
+    }
+  }
+
   for (const Cause& cause : tombstone.causes()) {
     if (tombstone.causes_size() > 1) {
       CBS("");
