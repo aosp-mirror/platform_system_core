@@ -22,6 +22,21 @@ message CrashDetail {
   reserved 3 to 999;
 }
 
+message StackHistoryBufferEntry {
+  BacktraceFrame addr = 1;
+  uint64 fp = 2;
+  uint64 tag = 3;
+
+  reserved 4 to 999;
+}
+
+message StackHistoryBuffer {
+  uint64 tid = 1;
+  repeated StackHistoryBufferEntry entries = 2;
+
+  reserved 3 to 999;
+}
+
 message Tombstone {
   Architecture arch = 1;
   Architecture guest_arch = 24;
@@ -53,7 +68,9 @@ message Tombstone {
   uint32 page_size = 22;
   bool has_been_16kb_mode = 23;
 
-  reserved 26 to 999;
+  StackHistoryBuffer stack_history_buffer = 26;
+
+  reserved 27 to 999;
 }
 
 enum Architecture {
