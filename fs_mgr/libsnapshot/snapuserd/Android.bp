@@ -248,7 +248,7 @@ cc_test {
     defaults: ["snapuserd_test_defaults"],
     host_supported: true,
     test_suites: [
-        "device-tests",
+        "general-tests",
     ],
     test_options: {
         test_runner_options: [
