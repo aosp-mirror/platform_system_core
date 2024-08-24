@@ -83,19 +83,14 @@ class ServiceList {
     auto end() const { return services_.end(); }
     const std::vector<Service*> services_in_shutdown_order() const;
 
-    void MarkPostData();
-    bool IsPostData();
     void DelayService(const Service& service);
     void StartDelayedServices();
-
-    void ResetState() { post_data_ = false; }
 
     auto size() const { return services_.size(); }
 
   private:
     std::vector<std::unique_ptr<Service>> services_;
 
-    bool post_data_ = false;
     std::vector<std::string> delayed_service_names_;
 };
 
