@@ -103,7 +103,7 @@ on init
 
     # Mix device-specific information into the entropy pool
     copy /proc/cmdline /dev/urandom
-    copy /system/etc/prop.default /dev/urandom
+    copy /proc/bootconfig /dev/urandom
 
     symlink /proc/self/fd/0 /dev/stdin
     symlink /proc/self/fd/1 /dev/stdout
