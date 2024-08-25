@@ -144,8 +144,6 @@ class Service {
     std::optional<std::chrono::seconds> timeout_period() const { return timeout_period_; }
     const std::vector<std::string>& args() const { return args_; }
     bool is_updatable() const { return updatable_; }
-    bool is_post_data() const { return post_data_; }
-    bool is_from_apex() const { return base::StartsWith(filename_, "/apex/"); }
     void set_oneshot(bool value) {
         if (value) {
             flags_ |= SVC_ONESHOT;
@@ -243,8 +241,6 @@ class Service {
     std::vector<std::function<void(const siginfo_t& siginfo)>> reap_callbacks_;
 
     std::optional<MountNamespace> mount_namespace_;
-
-    bool post_data_ = false;
 
     std::optional<std::string> on_failure_reboot_target_;
 
