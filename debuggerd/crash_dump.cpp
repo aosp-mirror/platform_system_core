@@ -662,6 +662,15 @@ int main(int argc, char** argv) {
         info.pac_enabled_keys = -1;
       }
 
+#if defined(__aarch64__)
+      struct iovec tls_iov = {
+          &info.tls,
+          sizeof(info.tls),
+      };
+      if (ptrace(PTRACE_GETREGSET, thread, NT_ARM_TLS, reinterpret_cast<void*>(&tls_iov)) == -1) {
+        info.tls = 0;
+      }
+#endif
       if (thread == g_target_thread) {
         // Read the thread's registers along with the rest of the crash info out of the pipe.
         ReadCrashInfo(input_pipe, &siginfo, &info.registers, &process_info, &recoverable_crash);

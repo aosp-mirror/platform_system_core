@@ -103,7 +103,7 @@ on init
 
     # Mix device-specific information into the entropy pool
     copy /proc/cmdline /dev/urandom
-    copy /system/etc/prop.default /dev/urandom
+    copy /proc/bootconfig /dev/urandom
 
     symlink /proc/self/fd/0 /dev/stdin
     symlink /proc/self/fd/1 /dev/stdout
@@ -695,8 +695,6 @@ on property:ro.product.cpu.abilist64=* && property:bootreceiver.enable=1
     write /sys/kernel/tracing/instances/bootreceiver/events/error_report/error_report_end/enable 1
 
 on post-fs-data
-
-    mark_post_data
 
     # Start checkpoint before we touch data
     exec - system system -- /system/bin/vdc checkpoint prepareCheckpoint
