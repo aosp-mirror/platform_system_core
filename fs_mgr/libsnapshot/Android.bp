@@ -294,7 +294,7 @@ cc_test {
     ],
     test_suites: [
         "vts",
-        "device-tests",
+        "general-tests",
     ],
     test_options: {
         min_shipping_api_level: 30,
@@ -311,7 +311,7 @@ cc_test {
         "-DLIBSNAPSHOT_TEST_VAB_LEGACY",
     ],
     test_suites: [
-        "device-tests",
+        "general-tests",
     ],
     test_options: {
         // Legacy VAB launched in Android R.
@@ -420,7 +420,7 @@ cc_test {
         "libstorage_literals_headers",
     ],
     test_suites: [
-        "device-tests",
+        "general-tests",
     ],
     test_options: {
         min_shipping_api_level: 30,
