@@ -18,7 +18,6 @@
 
 #include <vector>
 
-#include "interface_utils.h"
 #include "parser.h"
 #include "service.h"
 #include "service_list.h"
@@ -29,13 +28,8 @@ namespace init {
 
 class ServiceParser : public SectionParser {
   public:
-    ServiceParser(
-            ServiceList* service_list, Subcontext* subcontext,
-            const std::optional<InterfaceInheritanceHierarchyMap>& interface_inheritance_hierarchy)
-        : service_list_(service_list),
-          subcontext_(subcontext),
-          interface_inheritance_hierarchy_(interface_inheritance_hierarchy),
-          service_(nullptr) {}
+    ServiceParser(ServiceList* service_list, Subcontext* subcontext)
+        : service_list_(service_list), subcontext_(subcontext), service_(nullptr) {}
     Result<void> ParseSection(std::vector<std::string>&& args, const std::string& filename,
                               int line) override;
     Result<void> ParseLineSection(std::vector<std::string>&& args, int line) override;
@@ -88,7 +82,6 @@ class ServiceParser : public SectionParser {
 
     ServiceList* service_list_;
     Subcontext* subcontext_;
-    std::optional<InterfaceInheritanceHierarchyMap> interface_inheritance_hierarchy_;
     std::unique_ptr<Service> service_;
     std::string filename_;
 };
