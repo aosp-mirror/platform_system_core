@@ -39,9 +39,6 @@ std::string GetFstabPath();
 void ImportBootconfigFromString(const std::string& bootconfig,
                                 const std::function<void(std::string, std::string)>& fn);
 
-bool GetBootconfigFromString(const std::string& bootconfig, const std::string& key,
-                             std::string* out);
-
 void ImportKernelCmdlineFromString(const std::string& cmdline,
                                    const std::function<void(std::string, std::string)>& fn);
 
