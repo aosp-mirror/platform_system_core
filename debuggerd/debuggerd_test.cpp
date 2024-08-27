@@ -86,7 +86,6 @@ using ::testing::HasSubstr;
 #define ARCH_SUFFIX ""
 #endif
 
-constexpr size_t kTagGranuleSize = 16;
 constexpr char kWaitForDebuggerKey[] = "debug.debuggerd.wait_for_debugger";
 
 #define TIMEOUT(seconds, expr)                                     \
@@ -742,6 +741,8 @@ TEST_F(CrasherTest, mte_multiple_causes) {
 }
 
 #if defined(__aarch64__)
+constexpr size_t kTagGranuleSize = 16;
+
 static uintptr_t CreateTagMapping() {
   // Some of the MTE tag dump tests assert that there is an inaccessible page to the left and right
   // of the PROT_MTE page, so map three pages and set the two guard pages to PROT_NONE.
