@@ -62,8 +62,7 @@ void TestInit(const std::string& init_script_file, const BuiltinFunctionMap& tes
     Action::set_function_map(&test_function_map);
 
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(service_list, nullptr, std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(service_list, nullptr));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(action_manager, nullptr));
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
 
@@ -625,8 +624,7 @@ service A something
 
     ServiceList service_list;
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&service_list, nullptr, std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, nullptr));
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
 
@@ -657,8 +655,7 @@ service A something
 
     ServiceList service_list;
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&service_list, nullptr, std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, nullptr));
 
     ASSERT_TRUE(parser.ParseConfig(tf.path));
     ASSERT_EQ(1u, parser.parse_error_count());
