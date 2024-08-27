@@ -38,7 +38,6 @@ init_common_sources = [
     "capabilities.cpp",
     "epoll.cpp",
     "import_parser.cpp",
-    "interface_utils.cpp",
     "interprocess_fifo.cpp",
     "keychords.cpp",
     "parser.cpp",
@@ -88,6 +87,7 @@ init_device_sources = [
 init_host_sources = [
     "check_builtins.cpp",
     "host_import_parser.cpp",
+    "interface_utils.cpp",
 ]
 
 soong_config_module_type {
@@ -190,7 +190,6 @@ libinit_cc_defaults {
         "libext4_utils",
         "libfs_mgr",
         "libgsi",
-        "libhidl-gen-utils",
         "liblog",
         "liblogwrap",
         "liblp",

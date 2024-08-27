@@ -39,27 +39,6 @@ std::string FQNamesToString(const std::set<FQName>& fqnames) {
     return android::base::Join(fqname_strings, " ");
 }
 
-}  // namespace
-
-Result<void> CheckInterfaceInheritanceHierarchy(const std::set<std::string>& instances,
-                                                const InterfaceInheritanceHierarchyMap& hierarchy) {
-    std::set<FQName> interface_fqnames;
-    for (const std::string& instance : instances) {
-        // There is insufficient build-time information on AIDL interfaces to check them here
-        // TODO(b/139307527): Rework how services store interfaces to avoid excess string parsing
-        if (base::Split(instance, "/")[0] == "aidl") {
-            continue;
-        }
-
-        FqInstance fqinstance;
-        if (!fqinstance.setTo(instance)) {
-            return Error() << "Unable to parse interface instance '" << instance << "'";
-        }
-        interface_fqnames.insert(fqinstance.getFqName());
-    }
-    return CheckInterfaceInheritanceHierarchy(interface_fqnames, hierarchy);
-}
-
 Result<void> CheckInterfaceInheritanceHierarchy(const std::set<FQName>& interfaces,
                                                 const InterfaceInheritanceHierarchyMap& hierarchy) {
     std::ostringstream error_stream;
@@ -88,6 +67,27 @@ Result<void> CheckInterfaceInheritanceHierarchy(const std::set<FQName>& interfac
     }
 
     return {};
+}
+
+}  // namespace
+
+Result<void> CheckInterfaceInheritanceHierarchy(const std::set<std::string>& instances,
+                                                const InterfaceInheritanceHierarchyMap& hierarchy) {
+    std::set<FQName> interface_fqnames;
+    for (const std::string& instance : instances) {
+        // There is insufficient build-time information on AIDL interfaces to check them here
+        // TODO(b/139307527): Rework how services store interfaces to avoid excess string parsing
+        if (base::Split(instance, "/")[0] == "aidl") {
+            continue;
+        }
+
+        FqInstance fqinstance;
+        if (!fqinstance.setTo(instance)) {
+            return Error() << "Unable to parse interface instance '" << instance << "'";
+        }
+        interface_fqnames.insert(fqinstance.getFqName());
+    }
+    return CheckInterfaceInheritanceHierarchy(interface_fqnames, hierarchy);
 }
 
 std::optional<std::set<FQName>> known_interfaces;

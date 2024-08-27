@@ -38,6 +38,7 @@
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android/avf_cc_flags.h>
+#include <fs_mgr.h>
 #include <modprobe/modprobe.h>
 #include <private/android_filesystem_config.h>
 
@@ -303,6 +304,22 @@ static BootMode GetBootMode(const std::string& cmdline, const std::string& bootc
     return BootMode::NORMAL_MODE;
 }
 
+static void MaybeResumeFromHibernation(const std::string& bootconfig) {
+    std::string hibernationResumeDevice;
+    android::fs_mgr::GetBootconfigFromString(bootconfig, "androidboot.hibernation_resume_device",
+                                             &hibernationResumeDevice);
+    if (!hibernationResumeDevice.empty()) {
+        android::base::unique_fd fd(open("/sys/power/resume", O_RDWR | O_CLOEXEC));
+        if (fd >= 0) {
+            if (!android::base::WriteStringToFd(hibernationResumeDevice, fd)) {
+                PLOG(ERROR) << "Failed to write to /sys/power/resume";
+            }
+        } else {
+            PLOG(ERROR) << "Failed to open /sys/power/resume";
+        }
+    }
+}
+
 static std::unique_ptr<FirstStageMount> CreateFirstStageMount(const std::string& cmdline) {
     auto ret = FirstStageMount::Create(cmdline);
     if (ret.ok()) {
@@ -441,6 +458,8 @@ int FirstStageMain(int argc, char** argv) {
         LOG(INFO) << "Loaded " << module_count << " kernel modules took "
                   << module_elapse_time.count() << " ms";
     }
+
+    MaybeResumeFromHibernation(bootconfig);
 
     std::unique_ptr<FirstStageMount> fsm;
 
