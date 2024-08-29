@@ -186,6 +186,7 @@ cc_binary {
         "libprotobuf-cpp-lite",
         "libsparse",
         "libutils",
+        "libselinux",
     ],
 
     static_libs: [

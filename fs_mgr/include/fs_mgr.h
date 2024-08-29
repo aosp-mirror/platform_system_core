@@ -104,6 +104,12 @@ int fs_mgr_setup_verity(android::fs_mgr::FstabEntry* fstab, bool wait_for_verity
 // returned. Otherwise, it will use the current slot.
 std::string fs_mgr_get_super_partition_name(int slot = -1);
 
+// Set readonly for the block device
+bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
+
+// Check if the block device has ext4 filesystem
+bool fs_mgr_is_ext4(const std::string& blk_device);
+
 enum FsMgrUmountStatus : int {
     SUCCESS = 0,
     ERROR_UNKNOWN = 1 << 0,
