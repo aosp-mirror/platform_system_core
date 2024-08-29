@@ -57,7 +57,7 @@ class ReadWorker : public Worker, public IBlockServer::Delegate {
     bool ReadFromSourceDevice(const CowOperation* cow_op, void* buffer);
     bool ReadDataFromBaseDevice(sector_t sector, void* buffer, size_t read_size);
 
-    constexpr bool IsBlockAligned(size_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
+    constexpr bool IsBlockAligned(uint64_t size) { return ((size & (BLOCK_SZ - 1)) == 0); }
     constexpr sector_t ChunkToSector(chunk_t chunk) { return chunk << CHUNK_SHIFT; }
     constexpr chunk_t SectorToChunk(sector_t sector) { return sector >> CHUNK_SHIFT; }
 
