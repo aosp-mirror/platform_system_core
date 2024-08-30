@@ -330,11 +330,11 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             if (gid != s.st_gid) {
                 new_group = gid;
             }
-        if (mode != s.st_mode) {
-            if (chmod(path.c_str(), mode) != 0) {
-                PLOG(ERROR) << "Cannot chmod " << path << " to " << mode;
+            if (mode != s.st_mode) {
+                if (chmod(path.c_str(), mode) != 0) {
+                    PLOG(ERROR) << "Cannot chmod " << path << " to " << mode;
+                }
             }
-        }
         } else {
             PLOG(ERROR) << "Cannot stat " << path;
         }
