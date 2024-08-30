@@ -46,7 +46,6 @@ cc_defaults {
         "libfstab",
         "libsnapuserd_client",
         "libz",
-        "libselinux",
     ],
     header_libs: [
         "libfiemap_headers",
@@ -112,6 +111,9 @@ cc_library_static {
     static_libs: [
         "libfs_mgr_binder",
     ],
+    whole_static_libs: [
+        "libselinux",
+    ],
 }
 
 cc_library {
@@ -130,6 +132,9 @@ cc_library {
     static_libs: [
         "libsnapshot_cow",
     ],
+    whole_static_libs: [
+        "libselinux",
+    ],
 }
 
 cc_library_static {
@@ -144,6 +149,7 @@ cc_library_static {
     ],
     static_libs: [
         "libfs_mgr",
+        "libselinux",
     ],
 }
 
@@ -160,6 +166,9 @@ cc_library_static {
     ],
     static_libs: [
         "libfs_mgr",
+    ],
+    whole_static_libs: [
+        "libselinux",
     ],
 }
 
@@ -243,6 +252,7 @@ cc_library_static {
         "libfs_mgr",
         "libgmock",
         "libgtest",
+        "libselinux",
     ],
 }
 
