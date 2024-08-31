@@ -253,8 +253,7 @@ service $name /system/bin/yes
                                        "$selabel", GetSecurityContext(), false);
     ServiceList& service_list = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&service_list, nullptr, std::nullopt));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, nullptr));
 
     TemporaryFile tf;
     ASSERT_GE(tf.fd, 0);
