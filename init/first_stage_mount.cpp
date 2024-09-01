@@ -371,6 +371,14 @@ bool FirstStageMountVBootV2::CreateLogicalPartitions() {
     }
 
     if (SnapshotManager::IsSnapshotManagerNeeded()) {
+        auto init_devices = [this](const std::string& device) -> bool {
+            if (android::base::StartsWith(device, "/dev/block/dm-")) {
+                return block_dev_init_.InitDmDevice(device);
+            }
+            return block_dev_init_.InitDevices({device});
+        };
+
+        SnapshotManager::MapTempOtaMetadataPartitionIfNeeded(init_devices);
         auto sm = SnapshotManager::NewForFirstStageMount();
         if (!sm) {
             return false;

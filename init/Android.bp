@@ -38,7 +38,6 @@ init_common_sources = [
     "capabilities.cpp",
     "epoll.cpp",
     "import_parser.cpp",
-    "interface_utils.cpp",
     "interprocess_fifo.cpp",
     "keychords.cpp",
     "parser.cpp",
@@ -84,10 +83,6 @@ init_device_sources = [
     "uevent_listener.cpp",
     "ueventd.cpp",
     "ueventd_parser.cpp",
-]
-init_host_sources = [
-    "check_builtins.cpp",
-    "host_import_parser.cpp",
 ]
 
 soong_config_module_type {
@@ -190,7 +185,6 @@ libinit_cc_defaults {
         "libext4_utils",
         "libfs_mgr",
         "libgsi",
-        "libhidl-gen-utils",
         "liblog",
         "liblogwrap",
         "liblp",
@@ -607,8 +601,6 @@ cc_defaults {
     whole_static_libs: ["libcap"],
     shared_libs: [
         "libcutils",
-        "libhidl-gen-utils",
-        "libhidlmetadata",
         "liblog",
         "libprocessgroup",
         "libprotobuf-cpp-lite",
@@ -616,9 +608,6 @@ cc_defaults {
     proto: {
         type: "lite",
     },
-    generated_headers: [
-        "generated_stub_builtin_function_map",
-    ],
     target: {
         android: {
             enabled: false,
@@ -637,17 +626,43 @@ cc_defaults {
 cc_binary {
     name: "host_init_verifier",
     defaults: ["init_host_defaults"],
-    srcs: ["host_init_verifier.cpp"] + init_common_sources + init_host_sources,
+    srcs: [
+        "check_builtins.cpp",
+        "host_import_parser.cpp",
+        "host_init_verifier.cpp",
+        "interface_utils.cpp",
+    ] + init_common_sources,
     generated_headers: [
         "generated_android_ids",
+        "generated_stub_builtin_function_map",
     ],
+    shared_libs: [
+        "libhidl-gen-utils",
+        "libhidlmetadata",
+    ],
+}
+
+genrule {
+    name: "noop_builtin_function_map",
+    tool_files: ["host_builtin_map.py"],
+    out: ["noop_builtin_function_map.h"],
+    srcs: [
+        "builtins.cpp",
+        "noop_builtins.cpp",
+    ],
+    cmd: "$(location host_builtin_map.py) --builtins $(location builtins.cpp) --check_builtins $(location noop_builtins.cpp) > $(out)",
 }
 
 cc_library_host_static {
     name: "libinit_host",
     defaults: ["init_host_defaults"],
-    srcs: init_common_sources + init_host_sources,
+    srcs: [
+        "noop_builtins.cpp",
+    ] + init_common_sources,
     export_include_dirs: ["."],
+    generated_headers: [
+        "noop_builtin_function_map",
+    ],
     proto: {
         export_proto_headers: true,
     },
