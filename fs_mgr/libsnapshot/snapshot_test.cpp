@@ -47,6 +47,7 @@
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/test_helpers.h>
 #include "partition_cow_creator.h"
+#include "scratch_super.h"
 #include "utility.h"
 
 // Mock classes are not used. Header included to ensure mocked class definition aligns with the
@@ -1341,6 +1342,15 @@ class SnapshotUpdateTest : public SnapshotTest {
     PartitionUpdate* prd_ = nullptr;
     DynamicPartitionGroup* group_ = nullptr;
 };
+
+TEST_F(SnapshotUpdateTest, SuperOtaMetadataTest) {
+    auto info = new TestDeviceInfo(fake_super);
+    ASSERT_TRUE(CreateScratchOtaMetadataOnSuper(info));
+    std::string scratch_device = GetScratchOtaMetadataPartition();
+    ASSERT_NE(scratch_device, "");
+    ASSERT_NE(MapScratchOtaMetadataPartition(scratch_device), "");
+    ASSERT_TRUE(CleanupScratchOtaMetadataIfPresent(info));
+}
 
 // Test full update flow executed by update_engine. Some partitions uses super empty space,
 // some uses images, and some uses both.
