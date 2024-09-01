@@ -1251,6 +1251,16 @@ void PropertyLoadBootDefaults() {
     update_sys_usb_config();
 }
 
+void PropertyLoadDerivedDefaults() {
+    const char* PAGE_PROP = "ro.boot.hardware.cpu.pagesize";
+    if (GetProperty(PAGE_PROP, "").empty()) {
+        std::string error;
+        if (PropertySetNoSocket(PAGE_PROP, std::to_string(getpagesize()), &error) != PROP_SUCCESS) {
+            LOG(ERROR) << "Could not set '" << PAGE_PROP << "' because: " << error;
+        }
+    }
+}
+
 bool LoadPropertyInfoFromFile(const std::string& filename,
                               std::vector<PropertyInfoEntry>* property_infos) {
     auto file_contents = std::string();
@@ -1421,6 +1431,7 @@ void PropertyInit() {
     ExportKernelBootProps();
 
     PropertyLoadBootDefaults();
+    PropertyLoadDerivedDefaults();
 }
 
 static void HandleInitSocket() {
