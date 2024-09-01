@@ -42,6 +42,7 @@ cc_library_static {
     static_libs: [
         "libcutils_sockets",
         "libfs_mgr_file_wait",
+        "libdm",
     ],
     shared_libs: [
         "libbase",
@@ -248,7 +249,7 @@ cc_test {
     defaults: ["snapuserd_test_defaults"],
     host_supported: true,
     test_suites: [
-        "device-tests",
+        "general-tests",
     ],
     test_options: {
         test_runner_options: [
