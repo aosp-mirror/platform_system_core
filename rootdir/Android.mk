@@ -35,7 +35,8 @@ LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
     ln -sfn /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
-    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
+    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard; \
+    ln -sf /product/etc/security/adb_keys $(TARGET_ROOT_OUT)/adb_keys
 
 ALL_ROOTDIR_SYMLINKS := \
   $(TARGET_ROOT_OUT)/bin \
@@ -150,4 +151,3 @@ $(ALL_ROOTDIR_SYMLINKS): $(LOCAL_BUILT_MODULE)
 init.environ.rc-soong := $(call intermediates-dir-for,ETC,init.environ.rc-soong)/init.environ.rc-soong
 $(eval $(call copy-one-file,$(init.environ.rc-soong),$(LOCAL_BUILT_MODULE)))
 init.environ.rc-soong :=
-
