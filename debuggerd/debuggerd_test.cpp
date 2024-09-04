@@ -1773,6 +1773,75 @@ TEST_F(CrasherTest, seccomp_crash_logcat) {
   AssertDeath(SIGABRT);
 }
 
+extern "C" void malloc_enable();
+extern "C" void malloc_disable();
+
+TEST_F(CrasherTest, seccomp_tombstone_no_allocation) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        // Disable allocations to verify that nothing in the fallback
+        // signal handler does an allocation.
+        malloc_disable();
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
+}
+
+TEST_F(CrasherTest, seccomp_backtrace_no_allocation) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdNativeBacktrace;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        // Disable allocations to verify that nothing in the fallback
+        // signal handler does an allocation.
+        malloc_disable();
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
+}
+
 TEST_F(CrasherTest, competing_tracer) {
   int intercept_result;
   unique_fd output_fd;
