@@ -297,9 +297,7 @@ int main(int argc, char** argv) {
     ActionManager& am = ActionManager::GetInstance();
     ServiceList& sl = ServiceList::GetInstance();
     Parser parser;
-    parser.AddSectionParser("service",
-                            std::make_unique<ServiceParser>(&sl, GetSubcontext(),
-                                                            *interface_inheritance_hierarchy_map));
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&sl, GetSubcontext()));
     parser.AddSectionParser("on", std::make_unique<ActionParser>(&am, GetSubcontext()));
     parser.AddSectionParser("import", std::make_unique<HostImportParser>());
 
@@ -317,11 +315,23 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
+
     size_t failures = parser.parse_error_count() + am.CheckAllCommands() + sl.CheckAllCommands();
     if (failures > 0) {
         LOG(ERROR) << "Failed to parse init scripts with " << failures << " error(s).";
         return EXIT_FAILURE;
     }
+
+    for (const auto& service : sl) {
+        if (const auto& result = CheckInterfaceInheritanceHierarchy(
+                    service->interfaces(), *interface_inheritance_hierarchy_map);
+            !result.ok()) {
+            LOG(ERROR) << service->filename() << ": invalid interface in service '"
+                       << service->name() << "': " << result.error();
+            return EXIT_FAILURE;
+        }
+    }
+
     return EXIT_SUCCESS;
 }
 
