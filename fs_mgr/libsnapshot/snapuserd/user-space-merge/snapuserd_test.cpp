@@ -1530,6 +1530,14 @@ INSTANTIATE_TEST_SUITE_P(Io, HandlerTest, ::testing::ValuesIn(GetTestConfigs()))
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 
+#ifdef __ANDROID__
+    if (!android::snapshot::CanUseUserspaceSnapshots() ||
+        android::snapshot::IsVendorFromAndroid12()) {
+        std::cerr << "snapuserd_test not supported on this device\n";
+        return 0;
+    }
+#endif
+
     gflags::ParseCommandLineFlags(&argc, &argv, false);
 
     return RUN_ALL_TESTS();

@@ -82,7 +82,7 @@ class CowWriterV3 : public CowWriterBase {
                                                  CowOperationType type);
     size_t GetCompressionFactor(const size_t blocks_to_compress, CowOperationType type) const;
 
-    constexpr bool IsBlockAligned(const size_t size) {
+    constexpr bool IsBlockAligned(const uint64_t size) {
         // These are the only block size supported. Block size beyond 256k
         // may impact random read performance post OTA boot.
         const size_t values[] = {4_KiB, 8_KiB, 16_KiB, 32_KiB, 64_KiB, 128_KiB, 256_KiB};
