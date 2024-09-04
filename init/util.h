@@ -18,6 +18,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/unistd.h>
 
 #include <chrono>
 #include <functional>
@@ -106,6 +107,10 @@ inline constexpr bool IsMicrodroid() {
 #else
     return false;
 #endif
+}
+
+inline bool IsArcvm() {
+    return !access("/is_arcvm", F_OK);
 }
 
 bool Has32BitAbi();

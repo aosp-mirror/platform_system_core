@@ -163,7 +163,7 @@ struct TestFileHandle {
   protected:
     // |rel_path| is the relative path under test data directory.
     TestFileHandle(const std::filesystem::path& rel_path)
-        : abs_path_(std::move(std::filesystem::path(GetExecutableDirectory()) / rel_path)) {}
+        : abs_path_(std::filesystem::path(GetExecutableDirectory()) / rel_path) {}
     // Given |read_fd|, the readonly fd on the test file, return an fd that's suitable for client
     // to use. Implementation is responsible for managing the lifetime of the returned fd.
     virtual android::base::Result<borrowed_fd> Transform(const std::filesystem::path& abs_path,

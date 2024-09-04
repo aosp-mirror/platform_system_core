@@ -15,9 +15,7 @@
  */
 
 #include <fuzzer/FuzzedDataProvider.h>
-#include <hidl/metadata.h>
 #include <import_parser.h>
-#include <interface_utils.h>
 #include <rlimit_parser.h>
 
 using namespace android;
@@ -34,7 +32,6 @@ const std::string kValidPaths[] = {
 };
 
 const int32_t kMaxBytes = 256;
-const std::string kValidInterfaces = "android.frameworks.vr.composer@2.0::IVrComposerClient";
 
 class InitParserFuzzer {
   public:
@@ -44,9 +41,6 @@ class InitParserFuzzer {
   private:
     void InvokeParser();
     void InvokeLimitParser();
-    void InvokeInterfaceUtils();
-    InterfaceInheritanceHierarchyMap GenerateHierarchyMap();
-    std::vector<HidlInterfaceMetadata> GenerateInterfaceMetadata();
 
     FuzzedDataProvider fdp_;
 };
@@ -64,60 +58,6 @@ void InitParserFuzzer::InvokeLimitParser() {
     }
 }
 
-std::vector<HidlInterfaceMetadata> InitParserFuzzer::GenerateInterfaceMetadata() {
-    std::vector<HidlInterfaceMetadata> random_interface;
-    for (size_t idx = 0; idx < fdp_.ConsumeIntegral<size_t>(); ++idx) {
-        HidlInterfaceMetadata metadata;
-        metadata.name = fdp_.ConsumeRandomLengthString(kMaxBytes);
-        for (size_t idx1 = 0; idx1 < fdp_.ConsumeIntegral<size_t>(); ++idx1) {
-            metadata.inherited.push_back(fdp_.ConsumeRandomLengthString(kMaxBytes));
-        }
-        random_interface.push_back(metadata);
-    }
-    return random_interface;
-}
-
-InterfaceInheritanceHierarchyMap InitParserFuzzer::GenerateHierarchyMap() {
-    InterfaceInheritanceHierarchyMap result;
-    std::vector<HidlInterfaceMetadata> random_interface;
-    if (fdp_.ConsumeBool()) {
-        random_interface = GenerateInterfaceMetadata();
-    } else {
-        random_interface = HidlInterfaceMetadata::all();
-    }
-
-    for (const HidlInterfaceMetadata& iface : random_interface) {
-        std::set<FQName> inherited_interfaces;
-        for (const std::string& intf : iface.inherited) {
-            FQName fqname;
-            (void)fqname.setTo(intf);
-            inherited_interfaces.insert(fqname);
-        }
-        FQName fqname;
-        (void)fqname.setTo(iface.name);
-        result[fqname] = inherited_interfaces;
-    }
-    return result;
-}
-
-void InitParserFuzzer::InvokeInterfaceUtils() {
-    InterfaceInheritanceHierarchyMap hierarchy_map = GenerateHierarchyMap();
-    SetKnownInterfaces(hierarchy_map);
-    IsKnownInterface(fdp_.ConsumeRandomLengthString(kMaxBytes));
-    std::set<std::string> interface_set;
-    for (size_t idx = 0; idx < fdp_.ConsumeIntegral<size_t>(); ++idx) {
-        auto set_interface_values = fdp_.PickValueInArray<const std::function<void()>>({
-                [&]() {
-                    interface_set.insert(("aidl/" + fdp_.ConsumeRandomLengthString(kMaxBytes)));
-                },
-                [&]() { interface_set.insert(fdp_.ConsumeRandomLengthString(kMaxBytes)); },
-                [&]() { interface_set.insert(kValidInterfaces); },
-        });
-        set_interface_values();
-    }
-    CheckInterfaceInheritanceHierarchy(interface_set, hierarchy_map);
-}
-
 void InitParserFuzzer::InvokeParser() {
     Parser parser;
     std::string name = fdp_.ConsumeBool() ? fdp_.ConsumeRandomLengthString(kMaxBytes) : "import";
@@ -132,7 +72,6 @@ void InitParserFuzzer::Process() {
     while (fdp_.remaining_bytes()) {
         auto invoke_parser_fuzzer = fdp_.PickValueInArray<const std::function<void()>>({
                 [&]() { InvokeParser(); },
-                [&]() { InvokeInterfaceUtils(); },
                 [&]() { InvokeLimitParser(); },
         });
         invoke_parser_fuzzer();
