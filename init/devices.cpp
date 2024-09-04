@@ -283,7 +283,7 @@ std::tuple<mode_t, uid_t, gid_t> DeviceHandler::GetDevicePermissions(
 
 void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, int minor,
                                const std::vector<std::string>& links) const {
-    auto[mode, uid, gid] = GetDevicePermissions(path, links);
+    auto [mode, uid, gid] = GetDevicePermissions(path, links);
     mode |= (block ? S_IFBLK : S_IFCHR);
 
     std::string secontext;
@@ -330,11 +330,11 @@ void DeviceHandler::MakeDevice(const std::string& path, bool block, int major, i
             if (gid != s.st_gid) {
                 new_group = gid;
             }
-        if (mode != s.st_mode) {
-            if (chmod(path.c_str(), mode) != 0) {
-                PLOG(ERROR) << "Cannot chmod " << path << " to " << mode;
+            if (mode != s.st_mode) {
+                if (chmod(path.c_str(), mode) != 0) {
+                    PLOG(ERROR) << "Cannot chmod " << path << " to " << mode;
+                }
             }
-        }
         } else {
             PLOG(ERROR) << "Cannot stat " << path;
         }
@@ -531,7 +531,7 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
         if (!ReadFileToString(boot_id_path, &boot_id)) {
             PLOG(ERROR) << "Cannot duplicate ashmem device node. Failed to read " << boot_id_path;
             return;
-        };
+        }
         boot_id = Trim(boot_id);
 
         Uevent dup_ashmem_uevent = uevent;
@@ -542,10 +542,10 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
 }
 
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
-  if (uevent.action == "add" || uevent.action == "change" ||
-      uevent.action == "bind" || uevent.action == "online") {
-    FixupSysPermissions(uevent.path, uevent.subsystem);
-  }
+    if (uevent.action == "add" || uevent.action == "change" || uevent.action == "bind" ||
+        uevent.action == "online") {
+        FixupSysPermissions(uevent.path, uevent.subsystem);
+    }
 
     // if it's not a /dev device, nothing to do
     if (uevent.major < 0 || uevent.minor < 0) return;
