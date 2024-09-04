@@ -153,5 +153,8 @@ bool GetKernelCmdline(const std::string& key, std::string* out);
 // Return the "other" slot for the given slot suffix.
 std::string OtherSlotSuffix(const std::string& suffix);
 
+bool GetBootconfigFromString(const std::string& bootconfig, const std::string& key,
+                             std::string* out);
+
 }  // namespace fs_mgr
 }  // namespace android

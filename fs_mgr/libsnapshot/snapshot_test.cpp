@@ -47,6 +47,7 @@
 #include <android/snapshot/snapshot.pb.h>
 #include <libsnapshot/test_helpers.h>
 #include "partition_cow_creator.h"
+#include "scratch_super.h"
 #include "utility.h"
 
 // Mock classes are not used. Header included to ensure mocked class definition aligns with the
@@ -1342,6 +1343,15 @@ class SnapshotUpdateTest : public SnapshotTest {
     DynamicPartitionGroup* group_ = nullptr;
 };
 
+TEST_F(SnapshotUpdateTest, SuperOtaMetadataTest) {
+    auto info = new TestDeviceInfo(fake_super);
+    ASSERT_TRUE(CreateScratchOtaMetadataOnSuper(info));
+    std::string scratch_device = GetScratchOtaMetadataPartition();
+    ASSERT_NE(scratch_device, "");
+    ASSERT_NE(MapScratchOtaMetadataPartition(scratch_device), "");
+    ASSERT_TRUE(CleanupScratchOtaMetadataIfPresent(info));
+}
+
 // Test full update flow executed by update_engine. Some partitions uses super empty space,
 // some uses images, and some uses both.
 // Also test UnmapUpdateSnapshot unmaps everything.
@@ -2102,10 +2112,10 @@ TEST_F(SnapshotUpdateTest, DataWipeRollbackInRecovery) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
-    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_TRUE(test_device->IsSlotUnbootable(1));
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
 }
@@ -2127,6 +2137,7 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::None);
     EXPECT_FALSE(test_device->IsSlotUnbootable(0));
@@ -2135,10 +2146,6 @@ TEST_F(SnapshotUpdateTest, DataWipeAfterRollback) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
-    if (ShouldSkipLegacyMerging()) {
-        GTEST_SKIP() << "Skipping legacy merge in test";
-    }
-
     AddOperationForPartitions();
     // Execute the update.
     ASSERT_TRUE(sm->BeginUpdate());
@@ -2157,6 +2164,7 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
@@ -2178,10 +2186,6 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
 
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
-    if (ShouldSkipLegacyMerging()) {
-        GTEST_SKIP() << "Skipping legacy merge in test";
-    }
-
     AddOperationForPartitions();
 
     // Execute the update.
@@ -2222,6 +2226,7 @@ TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     test_device->set_recovery(true);
     auto new_sm = NewManagerForFirstStageMount(test_device);
 
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
     ASSERT_TRUE(new_sm->HandleImminentDataWipe());
     // Manually mount metadata so that we can call GetUpdateState() below.
     MountMetadata();
