@@ -18,6 +18,7 @@ phony {
         "awk",
         "bc",
         "bzip2",
+        "cpu-target-features",
         "fsck.exfat",
         "ldd",
         "logwrapper",

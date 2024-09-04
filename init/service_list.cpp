@@ -68,14 +68,6 @@ void ServiceList::DumpState() const {
     }
 }
 
-void ServiceList::MarkPostData() {
-    post_data_ = true;
-}
-
-bool ServiceList::IsPostData() {
-    return post_data_;
-}
-
 void ServiceList::StartDelayedServices() {
     for (const auto& name : delayed_service_names_) {
         Service* service = FindService(name);
