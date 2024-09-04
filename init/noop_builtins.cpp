@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+// Note that parser will perform arity checks only.
 
-int main(int, char**) {
-  volatile char* f = (char*)malloc(1);
-  printf("%c\n", f[17]);
-#ifdef __aarch64__
-  if (getenv("MTE_PERMISSIVE_REENABLE_TIME_CPUMS")) {
-    // Burn some cycles because the MTE_PERMISSIVE_REENABLE_TIME_CPUMS is based on CPU clock.
-    for (int i = 0; i < 1000000000; ++i) {
-      asm("isb");
-    }
-    printf("%c\n", f[17]);
-  }
-#endif
-  return 0;
+#include <android-base/result.h>
+
+#include "builtin_arguments.h"
+#include "builtins.h"
+
+namespace android::init {
+
+static base::Result<void> check_stub(const BuiltinArguments&) {
+    return {};
 }
+
+#include "noop_builtin_function_map.h"
+
+}  // namespace android::init
