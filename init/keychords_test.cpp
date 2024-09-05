@@ -168,16 +168,16 @@ const std::vector<int> escape_chord = {KEY_ESC};
 const std::vector<int> triple1_chord = {KEY_BACKSPACE, KEY_VOLUMEDOWN, KEY_VOLUMEUP};
 const std::vector<int> triple2_chord = {KEY_VOLUMEDOWN, KEY_VOLUMEUP, KEY_BACK};
 
-const std::vector<const std::vector<int>> empty_chords;
-const std::vector<const std::vector<int>> chords = {
-    escape_chord,
-    triple1_chord,
-    triple2_chord,
+const std::vector<std::vector<int>> empty_chords;
+const std::vector<std::vector<int>> chords = {
+        escape_chord,
+        triple1_chord,
+        triple2_chord,
 };
 
 class TestFrame {
   public:
-    TestFrame(const std::vector<const std::vector<int>>& chords, EventHandler* ev = nullptr);
+    TestFrame(const std::vector<std::vector<int>>& chords, EventHandler* ev = nullptr);
 
     void RelaxForMs(std::chrono::milliseconds wait = 1ms);
 
@@ -194,16 +194,15 @@ class TestFrame {
     std::string Format() const;
 
   private:
-    static std::string Format(const std::vector<const std::vector<int>>& chords);
+    static std::string Format(const std::vector<std::vector<int>>& chords);
 
     Epoll epoll_;
     Keychords keychords_;
-    std::vector<const std::vector<int>> keycodes_;
+    std::vector<std::vector<int>> keycodes_;
     EventHandler* ev_;
 };
 
-TestFrame::TestFrame(const std::vector<const std::vector<int>>& chords, EventHandler* ev)
-    : ev_(ev) {
+TestFrame::TestFrame(const std::vector<std::vector<int>>& chords, EventHandler* ev) : ev_(ev) {
     if (!epoll_.Open().ok()) return;
     for (const auto& keycodes : chords) keychords_.Register(keycodes);
     keychords_.Start(&epoll_, [this](const std::vector<int>& keycodes) {
@@ -262,7 +261,7 @@ void TestFrame::WaitForChord(const std::vector<int>& chord) {
     for (int retry = 1000; retry && !IsChord(chord); --retry) RelaxForMs();
 }
 
-std::string TestFrame::Format(const std::vector<const std::vector<int>>& chords) {
+std::string TestFrame::Format(const std::vector<std::vector<int>>& chords) {
     std::string ret("{");
     if (!chords.empty()) {
         ret += android::base::Join(chords.front(), ' ');
