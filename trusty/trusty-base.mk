@@ -22,18 +22,7 @@
 # For gatekeeper, we include the generic -service and -impl to use legacy
 # HAL loading of gatekeeper.trusty.
 
-# Allow the KeyMint HAL service implementation to be selected at build time.  This needs to be
-# done in sync with the TA implementation included in Trusty.  Possible values are:
-#
-# - Rust implementation:   export TRUSTY_KEYMINT_IMPL=rust
-# - C++ implementation:    (any other value of TRUSTY_KEYMINT_IMPL)
-
-ifeq ($(TRUSTY_KEYMINT_IMPL),rust)
-    LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.rust.trusty
-else
-    # Default to the C++ implementation
-    LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.trusty
-endif
+$(call inherit-product, system/core/trusty/keymint/trusty-keymint.mk)
 
 ifeq ($(SECRETKEEPER_ENABLED),true)
     LOCAL_SECRETKEEPER_PRODUCT_PACKAGE := android.hardware.security.secretkeeper.trusty
@@ -42,7 +31,6 @@ else
 endif
 
 PRODUCT_PACKAGES += \
-	$(LOCAL_KEYMINT_PRODUCT_PACKAGE) \
 	$(LOCAL_SECRETKEEPER_PRODUCT_PACKAGE) \
 	android.hardware.gatekeeper-service.trusty \
 	trusty_apploader \
