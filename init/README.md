@@ -745,6 +745,9 @@ provides the `aidl_lazy_test_1` interface.
   fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
   under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
+`swapoff <path>`
+> Stops swapping to the file or block device specified by path.
+
 `symlink <target> <path>`
 > Create a symbolic link at _path_ with the value _target_
 
@@ -787,7 +790,6 @@ provides the `aidl_lazy_test_1` interface.
 > Open the file at _path_ and write a string to it with write(2).
   If the file does not exist, it will be created. If it does exist,
   it will be truncated. Properties are expanded within _content_.
-
 
 Imports
 -------
