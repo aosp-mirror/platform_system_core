@@ -80,10 +80,8 @@
 
 using namespace std::chrono_literals;
 
-bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
 bool fs_mgr_is_device_unlocked();
 
-bool fs_mgr_is_ext4(const std::string& blk_device);
 bool fs_mgr_is_f2fs(const std::string& blk_device);
 
 bool fs_mgr_filesystem_available(const std::string& filesystem);
