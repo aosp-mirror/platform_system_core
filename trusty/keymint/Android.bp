@@ -20,6 +20,7 @@ package {
 rust_defaults {
     name: "android.hardware.security.keymint-service.rust.trusty.default",
     relative_install_path: "hw",
+    vendor: true,
     srcs: [
         "src/keymint_hal_main.rs",
     ],
@@ -38,7 +39,6 @@ rust_defaults {
 
 rust_binary {
     name: "android.hardware.security.keymint-service.rust.trusty",
-    vendor: true,
     defaults: ["android.hardware.security.keymint-service.rust.trusty.default"],
     init_rc: ["android.hardware.security.keymint-service.rust.trusty.rc"],
     vintf_fragments: ["android.hardware.security.keymint-service.rust.trusty.xml"],
@@ -48,10 +48,8 @@ rust_binary {
 }
 
 rust_binary {
-    name: "android.hardware.security.keymint-service.rust.trusty.system.nonsecure",
-    system_ext_specific: true,
+    name: "android.hardware.security.keymint-service.rust.trusty.nonsecure",
     defaults: ["android.hardware.security.keymint-service.rust.trusty.default"],
-    init_rc: ["android.hardware.security.keymint-service.rust.trusty.system.nonsecure.rc"],
     features: ["nonsecure"],
     rustlibs: [
         "libkmr_hal_nonsecure",

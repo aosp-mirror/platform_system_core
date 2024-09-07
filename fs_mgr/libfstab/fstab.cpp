@@ -39,10 +39,6 @@
 #include "fstab_priv.h"
 #include "logging_macros.h"
 
-#if !defined(MS_LAZYTIME)
-#define MS_LAZYTIME (1 << 25)
-#endif
-
 using android::base::EndsWith;
 using android::base::ParseByteCount;
 using android::base::ParseInt;
@@ -78,7 +74,6 @@ FlagList kMountFlagsList[] = {
         {"private", MS_PRIVATE},
         {"slave", MS_SLAVE},
         {"shared", MS_SHARED},
-        {"lazytime", MS_LAZYTIME},
         {"defaults", 0},
 };
 
