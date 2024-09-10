@@ -18,12 +18,12 @@ package {
 cc_binary {
     name: "rpmb_dev",
     vendor: true,
+    host_supported: true,
 
     srcs: [
         "rpmb_dev.c",
     ],
     shared_libs: [
-        "libc",
         "libcutils",
         "liblog",
         "libcrypto",
