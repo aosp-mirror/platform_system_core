@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,19 @@
  * limitations under the License.
  */
 
-__BEGIN_DECLS
+// Note that parser will perform arity checks only.
 
-void trusty_gatekeeper_set_dev_name(const char* device_name);
-int trusty_gatekeeper_connect();
-int trusty_gatekeeper_call(uint32_t cmd, void *in, uint32_t in_size, uint8_t *out,
-                           uint32_t *out_size);
-void trusty_gatekeeper_disconnect();
+#include <android-base/result.h>
 
-__END_DECLS
+#include "builtin_arguments.h"
+#include "builtins.h"
+
+namespace android::init {
+
+static base::Result<void> check_stub(const BuiltinArguments&) {
+    return {};
+}
+
+#include "noop_builtin_function_map.h"
+
+}  // namespace android::init

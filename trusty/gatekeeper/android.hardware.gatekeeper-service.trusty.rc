@@ -1,4 +1,5 @@
-service vendor.gatekeeper_default /vendor/bin/hw/android.hardware.gatekeeper-service.trusty
+service vendor.gatekeeper_default /vendor/bin/hw/android.hardware.gatekeeper-service.trusty \
+                                          --dev ${ro.hardware.trusty_ipc_dev.gatekeeper:-/dev/trusty-ipc-dev0}
     class hal
     user system
     group system

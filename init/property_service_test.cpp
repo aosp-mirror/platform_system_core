@@ -16,10 +16,8 @@
 
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/system_properties.h>
 #include <sys/un.h>
-
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
 
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
@@ -82,12 +80,6 @@ TEST(property_service, userspace_reboot_not_supported) {
         GTEST_SKIP() << "Skipping test, must be run as root.";
         return;
     }
-    const std::string original_value = GetProperty("init.userspace_reboot.is_supported", "");
-    auto guard = android::base::make_scope_guard([&original_value]() {
-        SetProperty("init.userspace_reboot.is_supported", original_value);
-    });
-
-    ASSERT_TRUE(SetProperty("init.userspace_reboot.is_supported", "false"));
     EXPECT_FALSE(SetProperty("sys.powerctl", "reboot,userspace"));
 }
 

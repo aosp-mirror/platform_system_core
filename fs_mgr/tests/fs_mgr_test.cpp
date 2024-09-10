@@ -37,6 +37,10 @@
 using namespace android::fs_mgr;
 using namespace testing;
 
+#if !defined(MS_LAZYTIME)
+#define MS_LAZYTIME (1 << 25)
+#endif
+
 namespace {
 
 const std::string cmdline =
@@ -329,6 +333,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
                 {"private", MS_PRIVATE},
                 {"slave", MS_SLAVE},
                 {"shared", MS_SHARED},
+                {"lazytime", MS_LAZYTIME},
                 {"defaults", 0},
                 {0, 0},
         };
@@ -1060,23 +1065,6 @@ TEST(fs_mgr, DefaultFstabContainsUserdata) {
     ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
     ASSERT_NE(nullptr, GetEntryForMountPoint(&fstab, "/data"))
             << "Default fstab doesn't contain /data entry";
-}
-
-TEST(fs_mgr, UserdataMountedFromDefaultFstab) {
-    if (getuid() != 0) {
-        GTEST_SKIP() << "Must be run as root.";
-        return;
-    }
-    Fstab fstab;
-    ASSERT_TRUE(ReadDefaultFstab(&fstab)) << "Failed to read default fstab";
-    Fstab proc_mounts;
-    ASSERT_TRUE(ReadFstabFromFile("/proc/mounts", &proc_mounts)) << "Failed to read /proc/mounts";
-    auto mounted_entry = GetEntryForMountPoint(&proc_mounts, "/data");
-    ASSERT_NE(mounted_entry, nullptr) << "/data is not mounted";
-    std::string block_device;
-    ASSERT_TRUE(android::base::Realpath(mounted_entry->blk_device, &block_device));
-    ASSERT_NE(nullptr, fs_mgr_get_mounted_entry_for_userdata(&fstab, block_device))
-            << "/data wasn't mounted from default fstab";
 }
 
 TEST(fs_mgr, ReadFstabFromFile_FsMgrOptions_Readahead_Size_KB) {
