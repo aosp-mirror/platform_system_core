@@ -18,6 +18,7 @@
 #include <dlfcn.h>
 #include <err.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/prctl.h>
 #include <malloc.h>
 #include <pthread.h>
@@ -69,7 +70,6 @@
 #include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "gtest/gtest.h"
-#include "libdebuggerd/utility.h"
 #include "protocol.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
@@ -741,6 +741,8 @@ TEST_F(CrasherTest, mte_multiple_causes) {
 }
 
 #if defined(__aarch64__)
+constexpr size_t kTagGranuleSize = 16;
+
 static uintptr_t CreateTagMapping() {
   // Some of the MTE tag dump tests assert that there is an inaccessible page to the left and right
   // of the PROT_MTE page, so map three pages and set the two guard pages to PROT_NONE.
@@ -1769,6 +1771,75 @@ TEST_F(CrasherTest, seccomp_crash_logcat) {
 
   // Make sure we don't get SIGSYS when trying to dump a crash to logcat.
   AssertDeath(SIGABRT);
+}
+
+extern "C" void malloc_enable();
+extern "C" void malloc_disable();
+
+TEST_F(CrasherTest, seccomp_tombstone_no_allocation) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdTombstone;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        // Disable allocations to verify that nothing in the fallback
+        // signal handler does an allocation.
+        malloc_disable();
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
+}
+
+TEST_F(CrasherTest, seccomp_backtrace_no_allocation) {
+  int intercept_result;
+  unique_fd output_fd;
+
+  static const auto dump_type = kDebuggerdNativeBacktrace;
+  StartProcess(
+      []() {
+        std::thread a(foo);
+        std::thread b(bar);
+
+        std::this_thread::sleep_for(100ms);
+
+        // Disable allocations to verify that nothing in the fallback
+        // signal handler does an allocation.
+        malloc_disable();
+        raise_debugger_signal(dump_type);
+        _exit(0);
+      },
+      &seccomp_fork);
+
+  StartIntercept(&output_fd, dump_type);
+  FinishCrasher();
+  AssertDeath(0);
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  ASSERT_BACKTRACE_FRAME(result, "raise_debugger_signal");
+  ASSERT_BACKTRACE_FRAME(result, "foo");
+  ASSERT_BACKTRACE_FRAME(result, "bar");
 }
 
 TEST_F(CrasherTest, competing_tracer) {

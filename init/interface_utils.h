@@ -34,8 +34,6 @@ using InterfaceInheritanceHierarchyMap = std::map<android::FQName, std::set<andr
 // interface set. Uses the provided hierarchy data.
 Result<void> CheckInterfaceInheritanceHierarchy(const std::set<std::string>& instances,
                                                 const InterfaceInheritanceHierarchyMap& hierarchy);
-Result<void> CheckInterfaceInheritanceHierarchy(const std::set<android::FQName>& interfaces,
-                                                const InterfaceInheritanceHierarchyMap& hierarchy);
 
 // Saves the set of known interfaces using the provided HIDL interface
 // inheritance hierarchy.

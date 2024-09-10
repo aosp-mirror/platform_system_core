@@ -36,6 +36,7 @@
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/swap.h>
 #include <sys/syscall.h>
 #include <sys/system_properties.h>
 #include <sys/time.h>
@@ -46,7 +47,6 @@
 #include <map>
 #include <memory>
 
-#include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -606,8 +606,6 @@ static Result<void> queue_fs_event(int code) {
     return Error() << "Invalid code: " << code;
 }
 
-static int initial_mount_fstab_return_code = -1;
-
 /* <= Q: mount_all <fstab> [ <path> ]* [--<options>]*
  * >= R: mount_all [ <fstab> ] [--<options>]*
  *
@@ -648,19 +646,10 @@ static Result<void> do_mount_all(const BuiltinArguments& args) {
         import_late(mount_all->rc_paths);
     }
 
-    if (mount_fstab_result.userdata_mounted) {
-        // This call to fs_mgr_mount_all mounted userdata. Keep the result in
-        // order for userspace reboot to correctly remount userdata.
-        LOG(INFO) << "Userdata mounted using "
-                  << (mount_all->fstab_path.empty() ? "(default fstab)" : mount_all->fstab_path)
-                  << " result : " << mount_fstab_result.code;
-        initial_mount_fstab_return_code = mount_fstab_result.code;
-    }
-
     if (queue_event) {
         /* queue_fs_event will queue event based on mount_fstab return code
          * and return processed return code*/
-        auto queue_fs_result = queue_fs_event(mount_fstab_result.code);
+        auto queue_fs_result = queue_fs_event(mount_fstab_result);
         if (!queue_fs_result.ok()) {
             return Error() << "queue_fs_event() failed: " << queue_fs_result.error();
         }
@@ -1148,57 +1137,24 @@ static Result<void> ExecWithFunctionOnFailure(const std::vector<std::string>& ar
 }
 
 static Result<void> ExecVdcRebootOnFailure(const std::string& vdc_arg) {
-    bool should_reboot_into_recovery = true;
     auto reboot_reason = vdc_arg + "_failed";
-    if (android::sysprop::InitProperties::userspace_reboot_in_progress().value_or(false)) {
-        should_reboot_into_recovery = false;
-        reboot_reason = "userspace_failed," + vdc_arg;
-    }
 
-    auto reboot = [reboot_reason, should_reboot_into_recovery](const std::string& message) {
+    auto reboot = [reboot_reason](const std::string& message) {
         // TODO (b/122850122): support this in gsi
-        if (should_reboot_into_recovery) {
-            if (IsFbeEnabled() && !android::gsi::IsGsiRunning()) {
-                LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
-                if (auto result = reboot_into_recovery(
-                            {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
-                    !result.ok()) {
-                    LOG(FATAL) << "Could not reboot into recovery: " << result.error();
-                }
-            } else {
-                LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
+        if (IsFbeEnabled() && !android::gsi::IsGsiRunning()) {
+            LOG(ERROR) << message << ": Rebooting into recovery, reason: " << reboot_reason;
+            if (auto result = reboot_into_recovery(
+                        {"--prompt_and_wipe_data", "--reason="s + reboot_reason});
+                !result.ok()) {
+                LOG(FATAL) << "Could not reboot into recovery: " << result.error();
             }
         } else {
-            LOG(ERROR) << message << ": rebooting, reason: " << reboot_reason;
-            trigger_shutdown("reboot," + reboot_reason);
+            LOG(ERROR) << "Failure (reboot suppressed): " << reboot_reason;
         }
     };
 
     std::vector<std::string> args = {"exec", "/system/bin/vdc", "--wait", "cryptfs", vdc_arg};
     return ExecWithFunctionOnFailure(args, reboot);
-}
-
-static Result<void> do_remount_userdata(const BuiltinArguments& args) {
-    if (initial_mount_fstab_return_code == -1) {
-        return Error() << "Calling remount_userdata too early";
-    }
-    Fstab fstab;
-    if (!ReadDefaultFstab(&fstab)) {
-        // TODO(b/135984674): should we reboot here?
-        return Error() << "Failed to read fstab";
-    }
-    // TODO(b/135984674): check that fstab contains /data.
-    if (auto rc = fs_mgr_remount_userdata_into_checkpointing(&fstab); rc < 0) {
-        std::string proc_mounts_output;
-        android::base::ReadFileToString("/proc/mounts", &proc_mounts_output, true);
-        android::base::WriteStringToFile(proc_mounts_output,
-                                         "/metadata/userspacereboot/mount_info.txt");
-        trigger_shutdown("reboot,mount_userdata_failed");
-    }
-    if (auto result = queue_fs_event(initial_mount_fstab_return_code); !result.ok()) {
-        return Error() << "queue_fs_event() failed: " << result.error();
-    }
-    return {};
 }
 
 static Result<void> do_installkey(const BuiltinArguments& args) {
@@ -1216,8 +1172,7 @@ static Result<void> do_init_user0(const BuiltinArguments& args) {
 }
 
 static Result<void> do_mark_post_data(const BuiltinArguments& args) {
-    ServiceList::GetInstance().MarkPostData();
-
+    LOG(INFO) << "deprecated action `mark_post_data` called.";
     return {};
 }
 
@@ -1316,6 +1271,13 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     return {};
 }
 
+static Result<void> do_swapoff(const BuiltinArguments& args) {
+    if (!swapoff(args[1].c_str())) {
+        return ErrnoError() << "swapoff() failed";
+    }
+    return {};
+}
+
 // Builtin-function-map start
 const BuiltinFunctionMap& GetBuiltinFunctionMap() {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
@@ -1361,7 +1323,6 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"umount_all",              {0,     1,    {false,  do_umount_all}}},
         {"update_linker_config",    {0,     0,    {false,  do_update_linker_config}}},
         {"readahead",               {1,     2,    {true,   do_readahead}}},
-        {"remount_userdata",        {0,     0,    {false,  do_remount_userdata}}},
         {"restart",                 {1,     2,    {false,  do_restart}}},
         {"restorecon",              {1,     kMax, {true,   do_restorecon}}},
         {"restorecon_recursive",    {1,     kMax, {true,   do_restorecon_recursive}}},
@@ -1372,6 +1333,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
         {"swapon_all",              {0,     1,    {false,  do_swapon_all}}},
+        {"swapoff",                 {1,     1,    {false,  do_swapoff}}},
         {"enter_default_mount_ns",  {0,     0,    {false,  do_enter_default_mount_ns}}},
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},

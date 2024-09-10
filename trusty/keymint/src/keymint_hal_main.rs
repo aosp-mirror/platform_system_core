@@ -14,10 +14,11 @@
 // limitations under the License.
 
 //! This module implements the HAL service for Keymint (Rust) in Trusty.
+use clap::Parser;
 use kmr_hal::{
     extract_rsp, keymint, rpc, secureclock, send_hal_info, sharedsecret, SerializedChannel,
 };
-use log::{error, info};
+use log::{error, info, warn};
 use std::{
     ffi::CString,
     ops::DerefMut,
@@ -81,6 +82,13 @@ impl SerializedChannel for TipcChannel {
     }
 }
 
+#[derive(Parser, Debug)]
+struct Args {
+    /// Tipc device path
+    #[arg(short, long, default_value_t = DEFAULT_DEVICE.to_string())]
+    dev: String,
+}
+
 fn main() {
     if let Err(HalServiceError(e)) = inner_main() {
         panic!("HAL service failed: {:?}", e);
@@ -88,6 +96,7 @@ fn main() {
 }
 
 fn inner_main() -> Result<(), HalServiceError> {
+    let args = Args::parse();
     // Initialize Android logging.
     android_logger::init_once(
         android_logger::Config::default()
@@ -100,17 +109,49 @@ fn inner_main() -> Result<(), HalServiceError> {
         error!("{}", panic_info);
     }));
 
-    info!("Trusty KM HAL service is starting.");
+    if cfg!(feature = "nonsecure") {
+        warn!("Non-secure Trusty KM HAL service is starting.");
+    } else {
+        info!("Trusty KM HAL service is starting.");
+    }
 
     info!("Starting thread pool now.");
     binder::ProcessState::start_thread_pool();
 
     // Create connection to the TA
-    let connection = trusty::TipcChannel::connect(DEFAULT_DEVICE, TRUSTY_KEYMINT_RUST_SERVICE_NAME)
-        .map_err(|e| {
-            HalServiceError(format!("Failed to connect to Trusty Keymint TA because of {:?}.", e))
-        })?;
+    let connection =
+        trusty::TipcChannel::connect(args.dev.as_str(), TRUSTY_KEYMINT_RUST_SERVICE_NAME).map_err(
+            |e| {
+                HalServiceError(format!(
+                    "Failed to connect to Trusty Keymint TA at {} because of {:?}.",
+                    args.dev, e
+                ))
+            },
+        )?;
     let tipc_channel = Arc::new(Mutex::new(TipcChannel(connection)));
+
+    #[cfg(feature = "nonsecure")]
+    {
+        // When the non-secure feature is enabled, retrieve root-of-trust information
+        // (with the exception of the verified boot key hash) from Android properties, and
+        // populate the TA with this information. On a real device, the bootloader should
+        // provide this data to the TA directly.
+        let boot_req = kmr_hal_nonsecure::get_boot_info();
+        info!("boot/HAL->TA: boot info is {:?}", boot_req);
+        kmr_hal::send_boot_info(tipc_channel.lock().unwrap().deref_mut(), boot_req)
+            .map_err(|e| HalServiceError(format!("Failed to send boot info: {:?}", e)))?;
+        // When the non-secure feature is enabled, also retrieve device ID information
+        // (except for IMEI/MEID values) from Android properties and populate the TA with
+        // this information. On a real device, a factory provisioning process would populate
+        // this information.
+        let attest_ids = kmr_hal_nonsecure::attestation_id_info();
+        if let Err(e) =
+            kmr_hal::send_attest_ids(tipc_channel.lock().unwrap().deref_mut(), attest_ids)
+        {
+            error!("Failed to send attestation ID info: {:?}", e);
+        }
+        info!("Successfully sent non-secure boot info and attestation IDs to the TA.");
+    }
 
     // Register the Keymint service
     let km_service = keymint::Device::new_as_binder(tipc_channel.clone());

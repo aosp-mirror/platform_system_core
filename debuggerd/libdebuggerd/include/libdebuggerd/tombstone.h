@@ -73,5 +73,8 @@ bool tombstone_proto_to_text(
 
 void fill_in_backtrace_frame(BacktraceFrame* f, const unwindstack::FrameData& frame);
 void set_human_readable_cause(Cause* cause, uint64_t fault_addr);
-
+#if defined(__aarch64__)
+void dump_stack_history(unwindstack::AndroidUnwinder* unwinder, uintptr_t target_tls,
+                        StackHistoryBuffer& shb_ob, bool nounwind = false);
+#endif
 #endif  // _DEBUGGERD_TOMBSTONE_H

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "device_info.h"
+#include "scratch_super.h"
 
 #include <android-base/logging.h>
 #include <fs_mgr.h>
@@ -37,8 +38,24 @@ constexpr bool kIsRecovery = true;
 constexpr bool kIsRecovery = false;
 #endif
 
+DeviceInfo::DeviceInfo() {
+    std::string scratch_device = android::snapshot::GetScratchOtaMetadataPartition();
+    if (!scratch_device.empty()) {
+        std::string scratch_metadata =
+                android::snapshot::MapScratchOtaMetadataPartition(scratch_device);
+        if (!scratch_metadata.empty()) {
+            SetMetadataDir(scratch_metadata);
+            SetTempMetadata();
+        }
+    }
+}
+
 std::string DeviceInfo::GetMetadataDir() const {
-    return "/metadata/ota"s;
+    return metadata_dir_;
+}
+
+void DeviceInfo::SetMetadataDir(const std::string& value) {
+    metadata_dir_ = value;
 }
 
 std::string DeviceInfo::GetSlotSuffix() const {
@@ -102,6 +119,24 @@ bool DeviceInfo::IsRecovery() const {
 
 bool DeviceInfo::IsFirstStageInit() const {
     return first_stage_init_;
+}
+
+bool DeviceInfo::SetActiveBootSlot([[maybe_unused]] unsigned int slot) {
+#ifdef LIBSNAPSHOT_USE_HAL
+    if (!EnsureBootHal()) {
+        return false;
+    }
+
+    CommandResult result = boot_control_->SetActiveBootSlot(slot);
+    if (!result.success) {
+        LOG(ERROR) << "Error setting slot " << slot << " active: " << result.errMsg;
+        return false;
+    }
+    return true;
+#else
+    LOG(ERROR) << "HAL support not enabled.";
+    return false;
+#endif
 }
 
 bool DeviceInfo::SetSlotAsUnbootable([[maybe_unused]] unsigned int slot) {

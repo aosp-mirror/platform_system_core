@@ -36,10 +36,12 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <android-base/macros.h>
 #include <android-base/parsebool.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/unique_fd.h>
 #include <async_safe/log.h>
@@ -113,6 +115,59 @@ static bool is_permissive_mte() {
          property_parse_bool("persist.device_config.memory_safety_native.permissive.default") ||
          property_parse_bool(process_sysprop_name) ||
          (permissive_env && ParseBool(permissive_env) == ParseBoolResult::kTrue);
+}
+
+static bool parse_uint_with_error_reporting(const char* s, const char* name, int* v) {
+  if (android::base::ParseInt(s, v) && *v >= 0) {
+    return true;
+  }
+  async_safe_format_log(ANDROID_LOG_ERROR, "libc", "invalid %s: %s", name, s);
+  return false;
+}
+
+// We cannot use base::GetIntProperty, because that internally uses
+// std::string, which allocates.
+static bool property_parse_int(const char* name, int* out) {
+  const prop_info* pi = __system_property_find(name);
+  if (!pi) return false;
+  struct cookie_t {
+    int* out;
+    bool empty;
+  } cookie{out, true};
+  __system_property_read_callback(
+      pi,
+      [](void* raw_cookie, const char* name, const char* value, uint32_t) {
+        // Property is set to empty value, ignoring.
+        if (!*value) return;
+        cookie_t* cookie = reinterpret_cast<cookie_t*>(raw_cookie);
+        if (parse_uint_with_error_reporting(value, name, cookie->out)) cookie->empty = false;
+      },
+      &cookie);
+  return !cookie.empty;
+}
+
+static int permissive_mte_renable_timer() {
+  if (char* env = getenv("MTE_PERMISSIVE_REENABLE_TIME_CPUMS")) {
+    int v;
+    if (parse_uint_with_error_reporting(env, "MTE_PERMISSIVE_REENABLE_TIME_CPUMS", &v)) return v;
+  }
+
+  char process_sysprop_name[512];
+  async_safe_format_buffer(process_sysprop_name, sizeof(process_sysprop_name),
+                           "persist.sys.mte.permissive_reenable_timer.process.%s", getprogname());
+  int v;
+  if (property_parse_int(process_sysprop_name, &v)) return v;
+  if (property_parse_int("persist.sys.mte.permissive_reenable_timer.default", &v)) return v;
+  char process_deviceconf_sysprop_name[512];
+  async_safe_format_buffer(
+      process_deviceconf_sysprop_name, sizeof(process_deviceconf_sysprop_name),
+      "persist.device_config.memory_safety_native.permissive_reenable_timer.process.%s",
+      getprogname());
+  if (property_parse_int(process_deviceconf_sysprop_name, &v)) return v;
+  if (property_parse_int(
+          "persist.device_config.memory_safety_native.permissive_reenable_timer.default", &v))
+    return v;
+  return 0;
 }
 
 static inline void futex_wait(volatile void* ftx, int value) {
@@ -599,12 +654,40 @@ static void debuggerd_signal_handler(int signal_number, siginfo_t* info, void* c
     if (tagged_addr_ctrl < 0) {
       fatal_errno("failed to PR_GET_TAGGED_ADDR_CTRL");
     }
+    int previous = tagged_addr_ctrl & PR_MTE_TCF_MASK;
     tagged_addr_ctrl = (tagged_addr_ctrl & ~PR_MTE_TCF_MASK) | PR_MTE_TCF_NONE;
     if (prctl(PR_SET_TAGGED_ADDR_CTRL, tagged_addr_ctrl, 0, 0, 0) < 0) {
       fatal_errno("failed to PR_SET_TAGGED_ADDR_CTRL");
     }
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc",
-                          "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING.");
+    if (int reenable_timer = permissive_mte_renable_timer()) {
+      async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                            "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING WITH "
+                            "MTE DISABLED FOR %d MS OF CPU TIME.",
+                            reenable_timer);
+      timer_t timerid{};
+      struct sigevent sev {};
+      sev.sigev_signo = BIONIC_ENABLE_MTE;
+      sev.sigev_notify = SIGEV_THREAD_ID;
+      sev.sigev_value.sival_int = previous;
+      sev.sigev_notify_thread_id = __gettid();
+      // This MUST be CLOCK_THREAD_CPUTIME_ID. If we used CLOCK_MONOTONIC we could get stuck
+      // in an endless loop of re-running the same instruction, calling this signal handler,
+      // and re-enabling MTE before we had a chance to re-run the instruction.
+      if (timer_create(CLOCK_THREAD_CPUTIME_ID, &sev, &timerid) == -1) {
+        fatal_errno("timer_create() failed");
+      }
+      struct itimerspec its {};
+      its.it_value.tv_sec = reenable_timer / 1000;
+      its.it_value.tv_nsec = (reenable_timer % 1000) * 1000000;
+
+      if (timer_settime(timerid, 0, &its, nullptr) == -1) {
+        fatal_errno("timer_settime() failed");
+      }
+    } else {
+      async_safe_format_log(
+          ANDROID_LOG_ERROR, "libc",
+          "MTE ERROR DETECTED BUT RUNNING IN PERMISSIVE MODE. CONTINUING WITH MTE DISABLED.");
+    }
     pthread_mutex_unlock(&crash_mutex);
   }
 
