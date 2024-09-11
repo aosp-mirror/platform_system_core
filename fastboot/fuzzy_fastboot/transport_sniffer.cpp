@@ -90,7 +90,7 @@ std::string TransportSniffer::CreateTrace() {
     // and be printed as a string, or just a raw byte-buffer
     const auto msg = [&ret, no_print](const std::vector<char>& buf) {
         ret += android::base::StringPrintf("(%lu bytes): ", buf.size());
-        std::vector<const char>::iterator iter = buf.end();
+        std::vector<char>::const_iterator iter = buf.end();
         const unsigned max_chars = 50;
         if (buf.size() > max_chars) {
             iter = buf.begin() + max_chars;
