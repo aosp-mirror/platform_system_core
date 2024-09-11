@@ -1,4 +1,5 @@
-service vendor.keymint-trusty /vendor/bin/hw/android.hardware.security.keymint-service.trusty
+service vendor.keymint-trusty /vendor/bin/hw/android.hardware.security.keymint-service.trusty \
+                                          --dev ${ro.hardware.trusty_ipc_dev.keymint:-/dev/trusty-ipc-dev0}
     class early_hal
     user nobody
     group drmrpc
