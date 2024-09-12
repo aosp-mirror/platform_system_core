@@ -1,7 +1,5 @@
 LOCAL_PATH:= $(call my-dir)
 
-$(eval $(call declare-1p-copy-files,system/core/rootdir,))
-
 #######################################
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 ASAN_EXTRACT_FILES :=
