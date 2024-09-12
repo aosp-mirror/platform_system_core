@@ -60,6 +60,7 @@ static_assert(sizeof(off_t) == sizeof(uint64_t));
 static inline void cleanup(const std::string& file_path, bool created) {
     if (created) {
         unlink(file_path.c_str());
+        sync();
     }
 }
 
