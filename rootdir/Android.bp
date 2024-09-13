@@ -50,10 +50,15 @@ prebuilt_etc {
     recovery_available: true,
 }
 
+filegroup {
+    name: "system_linker_config_json_file",
+    srcs: ["etc/linker.config.json"],
+}
+
 // TODO(b/147210213) Generate list of libraries during build and fill in at build time
 linker_config {
     name: "system_linker_config",
-    src: "etc/linker.config.json",
+    src: ":system_linker_config_json_file",
     installable: false,
 }
 
@@ -114,10 +119,84 @@ prebuilt_etc {
     sub_dir: "init",
 }
 
+prebuilt_etc {
+    name: "asan.options",
+    src: "asan.options",
+}
+
+sh_binary {
+    name: "asan_extract",
+    src: "asan_extract.sh",
+    init_rc: ["asan_extract.rc"],
+    // We need bzip2 on device for extraction.
+    required: ["bzip2"],
+}
+
 llndk_libraries_txt {
     name: "llndk.libraries.txt",
 }
 
 sanitizer_libraries_txt {
     name: "sanitizer.libraries.txt",
+}
+
+EXPORT_GLOBAL_ASAN_OPTIONS = select(soong_config_variable("ANDROID", "ASAN_ENABLED"), {
+    true: "export ASAN_OPTIONS include=/system/asan.options",
+    default: "",
+})
+
+EXPORT_GLOBAL_HWASAN_OPTIONS = select(soong_config_variable("ANDROID", "HWASAN_ENABLED"), {
+    true: "export HWASAN_OPTIONS heap_history_size=1023,stack_history_size=512,export_memory_stats=0,max_malloc_fill_size=131072,malloc_fill_byte=0",
+    default: "",
+})
+
+EXPORT_GLOBAL_GCOV_OPTIONS = select(soong_config_variable("ANDROID", "GCOV_COVERAGE"), {
+    true: "export GCOV_PREFIX /data/misc/trace",
+    default: "",
+})
+
+EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS = select((soong_config_variable("ANDROID", "CLANG_COVERAGE"), soong_config_variable("ANDROID", "CLANG_COVERAGE_CONTINUOUS_MODE")), {
+    (true, true): "export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw",
+    (true, default): "export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw",
+    (default, default): "",
+})
+
+EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE = select(soong_config_variable("ANDROID", "SCUDO_ALLOCATION_RING_BUFFER_SIZE"), {
+    "": "",
+    any @ size: "export SCUDO_ALLOCATION_RING_BUFFER_SIZE " + size,
+    default: "",
+})
+
+genrule {
+    name: "init.environ.rc.gen",
+    srcs: ["init.environ.rc.in"],
+    out: ["init.environ.rc"],
+    cmd: "cp -f $(in) $(out) && " +
+        "echo '    " + EXPORT_GLOBAL_ASAN_OPTIONS + "' >> $(out) && " +
+        "echo '    " + EXPORT_GLOBAL_GCOV_OPTIONS + "' >> $(out) && " +
+        "echo '    " + EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS + "' >> $(out) && " +
+        "echo '    " + EXPORT_GLOBAL_HWASAN_OPTIONS + "' >> $(out) && " +
+        "echo '    " + EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE + "' >> $(out)",
+}
+
+prebuilt_root {
+    name: "init.environ.rc-soong",
+    src: ":init.environ.rc.gen",
+    filename: "init.environ.rc",
+    install_in_root: true,
+    no_full_install: true,
+    required: select((soong_config_variable("ANDROID", "ASAN_ENABLED"), soong_config_variable("ANDROID", "SANITIZE_TARGET_SYSTEM_ENABLED")), {
+        (true, true): [
+            "asan.options",
+            "asan_extract",
+        ],
+        (true, default): ["asan.options"],
+        (default, default): [],
+    }),
+}
+
+filegroup {
+    name: "ramdisk_node_list",
+    srcs: ["ramdisk_node_list"],
+    export_to_make_var: "RAMDISK_NODE_LIST",
 }

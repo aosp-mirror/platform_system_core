@@ -1,43 +1,15 @@
 LOCAL_PATH:= $(call my-dir)
 
-$(eval $(call declare-1p-copy-files,system/core/rootdir,))
-
 #######################################
-# asan.options
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
-
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := asan.options
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_MODULE_CLASS := ETC
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_PATH := $(TARGET_OUT)
-
-include $(BUILD_PREBUILT)
-
-# ASAN extration.
 ASAN_EXTRACT_FILES :=
 ifeq ($(SANITIZE_TARGET_SYSTEM),true)
-include $(CLEAR_VARS)
-LOCAL_MODULE:= asan_extract
-LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS:= notice
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_SRC_FILES := asan_extract.sh
-LOCAL_INIT_RC := asan_extract.rc
-# We need bzip2 on device for extraction.
-LOCAL_REQUIRED_MODULES := bzip2
-include $(BUILD_PREBUILT)
 ASAN_EXTRACT_FILES := asan_extract
 endif
-
 endif
-
 #######################################
 # init.environ.rc
+# TODO(b/353429422): move LOCAL_POST_INSTALL_CMD to other rules and remove Android.mk module.
 
 include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := ETC
@@ -46,36 +18,8 @@ LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
 LOCAL_LICENSE_CONDITIONS := notice
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 
-EXPORT_GLOBAL_ASAN_OPTIONS :=
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
-  EXPORT_GLOBAL_ASAN_OPTIONS := export ASAN_OPTIONS include=/system/asan.options
-  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_OPTIONS_FILES) $(ASAN_EXTRACT_FILES)
-endif
-
-EXPORT_GLOBAL_HWASAN_OPTIONS :=
-ifneq ($(filter hwaddress,$(SANITIZE_TARGET)),)
-  ifneq ($(HWADDRESS_SANITIZER_GLOBAL_OPTIONS),)
-    EXPORT_GLOBAL_HWASAN_OPTIONS := export HWASAN_OPTIONS $(HWADDRESS_SANITIZER_GLOBAL_OPTIONS)
-  endif
-endif
-
-EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE :=
-ifneq ($(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE),)
-  EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE := export SCUDO_ALLOCATION_RING_BUFFER_SIZE $(PRODUCT_SCUDO_ALLOCATION_RING_BUFFER_SIZE)
-endif
-
-EXPORT_GLOBAL_GCOV_OPTIONS :=
-ifeq ($(NATIVE_COVERAGE),true)
-  EXPORT_GLOBAL_GCOV_OPTIONS := export GCOV_PREFIX /data/misc/trace
-endif
-
-EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS :=
-ifeq ($(CLANG_COVERAGE),true)
-  ifeq ($(CLANG_COVERAGE_CONTINUOUS_MODE),true)
-    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang%c-%20m.profraw
-  else
-    EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS := export LLVM_PROFILE_FILE /data/misc/trace/clang-%20m.profraw
-  endif
+  LOCAL_REQUIRED_MODULES := asan.options $(ASAN_EXTRACT_FILES)
 endif
 
 # Put it here instead of in init.rc module definition,
@@ -89,7 +33,8 @@ LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
     ln -sfn /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
-    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
+    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard; \
+    ln -sf /product/etc/security/adb_keys $(TARGET_ROOT_OUT)/adb_keys
 
 ALL_ROOTDIR_SYMLINKS := \
   $(TARGET_ROOT_OUT)/bin \
@@ -200,27 +145,7 @@ ALL_DEFAULT_INSTALLED_MODULES += $(ALL_ROOTDIR_SYMLINKS)
 include $(BUILD_SYSTEM)/base_rules.mk
 
 $(ALL_ROOTDIR_SYMLINKS): $(LOCAL_BUILT_MODULE)
-$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
-	@echo "Generate: $< -> $@"
-	@mkdir -p $(dir $@)
-	$(hide) cp $< $@
-	$(hide) sed -i -e 's?%EXPORT_GLOBAL_ASAN_OPTIONS%?$(EXPORT_GLOBAL_ASAN_OPTIONS)?g' $@
-	$(hide) sed -i -e 's?%EXPORT_GLOBAL_GCOV_OPTIONS%?$(EXPORT_GLOBAL_GCOV_OPTIONS)?g' $@
-	$(hide) sed -i -e 's?%EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS%?$(EXPORT_GLOBAL_CLANG_COVERAGE_OPTIONS)?g' $@
-	$(hide) sed -i -e 's?%EXPORT_GLOBAL_HWASAN_OPTIONS%?$(EXPORT_GLOBAL_HWASAN_OPTIONS)?g' $@
-	$(hide) sed -i -e 's?%EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE%?$(EXPORT_GLOBAL_SCUDO_ALLOCATION_RING_BUFFER_SIZE)?g' $@
 
-#######################################
-# ramdisk_node_list
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := ramdisk_node_list
-LOCAL_MODULE_CLASS := ETC
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_PATH := $(PRODUCT_OUT)
-
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-include $(BUILD_PREBUILT)
-
-include $(call all-makefiles-under,$(LOCAL_PATH))
+init.environ.rc-soong := $(call intermediates-dir-for,ETC,init.environ.rc-soong)/init.environ.rc-soong
+$(eval $(call copy-one-file,$(init.environ.rc-soong),$(LOCAL_BUILT_MODULE)))
+init.environ.rc-soong :=

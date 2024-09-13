@@ -32,8 +32,8 @@ cc_library {
         symbol_file: "libcgrouprc.map.txt",
     },
     srcs: [
-        "cgroup_controller.cpp",
-        "cgroup_file.cpp",
+        "a_cgroup_controller.cpp",
+        "a_cgroup_file.cpp",
     ],
     cflags: [
         "-Wall",

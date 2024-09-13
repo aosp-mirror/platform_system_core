@@ -359,6 +359,7 @@ cc_test {
         "libdebuggerd/test/dump_memory_test.cpp",
         "libdebuggerd/test/elf_fake.cpp",
         "libdebuggerd/test/log_fake.cpp",
+        "libdebuggerd/test/mte_stack_record_test.cpp",
         "libdebuggerd/test/open_files_list_test.cpp",
         "libdebuggerd/test/tombstone_proto_to_text_test.cpp",
     ],
