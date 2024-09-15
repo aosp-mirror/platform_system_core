@@ -170,7 +170,7 @@ cc_binary {
     recovery_available: true,
 }
 
-// This target will install to /system/bin/snapuserd_ramdisk
+// This target will install to /system/bin/snapuserd_ramdisk 
 // It will also create a symblink on /system/bin/snapuserd that point to
 // /system/bin/snapuserd_ramdisk .
 // This way, init can check if generic ramdisk copy exists.
