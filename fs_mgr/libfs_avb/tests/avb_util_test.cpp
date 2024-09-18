@@ -16,10 +16,10 @@
 
 #include <endian.h>
 
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <base/files/file_util.h>
 #include <base/rand_util.h>
-#include <base/strings/string_util.h>
 #include <libavb/libavb.h>
 
 #include "avb_util.h"
@@ -70,7 +70,7 @@ void AvbUtilTest::SetVBMetaFlags(const base::FilePath& image_path, uint32_t flag
 
     std::string image_file_name = image_path.RemoveExtension().BaseName().value();
     bool is_vbmeta_partition =
-        base::StartsWith(image_file_name, "vbmeta", base::CompareCase::INSENSITIVE_ASCII);
+        android::base::StartsWithIgnoreCase(image_file_name, "vbmeta");
 
     android::base::unique_fd fd(open(image_path.value().c_str(), O_RDWR | O_CLOEXEC));
     EXPECT_TRUE(fd > 0);
@@ -603,7 +603,7 @@ bool AvbUtilTest::CompareVBMeta(const base::FilePath& avb_image_path,
     std::string image_file_name = avb_image_path.RemoveExtension().BaseName().value();
 
     base::FilePath extracted_vbmeta_path;
-    if (base::StartsWith(image_file_name, "vbmeta", base::CompareCase::INSENSITIVE_ASCII)) {
+    if (android::base::StartsWithIgnoreCase(image_file_name, "vbmeta")) {
         extracted_vbmeta_path = avb_image_path;  // no need to extract if it's a vbmeta image.
     } else {
         extracted_vbmeta_path = ExtractVBMetaImage(avb_image_path, image_file_name + "-vbmeta.img");
