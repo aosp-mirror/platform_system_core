@@ -20,7 +20,6 @@
 
 #include <android-base/file.h>
 #include <base/files/file_util.h>
-#include <base/strings/string_util.h>
 
 namespace fs_avb_host_test {
 
