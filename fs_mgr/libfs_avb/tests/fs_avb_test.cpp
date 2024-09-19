@@ -18,8 +18,8 @@
 #include <stdlib.h>
 
 #include <android-base/file.h>
+#include <android-base/strings.h>
 #include <base/files/file_util.h>
-#include <base/strings/string_util.h>
 #include <fs_avb/fs_avb.h>
 #include <libavb/libavb.h>
 
@@ -49,7 +49,7 @@ void PublicFsAvbTest::ModifyVBMetaHeaderFlags(const base::FilePath& vbmeta_image
 
     // Only support modifying the flags in vbmeta*.img.
     std::string image_file_name = vbmeta_image_path.RemoveExtension().BaseName().value();
-    ASSERT_TRUE(base::StartsWith(image_file_name, "vbmeta", base::CompareCase::INSENSITIVE_ASCII));
+    ASSERT_TRUE(android::base::StartsWithIgnoreCase(image_file_name, "vbmeta"));
 
     android::base::unique_fd fd(open(vbmeta_image_path.value().c_str(), O_RDWR | O_CLOEXEC));
     EXPECT_TRUE(fd > 0);
