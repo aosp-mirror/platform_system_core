@@ -47,7 +47,12 @@ cc_binary {
         "libtrustystorageinterface",
         "libtrusty",
     ],
-
+    target: {
+        vendor: {
+            // vendor variant requires this flag
+            cflags: ["-DVENDOR_FS_READY_PROPERTY"],
+        },
+    },
     cflags: [
         "-Wall",
         "-Werror",
