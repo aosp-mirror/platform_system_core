@@ -838,7 +838,6 @@ void debuggerd_init(debuggerd_callbacks_t* callbacks) {
   // Use the alternate signal stack if available so we can catch stack overflows.
   action.sa_flags |= SA_ONSTACK;
 
-#define SA_EXPOSE_TAGBITS 0x00000800
   // Request that the kernel set tag bits in the fault address. This is necessary for diagnosing MTE
   // faults.
   action.sa_flags |= SA_EXPOSE_TAGBITS;
