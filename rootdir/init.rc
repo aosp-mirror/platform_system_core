@@ -495,6 +495,14 @@ on init
     start hwservicemanager
     start vndservicemanager
 
+    # Mount /mnt/vm ASAP to allow early VMs to run.
+    mkdir /mnt/vm 0755 root root
+    mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw
+    restorecon /mnt/vm
+    chown system system /mnt/vm
+    chmod 0770 /mnt/vm
+    mkdir /mnt/vm/early 0770 system system
+
 # Run boringssl self test for each ABI.  Any failures trigger reboot to firmware.
 import /system/etc/init/hw/init.boringssl.${ro.zygote}.rc
 
@@ -660,14 +668,6 @@ on late-fs
     # This does not work correctly if it is called in post-fs.
     chmod 0755 /sys/kernel/tracing
     chmod 0755 /sys/kernel/debug/tracing
-
-    # Early HALs may use early VM. Mount /mnt/vm before starting such HALs.
-    mkdir /mnt/vm 0755 root root
-    mount tmpfs tmpfs /mnt/vm nosuid nodev noexec rw
-    restorecon /mnt/vm
-    chown system system /mnt/vm
-    chmod 0770 /mnt/vm
-    mkdir /mnt/vm/early 0770 system system
 
     # HALs required before storage encryption can get unlocked (FBE)
     class_start early_hal
