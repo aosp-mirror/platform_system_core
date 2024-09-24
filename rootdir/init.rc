@@ -568,6 +568,7 @@ on late-init
 
     # Should be before netd, but after apex, properties and logging is available.
     trigger load_bpf_programs
+    trigger bpf-progs-loaded
 
     # Now we can start zygote.
     trigger zygote-start
@@ -1109,6 +1110,9 @@ on post-fs-data
 on property:vold.checkpoint_committed=1
     trigger post-fs-data-checkpointed
 
+on bpf-progs-loaded
+    start netd
+
 # It is recommended to put unnecessary data/ initialization from post-fs-data
 # to start-zygote in device's init.rc to unblock zygote start.
 on zygote-start
@@ -1116,7 +1120,6 @@ on zygote-start
     # A/B update verifier that marks a successful boot.
     exec_start update_verifier
     start statsd
-    start netd
     start zygote
     start zygote_secondary
 

@@ -156,6 +156,13 @@ static Result<Fstab> ReadFirstStageFstabAndroid() {
     return fstab;
 }
 
+static bool IsRequestingMicrodroidVendorPartition(const std::string& cmdline) {
+    if (virtualization::IsEnableTpuAssignableDeviceFlagEnabled()) {
+        return access("/proc/device-tree/avf/vendor_hashtree_descriptor_root_digest", F_OK) == 0;
+    }
+    return cmdline.find("androidboot.microdroid.mount_vendor=1") != std::string::npos;
+}
+
 // Note: this is a temporary solution to avoid blocking devs that depend on /vendor partition in
 // Microdroid. For the proper solution the /vendor fstab should probably be defined in the DT.
 // TODO(b/285855430): refactor this
@@ -166,7 +173,7 @@ static Result<Fstab> ReadFirstStageFstabMicrodroid(const std::string& cmdline) {
     if (!ReadDefaultFstab(&fstab)) {
         return Error() << "failed to read fstab";
     }
-    if (cmdline.find("androidboot.microdroid.mount_vendor=1") == std::string::npos) {
+    if (!IsRequestingMicrodroidVendorPartition(cmdline)) {
         // We weren't asked to mount /vendor partition, filter it out from the fstab.
         auto predicate = [](const auto& entry) { return entry.mount_point == "/vendor"; };
         fstab.erase(std::remove_if(fstab.begin(), fstab.end(), predicate), fstab.end());
