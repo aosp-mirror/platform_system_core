@@ -18,7 +18,8 @@ package {
 
 cc_binary {
     name: "trusty-ut-ctrl",
-    vendor: true,
+    vendor_available: true,
+    system_ext_specific: true,
 
     srcs: ["ut-ctrl.c"],
     shared_libs: [
