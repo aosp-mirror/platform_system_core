@@ -567,7 +567,7 @@ on late-init
     trigger post-fs-data
 
     # Should be before netd, but after apex, properties and logging is available.
-    trigger load_bpf_programs
+    trigger load-bpf-programs
     trigger bpf-progs-loaded
 
     # Now we can start zygote.
@@ -1110,6 +1110,19 @@ on post-fs-data
 on property:vold.checkpoint_committed=1
     trigger post-fs-data-checkpointed
 
+# It is important that we start bpfloader after:
+#   - /sys/fs/bpf is already mounted,
+#   - apex (incl. rollback) is initialized (so that we can load bpf
+#     programs shipped as part of apex mainline modules)
+#   - logd is ready for us to log stuff
+#
+# At the same time we want to be as early as possible to reduce races and thus
+# failures (before memory is fragmented, and cpu is busy running tons of other
+# stuff) and we absolutely want to be before netd and the system boot slot is
+# considered to have booted successfully.
+on load-bpf-programs
+    exec_start bpfloader
+
 on bpf-progs-loaded
     start netd
 
@@ -1280,7 +1293,7 @@ on property:net.tcp_def_init_rwnd=*
 # controlling access. On older kernels, the paranoid value is the only means of
 # controlling access. It is normally 3 (allow only root), but the shell user
 # can lower it to 1 (allowing thread-scoped pofiling) via security.perf_harden.
-on load_bpf_programs && property:sys.init.perf_lsm_hooks=1
+on load-bpf-programs && property:sys.init.perf_lsm_hooks=1
     write /proc/sys/kernel/perf_event_paranoid -1
 on property:security.perf_harden=0 && property:sys.init.perf_lsm_hooks=""
     write /proc/sys/kernel/perf_event_paranoid 1
