@@ -1,0 +1,64 @@
+service storageproxyd_system /system_ext/bin/storageproxyd.system \
+        -d ${storageproxyd_system.trusty_ipc_dev:-/dev/trusty-ipc-dev0} \
+        -r /dev/socket/rpmb_mock_system \
+        -p /data/secure_storage_system \
+        -t sock
+    disabled
+    user system
+    group system
+
+service rpmb_mock_init_system /system_ext/bin/rpmb_dev.system \
+        --dev /mnt/secure_storage_rpmb_system/persist/RPMB_DATA --init --size 2048
+    disabled
+    user system
+    group system
+    oneshot
+
+service rpmb_mock_system /system_ext/bin/rpmb_dev.system \
+        --dev /mnt/secure_storage_rpmb_system/persist/RPMB_DATA \
+        --sock rpmb_mock_system
+    disabled
+    user system
+    group system
+    socket rpmb_mock_system stream 660 system system
+
+# storageproxyd
+on late-fs && \
+    property:trusty_vm_system_nonsecure.ready=1 && \
+    property:storageproxyd_system.trusty_ipc_dev=*
+    wait /dev/socket/rpmb_mock_system
+    start storageproxyd_system
+
+
+# RPMB Mock
+on post-fs && \
+    property:trusty_vm_system_nonsecure.ready=1 && \
+    property:trusty_vm_system.vm_cid=*
+    # Create a persistent location for the RPMB data
+    # (work around lack of RPMb block device on CF).
+    # file contexts secure_storage_rpmb_system_file
+    # (only used on Cuttlefish as this is non secure)
+    mkdir /metadata/secure_storage_rpmb_system 0770 system system
+    mkdir /mnt/secure_storage_rpmb_system 0770 system system
+    symlink /metadata/secure_storage_rpmb_system \
+            /mnt/secure_storage_rpmb_system/persist
+    # Create a system persist directory in /metadata
+    # (work around lack of dedicated system persist partition).
+    # file contexts secure_storage_persist_system_file
+    mkdir /metadata/secure_storage_persist_system 0770 system system
+    mkdir /mnt/secure_storage_persist_system 0770 system system
+    symlink /metadata/secure_storage_persist_system \
+            /mnt/secure_storage_persist_system/persist
+    setprop storageproxyd_system.trusty_ipc_dev VSOCK:${trusty_vm_system.vm_cid}:1
+    exec_start rpmb_mock_init_system
+    start rpmb_mock_system
+
+on post-fs-data && \
+    property:trusty_vm_system_nonsecure.ready=1 && \
+    property:storageproxyd_system.trusty_ipc_dev=*
+    # file contexts secure_storage_system_file
+    mkdir /data/secure_storage_system 0770 root system
+    symlink /mnt/secure_storage_persist_system/persist \
+            /data/secure_storage_system/persist
+    chown root system /data/secure_storage_system/persist
+    restart storageproxyd_system
