@@ -14,13 +14,12 @@
 
 //! A Rust interface for the StatsD pull API.
 
-use once_cell::sync::Lazy;
 use statslog_rust_header::{Atoms, Stat, StatsError};
 use statspull_bindgen::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::c_void;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 /// The return value of callbacks.
 pub type StatsPullResult = Vec<Box<dyn Stat>>;
@@ -107,8 +106,8 @@ impl Default for Metadata {
     }
 }
 
-static COOKIES: Lazy<Mutex<HashMap<i32, fn() -> StatsPullResult>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static COOKIES: LazyLock<Mutex<HashMap<i32, fn() -> StatsPullResult>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// # Safety
 ///
