@@ -729,7 +729,6 @@ TEST(propertyinfoserializer, RealProperties) {
       {"sys.ims.QMI_DAEMON_STATUS", "u:object_r:qcom_ims_prop:s0"},
       {"sys.listeners.registered", "u:object_r:qseecomtee_prop:s0"},
       {"sys.logbootcomplete", "u:object_r:system_prop:s0"},
-      {"sys.oem_unlock_allowed", "u:object_r:system_prop:s0"},
       {"sys.qcom.devup", "u:object_r:system_prop:s0"},
       {"sys.sysctl.extra_free_kbytes", "u:object_r:system_prop:s0"},
       {"sys.usb.config", "u:object_r:system_radio_prop:s0"},
