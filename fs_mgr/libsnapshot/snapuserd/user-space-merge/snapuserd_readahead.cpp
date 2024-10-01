@@ -458,6 +458,7 @@ bool ReadAhead::ReapIoCompletions(int pending_ios_to_complete) {
 void ReadAhead::ProcessXorData(size_t& block_xor_index, size_t& xor_index,
                                std::vector<const CowOperation*>& xor_op_vec, void* buffer,
                                loff_t& buffer_offset) {
+    using WordType = std::conditional_t<sizeof(void*) == sizeof(uint64_t), uint64_t, uint32_t>;
     loff_t xor_buf_offset = 0;
 
     while (block_xor_index < blocks_.size()) {
@@ -470,13 +471,14 @@ void ReadAhead::ProcessXorData(size_t& block_xor_index, size_t& xor_index,
             // Check if this block is an XOR op
             if (xor_op->new_block == new_block) {
                 // Pointer to the data read from base device
-                uint8_t* buffer = reinterpret_cast<uint8_t*>(bufptr);
+                auto buffer_words = reinterpret_cast<WordType*>(bufptr);
                 // Get the xor'ed data read from COW device
-                uint8_t* xor_data = reinterpret_cast<uint8_t*>((char*)bufsink_.GetPayloadBufPtr() +
-                                                               xor_buf_offset);
+                auto xor_data_words = reinterpret_cast<WordType*>(
+                        (char*)bufsink_.GetPayloadBufPtr() + xor_buf_offset);
+                auto num_words = BLOCK_SZ / sizeof(WordType);
 
-                for (size_t byte_offset = 0; byte_offset < BLOCK_SZ; byte_offset++) {
-                    buffer[byte_offset] ^= xor_data[byte_offset];
+                for (auto i = 0; i < num_words; i++) {
+                    buffer_words[i] ^= xor_data_words[i];
                 }
 
                 // Move to next XOR op
