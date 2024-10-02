@@ -16,10 +16,11 @@
 
 #include <endian.h>
 
+#include <random>
+
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <base/files/file_util.h>
-#include <base/rand_util.h>
 #include <libavb/libavb.h>
 
 #include "avb_util.h"
@@ -727,7 +728,10 @@ void AvbUtilTest::ModifyFile(const base::FilePath& file_path, size_t offset, ssi
 
     // Introduces a new modification.
     if (length > 0) {
-        int modify_location = base::RandInt(offset, offset + length - 1);
+        // mersenne_twister_engine seeded with the default seed source.
+        static std::mt19937 gen(std::random_device{}());
+        std::uniform_int_distribution<> rand_distribution(offset, offset + length - 1);
+        int modify_location = rand_distribution(gen);
         file_content[modify_location] ^= 0x80;
         last_file_path = file_path.value();
         last_modified_location = modify_location;
