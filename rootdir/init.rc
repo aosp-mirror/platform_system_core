@@ -644,6 +644,7 @@ on post-fs
     mkdir /metadata/ota 0750 root system
     mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/watchdog 0770 root system
+    mkdir /metadata/tradeinmode 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
