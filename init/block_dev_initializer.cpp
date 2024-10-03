@@ -98,7 +98,11 @@ ListenerAction BlockDevInitializer::HandleUevent(const Uevent& uevent,
 
     LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << name;
 
-    devices->erase(iter);
+    // Remove partition from the list only if it was found on boot device
+    if (device_handler_->IsBootDevice(uevent)) {
+        devices->erase(iter);
+    }
+
     device_handler_->HandleUevent(uevent);
     return devices->empty() ? ListenerAction::kStop : ListenerAction::kContinue;
 }
