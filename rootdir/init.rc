@@ -1243,6 +1243,9 @@ on boot
     chown system system /sys/kernel/ipv4/tcp_rmem_min
     chown system system /sys/kernel/ipv4/tcp_rmem_def
     chown system system /sys/kernel/ipv4/tcp_rmem_max
+    chown system system /sys/firmware/acpi/tables
+    chown system system /sys/firmware/acpi/tables/BERT
+    chown system system /sys/firmware/acpi/tables/data/BERT
     chown root radio /proc/cmdline
     chown root system /proc/bootconfig
 
