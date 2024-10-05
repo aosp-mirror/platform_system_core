@@ -838,6 +838,10 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Get value of maximum cow op merge size
     uint32_t GetUpdateCowOpMergeSize(LockedFile* lock);
+
+    // Get number of threads to perform post OTA boot verification
+    uint32_t GetUpdateWorkerCount(LockedFile* lock);
+
     // Wrapper around libdm, with diagnostics.
     bool DeleteDeviceIfExists(const std::string& name,
                               const std::chrono::milliseconds& timeout_ms = {});
