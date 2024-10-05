@@ -19,11 +19,6 @@ package {
 prebuilt_etc {
     name: "cgroups.json",
     src: "cgroups.json",
-    required: [
-        "cgroups_28.json",
-        "cgroups_29.json",
-        "cgroups_30.json",
-    ],
 }
 
 prebuilt_etc {
@@ -34,49 +29,8 @@ prebuilt_etc {
 }
 
 prebuilt_etc {
-    name: "cgroups_28.json",
-    src: "cgroups_28.json",
-    sub_dir: "task_profiles",
-}
-
-prebuilt_etc {
-    name: "cgroups_29.json",
-    src: "cgroups_29.json",
-    sub_dir: "task_profiles",
-}
-
-prebuilt_etc {
-    name: "cgroups_30.json",
-    src: "cgroups_30.json",
-    sub_dir: "task_profiles",
-}
-
-prebuilt_etc {
     name: "task_profiles.json",
     src: "task_profiles.json",
-    required: [
-        "task_profiles_28.json",
-        "task_profiles_29.json",
-        "task_profiles_30.json",
-    ],
-}
-
-prebuilt_etc {
-    name: "task_profiles_28.json",
-    src: "task_profiles_28.json",
-    sub_dir: "task_profiles",
-}
-
-prebuilt_etc {
-    name: "task_profiles_29.json",
-    src: "task_profiles_29.json",
-    sub_dir: "task_profiles",
-}
-
-prebuilt_etc {
-    name: "task_profiles_30.json",
-    src: "task_profiles_30.json",
-    sub_dir: "task_profiles",
 }
 
 cc_defaults {
