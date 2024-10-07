@@ -501,9 +501,10 @@ have been omitted.
       reformatted here if it couldn't mount in first-stage init.
    6. `post-fs-data-checkpointed` - Triggered when vold has completed committing a checkpoint
       after an OTA update. Not triggered if checkpointing is not needed or supported.
-   7. `zygote-start` - Start the zygote.
-   8. `early-boot` - After zygote has started.
-   9. `boot` - After `early-boot` actions have completed.
+   7. `bpf-progs-loaded` - Starts things that want to start ASAP but need eBPF (incl. netd)
+   8. `zygote-start` - Start the zygote.
+   9. `early-boot` - After zygote has started.
+  10. `boot` - After `early-boot` actions have completed.
 
 Commands
 --------
@@ -636,7 +637,7 @@ provides the `aidl_lazy_test_1` interface.
   Properties are expanded within _level_.
 
 `mark_post_data`
-> Used to mark the point right after /data is mounted.
+> (This action is deprecated and no-op.)
 
 `mkdir <path> [<mode>] [<owner>] [<group>] [encryption=<action>] [key=<key>]`
 > Create a directory at _path_, optionally with the given mode, owner, and
@@ -745,6 +746,9 @@ provides the `aidl_lazy_test_1` interface.
   fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
   under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
+`swapoff <path>`
+> Stops swapping to the file or block device specified by path.
+
 `symlink <target> <path>`
 > Create a symbolic link at _path_ with the value _target_
 
@@ -787,7 +791,6 @@ provides the `aidl_lazy_test_1` interface.
 > Open the file at _path_ and write a string to it with write(2).
   If the file does not exist, it will be created. If it does exist,
   it will be truncated. Properties are expanded within _content_.
-
 
 Imports
 -------

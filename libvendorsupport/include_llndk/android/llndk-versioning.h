@@ -25,7 +25,7 @@
     __attribute__((annotate("introduced_in_llndk=" #vendor_api_level)))
 #endif
 
-#if defined(__ANDROID_VENDOR__)
+#if defined(__ANDROID_VNDK__)
 
 // Use this macro as an `if` statement to call an API that are available to both NDK and LLNDK.
 // This returns true for the vendor modules if the vendor_api_level is less than or equal to the
@@ -33,7 +33,7 @@
 #define API_LEVEL_AT_LEAST(sdk_api_level, vendor_api_level) \
     constexpr(__ANDROID_VENDOR_API__ >= vendor_api_level)
 
-#else  // __ANDROID_VENDOR__
+#else  // __ANDROID_VNDK__
 
 // For non-vendor modules, API_LEVEL_AT_LEAST is replaced with __builtin_available(sdk_api_level) to
 // guard the API for __INTRODUCED_IN.
@@ -42,4 +42,4 @@
     (__builtin_available(android sdk_api_level, *))
 #endif
 
-#endif  // __ANDROID_VENDOR__
+#endif  // __ANDROID_VNDK__

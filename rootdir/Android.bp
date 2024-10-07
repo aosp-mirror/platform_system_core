@@ -50,10 +50,15 @@ prebuilt_etc {
     recovery_available: true,
 }
 
+filegroup {
+    name: "system_linker_config_json_file",
+    srcs: ["etc/linker.config.json"],
+}
+
 // TODO(b/147210213) Generate list of libraries during build and fill in at build time
 linker_config {
     name: "system_linker_config",
-    src: "etc/linker.config.json",
+    src: ":system_linker_config_json_file",
     installable: false,
 }
 
@@ -188,4 +193,10 @@ prebuilt_root {
         (true, default): ["asan.options"],
         (default, default): [],
     }),
+}
+
+filegroup {
+    name: "ramdisk_node_list",
+    srcs: ["ramdisk_node_list"],
+    export_to_make_var: "RAMDISK_NODE_LIST",
 }

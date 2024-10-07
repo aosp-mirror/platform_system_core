@@ -1,7 +1,5 @@
 LOCAL_PATH:= $(call my-dir)
 
-$(eval $(call declare-1p-copy-files,system/core/rootdir,))
-
 #######################################
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 ASAN_EXTRACT_FILES :=
@@ -35,7 +33,8 @@ LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \
     ln -sf /data/user_de/0/com.android.shell/files/bugreports $(TARGET_ROOT_OUT)/bugreports; \
     ln -sfn /sys/kernel/debug $(TARGET_ROOT_OUT)/d; \
-    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard
+    ln -sf /storage/self/primary $(TARGET_ROOT_OUT)/sdcard; \
+    ln -sf /product/etc/security/adb_keys $(TARGET_ROOT_OUT)/adb_keys
 
 ALL_ROOTDIR_SYMLINKS := \
   $(TARGET_ROOT_OUT)/bin \
@@ -150,18 +149,3 @@ $(ALL_ROOTDIR_SYMLINKS): $(LOCAL_BUILT_MODULE)
 init.environ.rc-soong := $(call intermediates-dir-for,ETC,init.environ.rc-soong)/init.environ.rc-soong
 $(eval $(call copy-one-file,$(init.environ.rc-soong),$(LOCAL_BUILT_MODULE)))
 init.environ.rc-soong :=
-
-#######################################
-# ramdisk_node_list
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := ramdisk_node_list
-LOCAL_MODULE_CLASS := ETC
-LOCAL_SRC_FILES := $(LOCAL_MODULE)
-LOCAL_MODULE_PATH := $(PRODUCT_OUT)
-
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-include $(BUILD_PREBUILT)
-
-include $(call all-makefiles-under,$(LOCAL_PATH))
