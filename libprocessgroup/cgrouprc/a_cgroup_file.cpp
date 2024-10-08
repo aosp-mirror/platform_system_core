@@ -14,51 +14,93 @@
  * limitations under the License.
  */
 
-#include <iterator>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+#include <memory>
 
 #include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <android-base/unique_fd.h>
 #include <android/cgrouprc.h>
-#include <processgroup/util.h>
+#include <processgroup/processgroup.h>
 
 #include "cgrouprc_internal.h"
 
-static CgroupDescriptorMap* LoadDescriptors() {
-    CgroupDescriptorMap* descriptors = new CgroupDescriptorMap;
-    if (!ReadDescriptors(descriptors)) {
-        LOG(ERROR) << "Failed to load cgroup description file";
+using android::base::StringPrintf;
+using android::base::unique_fd;
+
+using android::cgrouprc::format::CgroupController;
+using android::cgrouprc::format::CgroupFile;
+
+static CgroupFile* LoadRcFile() {
+    struct stat sb;
+
+    unique_fd fd(TEMP_FAILURE_RETRY(open(CGROUPS_RC_PATH, O_RDONLY | O_CLOEXEC)));
+    if (fd < 0) {
+        PLOG(ERROR) << "open() failed for " << CGROUPS_RC_PATH;
         return nullptr;
     }
-    return descriptors;
+
+    if (fstat(fd, &sb) < 0) {
+        PLOG(ERROR) << "fstat() failed for " << CGROUPS_RC_PATH;
+        return nullptr;
+    }
+
+    size_t file_size = sb.st_size;
+    if (file_size < sizeof(CgroupFile)) {
+        LOG(ERROR) << "Invalid file format " << CGROUPS_RC_PATH;
+        return nullptr;
+    }
+
+    CgroupFile* file_data = (CgroupFile*)mmap(nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (file_data == MAP_FAILED) {
+        PLOG(ERROR) << "Failed to mmap " << CGROUPS_RC_PATH;
+        return nullptr;
+    }
+
+    if (file_data->version_ != CgroupFile::FILE_CURR_VERSION) {
+        LOG(ERROR) << CGROUPS_RC_PATH << " file version mismatch";
+        munmap(file_data, file_size);
+        return nullptr;
+    }
+
+    auto expected = sizeof(CgroupFile) + file_data->controller_count_ * sizeof(CgroupController);
+    if (file_size != expected) {
+        LOG(ERROR) << CGROUPS_RC_PATH << " file has invalid size, expected " << expected
+                   << ", actual " << file_size;
+        munmap(file_data, file_size);
+        return nullptr;
+    }
+
+    return file_data;
 }
 
-static const CgroupDescriptorMap* GetInstance() {
+static CgroupFile* GetInstance() {
     // Deliberately leak this object (not munmap) to avoid a race between destruction on
     // process exit and concurrent access from another thread.
-    static const CgroupDescriptorMap* descriptors = LoadDescriptors();
-    return descriptors;
+    static auto* file = LoadRcFile();
+    return file;
 }
 
 uint32_t ACgroupFile_getVersion() {
-    static constexpr uint32_t FILE_VERSION_1 = 1;
-    auto descriptors = GetInstance();
-    if (descriptors == nullptr) return 0;
-    // There has only ever been one version, and there will be no more since cgroup.rc is no more
-    return FILE_VERSION_1;
+    auto file = GetInstance();
+    if (file == nullptr) return 0;
+    return file->version_;
 }
 
 uint32_t ACgroupFile_getControllerCount() {
-    auto descriptors = GetInstance();
-    if (descriptors == nullptr) return 0;
-    return descriptors->size();
+    auto file = GetInstance();
+    if (file == nullptr) return 0;
+    return file->controller_count_;
 }
 
 const ACgroupController* ACgroupFile_getController(uint32_t index) {
-    auto descriptors = GetInstance();
-    if (descriptors == nullptr) return nullptr;
-    CHECK(index < descriptors->size());
+    auto file = GetInstance();
+    if (file == nullptr) return nullptr;
+    CHECK(index < file->controller_count_);
     // Although the object is not actually an ACgroupController object, all ACgroupController_*
     // functions implicitly convert ACgroupController* back to CgroupController* before invoking
     // member functions.
-    const CgroupController* p = std::next(descriptors->begin(), index)->second.controller();
-    return static_cast<const ACgroupController*>(p);
+    return static_cast<ACgroupController*>(&file->controllers_[index]);
 }

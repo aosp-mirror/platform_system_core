@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-#include <processgroup/cgroup_controller.h>
+#include <processgroup/format/cgroup_controller.h>
 
-#include <cstring>
+namespace android {
+namespace cgrouprc {
+namespace format {
 
 CgroupController::CgroupController(uint32_t version, uint32_t flags, const std::string& name,
                                    const std::string& path, uint32_t max_activation_depth)
@@ -53,3 +55,7 @@ const char* CgroupController::path() const {
 void CgroupController::set_flags(uint32_t flags) {
     flags_ = flags;
 }
+
+}  // namespace format
+}  // namespace cgrouprc
+}  // namespace android

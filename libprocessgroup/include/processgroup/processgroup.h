@@ -57,7 +57,7 @@ __BEGIN_DECLS
 
 bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 
-[[deprecated]] static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
+static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
 bool UsePerAppMemcg();
 
