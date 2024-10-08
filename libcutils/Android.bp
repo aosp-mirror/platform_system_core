@@ -301,7 +301,7 @@ cc_defaults {
         android: {
             static_executable: true,
             static_libs: [
-                "libprocessgroup_util",
+                "libcgrouprc_format",
             ] + test_libraries + always_static_test_libraries,
         },
         not_windows: {
