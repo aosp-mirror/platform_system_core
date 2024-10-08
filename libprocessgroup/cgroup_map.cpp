@@ -194,24 +194,6 @@ CgroupControllerWrapper CgroupMap::FindControllerByPath(const std::string& path)
     return CgroupControllerWrapper(nullptr);
 }
 
-int CgroupMap::ActivateControllers(const std::string& path) const {
-    for (const auto& [name, descriptor] : descriptors_) {
-        const uint32_t flags = descriptor.controller()->flags();
-        const uint32_t max_activation_depth = descriptor.controller()->max_activation_depth();
-        const int depth = GetCgroupDepth(descriptor.controller()->path(), path);
-
-        if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
-            std::string str("+");
-            str.append(descriptor.controller()->name());
-            if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
-                if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
-                    PLOG(WARNING) << "Activation of cgroup controller " << str
-                                  << " failed in path " << path;
-                } else {
-                    return -errno;
-                }
-            }
-        }
-    }
-    return 0;
+bool CgroupMap::ActivateControllers(const std::string& path) const {
+    return ::ActivateControllers(path, descriptors_);
 }
