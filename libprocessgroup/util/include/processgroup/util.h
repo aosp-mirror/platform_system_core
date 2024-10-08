@@ -31,3 +31,5 @@ unsigned int GetCgroupDepth(const std::string& controller_root, const std::strin
 using CgroupControllerName = std::string;
 using CgroupDescriptorMap = std::map<CgroupControllerName, CgroupDescriptor>;
 bool ReadDescriptors(CgroupDescriptorMap* descriptors);
+
+bool ActivateControllers(const std::string& path, const CgroupDescriptorMap& descriptors);
