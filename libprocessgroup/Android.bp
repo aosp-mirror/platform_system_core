@@ -17,7 +17,7 @@ soong_config_module_type {
 
 libprocessgroup_flag_aware_cc_defaults {
     name: "libprocessgroup_build_flags_cc",
-    cpp_std: "gnu++20",
+    cpp_std: "gnu++23",
     soong_config_variables: {
         memcg_v2_force_enabled: {
             cflags: [
@@ -116,5 +116,6 @@ cc_test {
     ],
     static_libs: [
         "libgmock",
+        "libprocessgroup_util",
     ],
 }

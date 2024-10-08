@@ -163,7 +163,6 @@ libinit_cc_defaults {
         "libavb",
         "libavf_cc_flags",
         "libbootloader_message",
-        "libcgrouprc_format",
         "liblmkd_utils",
         "liblz4",
         "libzstd",
