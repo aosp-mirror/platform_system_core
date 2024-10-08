@@ -474,8 +474,6 @@ void SelinuxRestoreContext() {
     RestoreconIfExists(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
     RestoreconIfExists("/metadata/gsi",
                        SELINUX_ANDROID_RESTORECON_RECURSE | SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
-
-    RestoreconIfExists("/dev/hvc1", 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {
