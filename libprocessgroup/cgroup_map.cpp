@@ -25,10 +25,12 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
+#include <android-base/strings.h>
 #include <cgroup_map.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/util.h>
 
+using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
 
@@ -38,17 +40,17 @@ static constexpr const char* CGROUP_TASKS_FILE_V2 = "/cgroup.threads";
 
 uint32_t CgroupControllerWrapper::version() const {
     CHECK(HasValue());
-    return controller_->version();
+    return ACgroupController_getVersion(controller_);
 }
 
 const char* CgroupControllerWrapper::name() const {
     CHECK(HasValue());
-    return controller_->name();
+    return ACgroupController_getName(controller_);
 }
 
 const char* CgroupControllerWrapper::path() const {
     CHECK(HasValue());
-    return controller_->path();
+    return ACgroupController_getPath(controller_);
 }
 
 bool CgroupControllerWrapper::HasValue() const {
@@ -60,7 +62,7 @@ bool CgroupControllerWrapper::IsUsable() {
 
     if (state_ == UNKNOWN) {
         if (__builtin_available(android 30, *)) {
-            uint32_t flags = controller_->flags();
+            uint32_t flags = ACgroupController_getFlags(controller_);
             state_ = (flags & CGROUPRC_CONTROLLER_FLAG_MOUNTED) != 0 ? USABLE : MISSING;
         } else {
             state_ = access(GetProcsFilePath("", 0, 0).c_str(), F_OK) == 0 ? USABLE : MISSING;
@@ -127,8 +129,8 @@ bool CgroupControllerWrapper::GetTaskGroup(pid_t tid, std::string* group) const 
 }
 
 CgroupMap::CgroupMap() {
-    if (!LoadDescriptors()) {
-        LOG(ERROR) << "CgroupMap::LoadDescriptors called for [" << getpid() << "] failed";
+    if (!LoadRcFile()) {
+        LOG(ERROR) << "CgroupMap::LoadRcFile called for [" << getpid() << "] failed";
     }
 }
 
@@ -139,9 +141,9 @@ CgroupMap& CgroupMap::GetInstance() {
     return *instance;
 }
 
-bool CgroupMap::LoadDescriptors() {
+bool CgroupMap::LoadRcFile() {
     if (!loaded_) {
-        loaded_ = ReadDescriptors(&descriptors_);
+        loaded_ = (ACgroupFile_getVersion() != 0);
     }
     return loaded_;
 }
@@ -149,30 +151,43 @@ bool CgroupMap::LoadDescriptors() {
 void CgroupMap::Print() const {
     if (!loaded_) {
         LOG(ERROR) << "CgroupMap::Print called for [" << getpid()
-                   << "] failed, cgroups were not initialized properly";
+                   << "] failed, RC file was not initialized properly";
         return;
     }
-    LOG(INFO) << "Controller count = " << descriptors_.size();
+    LOG(INFO) << "File version = " << ACgroupFile_getVersion();
+    LOG(INFO) << "File controller count = " << ACgroupFile_getControllerCount();
 
     LOG(INFO) << "Mounted cgroups:";
 
-    for (const auto& [name, descriptor] : descriptors_) {
-        LOG(INFO) << "\t" << descriptor.controller()->name() << " ver "
-                  << descriptor.controller()->version() << " path "
-                  << descriptor.controller()->path() << " flags "
-                  << descriptor.controller()->flags();
+    auto controller_count = ACgroupFile_getControllerCount();
+    for (uint32_t i = 0; i < controller_count; ++i) {
+        const ACgroupController* controller = ACgroupFile_getController(i);
+        if (__builtin_available(android 30, *)) {
+            LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
+                      << ACgroupController_getVersion(controller) << " path "
+                      << ACgroupController_getPath(controller) << " flags "
+                      << ACgroupController_getFlags(controller);
+        } else {
+            LOG(INFO) << "\t" << ACgroupController_getName(controller) << " ver "
+                      << ACgroupController_getVersion(controller) << " path "
+                      << ACgroupController_getPath(controller);
+        }
     }
 }
 
 CgroupControllerWrapper CgroupMap::FindController(const std::string& name) const {
     if (!loaded_) {
         LOG(ERROR) << "CgroupMap::FindController called for [" << getpid()
-                   << "] failed, cgroups were not initialized properly";
+                   << "] failed, RC file was not initialized properly";
         return CgroupControllerWrapper(nullptr);
     }
 
-    if (const auto it = descriptors_.find(name); it != descriptors_.end()) {
-        return CgroupControllerWrapper(it->second.controller());
+    auto controller_count = ACgroupFile_getControllerCount();
+    for (uint32_t i = 0; i < controller_count; ++i) {
+        const ACgroupController* controller = ACgroupFile_getController(i);
+        if (name == ACgroupController_getName(controller)) {
+            return CgroupControllerWrapper(controller);
+        }
     }
 
     return CgroupControllerWrapper(nullptr);
@@ -181,19 +196,47 @@ CgroupControllerWrapper CgroupMap::FindController(const std::string& name) const
 CgroupControllerWrapper CgroupMap::FindControllerByPath(const std::string& path) const {
     if (!loaded_) {
         LOG(ERROR) << "CgroupMap::FindControllerByPath called for [" << getpid()
-                   << "] failed, cgroups were not initialized properly";
+                   << "] failed, RC file was not initialized properly";
         return CgroupControllerWrapper(nullptr);
     }
 
-    for (const auto& [name, descriptor] : descriptors_) {
-        if (path.starts_with(descriptor.controller()->path())) {
-            return CgroupControllerWrapper(descriptor.controller());
+    auto controller_count = ACgroupFile_getControllerCount();
+    for (uint32_t i = 0; i < controller_count; ++i) {
+        const ACgroupController* controller = ACgroupFile_getController(i);
+        if (StartsWith(path, ACgroupController_getPath(controller))) {
+            return CgroupControllerWrapper(controller);
         }
     }
 
     return CgroupControllerWrapper(nullptr);
 }
 
-bool CgroupMap::ActivateControllers(const std::string& path) const {
-    return ::ActivateControllers(path, descriptors_);
+int CgroupMap::ActivateControllers(const std::string& path) const {
+    if (__builtin_available(android 30, *)) {
+        auto controller_count = ACgroupFile_getControllerCount();
+        for (uint32_t i = 0; i < controller_count; ++i) {
+            const ACgroupController* controller = ACgroupFile_getController(i);
+            const uint32_t flags = ACgroupController_getFlags(controller);
+            uint32_t max_activation_depth = UINT32_MAX;
+            if (__builtin_available(android 36, *)) {
+                max_activation_depth = ACgroupController_getMaxActivationDepth(controller);
+            }
+            const int depth = util::GetCgroupDepth(ACgroupController_getPath(controller), path);
+
+            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
+                std::string str("+");
+                str.append(ACgroupController_getName(controller));
+                if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
+                    if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
+                        PLOG(WARNING) << "Activation of cgroup controller " << str
+                                      << " failed in path " << path;
+                    } else {
+                        return -errno;
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+    return -ENOSYS;
 }
