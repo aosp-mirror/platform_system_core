@@ -37,15 +37,7 @@ cc_library_static {
         "include",
     ],
     srcs: [
-        "cgroup_controller.cpp",
-        "cgroup_descriptor.cpp",
         "util.cpp",
-    ],
-    shared_libs: [
-        "libbase",
-    ],
-    static_libs: [
-        "libjsoncpp",
     ],
     defaults: ["libprocessgroup_build_flags_cc"],
 }

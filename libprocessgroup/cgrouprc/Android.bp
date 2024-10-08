@@ -49,8 +49,7 @@ cc_library {
         "libbase",
     ],
     static_libs: [
-        "libjsoncpp",
-        "libprocessgroup_util",
+        "libcgrouprc_format",
     ],
     stubs: {
         symbol_file: "libcgrouprc.map.txt",
