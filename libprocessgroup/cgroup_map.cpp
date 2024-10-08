@@ -151,7 +151,7 @@ bool CgroupMap::LoadRcFile() {
 void CgroupMap::Print() const {
     if (!loaded_) {
         LOG(ERROR) << "CgroupMap::Print called for [" << getpid()
-                   << "] failed, RC file was not initialized properly";
+                   << "] failed, cgroups were not initialized properly";
         return;
     }
     LOG(INFO) << "File version = " << ACgroupFile_getVersion();
@@ -221,7 +221,7 @@ int CgroupMap::ActivateControllers(const std::string& path) const {
             if (__builtin_available(android 36, *)) {
                 max_activation_depth = ACgroupController_getMaxActivationDepth(controller);
             }
-            const int depth = util::GetCgroupDepth(ACgroupController_getPath(controller), path);
+            const int depth = GetCgroupDepth(ACgroupController_getPath(controller), path);
 
             if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
                 std::string str("+");
