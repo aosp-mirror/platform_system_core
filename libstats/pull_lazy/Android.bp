@@ -32,7 +32,7 @@ cc_test {
         "-Wall",
         "-Werror",
     ],
-    test_suites: ["device-tests", "mts-statsd"],
+    test_suites: ["device-tests"],
     test_config: "libstatspull_lazy_test.xml",
     // TODO(b/153588990): Remove when the build system properly separates.
     // 32bit and 64bit architectures.
