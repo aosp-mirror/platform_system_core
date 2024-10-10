@@ -114,8 +114,6 @@ class SetTimerSlackAction : public ProfileAction {
 
   private:
     unsigned long slack_;
-
-    static bool IsTimerSlackSupported(pid_t tid);
 };
 
 // Set attribute profile element
