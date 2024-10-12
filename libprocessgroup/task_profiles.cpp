@@ -37,11 +37,6 @@
 
 #include <build_flags.h>
 
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-#include <sys/prctl.h>
-#endif
-
 using android::base::GetThreadId;
 using android::base::GetUintProperty;
 using android::base::StringPrintf;
