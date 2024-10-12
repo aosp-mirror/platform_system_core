@@ -37,11 +37,6 @@
 
 #include <build_flags.h>
 
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-#include <sys/prctl.h>
-#endif
-
 using android::base::GetThreadId;
 using android::base::GetUintProperty;
 using android::base::StringPrintf;
@@ -203,33 +198,15 @@ bool SetClampsAction::ExecuteForTask(int) const {
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 
-bool SetTimerSlackAction::IsTimerSlackSupported(pid_t tid) {
-    auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
-
-    return (access(file.c_str(), W_OK) == 0);
-}
-
 bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
-    static bool sys_supports_timerslack = IsTimerSlackSupported(tid);
-
-    // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
-    // TODO: once we've backported this, log if the open(2) fails.
-    if (sys_supports_timerslack) {
-        auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
-        if (!WriteStringToFile(std::to_string(slack_), file)) {
-            if (errno == ENOENT) {
-                // This happens when process is already dead
-                return true;
-            }
-            PLOG(ERROR) << "set_timerslack_ns write failed";
+    const auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
+    if (!WriteStringToFile(std::to_string(slack_), file)) {
+        if (errno == ENOENT) {
+            // This happens when process is already dead
+            return true;
         }
-    }
-
-    // TODO: Remove when /proc/<tid>/timerslack_ns interface is backported.
-    if (tid == 0 || tid == GetThreadId()) {
-        if (prctl(PR_SET_TIMERSLACK, slack_) == -1) {
-            PLOG(ERROR) << "set_timerslack_ns prctl failed";
-        }
+        PLOG(ERROR) << "set_timerslack_ns write failed";
+        return false;
     }
 
     return true;
