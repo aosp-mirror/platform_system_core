@@ -77,7 +77,7 @@ class ProfileAction {
 
     // Default implementations will fail
     virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; }
-    virtual bool ExecuteForTask(int) const { return false; }
+    virtual bool ExecuteForTask(pid_t) const { return false; }
     virtual bool ExecuteForUID(uid_t) const { return false; }
 
     virtual void EnableResourceCaching(ResourceCacheType) {}
@@ -114,8 +114,6 @@ class SetTimerSlackAction : public ProfileAction {
 
   private:
     unsigned long slack_;
-
-    static bool IsTimerSlackSupported(pid_t tid);
 };
 
 // Set attribute profile element
