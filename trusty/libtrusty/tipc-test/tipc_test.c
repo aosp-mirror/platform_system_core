@@ -67,7 +67,7 @@ static const char *main_ctrl_name = "com.android.ipc-unittest.ctrl";
 static const char* receiver_name = "com.android.trusty.memref.receiver";
 static const size_t memref_chunk_size = 4096;
 
-static const char* _sopts = "hsvDS:t:r:m:b:B:";
+static const char* _sopts = "hsvD:S:t:r:m:b:B:";
 /* clang-format off */
 static const struct option _lopts[] =  {
     {"help",    no_argument,       0, 'h'},
