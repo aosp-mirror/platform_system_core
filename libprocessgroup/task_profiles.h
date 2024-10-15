@@ -91,19 +91,6 @@ class ProfileAction {
 };
 
 // Profile actions
-class SetClampsAction : public ProfileAction {
-  public:
-    SetClampsAction(int boost, int clamp) noexcept : boost_(boost), clamp_(clamp) {}
-
-    const char* Name() const override { return "SetClamps"; }
-    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
-    bool ExecuteForTask(pid_t tid) const override;
-
-  protected:
-    int boost_;
-    int clamp_;
-};
-
 class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
