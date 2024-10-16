@@ -184,7 +184,7 @@ std::vector<SuperImageExtent> SuperLayoutBuilder::GetImageLayout() {
                 return {};
             }
 
-            size_t size = e.num_sectors * LP_SECTOR_SIZE;
+            uint64_t size = e.num_sectors * LP_SECTOR_SIZE;
             uint64_t super_offset = e.target_data * LP_SECTOR_SIZE;
             extents.emplace_back(super_offset, size, image_name, image_offset);
 
