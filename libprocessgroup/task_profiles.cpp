@@ -188,18 +188,6 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
     return true;
 }
 
-bool SetClampsAction::ExecuteForProcess(uid_t, pid_t) const {
-    // TODO: add support when kernel supports util_clamp
-    LOG(WARNING) << "SetClampsAction::ExecuteForProcess is not supported";
-    return false;
-}
-
-bool SetClampsAction::ExecuteForTask(int) const {
-    // TODO: add support when kernel supports util_clamp
-    LOG(WARNING) << "SetClampsAction::ExecuteForTask is not supported";
-    return false;
-}
-
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 
@@ -957,23 +945,6 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                                                                       attr_value, optional));
                 } else {
                     LOG(WARNING) << "SetAttribute: unknown attribute: " << attr_name;
-                }
-            } else if (action_name == "SetClamps") {
-                std::string boost_value = params_val["Boost"].asString();
-                std::string clamp_value = params_val["Clamp"].asString();
-                char* end;
-                unsigned long boost;
-
-                boost = strtoul(boost_value.c_str(), &end, 10);
-                if (end > boost_value.c_str()) {
-                    unsigned long clamp = strtoul(clamp_value.c_str(), &end, 10);
-                    if (end > clamp_value.c_str()) {
-                        profile->Add(std::make_unique<SetClampsAction>(boost, clamp));
-                    } else {
-                        LOG(WARNING) << "SetClamps: invalid parameter " << clamp_value;
-                    }
-                } else {
-                    LOG(WARNING) << "SetClamps: invalid parameter: " << boost_value;
                 }
             } else if (action_name == "WriteFile") {
                 std::string attr_filepath = params_val["FilePath"].asString();
