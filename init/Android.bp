@@ -390,6 +390,7 @@ init_first_stage_cc_defaults {
         "libsnapshot_init",
         "update_metadata-protos",
         "libprocinfo",
+        "libbootloader_message",
     ],
 
     static_executable: true,
