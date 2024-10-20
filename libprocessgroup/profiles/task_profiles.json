@@ -572,33 +572,6 @@
     },
 
     {
-      "Name": "PerfBoost",
-      "Actions": [
-        {
-          "Name": "SetClamps",
-          "Params":
-          {
-            "Boost": "50%",
-            "Clamp": "0"
-          }
-        }
-      ]
-    },
-    {
-      "Name": "PerfClamp",
-      "Actions": [
-        {
-          "Name": "SetClamps",
-          "Params":
-          {
-            "Boost": "0",
-            "Clamp": "30%"
-          }
-        }
-      ]
-    },
-
-    {
       "Name": "LowMemoryUsage",
       "Actions": [
         {
