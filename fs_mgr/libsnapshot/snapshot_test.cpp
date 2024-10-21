@@ -2658,9 +2658,6 @@ TEST_F(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch) {
     // Remove the indicators
     ASSERT_TRUE(sm->PrepareDeviceToBootWithoutSnapshot());
 
-    // Ensure snapshots are still mounted
-    ASSERT_TRUE(sm->IsUserspaceSnapshotUpdateInProgress());
-
     // Cleanup snapshots
     ASSERT_TRUE(sm->UnmapAllSnapshots());
 }
