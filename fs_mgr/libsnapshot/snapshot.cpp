@@ -1343,10 +1343,25 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
         }
 
         if (merge_status == "snapshot" &&
-            DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE &&
-            update_status.merge_phase() == MergePhase::FIRST_PHASE) {
-            // The snapshot is not being merged because it's in the wrong phase.
-            return MergeResult(UpdateState::None);
+            DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE) {
+            if (update_status.merge_phase() == MergePhase::FIRST_PHASE) {
+                // The snapshot is not being merged because it's in the wrong phase.
+                return MergeResult(UpdateState::None);
+            } else {
+                // update_status is already in second phase but the
+                // snapshot_status is still not set to SnapshotState::MERGING.
+                //
+                // Resume the merge at this point. see b/374225913
+                LOG(INFO) << "SwitchSnapshotToMerge: " << name << " after resuming merge";
+                auto code = SwitchSnapshotToMerge(lock, name);
+                if (code != MergeFailureCode::Ok) {
+                    LOG(ERROR) << "Failed to switch snapshot: " << name
+                               << " to merge during second phase";
+                    return MergeResult(UpdateState::MergeFailed,
+                                       MergeFailureCode::UnknownTargetType);
+                }
+                return MergeResult(UpdateState::Merging);
+            }
         }
 
         if (merge_status == "snapshot-merge") {
@@ -1442,8 +1457,14 @@ MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
         return MergeFailureCode::WriteStatus;
     }
 
+    auto current_slot_suffix = device_->GetSlotSuffix();
     MergeFailureCode result = MergeFailureCode::Ok;
     for (const auto& snapshot : snapshots) {
+        if (!android::base::EndsWith(snapshot, current_slot_suffix)) {
+            LOG(ERROR) << "Skipping invalid snapshot: " << snapshot
+                       << " during MergeSecondPhaseSnapshots";
+            continue;
+        }
         SnapshotStatus snapshot_status;
         if (!ReadSnapshotStatus(lock, snapshot, &snapshot_status)) {
             return MergeFailureCode::ReadStatus;
