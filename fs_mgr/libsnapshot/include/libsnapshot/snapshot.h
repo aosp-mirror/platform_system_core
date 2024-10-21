@@ -442,6 +442,7 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotUpdateTest, QueryStatusError);
     FRIEND_TEST(SnapshotUpdateTest, SnapshotStatusFileWithoutCow);
     FRIEND_TEST(SnapshotUpdateTest, SpaceSwapUpdate);
+    FRIEND_TEST(SnapshotUpdateTest, InterruptMergeDuringPhaseUpdate);
     FRIEND_TEST(SnapshotUpdateTest, MapAllSnapshotsWithoutSlotSwitch);
     friend class SnapshotTest;
     friend class SnapshotUpdateTest;
