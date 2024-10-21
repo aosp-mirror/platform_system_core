@@ -1603,7 +1603,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.fs_type,
                                    attempted_entry.fs_mgr_flags.is_zoned ? "true" : "false",
                                    std::to_string(attempted_entry.length),
-                                   android::base::Join(attempted_entry.user_devices, ' ')},
+                                   android::base::Join(attempted_entry.user_devices, ' '),
+                                   android::base::Join(attempted_entry.device_aliased, ' ')},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1655,7 +1656,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                formattable_entry->fs_type,
                                formattable_entry->fs_mgr_flags.is_zoned ? "true" : "false",
                                std::to_string(formattable_entry->length),
-                               android::base::Join(formattable_entry->user_devices, ' ')},
+                               android::base::Join(formattable_entry->user_devices, ' '),
+                               android::base::Join(formattable_entry->device_aliased, ' ')},
                               nullptr)) {
                     LERROR << "Encryption failed";
                 } else {
