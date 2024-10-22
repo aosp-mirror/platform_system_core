@@ -15,6 +15,7 @@
 //
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
@@ -85,9 +86,9 @@ cc_library_static {
         "libsnapshot_cow",
         "liburing",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
         "libcgrouprc",
-        "libcgrouprc_format",
     ],
     include_dirs: ["bionic/libc/kernel"],
     export_include_dirs: ["include"],
@@ -129,9 +130,9 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapuserd",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
         "libcgrouprc",
-        "libcgrouprc_format",
         "libsnapuserd_client",
         "libz",
         "liblz4",
@@ -221,9 +222,9 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapuserd",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
         "libcgrouprc",
-        "libcgrouprc_format",
         "liburing",
         "libz",
     ],
@@ -319,7 +320,6 @@ cc_binary_host {
         "libprocessgroup",
         "libjsoncpp",
         "libcgrouprc",
-        "libcgrouprc_format",
         "liburing",
         "libz",
     ],

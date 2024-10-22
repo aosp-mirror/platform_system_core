@@ -787,7 +787,7 @@ RefBase::~RefBase()
             // sp<T>(T*) constructor, assuming that if the object is around, it is already
             // owned by an sp<>.
             ALOGW("RefBase: Explicit destruction, weak count = %d (in %p). Use sp<> to manage this "
-                  "object.",
+                  "object. Note - if weak count is 0, this leaks mRefs (weakref_impl).",
                   mRefs->mWeak.load(), this);
 
 #if ANDROID_UTILS_CALLSTACK_ENABLED
