@@ -16,10 +16,18 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 
-namespace util {
+#include "cgroup_descriptor.h"
+
+// Duplicated from cgrouprc.h. Don't depend on libcgrouprc here.
+#define CGROUPRC_CONTROLLER_FLAG_MOUNTED 0x1
+#define CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION 0x2
+#define CGROUPRC_CONTROLLER_FLAG_OPTIONAL 0x4
 
 unsigned int GetCgroupDepth(const std::string& controller_root, const std::string& cgroup_path);
 
-}  // namespace util
+using CgroupControllerName = std::string;
+using CgroupDescriptorMap = std::map<CgroupControllerName, CgroupDescriptor>;
+bool ReadDescriptors(CgroupDescriptorMap* descriptors);
