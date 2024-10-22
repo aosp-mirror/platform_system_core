@@ -247,11 +247,12 @@ std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_de
     return {};
 }
 
-// Given a path that may start with a platform device, find the parent platform device by finding a
-// parent directory with a 'subsystem' symlink that points to the platform bus.
-// If it doesn't start with a platform device, return false
-bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_device_path) const {
-    platform_device_path->clear();
+// Given a path to a device that may have a parent in the passed set of
+// subsystems, find the parent device that's in the passed set of subsystems.
+// If we don't find a parent in the passed set of subsystems, return false.
+bool DeviceHandler::FindSubsystemDevice(std::string path, std::string* device_path,
+                                        const std::set<std::string>& subsystem_paths) const {
+    device_path->clear();
 
     // Uevents don't contain the mount point, so we need to add it here.
     path.insert(0, sysfs_mount_point_);
@@ -261,11 +262,10 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     while (directory != "/" && directory != ".") {
         std::string subsystem_link_path;
         if (Realpath(directory + "/subsystem", &subsystem_link_path) &&
-            (subsystem_link_path == sysfs_mount_point_ + "/bus/platform" ||
-             subsystem_link_path == sysfs_mount_point_ + "/bus/amba")) {
+            subsystem_paths.find(subsystem_link_path) != subsystem_paths.end()) {
             // We need to remove the mount point that we added above before returning.
             directory.erase(0, sysfs_mount_point_.size());
-            *platform_device_path = directory;
+            *device_path = directory;
             return true;
         }
 
@@ -277,6 +277,15 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     }
 
     return false;
+}
+
+bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_device_path) const {
+    const std::set<std::string> subsystem_paths = {
+            sysfs_mount_point_ + "/bus/platform",
+            sysfs_mount_point_ + "/bus/amba",
+    };
+
+    return FindSubsystemDevice(path, platform_device_path, subsystem_paths);
 }
 
 void DeviceHandler::FixupSysPermissions(const std::string& upath,
