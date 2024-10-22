@@ -193,14 +193,6 @@ BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path
     BlockDeviceInfo info;
 
     if (FindPlatformDevice(uevent_path, &info.str)) {
-        // Skip /devices/platform or /devices/ if present
-        static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
-        static constexpr std::string_view devices_prefix = "/devices/";
-        std::string_view str = info.str;
-
-        if (ConsumePrefix(&str, devices_platform_prefix) || ConsumePrefix(&str, devices_prefix)) {
-            info.str = str;
-        }
         info.type = "platform";
     } else if (FindPciDevicePrefix(uevent_path, &info.str)) {
         info.type = "pci";
@@ -265,7 +257,17 @@ bool DeviceHandler::FindSubsystemDevice(std::string path, std::string* device_pa
             subsystem_paths.find(subsystem_link_path) != subsystem_paths.end()) {
             // We need to remove the mount point that we added above before returning.
             directory.erase(0, sysfs_mount_point_.size());
-            *device_path = directory;
+
+            // Skip /devices/platform or /devices/ if present
+            static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
+            static constexpr std::string_view devices_prefix = "/devices/";
+            std::string_view sv = directory;
+
+            if (!ConsumePrefix(&sv, devices_platform_prefix)) {
+                ConsumePrefix(&sv, devices_prefix);
+            }
+            *device_path = sv;
+
             return true;
         }
 
