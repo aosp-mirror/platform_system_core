@@ -180,25 +180,7 @@ static bool ActivateV2CgroupController(const CgroupDescriptor& descriptor) {
         return false;
     }
 
-    if (controller->flags() & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION &&
-        controller->max_activation_depth() > 0) {
-        std::string str = "+";
-        str += controller->name();
-        std::string path = controller->path();
-        path += "/cgroup.subtree_control";
-
-        if (!android::base::WriteStringToFile(str, path)) {
-            if (IsOptionalController(controller)) {
-                PLOG(INFO) << "Failed to activate optional controller " << controller->name()
-                           << " at " << path;
-                return true;
-            }
-            PLOG(ERROR) << "Failed to activate controller " << controller->name();
-            return false;
-        }
-    }
-
-    return true;
+    return ::ActivateControllers(controller->path(), {{controller->name(), descriptor}});
 }
 
 static bool MountV1CgroupController(const CgroupDescriptor& descriptor) {
@@ -323,27 +305,7 @@ static bool CreateV2SubHierarchy(const std::string& path, const CgroupDescriptor
 
     // Activate all v2 controllers in path so they can be activated in
     // children as they are created.
-    for (const auto& [name, descriptor] : descriptors) {
-        const CgroupController* controller = descriptor.controller();
-        std::uint32_t flags = controller->flags();
-        std::uint32_t max_activation_depth = controller->max_activation_depth();
-        const int depth = GetCgroupDepth(controller->path(), path);
-
-        if (controller->version() == 2 && name != CGROUPV2_HIERARCHY_NAME &&
-            flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
-            std::string str("+");
-            str += controller->name();
-            if (!android::base::WriteStringToFile(str, path + "/cgroup.subtree_control")) {
-                if (flags & CGROUPRC_CONTROLLER_FLAG_OPTIONAL) {
-                    PLOG(WARNING) << "Activation of cgroup controller " << str << " failed in path "
-                                  << path;
-                } else {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
+    return ::ActivateControllers(path, descriptors);
 }
 
 bool CgroupSetup() {
