@@ -192,7 +192,22 @@ void SysfsPermissions::SetPermissions(const std::string& path) const {
 BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path) const {
     BlockDeviceInfo info;
 
-    if (FindPlatformDevice(uevent_path, &info.str)) {
+    if (!boot_part_uuid_.empty()) {
+        // Only use the more specific "MMC" or "SCSI" match if a partition UUID
+        // was passed. Old bootloaders that aren't passing the partition UUID
+        // instead pass the path to the closest "platform" device. It would
+        // break them if we chose this deeper (more specific) path.
+        //
+        // When we have a UUID we _want_ the more specific path since it can
+        // handle, for instance, differentiating two USB disks that are on
+        // the same USB controller. Using the closest platform device would
+        // classify them both the same by using the path to the USB controller.
+        if (FindMmcDevice(uevent_path, &info.str)) {
+            info.type = "mmc";
+        } else if (FindScsiDevice(uevent_path, &info.str)) {
+            info.type = "scsi";
+        }
+    } else if (FindPlatformDevice(uevent_path, &info.str)) {
         info.type = "platform";
     } else if (FindPciDevicePrefix(uevent_path, &info.str)) {
         info.type = "pci";
@@ -288,6 +303,22 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     };
 
     return FindSubsystemDevice(path, platform_device_path, subsystem_paths);
+}
+
+bool DeviceHandler::FindMmcDevice(std::string path, std::string* mmc_device_path) const {
+    const std::set<std::string> subsystem_paths = {
+            sysfs_mount_point_ + "/bus/mmc",
+    };
+
+    return FindSubsystemDevice(path, mmc_device_path, subsystem_paths);
+}
+
+bool DeviceHandler::FindScsiDevice(std::string path, std::string* scsi_device_path) const {
+    const std::set<std::string> subsystem_paths = {
+            sysfs_mount_point_ + "/bus/scsi",
+    };
+
+    return FindSubsystemDevice(path, scsi_device_path, subsystem_paths);
 }
 
 void DeviceHandler::FixupSysPermissions(const std::string& upath,
@@ -567,6 +598,48 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
     }
 }
 
+// Check Uevents looking for the kernel's boot partition UUID
+//
+// When we can stop checking uevents (either because we're done or because
+// we weren't looking for the kernel's boot partition UUID) then return
+// true. Return false if we're not done yet.
+bool DeviceHandler::CheckUeventForBootPartUuid(const Uevent& uevent) {
+    // If we aren't using boot_part_uuid then we're done.
+    if (boot_part_uuid_.empty()) {
+        return true;
+    }
+
+    // Finding the boot partition is a one-time thing that we do at init
+    // time, not steady state. This is because the boot partition isn't
+    // allowed to go away or change. Once we found the boot partition we don't
+    // expect to run again.
+    if (found_boot_part_uuid_) {
+        LOG(WARNING) << __PRETTY_FUNCTION__
+                     << " shouldn't run after kernel boot partition is found";
+        return true;
+    }
+
+    // We only need to look at newly-added block devices. Note that if someone
+    // is replaying events all existing devices will get "add"ed.
+    if (uevent.subsystem != "block" || uevent.action != "add") {
+        return false;
+    }
+
+    // If it's not the partition we care about then move on.
+    if (uevent.partition_uuid != boot_part_uuid_) {
+        return false;
+    }
+
+    auto device = GetBlockDeviceInfo(uevent.path);
+
+    LOG(INFO) << "Boot device " << device.str << " found via partition UUID";
+    found_boot_part_uuid_ = true;
+    boot_devices_.clear();
+    boot_devices_.insert(device.str);
+
+    return true;
+}
+
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.action == "add" || uevent.action == "change" || uevent.action == "bind" ||
         uevent.action == "online") {
@@ -629,17 +702,25 @@ void DeviceHandler::ColdbootDone() {
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
                              std::vector<SysfsPermissions> sysfs_permissions,
                              std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
-                             bool skip_restorecon)
+                             std::string boot_part_uuid, bool skip_restorecon)
     : dev_permissions_(std::move(dev_permissions)),
       sysfs_permissions_(std::move(sysfs_permissions)),
       subsystems_(std::move(subsystems)),
       boot_devices_(std::move(boot_devices)),
+      boot_part_uuid_(boot_part_uuid),
       skip_restorecon_(skip_restorecon),
-      sysfs_mount_point_("/sys") {}
+      sysfs_mount_point_("/sys") {
+    // If both a boot partition UUID and a list of boot devices are
+    // specified then we ignore the boot_devices in favor of boot_part_uuid.
+    if (boot_devices_.size() && !boot_part_uuid.empty()) {
+        LOG(WARNING) << "Both boot_devices and boot_part_uuid provided; ignoring bootdevices";
+        boot_devices_.clear();
+    }
+}
 
 DeviceHandler::DeviceHandler()
     : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                    std::vector<Subsystem>{}, std::set<std::string>{}, false) {}
+                    std::vector<Subsystem>{}, std::set<std::string>{}, "", false) {}
 
 }  // namespace init
 }  // namespace android
