@@ -18,8 +18,6 @@
 
 #include "gtest/gtest.h"
 
-using util::GetCgroupDepth;
-
 TEST(EmptyInputs, bothEmpty) {
     EXPECT_EQ(GetCgroupDepth({}, {}), 0);
 }
