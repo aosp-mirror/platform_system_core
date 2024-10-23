@@ -470,14 +470,12 @@ static bool GetGuestRegistersFromCrashedProcess([[maybe_unused]] pid_t tid,
   }
 
   NativeBridgeGuestStateHeader header;
-  if (!process_memory->ReadFully(header_ptr, &header, sizeof(NativeBridgeGuestStateHeader))) {
-    PLOG(ERROR) << "failed to get the guest state header for thread " << tid;
-    return false;
-  }
-  if (header.signature != NATIVE_BRIDGE_GUEST_STATE_SIGNATURE) {
+  if (!process_memory->ReadFully(header_ptr, &header, sizeof(NativeBridgeGuestStateHeader)) ||
+      header.signature != NATIVE_BRIDGE_GUEST_STATE_SIGNATURE) {
     // Return when ptr points to unmapped memory or no valid guest state.
     return false;
   }
+
   auto guest_state_data_copy = std::make_unique<unsigned char[]>(header.guest_state_data_size);
   if (!process_memory->ReadFully(reinterpret_cast<uintptr_t>(header.guest_state_data),
                                  guest_state_data_copy.get(), header.guest_state_data_size)) {
