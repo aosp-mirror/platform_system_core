@@ -17,25 +17,34 @@ package {
 }
 
 cc_binary {
-  name: "mte_upgrade_test_helper",
-  srcs: ["mte_upgrade_test_helper.cpp"],
-  sanitize: {
-    memtag_heap: true,
-    diag: {
-      memtag_heap: false,
+    name: "mte_upgrade_test_helper",
+    srcs: ["mte_upgrade_test_helper.cpp"],
+    sanitize: {
+        memtag_heap: true,
+        diag: {
+            memtag_heap: false,
+        },
     },
-  },
-  init_rc: [
-    "mte_upgrade_test.rc",
-  ],
+    init_rc: [
+        "mte_upgrade_test.rc",
+    ],
 }
 
 java_test_host {
     name: "mte_upgrade_test",
     libs: ["tradefed"],
-    static_libs: ["frameworks-base-hostutils", "cts-install-lib-host"],
-    srcs:  ["src/**/MteUpgradeTest.java", ":libtombstone_proto-src"],
-    data: [":mte_upgrade_test_helper", "mte_upgrade_test.rc" ],
+    static_libs: [
+        "frameworks-base-hostutils",
+        "cts-install-lib-host",
+    ],
+    srcs: [
+        "src/**/MteUpgradeTest.java",
+        ":libtombstone_proto-src",
+    ],
+    device_first_data: [
+        ":mte_upgrade_test_helper",
+        "mte_upgrade_test.rc",
+    ],
     test_config: "AndroidTest.xml",
     test_suites: ["general-tests"],
 }
