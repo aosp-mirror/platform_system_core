@@ -101,14 +101,21 @@ std::set<std::string> GetApexListFrom(const std::string& apex_dir) {
     return apex_list;
 }
 
+static int GetCurrentSdk() {
+    bool is_preview = base::GetProperty("ro.build.version.codename", "") != "REL";
+    if (is_preview) {
+        return __ANDROID_API_FUTURE__;
+    }
+    return android::base::GetIntProperty("ro.build.version.sdk", __ANDROID_API_FUTURE__);
+}
+
 static Result<void> ParseRcScripts(const std::vector<std::string>& files) {
     if (files.empty()) {
         return {};
     }
     // APEXes can have versioned RC files. These should be filtered based on
     // SDK version.
-    int sdk = android::base::GetIntProperty("ro.build.version.sdk", INT_MAX);
-    if (sdk < 35) sdk = 35;  // aosp/main merges only into sdk=35+ (ie. __ANDROID_API_V__+)
+    static int sdk = GetCurrentSdk();
     auto filtered = FilterVersionedConfigs(files, sdk);
     if (filtered.empty()) {
         return {};
