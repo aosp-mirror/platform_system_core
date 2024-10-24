@@ -105,7 +105,7 @@ class MapSnapshots {
     bool FinishSnapshotWrites();
     bool UnmapCowImagePath(std::string& name);
     bool DeleteSnapshots();
-    bool CleanupSnapshot() { return sm_->PrepareDeviceToBootWithoutSnapshot(); }
+    bool CleanupSnapshot();
     bool BeginUpdate();
     bool ApplyUpdate();
 
@@ -255,6 +255,8 @@ bool MapSnapshots::GetCowDevicePath(std::string partition_name, std::string* cow
     }
 
     LOG(INFO) << "Failed to find cow path: " << cow_device << " Checking the device for -img path";
+    // If the COW device exists only on /data
+    cow_device = partition_name + "-cow-img";
     if (!dm.GetDmDevicePathByName(cow_device, cow_path)) {
         LOG(ERROR) << "Failed to cow path: " << cow_device;
         return false;
@@ -491,6 +493,11 @@ bool MapSnapshots::FinishSnapshotWrites() {
 bool MapSnapshots::UnmapCowImagePath(std::string& name) {
     sm_ = SnapshotManager::New();
     return sm_->UnmapCowImage(name);
+}
+
+bool MapSnapshots::CleanupSnapshot() {
+    sm_ = SnapshotManager::New();
+    return sm_->PrepareDeviceToBootWithoutSnapshot();
 }
 
 bool MapSnapshots::DeleteSnapshots() {

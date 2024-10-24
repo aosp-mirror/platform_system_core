@@ -1,4 +1,5 @@
-# Copyright (C) 2007 Google Inc.
+#
+# Copyright (C) 2024 The Android Open-Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-LOCAL_PATH:= $(call my-dir)
-
-#
-# Package fastboot-related executables.
 #
 
-my_dist_files := $(HOST_OUT_EXECUTABLES)/mke2fs
-my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs
-my_dist_files += $(HOST_OUT_EXECUTABLES)/make_f2fs_casefold
-$(call dist-for-goals,dist_files sdk,$(my_dist_files))
-my_dist_files :=
+#
+# This makefile should be included by the cuttlefish device
+# when enabling the Trusty VM to pull in the baseline set
+# of storage specific modules
+
+PRODUCT_PACKAGES += \
+	storageproxyd.system \
+	rpmb_dev.system \
+

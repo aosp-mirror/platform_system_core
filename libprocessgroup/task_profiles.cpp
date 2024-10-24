@@ -17,11 +17,16 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "libprocessgroup"
 
+#include <task_profiles.h>
+
+#include <map>
+#include <string>
+
 #include <dirent.h>
 #include <fcntl.h>
+#include <sched.h>
+#include <sys/resource.h>
 #include <unistd.h>
-#include <task_profiles.h>
-#include <string>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -30,17 +35,12 @@
 #include <android-base/strings.h>
 #include <android-base/threads.h>
 
+#include <build_flags.h>
+
 #include <cutils/android_filesystem_config.h>
 
 #include <json/reader.h>
 #include <json/value.h>
-
-#include <build_flags.h>
-
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-#include <sys/prctl.h>
-#endif
 
 using android::base::GetThreadId;
 using android::base::GetUintProperty;
@@ -188,48 +188,18 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
     return true;
 }
 
-bool SetClampsAction::ExecuteForProcess(uid_t, pid_t) const {
-    // TODO: add support when kernel supports util_clamp
-    LOG(WARNING) << "SetClampsAction::ExecuteForProcess is not supported";
-    return false;
-}
-
-bool SetClampsAction::ExecuteForTask(int) const {
-    // TODO: add support when kernel supports util_clamp
-    LOG(WARNING) << "SetClampsAction::ExecuteForTask is not supported";
-    return false;
-}
-
 // To avoid issues in sdk_mac build
 #if defined(__ANDROID__)
 
-bool SetTimerSlackAction::IsTimerSlackSupported(pid_t tid) {
-    auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
-
-    return (access(file.c_str(), W_OK) == 0);
-}
-
 bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
-    static bool sys_supports_timerslack = IsTimerSlackSupported(tid);
-
-    // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
-    // TODO: once we've backported this, log if the open(2) fails.
-    if (sys_supports_timerslack) {
-        auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
-        if (!WriteStringToFile(std::to_string(slack_), file)) {
-            if (errno == ENOENT) {
-                // This happens when process is already dead
-                return true;
-            }
-            PLOG(ERROR) << "set_timerslack_ns write failed";
+    const auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
+    if (!WriteStringToFile(std::to_string(slack_), file)) {
+        if (errno == ENOENT) {
+            // This happens when process is already dead
+            return true;
         }
-    }
-
-    // TODO: Remove when /proc/<tid>/timerslack_ns interface is backported.
-    if (tid == 0 || tid == GetThreadId()) {
-        if (prctl(PR_SET_TIMERSLACK, slack_) == -1) {
-            PLOG(ERROR) << "set_timerslack_ns prctl failed";
-        }
+        PLOG(ERROR) << "set_timerslack_ns write failed";
+        return false;
     }
 
     return true;
@@ -672,6 +642,57 @@ bool WriteFileAction::IsValidForTask(int) const {
     return access(task_path_.c_str(), W_OK) == 0;
 }
 
+bool SetSchedulerPolicyAction::isNormalPolicy(int policy) {
+    return policy == SCHED_OTHER || policy == SCHED_BATCH || policy == SCHED_IDLE;
+}
+
+bool SetSchedulerPolicyAction::toPriority(int policy, int virtual_priority, int& priority_out) {
+    constexpr int VIRTUAL_PRIORITY_MIN = 1;
+    constexpr int VIRTUAL_PRIORITY_MAX = 99;
+
+    if (virtual_priority < VIRTUAL_PRIORITY_MIN || virtual_priority > VIRTUAL_PRIORITY_MAX) {
+        LOG(WARNING) << "SetSchedulerPolicy: invalid priority (" << virtual_priority
+                     << ") for policy (" << policy << ")";
+        return false;
+    }
+
+    const int min = sched_get_priority_min(policy);
+    if (min == -1) {
+        PLOG(ERROR) << "SetSchedulerPolicy: Cannot get min sched priority for policy " << policy;
+        return false;
+    }
+
+    const int max = sched_get_priority_max(policy);
+    if (max == -1) {
+        PLOG(ERROR) << "SetSchedulerPolicy: Cannot get max sched priority for policy " << policy;
+        return false;
+    }
+
+    priority_out = min + (virtual_priority - VIRTUAL_PRIORITY_MIN) * (max - min) /
+        (VIRTUAL_PRIORITY_MAX - VIRTUAL_PRIORITY_MIN);
+
+    return true;
+}
+
+bool SetSchedulerPolicyAction::ExecuteForTask(pid_t tid) const {
+    struct sched_param param = {};
+    param.sched_priority = isNormalPolicy(policy_) ? 0 : *priority_or_nice_;
+    if (sched_setscheduler(tid, policy_, &param) == -1) {
+        PLOG(WARNING) << "SetSchedulerPolicy: Failed to apply scheduler policy (" << policy_
+                      << ") with priority (" << *priority_or_nice_ << ") to tid " << tid;
+        return false;
+    }
+
+    if (isNormalPolicy(policy_) && priority_or_nice_ &&
+        setpriority(PRIO_PROCESS, tid, *priority_or_nice_) == -1) {
+        PLOG(WARNING) << "SetSchedulerPolicy: Failed to apply nice (" << *priority_or_nice_
+                      << ") to tid " << tid;
+        return false;
+    }
+
+    return true;
+}
+
 bool ApplyProfileAction::ExecuteForProcess(uid_t uid, pid_t pid) const {
     for (const auto& profile : profiles_) {
         profile->ExecuteForProcess(uid, pid);
@@ -925,23 +946,6 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 } else {
                     LOG(WARNING) << "SetAttribute: unknown attribute: " << attr_name;
                 }
-            } else if (action_name == "SetClamps") {
-                std::string boost_value = params_val["Boost"].asString();
-                std::string clamp_value = params_val["Clamp"].asString();
-                char* end;
-                unsigned long boost;
-
-                boost = strtoul(boost_value.c_str(), &end, 10);
-                if (end > boost_value.c_str()) {
-                    unsigned long clamp = strtoul(clamp_value.c_str(), &end, 10);
-                    if (end > clamp_value.c_str()) {
-                        profile->Add(std::make_unique<SetClampsAction>(boost, clamp));
-                    } else {
-                        LOG(WARNING) << "SetClamps: invalid parameter " << clamp_value;
-                    }
-                } else {
-                    LOG(WARNING) << "SetClamps: invalid parameter: " << boost_value;
-                }
             } else if (action_name == "WriteFile") {
                 std::string attr_filepath = params_val["FilePath"].asString();
                 std::string attr_procfilepath = params_val["ProcFilePath"].asString();
@@ -958,6 +962,62 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 } else if (attr_value.empty()) {
                     LOG(WARNING) << "WriteFile: invalid parameter: "
                                  << "empty value";
+                }
+            } else if (action_name == "SetSchedulerPolicy") {
+                const std::map<std::string, int> POLICY_MAP = {
+                    {"SCHED_OTHER", SCHED_OTHER},
+                    {"SCHED_BATCH", SCHED_BATCH},
+                    {"SCHED_IDLE", SCHED_IDLE},
+                    {"SCHED_FIFO", SCHED_FIFO},
+                    {"SCHED_RR", SCHED_RR},
+                };
+                const std::string policy_str = params_val["Policy"].asString();
+
+                const auto it = POLICY_MAP.find(policy_str);
+                if (it == POLICY_MAP.end()) {
+                    LOG(WARNING) << "SetSchedulerPolicy: invalid policy " << policy_str;
+                    continue;
+                }
+
+                const int policy = it->second;
+
+                if (SetSchedulerPolicyAction::isNormalPolicy(policy)) {
+                    if (params_val.isMember("Priority")) {
+                        LOG(WARNING) << "SetSchedulerPolicy: Normal policies (" << policy_str
+                                     << ") use Nice values, not Priority values";
+                    }
+
+                    if (params_val.isMember("Nice")) {
+                        // If present, this optional value will be passed in an additional syscall
+                        // to setpriority(), since the sched_priority value must be 0 for calls to
+                        // sched_setscheduler() with "normal" policies.
+                        const int nice = params_val["Nice"].asInt();
+
+                        const int LINUX_MIN_NICE = -20;
+                        const int LINUX_MAX_NICE = 19;
+                        if (nice < LINUX_MIN_NICE || nice > LINUX_MAX_NICE) {
+                            LOG(WARNING) << "SetSchedulerPolicy: Provided nice (" << nice
+                                         << ") appears out of range.";
+                        }
+                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, nice));
+                    } else {
+                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy));
+                    }
+                } else {
+                    if (params_val.isMember("Nice")) {
+                        LOG(WARNING) << "SetSchedulerPolicy: Real-time policies (" << policy_str
+                                     << ") use Priority values, not Nice values";
+                    }
+
+                    // This is a "virtual priority" as described by `man 2 sched_get_priority_min`
+                    // that will be mapped onto the following range for the provided policy:
+                    // [sched_get_priority_min(), sched_get_priority_max()]
+                    const int virtual_priority = params_val["Priority"].asInt();
+
+                    int priority;
+                    if (SetSchedulerPolicyAction::toPriority(policy, virtual_priority, priority)) {
+                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, priority));
+                    }
                 }
             } else {
                 LOG(WARNING) << "Unknown profile action: " << action_name;

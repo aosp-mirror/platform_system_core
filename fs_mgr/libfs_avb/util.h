@@ -20,12 +20,6 @@
 #include <string>
 #include <vector>
 
-#ifdef HOST_TEST
-#include <base/logging.h>
-#else
-#include <android-base/logging.h>
-#endif
-
 #include <android-base/result.h>
 
 using android::base::ErrnoError;
