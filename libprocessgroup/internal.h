@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,6 @@
 
 #pragma once
 
-#include <cstdint>
+#include <string>
 
-#include <processgroup/format/cgroup_controller.h>
-
-namespace android {
-namespace cgrouprc {
-namespace format {
-
-struct CgroupFile {
-    uint32_t version_;
-    uint32_t controller_count_;
-    CgroupController controllers_[];
-
-    static constexpr uint32_t FILE_VERSION_1 = 1;
-    static constexpr uint32_t FILE_CURR_VERSION = FILE_VERSION_1;
-};
-
-}  // namespace format
-}  // namespace cgrouprc
-}  // namespace android
+static const std::string CGROUP_V2_ROOT_DEFAULT = "/sys/fs/cgroup";
