@@ -241,6 +241,7 @@ RepackVendorBootImgTestEnv* env = nullptr;
 
 struct RepackVendorBootImgTestParam {
     std::string vendor_boot_file_name;
+    std::string dtb_file_name;
     uint32_t expected_header_version;
     friend std::ostream& operator<<(std::ostream& os, const RepackVendorBootImgTestParam& param) {
         return os << param.vendor_boot_file_name;
@@ -252,22 +253,50 @@ class RepackVendorBootImgTest : public ::testing::TestWithParam<RepackVendorBoot
     virtual void SetUp() {
         vboot = std::make_unique<ReadWriteTestFileHandle>(GetParam().vendor_boot_file_name);
         ASSERT_RESULT_OK(vboot->Open());
+
+        if (!GetParam().dtb_file_name.empty()) {
+            dtb_replacement = std::make_unique<ReadOnlyTestFileHandle>(GetParam().dtb_file_name);
+            ASSERT_RESULT_OK(dtb_replacement->Open());
+        }
     }
     std::unique_ptr<TestFileHandle> vboot;
+    std::unique_ptr<TestFileHandle> dtb_replacement;
 };
 
 TEST_P(RepackVendorBootImgTest, InvalidSize) {
-    EXPECT_ERROR(replace_vendor_ramdisk(vboot->fd(), vboot->size() + 1, "default",
-                                        env->replace->fd(), env->replace->size()),
-                 HasSubstr("Size of vendor boot does not match"));
-    EXPECT_ERROR(replace_vendor_ramdisk(vboot->fd(), vboot->size(), "default", env->replace->fd(),
-                                        env->replace->size() + 1),
-                 HasSubstr("Size of new vendor ramdisk does not match"));
+    EXPECT_ERROR(
+            replace_vendor_ramdisk(vboot->fd(), vboot->size() + 1, "default", env->replace->fd(),
+                                   env->replace->size(),
+                                   !GetParam().dtb_file_name.empty() ? dtb_replacement->fd()
+                                                                     : android::base::unique_fd(-1),
+                                   !GetParam().dtb_file_name.empty() ? dtb_replacement->size() : 0),
+            HasSubstr("Size of vendor boot does not match"));
+    EXPECT_ERROR(
+            replace_vendor_ramdisk(vboot->fd(), vboot->size(), "default", env->replace->fd(),
+                                   env->replace->size() + 1,
+                                   !GetParam().dtb_file_name.empty() ? dtb_replacement->fd()
+                                                                     : android::base::unique_fd(-1),
+                                   !GetParam().dtb_file_name.empty() ? dtb_replacement->size() : 0),
+            HasSubstr("Size of new vendor ramdisk does not match"));
+    if (!GetParam().dtb_file_name.empty()) {
+        EXPECT_ERROR(replace_vendor_ramdisk(vboot->fd(), vboot->size(), "default",
+                                            env->replace->fd(), env->replace->size(),
+                                            dtb_replacement->fd(), dtb_replacement->size() + 1),
+                     HasSubstr("Size of new dtb does not match"));
+    }
+    EXPECT_ERROR(
+            replace_vendor_ramdisk(
+                    vboot->fd(), vboot->size(), "default", env->replace->fd(), env->replace->size(),
+                    android::base::unique_fd(std::numeric_limits<int32_t>::max()), 1),
+            HasSubstr("Can't seek to the beginning of new dtb image"));
 }
 
 TEST_P(RepackVendorBootImgTest, ReplaceUnknown) {
-    auto res = replace_vendor_ramdisk(vboot->fd(), vboot->size(), "unknown", env->replace->fd(),
-                                      env->replace->size());
+    auto res = replace_vendor_ramdisk(
+            vboot->fd(), vboot->size(), "unknown", env->replace->fd(), env->replace->size(),
+            !GetParam().dtb_file_name.empty() ? dtb_replacement->fd()
+                                              : android::base::unique_fd(-1),
+            !GetParam().dtb_file_name.empty() ? dtb_replacement->size() : 0);
     if (GetParam().expected_header_version == 3) {
         EXPECT_ERROR(res, Eq("Require vendor boot header V4 but is V3"));
     } else if (GetParam().expected_header_version == 4) {
@@ -279,8 +308,11 @@ TEST_P(RepackVendorBootImgTest, ReplaceDefault) {
     auto old_content = vboot->Read();
     ASSERT_RESULT_OK(old_content);
 
-    ASSERT_RESULT_OK(replace_vendor_ramdisk(vboot->fd(), vboot->size(), "default",
-                                            env->replace->fd(), env->replace->size()));
+    ASSERT_RESULT_OK(replace_vendor_ramdisk(
+            vboot->fd(), vboot->size(), "default", env->replace->fd(), env->replace->size(),
+            !GetParam().dtb_file_name.empty() ? dtb_replacement->fd()
+                                              : android::base::unique_fd(-1),
+            !GetParam().dtb_file_name.empty() ? dtb_replacement->size() : 0));
     EXPECT_RESULT(vboot->fsize(), vboot->size()) << "File size should not change after repack";
 
     auto new_content_res = vboot->Read();
@@ -291,14 +323,23 @@ TEST_P(RepackVendorBootImgTest, ReplaceDefault) {
     ASSERT_EQ(0, memcmp(VENDOR_BOOT_MAGIC, hdr->magic, VENDOR_BOOT_MAGIC_SIZE));
     ASSERT_EQ(GetParam().expected_header_version, hdr->header_version);
     EXPECT_EQ(hdr->vendor_ramdisk_size, env->replace->size());
-    EXPECT_EQ(hdr->dtb_size, env->dtb->size());
+    if (GetParam().dtb_file_name.empty()) {
+        EXPECT_EQ(hdr->dtb_size, env->dtb->size());
+    } else {
+        EXPECT_EQ(hdr->dtb_size, dtb_replacement->size());
+    }
 
     auto o = round_up(sizeof(vendor_boot_img_hdr_v3), hdr->page_size);
     auto p = round_up(hdr->vendor_ramdisk_size, hdr->page_size);
     auto q = round_up(hdr->dtb_size, hdr->page_size);
 
     EXPECT_THAT(new_content.substr(o, p), IsPadded(env->replace_content));
-    EXPECT_THAT(new_content.substr(o + p, q), IsPadded(env->dtb_content));
+    if (GetParam().dtb_file_name.empty()) {
+        EXPECT_THAT(new_content.substr(o + p, q), IsPadded(env->dtb_content));
+    } else {
+        auto dtb_content_res = dtb_replacement->Read();
+        EXPECT_THAT(new_content.substr(o + p, q), IsPadded(*dtb_content_res));
+    }
 
     if (hdr->header_version < 4) return;
 
@@ -321,11 +362,17 @@ TEST_P(RepackVendorBootImgTest, ReplaceDefault) {
 
 INSTANTIATE_TEST_SUITE_P(
         RepackVendorBootImgTest, RepackVendorBootImgTest,
-        ::testing::Values(RepackVendorBootImgTestParam{"vendor_boot_v3.img", 3},
-                          RepackVendorBootImgTestParam{"vendor_boot_v4_with_frag.img", 4},
-                          RepackVendorBootImgTestParam{"vendor_boot_v4_without_frag.img", 4}),
+        ::testing::Values(RepackVendorBootImgTestParam{"vendor_boot_v3.img", "", 3},
+                          RepackVendorBootImgTestParam{"vendor_boot_v4_with_frag.img", "", 4},
+                          RepackVendorBootImgTestParam{"vendor_boot_v4_without_frag.img", "", 4},
+                          RepackVendorBootImgTestParam{"vendor_boot_v4_with_frag.img",
+                                                       "dtb_replace.img", 4},
+                          RepackVendorBootImgTestParam{"vendor_boot_v4_without_frag.img",
+                                                       "dtb_replace.img", 4}),
         [](const auto& info) {
-            return android::base::StringReplace(info.param.vendor_boot_file_name, ".", "_", false);
+            std::string test_name =
+                    android::base::StringReplace(info.param.vendor_boot_file_name, ".", "_", false);
+            return test_name + (!info.param.dtb_file_name.empty() ? "_replace_dtb" : "");
         });
 
 std::string_view GetRamdiskName(const vendor_ramdisk_table_entry_v4* entry) {
@@ -368,7 +415,8 @@ TEST_P(RepackVendorBootImgTestV4, Replace) {
     ASSERT_RESULT_OK(old_content);
 
     ASSERT_RESULT_OK(replace_vendor_ramdisk(vboot->fd(), vboot->size(), replace_ramdisk_name,
-                                            env->replace->fd(), env->replace->size()));
+                                            env->replace->fd(), env->replace->size(),
+                                            android::base::unique_fd(-1), 0));
     EXPECT_RESULT(vboot->fsize(), vboot->size()) << "File size should not change after repack";
 
     auto new_content_res = vboot->Read();
