@@ -40,6 +40,14 @@ genrule {
     cmd: "$(location fastboot_gen_rand) --seed dtb --length 1024 > $(out)",
 }
 
+// Fake dtb image for replacement.
+genrule {
+    name: "fastboot_test_dtb_replace",
+    defaults: ["fastboot_test_data_gen_defaults"],
+    out: ["dtb_replace.img"],
+    cmd: "$(location fastboot_gen_rand) --seed dtb --length 2048 > $(out)",
+}
+
 // Fake bootconfig image.
 genrule {
     name: "fastboot_test_bootconfig",
