@@ -23,17 +23,4 @@ cc_library_static {
     vendor_ramdisk_available: true,
     recovery_available: true,
     native_bridge_supported: true,
-    srcs: [
-        "cgroup_controller.cpp",
-    ],
-    cflags: [
-        "-Wall",
-        "-Werror",
-    ],
-    export_include_dirs: [
-        "include",
-    ],
-    shared_libs: [
-        "libbase",
-    ],
 }

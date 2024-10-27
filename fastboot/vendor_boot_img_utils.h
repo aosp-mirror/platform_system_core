@@ -31,4 +31,4 @@
 [[nodiscard]] android::base::Result<void> replace_vendor_ramdisk(
         android::base::borrowed_fd vendor_boot_fd, uint64_t vendor_boot_size,
         const std::string& ramdisk_name, android::base::borrowed_fd new_ramdisk_fd,
-        uint64_t new_ramdisk_size);
+        uint64_t new_ramdisk_size, android::base::borrowed_fd new_dtb_fd, uint64_t new_dtb_size);

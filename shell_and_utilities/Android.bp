@@ -58,6 +58,7 @@ phony {
         "toolbox_vendor",
         "toybox_vendor",
     ],
+    vendor: true,
 }
 
 // shell and utilities for first stage console. The list of binaries are
