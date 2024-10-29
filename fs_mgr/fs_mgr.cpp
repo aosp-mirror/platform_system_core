@@ -1603,7 +1603,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                    attempted_entry.fs_type,
                                    attempted_entry.fs_mgr_flags.is_zoned ? "true" : "false",
                                    std::to_string(attempted_entry.length),
-                                   android::base::Join(attempted_entry.user_devices, ' ')},
+                                   android::base::Join(attempted_entry.user_devices, ' '),
+                                   android::base::Join(attempted_entry.device_aliased, ' ')},
                                   nullptr)) {
                         LERROR << "Encryption failed";
                         set_type_property(encryptable);
@@ -1655,7 +1656,8 @@ int fs_mgr_mount_all(Fstab* fstab, int mount_mode) {
                                formattable_entry->fs_type,
                                formattable_entry->fs_mgr_flags.is_zoned ? "true" : "false",
                                std::to_string(formattable_entry->length),
-                               android::base::Join(formattable_entry->user_devices, ' ')},
+                               android::base::Join(formattable_entry->user_devices, ' '),
+                               android::base::Join(formattable_entry->device_aliased, ' ')},
                               nullptr)) {
                     LERROR << "Encryption failed";
                 } else {
@@ -2312,6 +2314,14 @@ std::string fs_mgr_get_context(const std::string& mount_point) {
     std::string context(ctx);
     free(ctx);
     return context;
+}
+
+int fs_mgr_f2fs_ideal_block_size() {
+#if defined(__i386__) || defined(__x86_64__)
+    return 4096;
+#else
+    return getpagesize();
+#endif
 }
 
 namespace android {
