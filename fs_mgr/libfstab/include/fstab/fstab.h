@@ -33,6 +33,7 @@ namespace fs_mgr {
 struct FstabEntry {
     std::string blk_device;
     std::vector<std::string> user_devices;
+    std::vector<int> device_aliased;
     std::string logical_partition_name;
     std::string mount_point;
     std::string fs_type;
