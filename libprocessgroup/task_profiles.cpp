@@ -188,9 +188,6 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
     return true;
 }
 
-// To avoid issues in sdk_mac build
-#if defined(__ANDROID__)
-
 bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
     const auto file = StringPrintf("/proc/%d/timerslack_ns", tid);
     if (!WriteStringToFile(std::to_string(slack_), file)) {
@@ -204,14 +201,6 @@ bool SetTimerSlackAction::ExecuteForTask(pid_t tid) const {
 
     return true;
 }
-
-#else
-
-bool SetTimerSlackAction::ExecuteForTask(int) const {
-    return true;
-};
-
-#endif
 
 bool SetAttributeAction::WriteValueToFile(const std::string& path) const {
     if (!WriteStringToFile(value_, path)) {
