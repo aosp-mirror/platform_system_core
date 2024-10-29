@@ -2314,6 +2314,14 @@ std::string fs_mgr_get_context(const std::string& mount_point) {
     return context;
 }
 
+int fs_mgr_f2fs_ideal_block_size() {
+#if defined(__i386__) || defined(__x86_64__)
+    return 4096;
+#else
+    return getpagesize();
+#endif
+}
+
 namespace android {
 namespace fs_mgr {
 
