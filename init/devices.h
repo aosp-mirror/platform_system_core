@@ -133,6 +133,7 @@ class DeviceHandler : public UeventHandler {
     // `androidboot.partition_map=vdb,metadata;vdc,userdata` maps `vdb` to `metadata` and `vdc` to
     // `userdata`.
     static std::string GetPartitionNameForDevice(const std::string& device);
+    bool IsBootDevice(const Uevent& uevent) const;
 
   private:
     void ColdbootDone() override;
