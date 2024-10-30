@@ -75,7 +75,7 @@ static void fix_stat(const char *path, struct stat *s)
     }
 }
 
-static void _eject(struct stat *s, char *out, int olen, char *data, unsigned datasize)
+static void _eject(struct stat *s, const char *out, int olen, char *data, unsigned datasize)
 {
     // Nothing is special about this value, just picked something in the
     // approximate range that was being used already, and avoiding small
@@ -151,9 +151,10 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
     DIR* d = opendir(in);
     if (d == NULL) err(1, "cannot open directory '%s'", in);
 
+    // TODO: switch to std::vector
     int size = 32;
     int entries = 0;
-    char** names = malloc(size * sizeof(char*));
+    char** names = (char**) malloc(size * sizeof(char*));
     if (names == NULL) {
       errx(1, "failed to allocate dir names array (size %d)", size);
     }
@@ -167,7 +168,7 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
 
         if (entries >= size) {
           size *= 2;
-          names = realloc(names, size * sizeof(char*));
+          names = (char**) realloc(names, size * sizeof(char*));
           if (names == NULL) {
             errx(1, "failed to reallocate dir names array (size %d)", size);
           }
@@ -445,15 +446,12 @@ int main(int argc, char *argv[])
     int num_dirs = argc - optind;
     argv += optind;
 
-    while(num_dirs-- > 0){
+    while (num_dirs-- > 0){
         char *x = strchr(*argv, '=');
-        if(x != 0) {
-            *x++ = 0;
-        } else {
-            x = "";
+        if (x != nullptr) {
+            *x++ = '\0';
         }
-
-        archive(*argv, x);
+        archive(*argv, x ?: "");
 
         argv++;
     }
