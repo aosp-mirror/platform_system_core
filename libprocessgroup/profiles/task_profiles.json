@@ -203,6 +203,19 @@
       ]
     },
     {
+      "Name": "RealTimeInputScheduling",
+      "Actions": [
+        {
+          "Name": "SetSchedulerPolicy",
+          "Params":
+          {
+            "Policy": "SCHED_FIFO",
+            "Priority": "98"
+          }
+        }
+      ]
+    },
+    {
       "Name": "CameraServicePerformance",
       "Actions": [
         {
@@ -572,33 +585,6 @@
     },
 
     {
-      "Name": "PerfBoost",
-      "Actions": [
-        {
-          "Name": "SetClamps",
-          "Params":
-          {
-            "Boost": "50%",
-            "Clamp": "0"
-          }
-        }
-      ]
-    },
-    {
-      "Name": "PerfClamp",
-      "Actions": [
-        {
-          "Name": "SetClamps",
-          "Params":
-          {
-            "Boost": "0",
-            "Clamp": "30%"
-          }
-        }
-      ]
-    },
-
-    {
       "Name": "LowMemoryUsage",
       "Actions": [
         {
@@ -728,6 +714,10 @@
     {
       "Name": "OtaProfiles",
       "Profiles": [ "ServiceCapacityLow", "LowIoPriority", "HighEnergySaving" ]
+    },
+    {
+      "Name": "InputPolicy",
+      "Profiles": [ "RealTimeInputScheduling", "MaxPerformance", "ProcessCapacityMax", "TimerSlackNormal" ]
     }
   ]
 }
