@@ -32,9 +32,12 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android/avf_cc_flags.h>
+#include <bootloader_message/bootloader_message.h>
+#include <cutils/android_reboot.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
@@ -46,6 +49,7 @@
 
 #include "block_dev_initializer.h"
 #include "devices.h"
+#include "reboot_utils.h"
 #include "result.h"
 #include "snapuserd_transition.h"
 #include "switch_root.h"
@@ -110,6 +114,8 @@ class FirstStageMountVBootV2 : public FirstStageMount {
 
     bool GetDmVerityDevices(std::set<std::string>* devices);
     bool SetUpDmVerity(FstabEntry* fstab_entry);
+
+    void RequestTradeInModeWipeIfNeeded();
 
     bool InitAvbHandle();
 
@@ -263,6 +269,8 @@ bool FirstStageMountVBootV2::DoCreateDevices() {
 }
 
 bool FirstStageMountVBootV2::DoFirstStageMount() {
+    RequestTradeInModeWipeIfNeeded();
+
     if (!IsDmLinearEnabled() && fstab_.empty()) {
         // Nothing to mount.
         LOG(INFO) << "First stage mount skipped (missing/incompatible/empty fstab in device tree)";
@@ -305,11 +313,6 @@ bool FirstStageMountVBootV2::InitDevices() {
             return false;
         }
     }
-
-    if (IsArcvm() && !block_dev_init_.InitHvcDevice("hvc1")) {
-        return false;
-    }
-
     return true;
 }
 
@@ -881,6 +884,55 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
     // Sets INIT_AVB_VERSION here for init to set ro.boot.avb_version in the second stage.
     setenv("INIT_AVB_VERSION", avb_handle_->avb_version().c_str(), 1);
     return true;
+}
+
+void FirstStageMountVBootV2::RequestTradeInModeWipeIfNeeded() {
+    static constexpr const char* kWipeIndicator = "/metadata/tradeinmode/wipe";
+    static constexpr size_t kWipeAttempts = 3;
+
+    if (access(kWipeIndicator, R_OK) == -1) {
+        return;
+    }
+
+    // Write a counter to the wipe indicator, to try and prevent boot loops if
+    // recovery fails to wipe data.
+    uint32_t counter = 0;
+    std::string contents;
+    if (ReadFileToString(kWipeIndicator, &contents)) {
+        android::base::ParseUint(contents, &counter);
+        contents = std::to_string(++counter);
+        if (android::base::WriteStringToFile(contents, kWipeIndicator)) {
+            sync();
+        } else {
+            PLOG(ERROR) << "Failed to update " << kWipeIndicator;
+        }
+    } else {
+        PLOG(ERROR) << "Failed to read " << kWipeIndicator;
+    }
+
+    std::string err;
+    auto misc_device = get_misc_blk_device(&err);
+    if (misc_device.empty()) {
+        LOG(FATAL) << "Could not find misc device: " << err;
+    }
+
+    auto misc_name = android::base::Basename(misc_device);
+    if (!block_dev_init_.InitDevices({misc_name})) {
+        LOG(FATAL) << "Could not find misc device: " << misc_device;
+    }
+
+    // If we've failed to wipe three times, don't include the wipe command. This
+    // will force us to boot into the recovery menu instead where a manual wipe
+    // can be attempted.
+    std::vector<std::string> options;
+    if (counter <= kWipeAttempts) {
+        options.emplace_back("--wipe_data");
+        options.emplace_back("--reason=tradeinmode");
+    }
+    if (!write_bootloader_message(options, &err)) {
+        LOG(FATAL) << "Could not issue wipe: " << err;
+    }
+    RebootSystem(ANDROID_RB_RESTART2, "recovery", "reboot,tradeinmode,wipe");
 }
 
 void SetInitAvbVersionInRecovery() {

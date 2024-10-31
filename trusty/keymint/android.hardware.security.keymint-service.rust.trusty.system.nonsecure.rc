@@ -1,0 +1,17 @@
+service system.keymint.rust-trusty.nonsecure \
+  /system_ext/bin/hw/android.hardware.security.keymint-service.rust.trusty.system.nonsecure \
+  --dev ${system.keymint.trusty_ipc_dev:-/dev/trusty-ipc-dev0}
+    disabled
+    user nobody
+    group drmrpc
+    # The keymint service is not allowed to restart.
+    # If it crashes, a device restart is required.
+    oneshot
+
+# Only starts the non-secure KeyMint HALs when the KeyMint VM feature is enabled
+# TODO(b/357821690): Start the KeyMint HALs when the KeyMint VM is ready once the Trusty VM
+# has a mechanism to notify the host.
+on late-fs && property:ro.hardware.security.keymint.trusty.system=1 && \
+   property:trusty_vm_system.vm_cid=*
+    setprop system.keymint.trusty_ipc_dev VSOCK:${trusty_vm_system.vm_cid}:1
+    start system.keymint.rust-trusty.nonsecure

@@ -39,6 +39,10 @@
 #include "fstab_priv.h"
 #include "logging_macros.h"
 
+#if !defined(MS_LAZYTIME)
+#define MS_LAZYTIME (1 << 25)
+#endif
+
 using android::base::EndsWith;
 using android::base::ParseByteCount;
 using android::base::ParseInt;
@@ -74,6 +78,7 @@ FlagList kMountFlagsList[] = {
         {"private", MS_PRIVATE},
         {"slave", MS_SLAVE},
         {"shared", MS_SHARED},
+        {"lazytime", MS_LAZYTIME},
         {"defaults", 0},
 };
 
@@ -168,6 +173,7 @@ void ParseUserDevices(const std::string& arg, FstabEntry* entry) {
         entry->fs_mgr_flags.is_zoned = true;
     }
     entry->user_devices.push_back(param[1]);
+    entry->device_aliased.push_back(param[0] == "exp_alias" ? 1 : 0);
 }
 
 bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
