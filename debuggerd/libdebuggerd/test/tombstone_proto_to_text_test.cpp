@@ -22,6 +22,7 @@
 #include <android-base/test_utils.h>
 
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/tombstone_proto_to_text.h"
 #include "tombstone.pb.h"
 
 using CallbackType = std::function<void(const std::string& line, bool should_log)>;
