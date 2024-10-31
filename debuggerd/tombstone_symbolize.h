@@ -16,13 +16,27 @@
 
 #pragma once
 
-#include <functional>
 #include <string>
+#include <vector>
+
+#include "android-base/unique_fd.h"
 
 class BacktraceFrame;
-class Tombstone;
 
-bool tombstone_proto_to_text(
-    const Tombstone& tombstone,
-    std::function<void(const std::string& line, bool should_log)> callback,
-    std::function<void(const BacktraceFrame& frame)> symbolize);
+class Symbolizer {
+  android::base::unique_fd in_fd, out_fd;
+
+  std::string read_response();
+
+ public:
+  bool Start(const std::vector<std::string>& debug_file_directories);
+
+  struct Frame {
+    std::string function_name, file;
+    uint64_t line, column;
+  };
+
+  std::vector<Frame> SymbolizeCode(std::string path, uint64_t rel_pc);
+};
+
+void symbolize_backtrace_frame(const BacktraceFrame& frame, Symbolizer& sym);
