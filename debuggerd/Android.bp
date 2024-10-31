@@ -333,7 +333,10 @@ cc_binary {
     name: "pbtombstone",
     host_supported: true,
     defaults: ["debuggerd_defaults"],
-    srcs: ["pbtombstone.cpp"],
+    srcs: [
+        "pbtombstone.cpp",
+        "tombstone_symbolize.cpp",
+    ],
     static_libs: [
         "libbase",
         "libdebuggerd_tombstone_proto_to_text",
