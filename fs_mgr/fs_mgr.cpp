@@ -2215,11 +2215,11 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const FstabEntry& entry) {
 
 #if ALLOW_ADBD_DISABLE_VERITY == 0
     // Allowlist the mount point if user build.
-    static const std::vector<const std::string> kAllowedPaths = {
+    static const std::vector<std::string> kAllowedPaths = {
             "/odm",         "/odm_dlkm",   "/oem",    "/product",
             "/system_dlkm", "/system_ext", "/vendor", "/vendor_dlkm",
     };
-    static const std::vector<const std::string> kAllowedPrefixes = {
+    static const std::vector<std::string> kAllowedPrefixes = {
             "/mnt/product/",
             "/mnt/vendor/",
     };
@@ -2314,6 +2314,14 @@ std::string fs_mgr_get_context(const std::string& mount_point) {
     std::string context(ctx);
     free(ctx);
     return context;
+}
+
+int fs_mgr_f2fs_ideal_block_size() {
+#if defined(__i386__) || defined(__x86_64__)
+    return 4096;
+#else
+    return getpagesize();
+#endif
 }
 
 namespace android {
