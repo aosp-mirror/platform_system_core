@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 #include <android-base/unique_fd.h>
-#include <libdebuggerd/tombstone.h>
+#include <libdebuggerd/tombstone_proto_to_text.h>
 
 #include "tombstone.pb.h"
 
