@@ -67,13 +67,6 @@ static void AssertPolicy(SchedPolicy expected_policy) {
 }
 
 TEST(SchedPolicy, set_sched_policy) {
-    if (!schedboost_enabled()) {
-        // schedboost_enabled() (i.e. CONFIG_CGROUP_SCHEDTUNE) is optional;
-        // it's only needed on devices using energy-aware scheduler.
-        GTEST_LOG_(INFO) << "skipping test that requires CONFIG_CGROUP_SCHEDTUNE";
-        return;
-    }
-
     ASSERT_EQ(0, set_sched_policy(0, SP_BACKGROUND));
     ASSERT_EQ(0, set_cpuset_policy(0, SP_BACKGROUND));
     AssertPolicy(SP_BACKGROUND);
