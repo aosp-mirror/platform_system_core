@@ -137,3 +137,6 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry
 // File name used to track if encryption was interrupted, leading to a known bad fs state
 std::string fs_mgr_metadata_encryption_in_progress_file_name(
         const android::fs_mgr::FstabEntry& entry);
+
+// Returns the ideal block size for make_f2fs. Returns -1 on failure.
+int fs_mgr_f2fs_ideal_block_size();

@@ -1,4 +1,3 @@
-
 //
 // Copyright (C) 2023 The Android Open Source Project
 //
@@ -16,6 +15,7 @@
 //
 package {
     default_applicable_licenses: ["Android-Apache-2.0"],
+    default_team: "trendy_team_android_telemetry_client_infra",
 }
 
 cc_defaults {
@@ -28,6 +28,7 @@ cc_defaults {
 
 cc_library {
     name: "libexpresslog",
+    host_supported: true,
     defaults: ["expresslog_defaults"],
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
@@ -74,6 +75,7 @@ genrule {
 
 cc_library_static {
     name: "libstatslog_express",
+    host_supported: true,
     generated_sources: ["statslog_express.cpp"],
     generated_headers: ["statslog_express.h"],
     export_generated_headers: ["statslog_express.h"],
@@ -119,5 +121,5 @@ cc_test {
     ],
     shared_libs: [
         "libstatssocket",
-    ]
+    ],
 }
