@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include <libdebuggerd/tombstone.h>
+#include <libdebuggerd/tombstone_proto_to_text.h>
+#include <libdebuggerd/utility_host.h>
 
 #include <inttypes.h>
 
@@ -30,8 +31,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <bionic/macros.h>
-#include <sys/prctl.h>
 
 #include "tombstone.pb.h"
 
@@ -55,28 +54,6 @@ static std::string describe_end(long value, std::string& desc) {
     desc += StringPrintf(", unknown 0x%lx", value);
   }
   return desc.empty() ? "" : " (" + desc.substr(2) + ")";
-}
-
-static std::string describe_tagged_addr_ctrl(long value) {
-  std::string desc;
-  DESCRIBE_FLAG(PR_TAGGED_ADDR_ENABLE);
-  DESCRIBE_FLAG(PR_MTE_TCF_SYNC);
-  DESCRIBE_FLAG(PR_MTE_TCF_ASYNC);
-  if (value & PR_MTE_TAG_MASK) {
-    desc += StringPrintf(", mask 0x%04lx", (value & PR_MTE_TAG_MASK) >> PR_MTE_TAG_SHIFT);
-    value &= ~PR_MTE_TAG_MASK;
-  }
-  return describe_end(value, desc);
-}
-
-static std::string describe_pac_enabled_keys(long value) {
-  std::string desc;
-  DESCRIBE_FLAG(PR_PAC_APIAKEY);
-  DESCRIBE_FLAG(PR_PAC_APIBKEY);
-  DESCRIBE_FLAG(PR_PAC_APDAKEY);
-  DESCRIBE_FLAG(PR_PAC_APDBKEY);
-  DESCRIBE_FLAG(PR_PAC_APGAKEY);
-  return describe_end(value, desc);
 }
 
 static const char* abi_string(const Architecture& arch) {
@@ -111,6 +88,13 @@ static int pointer_width(const Tombstone& tombstone) {
     default:
       return 8;
   }
+}
+
+static uint64_t untag_address(Architecture arch, uint64_t addr) {
+  if (arch == Architecture::ARM64) {
+    return addr & ((1ULL << 56) - 1);
+  }
+  return addr;
 }
 
 static void print_thread_header(CallbackType callback, const Tombstone& tombstone,
@@ -321,7 +305,8 @@ static void print_tag_dump(CallbackType callback, const Tombstone& tombstone) {
 
   size_t tag_index = 0;
   size_t num_tags = tags.length();
-  uintptr_t fault_granule = untag_address(signal.fault_address()) & ~(kTagGranuleSize - 1);
+  uintptr_t fault_granule =
+      untag_address(tombstone.arch(), signal.fault_address()) & ~(kTagGranuleSize - 1);
   for (size_t row = 0; tag_index < num_tags; ++row) {
     uintptr_t row_addr =
         (memory_dump.begin_address() + row * kNumTagColumns * kTagGranuleSize) & kRowStartMask;
@@ -369,7 +354,7 @@ static void print_memory_maps(CallbackType callback, const Tombstone& tombstone)
 
   const Signal& signal_info = tombstone.signal_info();
   bool has_fault_address = signal_info.has_fault_address();
-  uint64_t fault_address = untag_address(signal_info.fault_address());
+  uint64_t fault_address = untag_address(tombstone.arch(), signal_info.fault_address());
   bool preamble_printed = false;
   bool printed_fault_address_marker = false;
   for (const auto& map : tombstone.memory_mappings()) {

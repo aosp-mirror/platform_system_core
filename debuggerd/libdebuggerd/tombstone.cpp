@@ -17,6 +17,7 @@
 #define LOG_TAG "DEBUG"
 
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/tombstone_proto_to_text.h"
 
 #include <errno.h>
 #include <signal.h>

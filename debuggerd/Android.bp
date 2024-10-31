@@ -200,27 +200,27 @@ cc_library {
     ramdisk_available: true,
     recovery_available: true,
     vendor_ramdisk_available: true,
+    host_supported: true,
 
     local_include_dirs: ["libdebuggerd/include"],
     export_include_dirs: ["libdebuggerd/include"],
 
     srcs: [
         "libdebuggerd/tombstone_proto_to_text.cpp",
-    ],
-
-    header_libs: [
-        "bionic_libc_platform_headers",
+        "libdebuggerd/utility_host.cpp",
     ],
 
     static_libs: [
         "libbase",
-        "liblog_for_runtime_apex",
-        "libunwindstack",
     ],
 
     whole_static_libs: [
         "libtombstone_proto",
         "libprotobuf-cpp-lite",
+    ],
+
+    shared_libs: [
+        "liblog",
     ],
 
     apex_available: [
@@ -331,15 +331,15 @@ cc_library_static {
 
 cc_binary {
     name: "pbtombstone",
+    host_supported: true,
     defaults: ["debuggerd_defaults"],
     srcs: ["pbtombstone.cpp"],
     static_libs: [
         "libbase",
-        "libdebuggerd",
+        "libdebuggerd_tombstone_proto_to_text",
         "liblog",
         "libprotobuf-cpp-lite",
         "libtombstone_proto",
-        "libunwindstack",
     ],
 }
 
