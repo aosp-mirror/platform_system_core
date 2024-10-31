@@ -31,6 +31,7 @@ DEFINE_bool(user_snapshot, false, "If true, user-space snapshots are used");
 DEFINE_bool(io_uring, false, "If true, io_uring feature is enabled");
 DEFINE_bool(o_direct, false, "If true, enable direct reads on source device");
 DEFINE_int32(cow_op_merge_size, 0, "number of operations to be processed at once");
+DEFINE_int32(worker_count, 4, "number of worker threads used to serve I/O requests to dm-user");
 
 namespace android {
 namespace snapshot {
@@ -114,8 +115,9 @@ bool Daemon::StartServerForUserspaceSnapshots(int arg_start, int argc, char** ar
             LOG(ERROR) << "Malformed message, expected at least four sub-arguments.";
             return false;
         }
-        auto handler = user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3],
-                                               FLAGS_o_direct, FLAGS_cow_op_merge_size);
+        auto handler =
+                user_server_.AddHandler(parts[0], parts[1], parts[2], parts[3], FLAGS_worker_count,
+                                        FLAGS_o_direct, FLAGS_cow_op_merge_size);
         if (!handler || !user_server_.StartHandler(parts[0])) {
             return false;
         }

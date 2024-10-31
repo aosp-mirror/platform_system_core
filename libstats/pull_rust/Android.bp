@@ -61,7 +61,6 @@ rust_library {
     srcs: ["stats_pull.rs"],
     rustlibs: [
         "liblog_rust",
-        "libonce_cell",
         "libstatslog_rust_header",
         "libstatspull_bindgen",
     ],

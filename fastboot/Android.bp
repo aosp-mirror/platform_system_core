@@ -430,6 +430,7 @@ cc_test_host {
     ],
     data: [
         ":fastboot_test_dtb",
+        ":fastboot_test_dtb_replace",
         ":fastboot_test_bootconfig",
         ":fastboot_test_vendor_ramdisk_none",
         ":fastboot_test_vendor_ramdisk_platform",

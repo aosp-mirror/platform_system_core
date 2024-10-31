@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <fstab/fstab.h>
 #include <libavb/libavb.h>
