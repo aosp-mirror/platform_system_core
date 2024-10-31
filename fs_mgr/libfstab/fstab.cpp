@@ -173,6 +173,7 @@ void ParseUserDevices(const std::string& arg, FstabEntry* entry) {
         entry->fs_mgr_flags.is_zoned = true;
     }
     entry->user_devices.push_back(param[1]);
+    entry->device_aliased.push_back(param[0] == "exp_alias" ? 1 : 0);
 }
 
 bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
