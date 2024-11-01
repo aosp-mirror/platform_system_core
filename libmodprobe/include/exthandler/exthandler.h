@@ -15,14 +15,9 @@
  */
 
 #pragma once
-
-#include <functional>
+#include <android-base/result.h>
 #include <string>
 
-class BacktraceFrame;
-class Tombstone;
-
-bool tombstone_proto_to_text(
-    const Tombstone& tombstone,
-    std::function<void(const std::string& line, bool should_log)> callback,
-    std::function<void(const BacktraceFrame& frame)> symbolize);
+android::base::Result<std::string> RunExternalHandler(
+        const std::string& handler, uid_t uid, gid_t gid,
+        std::unordered_map<std::string, std::string>& envs_map);

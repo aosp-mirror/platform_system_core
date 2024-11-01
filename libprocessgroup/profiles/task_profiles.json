@@ -203,19 +203,6 @@
       ]
     },
     {
-      "Name": "RealTimeInputScheduling",
-      "Actions": [
-        {
-          "Name": "SetSchedulerPolicy",
-          "Params":
-          {
-            "Policy": "SCHED_FIFO",
-            "Priority": "98"
-          }
-        }
-      ]
-    },
-    {
       "Name": "CameraServicePerformance",
       "Actions": [
         {
@@ -717,7 +704,7 @@
     },
     {
       "Name": "InputPolicy",
-      "Profiles": [ "RealTimeInputScheduling", "MaxPerformance", "ProcessCapacityMax", "TimerSlackNormal" ]
+      "Profiles": [ "MaxPerformance", "ProcessCapacityMax", "TimerSlackNormal" ]
     }
   ]
 }
