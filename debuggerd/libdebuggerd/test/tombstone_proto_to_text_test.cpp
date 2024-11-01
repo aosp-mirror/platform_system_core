@@ -22,6 +22,7 @@
 #include <android-base/test_utils.h>
 
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/tombstone_proto_to_text.h"
 #include "tombstone.pb.h"
 
 using CallbackType = std::function<void(const std::string& line, bool should_log)>;
@@ -60,12 +61,16 @@ class TombstoneProtoToTextTest : public ::testing::Test {
 
   void ProtoToString() {
     text_ = "";
-    EXPECT_TRUE(
-        tombstone_proto_to_text(*tombstone_, [this](const std::string& line, bool should_log) {
+    EXPECT_TRUE(tombstone_proto_to_text(
+        *tombstone_,
+        [this](const std::string& line, bool should_log) {
           if (should_log) {
             text_ += "LOG ";
           }
           text_ += line + '\n';
+        },
+        [&](const BacktraceFrame& frame) {
+          text_ += "SYMBOLIZE " + frame.build_id() + " " + std::to_string(frame.pc()) + "\n";
         }));
   }
 
@@ -161,4 +166,12 @@ TEST_F(TombstoneProtoToTextTest, stack_record) {
   EXPECT_MATCH(text_, "stack tag-mismatch on thread 123");
   EXPECT_MATCH(text_, "stack_record fp:0x1 tag:0xb pc:foo\\.so\\+0x567 \\(BuildId: ABC123\\)");
   EXPECT_MATCH(text_, "stack_record fp:0x2 tag:0xc pc:bar\\.so\\+0x678");
+}
+
+TEST_F(TombstoneProtoToTextTest, symbolize) {
+  BacktraceFrame* frame = main_thread_->add_current_backtrace();
+  frame->set_pc(12345);
+  frame->set_build_id("0123456789abcdef");
+  ProtoToString();
+  EXPECT_MATCH(text_, "\\(BuildId: 0123456789abcdef\\)\\nSYMBOLIZE 0123456789abcdef 12345\\n");
 }
