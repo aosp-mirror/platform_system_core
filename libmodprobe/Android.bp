@@ -13,6 +13,7 @@ cc_library_static {
     vendor_ramdisk_available: true,
     host_supported: true,
     srcs: [
+        "exthandler.cpp",
         "libmodprobe.cpp",
         "libmodprobe_ext.cpp",
     ],
@@ -30,6 +31,7 @@ cc_test {
     ],
     local_include_dirs: ["include/"],
     srcs: [
+        "exthandler.cpp",
         "libmodprobe_test.cpp",
         "libmodprobe.cpp",
         "libmodprobe_ext_test.cpp",
