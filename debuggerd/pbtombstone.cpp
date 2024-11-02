@@ -16,32 +16,55 @@
 
 #include <err.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
 
+#include <string>
+#include <vector>
+
 #include <android-base/unique_fd.h>
-#include <libdebuggerd/tombstone.h>
+#include <libdebuggerd/tombstone_proto_to_text.h>
 
 #include "tombstone.pb.h"
+#include "tombstone_symbolize.h"
 
 using android::base::unique_fd;
 
 [[noreturn]] void usage(bool error) {
-  fprintf(stderr, "usage: pbtombstone TOMBSTONE.PB\n");
+  fprintf(stderr, "usage: pbtombstone [OPTION] TOMBSTONE.PB\n");
   fprintf(stderr, "Convert a protobuf tombstone to text.\n");
+  fprintf(stderr, "Arguments:\n");
+  fprintf(stderr, "  -h, --help                   print this message\n");
+  fprintf(stderr, "  --debug-file-directory PATH  specify the path to a symbols directory\n");
   exit(error);
 }
 
-int main(int argc, const char* argv[]) {
-  if (argc != 2) {
+int main(int argc, char* argv[]) {
+  std::vector<std::string> debug_file_directories;
+  static struct option long_options[] = {
+      {"debug-file-directory", required_argument, 0, 0},
+      {"help", no_argument, 0, 'h'},
+      {},
+  };
+  int c;
+  while ((c = getopt_long(argc, argv, "h", long_options, 0)) != -1) {
+    switch (c) {
+      case 0:
+        debug_file_directories.push_back(optarg);
+        break;
+
+      case 'h':
+        usage(false);
+        break;
+    }
+  }
+
+  if (optind != argc-1) {
     usage(true);
   }
 
-  if (strcmp("-h", argv[1]) == 0 || strcmp("--help", argv[1]) == 0) {
-    usage(false);
-  }
-
-  unique_fd fd(open(argv[1], O_RDONLY | O_CLOEXEC));
+  unique_fd fd(open(argv[optind], O_RDONLY | O_CLOEXEC));
   if (fd == -1) {
     err(1, "failed to open tombstone '%s'", argv[1]);
   }
@@ -51,8 +74,11 @@ int main(int argc, const char* argv[]) {
     err(1, "failed to parse tombstone");
   }
 
+  Symbolizer sym;
+  sym.Start(debug_file_directories);
   bool result = tombstone_proto_to_text(
-      tombstone, [](const std::string& line, bool) { printf("%s\n", line.c_str()); });
+      tombstone, [](const std::string& line, bool) { printf("%s\n", line.c_str()); },
+      [&](const BacktraceFrame& frame) { symbolize_backtrace_frame(frame, sym); });
 
   if (!result) {
     errx(1, "tombstone was malformed");
