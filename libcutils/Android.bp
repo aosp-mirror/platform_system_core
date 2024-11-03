@@ -279,7 +279,6 @@ test_libraries = [
     "liblog",
     "libbase",
     "libprocessgroup",
-    "libcgrouprc",
 ]
 
 cc_test {
