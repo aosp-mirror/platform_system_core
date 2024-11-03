@@ -20,6 +20,7 @@
 #include <task_profiles.h>
 
 #include <map>
+#include <optional>
 #include <string>
 
 #include <dirent.h>
@@ -54,6 +55,7 @@ static constexpr const char* TASK_PROFILE_DB_VENDOR_FILE = "/vendor/etc/task_pro
 
 static constexpr const char* TEMPLATE_TASK_PROFILE_API_FILE =
         "/etc/task_profiles/task_profiles_%u.json";
+namespace {
 
 class FdCacheHelper {
   public:
@@ -64,8 +66,11 @@ class FdCacheHelper {
     };
 
     static void Cache(const std::string& path, android::base::unique_fd& fd);
+
     static void Drop(android::base::unique_fd& fd);
+
     static void Init(const std::string& path, android::base::unique_fd& fd);
+
     static bool IsCached(const android::base::unique_fd& fd) { return fd > FDS_INACCESSIBLE; }
 
   private:
@@ -115,6 +120,17 @@ void FdCacheHelper::Drop(android::base::unique_fd& fd) {
 bool FdCacheHelper::IsAppDependentPath(const std::string& path) {
     return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
 }
+
+std::optional<long> readLong(const std::string& str) {
+    char* end;
+    const long result = strtol(str.c_str(), &end, 10);
+    if (end > str.c_str()) {
+        return result;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
 
 IProfileAttribute::~IProfileAttribute() = default;
 
@@ -913,15 +929,12 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                     LOG(WARNING) << "JoinCgroup: controller " << controller_name << " is not found";
                 }
             } else if (action_name == "SetTimerSlack") {
-                std::string slack_value = params_val["Slack"].asString();
-                char* end;
-                unsigned long slack;
-
-                slack = strtoul(slack_value.c_str(), &end, 10);
-                if (end > slack_value.c_str()) {
-                    profile->Add(std::make_unique<SetTimerSlackAction>(slack));
+                const std::string slack_string = params_val["Slack"].asString();
+                std::optional<long> slack = readLong(slack_string);
+                if (slack && *slack >= 0) {
+                    profile->Add(std::make_unique<SetTimerSlackAction>(*slack));
                 } else {
-                    LOG(WARNING) << "SetTimerSlack: invalid parameter: " << slack_value;
+                    LOG(WARNING) << "SetTimerSlack: invalid parameter: " << slack_string;
                 }
             } else if (action_name == "SetAttribute") {
                 std::string attr_name = params_val["Name"].asString();
@@ -980,15 +993,19 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                         // If present, this optional value will be passed in an additional syscall
                         // to setpriority(), since the sched_priority value must be 0 for calls to
                         // sched_setscheduler() with "normal" policies.
-                        const int nice = params_val["Nice"].asInt();
+                        const std::string nice_string = params_val["Nice"].asString();
+                        const std::optional<int> nice = readLong(nice_string);
 
+                        if (!nice) {
+                            LOG(FATAL) << "Invalid nice value specified: " << nice_string;
+                        }
                         const int LINUX_MIN_NICE = -20;
                         const int LINUX_MAX_NICE = 19;
-                        if (nice < LINUX_MIN_NICE || nice > LINUX_MAX_NICE) {
-                            LOG(WARNING) << "SetSchedulerPolicy: Provided nice (" << nice
+                        if (*nice < LINUX_MIN_NICE || *nice > LINUX_MAX_NICE) {
+                            LOG(WARNING) << "SetSchedulerPolicy: Provided nice (" << *nice
                                          << ") appears out of range.";
                         }
-                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, nice));
+                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, *nice));
                     } else {
                         profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy));
                     }
@@ -1001,11 +1018,18 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                     // This is a "virtual priority" as described by `man 2 sched_get_priority_min`
                     // that will be mapped onto the following range for the provided policy:
                     // [sched_get_priority_min(), sched_get_priority_max()]
-                    const int virtual_priority = params_val["Priority"].asInt();
 
-                    int priority;
-                    if (SetSchedulerPolicyAction::toPriority(policy, virtual_priority, priority)) {
-                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, priority));
+                    const std::string priority_string = params_val["Priority"].asString();
+                    std::optional<long> virtual_priority = readLong(priority_string);
+                    if (virtual_priority && *virtual_priority > 0) {
+                        int priority;
+                        if (SetSchedulerPolicyAction::toPriority(policy, *virtual_priority,
+                                                                 priority)) {
+                            profile->Add(
+                                    std::make_unique<SetSchedulerPolicyAction>(policy, priority));
+                        }
+                    } else {
+                        LOG(WARNING) << "Invalid priority value: " << priority_string;
                     }
                 }
             } else {

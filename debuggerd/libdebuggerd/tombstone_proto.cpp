@@ -69,6 +69,7 @@
 
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/utility.h"
+#include "libdebuggerd/utility_host.h"
 #include "util.h"
 
 #include "tombstone.pb.h"

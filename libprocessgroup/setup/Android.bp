@@ -29,7 +29,6 @@ cc_library_shared {
     ],
     shared_libs: [
         "libbase",
-        "libcgrouprc",
         "libjsoncpp",
     ],
     static_libs: [
