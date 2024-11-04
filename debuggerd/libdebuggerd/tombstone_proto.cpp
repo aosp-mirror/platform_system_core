@@ -69,6 +69,7 @@
 
 #include "libdebuggerd/open_files_list.h"
 #include "libdebuggerd/utility.h"
+#include "libdebuggerd/utility_host.h"
 #include "util.h"
 
 #include "tombstone.pb.h"
@@ -356,6 +357,9 @@ static void dump_probable_cause(Tombstone* tombstone, unwindstack::AndroidUnwind
     auto map_info = maps->Find(fault_addr);
     if (map_info != nullptr && map_info->flags() == PROT_EXEC) {
       cause = "execute-only (no-read) memory access error; likely due to data in .text.";
+    } else if (fault_addr == target_thread.registers->pc() &&
+               map_info != nullptr && (map_info->flags() & PROT_EXEC) == 0) {
+      cause = "trying to execute non-executable memory.";
     } else {
       cause = get_stack_overflow_cause(fault_addr, target_thread.registers->sp(), maps);
     }

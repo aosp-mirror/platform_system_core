@@ -34,6 +34,7 @@
 
 #include <string>
 
+#include <android-base/logging.h>
 #include <android-base/macros.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
