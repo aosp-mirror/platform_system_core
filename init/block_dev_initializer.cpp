@@ -140,11 +140,43 @@ ListenerAction BlockDevInitializer::HandleUevent(const Uevent& uevent,
 
     LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << name;
 
-    devices->erase(iter);
+    // Remove the partition from the list of partitions we're waiting for.
+    //
+    // Partitions that we're waiting for here are expected to be on the boot
+    // device, so only remove from the list if they're on the boot device.
+    // This prevents us from being confused if there are multiple disks (some
+    // perhaps connected via USB) that have matching partition names.
+    //
+    // ...but...
+    //
+    // Some products (especialy emulators) don't seem to set up boot_devices
+    // or possibly not all the partitions that we need to wait for are on the
+    // specified boot device. Thus, only require partitions to be on the boot
+    // device in "strict" mode, which should be used on newer systems.
+    if (device_handler_->IsBootDevice(uevent) || !device_handler_->IsBootDeviceStrict()) {
+        devices->erase(iter);
+    }
+
     device_handler_->HandleUevent(uevent);
     return devices->empty() ? ListenerAction::kStop : ListenerAction::kContinue;
 }
 
+// Wait for partitions that are expected to be on the "boot device" to initialize.
+//
+// Wait (for up to 10 seconds) for partitions passed in `devices` to show up.
+// All block devices found while waiting will be initialized, which includes
+// creating symlinks for them in /dev/block. Once all `devices` are found we'll
+// return success (true). If any devices aren't found we'll return failure
+// (false). As devices are found they will be removed from `devices`.
+//
+// The contents of `devices` is the names of the partitions. This can be:
+// - The `partition_name` reported by a uevent, or the final component in the
+//   `path` reported by a uevent if the `partition_name` is blank.
+// - The result of DeviceHandler::GetPartitionNameForDevice() on the
+//   `device_name` reported by a uevent.
+//
+// NOTE: on newer systems partitions _must_ be on the "boot device". See
+// comments inside HandleUevent().
 bool BlockDevInitializer::InitDevices(std::set<std::string> devices) {
     auto uevent_callback = [&, this](const Uevent& uevent) -> ListenerAction {
         return HandleUevent(uevent, &devices);
