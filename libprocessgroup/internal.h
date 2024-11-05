@@ -16,20 +16,6 @@
 
 #pragma once
 
-#include <map>
 #include <string>
 
-#include "cgroup_descriptor.h"
-
-// Duplicated from cgrouprc.h. Don't depend on libcgrouprc here.
-#define CGROUPRC_CONTROLLER_FLAG_MOUNTED 0x1
-#define CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION 0x2
-#define CGROUPRC_CONTROLLER_FLAG_OPTIONAL 0x4
-
-unsigned int GetCgroupDepth(const std::string& controller_root, const std::string& cgroup_path);
-
-using CgroupControllerName = std::string;
-using CgroupDescriptorMap = std::map<CgroupControllerName, CgroupDescriptor>;
-bool ReadDescriptors(CgroupDescriptorMap* descriptors);
-
-bool ActivateControllers(const std::string& path, const CgroupDescriptorMap& descriptors);
+static const std::string CGROUP_V2_ROOT_DEFAULT = "/sys/fs/cgroup";

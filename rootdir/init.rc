@@ -70,6 +70,9 @@ on early-init
 
     start ueventd
 
+    # Mount tracefs (with GID=AID_READTRACEFS)
+    mount tracefs tracefs /sys/kernel/tracing gid=3012
+
     # Run apexd-bootstrap so that APEXes that provide critical libraries
     # become available. Note that this is executed as exec_start to ensure that
     # the libraries are available to the processes started after this statement.
@@ -79,9 +82,6 @@ on early-init
     # These must already exist by the time boringssl_self_test32 / boringssl_self_test64 run.
     mkdir /dev/boringssl 0755 root root
     mkdir /dev/boringssl/selftest 0755 root root
-
-    # Mount tracefs (with GID=AID_READTRACEFS)
-    mount tracefs tracefs /sys/kernel/tracing gid=3012
 
     # create sys dirctory
     mkdir /dev/sys 0755 system system
@@ -111,37 +111,6 @@ on init
 
     # Create socket dir for ot-daemon
     mkdir /dev/socket/ot-daemon 0770 thread_network thread_network
-
-    # Create energy-aware scheduler tuning nodes
-    mkdir /dev/stune/foreground
-    mkdir /dev/stune/background
-    mkdir /dev/stune/top-app
-    mkdir /dev/stune/rt
-    chown system system /dev/stune
-    chown system system /dev/stune/foreground
-    chown system system /dev/stune/background
-    chown system system /dev/stune/top-app
-    chown system system /dev/stune/rt
-    chown system system /dev/stune/tasks
-    chown system system /dev/stune/foreground/tasks
-    chown system system /dev/stune/background/tasks
-    chown system system /dev/stune/top-app/tasks
-    chown system system /dev/stune/rt/tasks
-    chown system system /dev/stune/cgroup.procs
-    chown system system /dev/stune/foreground/cgroup.procs
-    chown system system /dev/stune/background/cgroup.procs
-    chown system system /dev/stune/top-app/cgroup.procs
-    chown system system /dev/stune/rt/cgroup.procs
-    chmod 0664 /dev/stune/tasks
-    chmod 0664 /dev/stune/foreground/tasks
-    chmod 0664 /dev/stune/background/tasks
-    chmod 0664 /dev/stune/top-app/tasks
-    chmod 0664 /dev/stune/rt/tasks
-    chmod 0664 /dev/stune/cgroup.procs
-    chmod 0664 /dev/stune/foreground/cgroup.procs
-    chmod 0664 /dev/stune/background/cgroup.procs
-    chmod 0664 /dev/stune/top-app/cgroup.procs
-    chmod 0664 /dev/stune/rt/cgroup.procs
 
     # cpuctl hierarchy for devices using utilclamp
     mkdir /dev/cpuctl/foreground
@@ -215,24 +184,6 @@ on init
     chown system system /dev/cpuctl/camera-daemon/cgroup.procs
     chmod 0664 /dev/cpuctl/camera-daemon/tasks
     chmod 0664 /dev/cpuctl/camera-daemon/cgroup.procs
-
-    # Create an stune group for camera-specific processes
-    mkdir /dev/stune/camera-daemon
-    chown system system /dev/stune/camera-daemon
-    chown system system /dev/stune/camera-daemon/tasks
-    chown system system /dev/stune/camera-daemon/cgroup.procs
-    chmod 0664 /dev/stune/camera-daemon/tasks
-    chmod 0664 /dev/stune/camera-daemon/cgroup.procs
-
-    # Create an stune group for NNAPI HAL processes
-    mkdir /dev/stune/nnapi-hal
-    chown system system /dev/stune/nnapi-hal
-    chown system system /dev/stune/nnapi-hal/tasks
-    chown system system /dev/stune/nnapi-hal/cgroup.procs
-    chmod 0664 /dev/stune/nnapi-hal/tasks
-    chmod 0664 /dev/stune/nnapi-hal/cgroup.procs
-    write /dev/stune/nnapi-hal/schedtune.boost 1
-    write /dev/stune/nnapi-hal/schedtune.prefer_idle 1
 
     # Create blkio group and apply initial settings.
     # This feature needs kernel to support it, and the
@@ -644,6 +595,7 @@ on post-fs
     mkdir /metadata/ota 0750 root system
     mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/watchdog 0770 root system
+    mkdir /metadata/tradeinmode 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system

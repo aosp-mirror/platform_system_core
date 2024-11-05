@@ -16,20 +16,27 @@
 
 #pragma once
 
-#include <map>
 #include <string>
+#include <vector>
 
-#include "cgroup_descriptor.h"
+#include "android-base/unique_fd.h"
 
-// Duplicated from cgrouprc.h. Don't depend on libcgrouprc here.
-#define CGROUPRC_CONTROLLER_FLAG_MOUNTED 0x1
-#define CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION 0x2
-#define CGROUPRC_CONTROLLER_FLAG_OPTIONAL 0x4
+class BacktraceFrame;
 
-unsigned int GetCgroupDepth(const std::string& controller_root, const std::string& cgroup_path);
+class Symbolizer {
+  android::base::unique_fd in_fd, out_fd;
 
-using CgroupControllerName = std::string;
-using CgroupDescriptorMap = std::map<CgroupControllerName, CgroupDescriptor>;
-bool ReadDescriptors(CgroupDescriptorMap* descriptors);
+  std::string read_response();
 
-bool ActivateControllers(const std::string& path, const CgroupDescriptorMap& descriptors);
+ public:
+  bool Start(const std::vector<std::string>& debug_file_directories);
+
+  struct Frame {
+    std::string function_name, file;
+    uint64_t line, column;
+  };
+
+  std::vector<Frame> SymbolizeCode(std::string path, uint64_t rel_pc);
+};
+
+void symbolize_backtrace_frame(const BacktraceFrame& frame, Symbolizer& sym);

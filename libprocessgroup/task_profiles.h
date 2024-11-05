@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -77,7 +78,7 @@ class ProfileAction {
 
     // Default implementations will fail
     virtual bool ExecuteForProcess(uid_t, pid_t) const { return false; }
-    virtual bool ExecuteForTask(int) const { return false; }
+    virtual bool ExecuteForTask(pid_t) const { return false; }
     virtual bool ExecuteForUID(uid_t) const { return false; }
 
     virtual void EnableResourceCaching(ResourceCacheType) {}
@@ -90,19 +91,6 @@ class ProfileAction {
 };
 
 // Profile actions
-class SetClampsAction : public ProfileAction {
-  public:
-    SetClampsAction(int boost, int clamp) noexcept : boost_(boost), clamp_(clamp) {}
-
-    const char* Name() const override { return "SetClamps"; }
-    bool ExecuteForProcess(uid_t uid, pid_t pid) const override;
-    bool ExecuteForTask(pid_t tid) const override;
-
-  protected:
-    int boost_;
-    int clamp_;
-};
-
 class SetTimerSlackAction : public ProfileAction {
   public:
     SetTimerSlackAction(unsigned long slack) noexcept : slack_(slack) {}
@@ -114,8 +102,6 @@ class SetTimerSlackAction : public ProfileAction {
 
   private:
     unsigned long slack_;
-
-    static bool IsTimerSlackSupported(pid_t tid);
 };
 
 // Set attribute profile element
@@ -187,6 +173,25 @@ class WriteFileAction : public ProfileAction {
     bool WriteValueToFile(const std::string& value, ResourceCacheType cache_type, uid_t uid,
                           pid_t pid, bool logfailures) const;
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, const std::string& value) const;
+};
+
+// Set scheduler policy action
+class SetSchedulerPolicyAction : public ProfileAction {
+  public:
+    SetSchedulerPolicyAction(int policy)
+        : policy_(policy) {}
+    SetSchedulerPolicyAction(int policy, int priority_or_nice)
+        : policy_(policy), priority_or_nice_(priority_or_nice) {}
+
+    const char* Name() const override { return "SetSchedulerPolicy"; }
+    bool ExecuteForTask(pid_t tid) const override;
+
+    static bool isNormalPolicy(int policy);
+    static bool toPriority(int policy, int virtual_priority, int& priority_out);
+
+  private:
+    int policy_;
+    std::optional<int> priority_or_nice_;
 };
 
 class TaskProfile {
