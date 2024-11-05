@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,9 @@
  */
 
 #pragma once
+#include <android-base/result.h>
+#include <string>
 
-#include <cstdint>
-
-#include <processgroup/format/cgroup_controller.h>
-
-namespace android {
-namespace cgrouprc {
-namespace format {
-
-struct CgroupFile {
-    uint32_t version_;
-    uint32_t controller_count_;
-    CgroupController controllers_[];
-
-    static constexpr uint32_t FILE_VERSION_1 = 1;
-    static constexpr uint32_t FILE_CURR_VERSION = FILE_VERSION_1;
-};
-
-}  // namespace format
-}  // namespace cgrouprc
-}  // namespace android
+android::base::Result<std::string> RunExternalHandler(
+        const std::string& handler, uid_t uid, gid_t gid,
+        std::unordered_map<std::string, std::string>& envs_map);

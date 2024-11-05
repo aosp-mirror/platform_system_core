@@ -16,9 +16,8 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_binary {
-    name: "trusty-ut-ctrl",
-    vendor: true,
+cc_defaults {
+    name: "trusty-ut-ctrl.defaults",
 
     srcs: ["ut-ctrl.c"],
     shared_libs: [
@@ -32,4 +31,16 @@ cc_binary {
         "-Wall",
         "-Werror",
     ],
+}
+
+cc_binary {
+    name: "trusty-ut-ctrl",
+    defaults: ["trusty-ut-ctrl.defaults"],
+    vendor: true,
+}
+
+cc_binary {
+    name: "trusty-ut-ctrl.system",
+    defaults: ["trusty-ut-ctrl.defaults"],
+    system_ext_specific: true,
 }

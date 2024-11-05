@@ -17,8 +17,11 @@
 #include <modprobe/modprobe.h>
 
 #include <fnmatch.h>
+#include <grp.h>
+#include <pwd.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 
 #include <algorithm>
 #include <map>
@@ -30,8 +33,11 @@
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
+
+#include "exthandler/exthandler.h"
 
 std::string Modprobe::MakeCanonical(const std::string& module_path) {
     auto start = module_path.find_last_of('/');
@@ -164,6 +170,10 @@ bool Modprobe::ParseOptionsCallback(const std::vector<std::string>& args) {
     auto it = args.begin();
     const std::string& type = *it++;
 
+    if (type == "dyn_options") {
+        return ParseDynOptionsCallback(std::vector<std::string>(it, args.end()));
+    }
+
     if (type != "options") {
         LOG(ERROR) << "non-options line encountered in modules.options";
         return false;
@@ -190,6 +200,57 @@ bool Modprobe::ParseOptionsCallback(const std::vector<std::string>& args) {
     }
 
     auto [unused, inserted] = this->module_options_.emplace(canonical_name, options);
+    if (!inserted) {
+        LOG(ERROR) << "multiple options lines present for module " << module;
+        return false;
+    }
+    return true;
+}
+
+bool Modprobe::ParseDynOptionsCallback(const std::vector<std::string>& args) {
+    auto it = args.begin();
+    int arg_size = 3;
+
+    if (args.size() < arg_size) {
+        LOG(ERROR) << "dyn_options lines in modules.options must have at least" << arg_size
+                   << " entries, not " << args.size();
+        return false;
+    }
+
+    const std::string& module = *it++;
+
+    const std::string& canonical_name = MakeCanonical(module);
+    if (canonical_name.empty()) {
+        return false;
+    }
+
+    const std::string& pwnam = *it++;
+    passwd* pwd = getpwnam(pwnam.c_str());
+    if (!pwd) {
+        LOG(ERROR) << "invalid handler uid'" << pwnam << "'";
+        return false;
+    }
+
+    std::string handler_with_args =
+            android::base::Join(std::vector<std::string>(it, args.end()), ' ');
+    handler_with_args.erase(std::remove(handler_with_args.begin(), handler_with_args.end(), '\"'),
+                            handler_with_args.end());
+
+    LOG(DEBUG) << "Launching external module options handler: '" << handler_with_args
+               << " for module: " << module;
+
+    // There is no need to set envs for external module options handler - pass
+    // empty map.
+    std::unordered_map<std::string, std::string> envs_map;
+    auto result = RunExternalHandler(handler_with_args, pwd->pw_uid, 0, envs_map);
+    if (!result.ok()) {
+        LOG(ERROR) << "External module handler failed: " << result.error();
+        return false;
+    }
+
+    LOG(INFO) << "Dynamic options for module: " << module << " are '" << *result << "'";
+
+    auto [unused, inserted] = this->module_options_.emplace(canonical_name, *result);
     if (!inserted) {
         LOG(ERROR) << "multiple options lines present for module " << module;
         return false;

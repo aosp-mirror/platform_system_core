@@ -70,6 +70,7 @@
 #include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "gtest/gtest.h"
+#include "libdebuggerd/utility_host.h"
 #include "protocol.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
@@ -741,8 +742,6 @@ TEST_F(CrasherTest, mte_multiple_causes) {
 }
 
 #if defined(__aarch64__)
-constexpr size_t kTagGranuleSize = 16;
-
 static uintptr_t CreateTagMapping() {
   // Some of the MTE tag dump tests assert that there is an inaccessible page to the left and right
   // of the PROT_MTE page, so map three pages and set the two guard pages to PROT_NONE.
