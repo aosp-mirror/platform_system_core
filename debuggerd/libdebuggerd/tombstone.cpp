@@ -17,6 +17,7 @@
 #define LOG_TAG "DEBUG"
 
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/tombstone_proto_to_text.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -145,7 +146,10 @@ void engrave_tombstone(unique_fd output_fd, unique_fd proto_fd,
   log.tfd = output_fd.get();
   log.amfd_data = amfd_data;
 
-  tombstone_proto_to_text(tombstone, [&log](const std::string& line, bool should_log) {
-    _LOG(&log, should_log ? logtype::HEADER : logtype::LOGS, "%s\n", line.c_str());
-  });
+  tombstone_proto_to_text(
+      tombstone,
+      [&log](const std::string& line, bool should_log) {
+        _LOG(&log, should_log ? logtype::HEADER : logtype::LOGS, "%s\n", line.c_str());
+      },
+      [](const BacktraceFrame&) {});
 }
