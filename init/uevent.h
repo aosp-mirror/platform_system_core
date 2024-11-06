@@ -28,6 +28,7 @@ struct Uevent {
     std::string subsystem;
     std::string firmware;
     std::string partition_name;
+    std::string partition_uuid;
     std::string device_name;
     std::string modalias;
     int partition_num;
