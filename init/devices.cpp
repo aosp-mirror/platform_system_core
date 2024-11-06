@@ -376,7 +376,13 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     std::string partition;
     std::string uuid;
 
-    if (FindPlatformDevice(uevent.path, &device)) {
+    if (FindDmDevice(uevent, &partition, &uuid)) {
+        std::vector<std::string> symlinks = {"/dev/block/mapper/" + partition};
+        if (!uuid.empty()) {
+            symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
+        }
+        return symlinks;
+    } else if (FindPlatformDevice(uevent.path, &device)) {
         // Skip /devices/platform or /devices/ if present
         static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
         static constexpr std::string_view devices_prefix = "/devices/";
@@ -392,12 +398,6 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         type = "pci";
     } else if (FindVbdDevicePrefix(uevent.path, &device)) {
         type = "vbd";
-    } else if (FindDmDevice(uevent, &partition, &uuid)) {
-        std::vector<std::string> symlinks = {"/dev/block/mapper/" + partition};
-        if (!uuid.empty()) {
-            symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
-        }
-        return symlinks;
     } else {
         return {};
     }
