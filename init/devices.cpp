@@ -45,6 +45,7 @@
 using namespace std::chrono_literals;
 
 using android::base::Basename;
+using android::base::ConsumePrefix;
 using android::base::Dirname;
 using android::base::ReadFileToString;
 using android::base::Readlink;
@@ -386,11 +387,10 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         // Skip /devices/platform or /devices/ if present
         static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
         static constexpr std::string_view devices_prefix = "/devices/";
+        std::string_view str = device;
 
-        if (StartsWith(device, devices_platform_prefix)) {
-            device = device.substr(devices_platform_prefix.length());
-        } else if (StartsWith(device, devices_prefix)) {
-            device = device.substr(devices_prefix.length());
+        if (ConsumePrefix(&str, devices_platform_prefix) || ConsumePrefix(&str, devices_prefix)) {
+            device = str;
         }
 
         type = "platform";
