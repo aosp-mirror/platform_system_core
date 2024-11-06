@@ -91,10 +91,3 @@ bool signal_has_si_addr(const siginfo_t*);
 void get_signal_sender(char* buf, size_t n, const siginfo_t*);
 const char* get_signame(const siginfo_t*);
 const char* get_sigcode(const siginfo_t*);
-
-// Number of bytes per MTE granule.
-constexpr size_t kTagGranuleSize = 16;
-
-// Number of rows and columns to display in an MTE tag dump.
-constexpr size_t kNumTagColumns = 16;
-constexpr size_t kNumTagRows = 16;
