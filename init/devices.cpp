@@ -189,6 +189,34 @@ void SysfsPermissions::SetPermissions(const std::string& path) const {
     }
 }
 
+BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path) const {
+    BlockDeviceInfo info;
+
+    if (FindPlatformDevice(uevent_path, &info.str)) {
+        // Skip /devices/platform or /devices/ if present
+        static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
+        static constexpr std::string_view devices_prefix = "/devices/";
+        std::string_view str = info.str;
+
+        if (ConsumePrefix(&str, devices_platform_prefix) || ConsumePrefix(&str, devices_prefix)) {
+            info.str = str;
+        }
+        info.type = "platform";
+    } else if (FindPciDevicePrefix(uevent_path, &info.str)) {
+        info.type = "pci";
+    } else if (FindVbdDevicePrefix(uevent_path, &info.str)) {
+        info.type = "vbd";
+    } else {
+        // Re-clear device to be extra certain in case one of the FindXXX()
+        // functions returned false but still modified it.
+        info.str = "";
+    }
+
+    info.is_boot_device = boot_devices_.find(info.str) != boot_devices_.end();
+
+    return info;
+}
+
 std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_device) {
     static const auto partition_map = [] {
         std::vector<std::pair<std::string, std::string>> partition_map;
@@ -372,8 +400,7 @@ void SanitizePartitionName(std::string* string) {
 }
 
 std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uevent) const {
-    std::string device;
-    std::string type;
+    BlockDeviceInfo info;
     std::string partition;
     std::string uuid;
 
@@ -383,32 +410,20 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
             symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
         }
         return symlinks;
-    } else if (FindPlatformDevice(uevent.path, &device)) {
-        // Skip /devices/platform or /devices/ if present
-        static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
-        static constexpr std::string_view devices_prefix = "/devices/";
-        std::string_view str = device;
+    }
 
-        if (ConsumePrefix(&str, devices_platform_prefix) || ConsumePrefix(&str, devices_prefix)) {
-            device = str;
-        }
+    info = GetBlockDeviceInfo(uevent.path);
 
-        type = "platform";
-    } else if (FindPciDevicePrefix(uevent.path, &device)) {
-        type = "pci";
-    } else if (FindVbdDevicePrefix(uevent.path, &device)) {
-        type = "vbd";
-    } else {
+    if (info.type.empty()) {
         return {};
     }
 
     std::vector<std::string> links;
 
-    LOG(VERBOSE) << "found " << type << " device " << device;
+    LOG(VERBOSE) << "found " << info.type << " device " << info.str;
 
-    auto link_path = "/dev/block/" + type + "/" + device;
+    auto link_path = "/dev/block/" + info.type + "/" + info.str;
 
-    bool is_boot_device = boot_devices_.find(device) != boot_devices_.end();
     if (!uevent.partition_name.empty()) {
         std::string partition_name_sanitized(uevent.partition_name);
         SanitizePartitionName(&partition_name_sanitized);
@@ -418,10 +433,10 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         }
         links.emplace_back(link_path + "/by-name/" + partition_name_sanitized);
         // Adds symlink: /dev/block/by-name/<partition_name>.
-        if (is_boot_device) {
+        if (info.is_boot_device) {
             links.emplace_back("/dev/block/by-name/" + partition_name_sanitized);
         }
-    } else if (is_boot_device) {
+    } else if (info.is_boot_device) {
         // If we don't have a partition name but we are a partition on a boot device, create a
         // symlink of /dev/block/by-name/<device_name> for symmetry.
         links.emplace_back("/dev/block/by-name/" + uevent.device_name);

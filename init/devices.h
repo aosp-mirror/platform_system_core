@@ -116,6 +116,12 @@ class Subsystem {
     std::string dir_name_ = "/dev";
 };
 
+struct BlockDeviceInfo {
+    std::string str;
+    std::string type;
+    bool is_boot_device;
+};
+
 class DeviceHandler : public UeventHandler {
   public:
     friend class DeviceHandlerTester;
@@ -136,6 +142,7 @@ class DeviceHandler : public UeventHandler {
 
   private:
     void ColdbootDone() override;
+    BlockDeviceInfo GetBlockDeviceInfo(const std::string& uevent_path) const;
     bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
