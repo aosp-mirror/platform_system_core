@@ -224,6 +224,17 @@ BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path
     return info;
 }
 
+bool DeviceHandler::IsBootDeviceStrict() const {
+    // When using the newer "boot_part_uuid" to specify the boot device then
+    // we require all core system partitions to be on the boot device.
+    return !boot_part_uuid_.empty();
+}
+
+bool DeviceHandler::IsBootDevice(const Uevent& uevent) const {
+    auto device = GetBlockDeviceInfo(uevent.path);
+    return device.is_boot_device;
+}
+
 std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_device) {
     static const auto partition_map = [] {
         std::vector<std::pair<std::string, std::string>> partition_map;
