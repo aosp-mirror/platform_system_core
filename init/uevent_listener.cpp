@@ -66,6 +66,9 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
         } else if (!strncmp(msg, "PARTNAME=", 9)) {
             msg += 9;
             uevent->partition_name = msg;
+        } else if (!strncmp(msg, "PARTUUID=", 9)) {
+            msg += 9;
+            uevent->partition_uuid = msg;
         } else if (!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
@@ -82,7 +85,7 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
     if (LOG_UEVENTS) {
         LOG(INFO) << "event { '" << uevent->action << "', '" << uevent->path << "', '"
                   << uevent->subsystem << "', '" << uevent->firmware << "', " << uevent->major
-                  << ", " << uevent->minor << " }";
+                  << ", " << uevent->minor << ", " << uevent->partition_uuid << " }";
     }
 }
 
