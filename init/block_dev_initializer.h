@@ -29,6 +29,7 @@ class BlockDevInitializer final {
   public:
     BlockDevInitializer();
 
+    bool InitBootDevicesFromPartUuid();
     bool InitDeviceMapper();
     bool InitDmUser(const std::string& name);
     bool InitDevices(std::set<std::string> devices);

@@ -353,10 +353,25 @@ int ueventd_main(int argc, char** argv) {
 
     auto ueventd_configuration = GetConfiguration();
 
-    uevent_handlers.emplace_back(std::make_unique<DeviceHandler>(
+    UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
+
+    // Right after making DeviceHandler, replay all events looking for which
+    // block device has the boot partition. This lets us make symlinks
+    // for all of the other partitions on the same disk. Note that by the time
+    // we get here we know that the boot partition has already shown up (if
+    // we're looking for it) so just regenerating events is enough to know
+    // we'll see it.
+    std::unique_ptr<DeviceHandler> device_handler = std::make_unique<DeviceHandler>(
             std::move(ueventd_configuration.dev_permissions),
             std::move(ueventd_configuration.sysfs_permissions),
-            std::move(ueventd_configuration.subsystems), android::fs_mgr::GetBootDevices(), true));
+            std::move(ueventd_configuration.subsystems), android::fs_mgr::GetBootDevices(),
+            android::fs_mgr::GetBootPartUuid(), true);
+    uevent_listener.RegenerateUevents([&](const Uevent& uevent) -> ListenerAction {
+        bool uuid_check_done = device_handler->CheckUeventForBootPartUuid(uevent);
+        return uuid_check_done ? ListenerAction::kStop : ListenerAction::kContinue;
+    });
+
+    uevent_handlers.emplace_back(std::move(device_handler));
     uevent_handlers.emplace_back(std::make_unique<FirmwareHandler>(
             std::move(ueventd_configuration.firmware_directories),
             std::move(ueventd_configuration.external_firmware_handlers)));
@@ -365,8 +380,6 @@ int ueventd_main(int argc, char** argv) {
         std::vector<std::string> base_paths = {"/odm/lib/modules", "/vendor/lib/modules"};
         uevent_handlers.emplace_back(std::make_unique<ModaliasHandler>(base_paths));
     }
-    UeventListener uevent_listener(ueventd_configuration.uevent_socket_rcvbuf_size);
-
     if (!android::base::GetBoolProperty(kColdBootDoneProp, false)) {
         ColdBoot cold_boot(uevent_listener, uevent_handlers,
                            ueventd_configuration.enable_parallel_restorecon,

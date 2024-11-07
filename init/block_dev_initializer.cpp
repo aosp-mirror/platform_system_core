@@ -33,7 +33,49 @@ BlockDevInitializer::BlockDevInitializer() : uevent_listener_(16 * 1024 * 1024) 
     auto boot_devices = android::fs_mgr::GetBootDevices();
     device_handler_ = std::make_unique<DeviceHandler>(
             std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
-            std::move(boot_devices), false);
+            std::move(boot_devices), android::fs_mgr::GetBootPartUuid(), false);
+}
+
+// If boot_part_uuid is specified, use it to set boot_devices
+//
+// When `androidboot.boot_part_uuid` is specified then that's the partition UUID
+// of the kernel. Look for that partition and then set `boot_devices` to be
+// exactly one item: the block device containing that partition.
+//
+// NOTE that `boot_part_uuid` is only specified on newer devices. Older devices
+// specified `boot_devices` directly.
+bool BlockDevInitializer::InitBootDevicesFromPartUuid() {
+    bool uuid_check_done = false;
+
+    auto boot_part_callback = [&, this](const Uevent& uevent) -> ListenerAction {
+        uuid_check_done = device_handler_->CheckUeventForBootPartUuid(uevent);
+        return uuid_check_done ? ListenerAction::kStop : ListenerAction::kContinue;
+    };
+
+    // Re-run already arrived uevents looking for the boot partition UUID.
+    //
+    // NOTE: If we're not using the boot partition UUID to find the boot
+    // device then the first uevent we analyze will cause us to stop looking
+    // and set `uuid_check_done`. This will shortcut all of the UUID logic.
+    // Replaying one uevent is not expected to be slow.
+    uevent_listener_.RegenerateUevents(boot_part_callback);
+
+    // If we're not done looking, poll for uevents for longer
+    if (!uuid_check_done) {
+        Timer t;
+        uevent_listener_.Poll(boot_part_callback, 10s);
+        LOG(INFO) << "Wait for boot partition returned after " << t;
+    }
+
+    // Give a nicer error message if we were expecting to find the kernel boot
+    // partition but didn't. Later code would fail too but the message there
+    // is a bit further from the root cause of the problem.
+    if (!uuid_check_done) {
+        LOG(ERROR) << __PRETTY_FUNCTION__ << ": boot partition not found after polling timeout.";
+        return false;
+    }
+
+    return true;
 }
 
 bool BlockDevInitializer::InitDeviceMapper() {
