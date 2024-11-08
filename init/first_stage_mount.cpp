@@ -288,6 +288,10 @@ static bool IsMicrodroidStrictBoot() {
 }
 
 bool FirstStageMountVBootV2::InitDevices() {
+    if (!block_dev_init_.InitBootDevicesFromPartUuid()) {
+        return false;
+    }
+
     std::set<std::string> devices;
     GetSuperDeviceName(&devices);
 
