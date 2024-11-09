@@ -265,6 +265,10 @@ cc_test {
                 name: "force-no-test-error",
                 value: "false",
             },
+            {
+                name: "native-test-timeout",
+                value: "15m",
+            },
         ],
     },
 }
