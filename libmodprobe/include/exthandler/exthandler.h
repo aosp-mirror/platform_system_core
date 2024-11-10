@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,29 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_UEVENT_H
-#define _INIT_UEVENT_H
-
+#pragma once
+#include <android-base/result.h>
 #include <string>
 
-namespace android {
-namespace init {
-
-struct Uevent {
-    std::string action;
-    std::string path;
-    std::string subsystem;
-    std::string firmware;
-    std::string partition_name;
-    std::string partition_uuid;
-    std::string device_name;
-    std::string modalias;
-    int partition_num;
-    int major;
-    int minor;
-};
-
-}  // namespace init
-}  // namespace android
-
-#endif
+android::base::Result<std::string> RunExternalHandler(
+        const std::string& handler, uid_t uid, gid_t gid,
+        std::unordered_map<std::string, std::string>& envs_map);

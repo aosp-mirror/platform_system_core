@@ -188,28 +188,6 @@ void SysfsPermissions::SetPermissions(const std::string& path) const {
     }
 }
 
-bool DeviceHandler::IsBootDevice(const Uevent& uevent) const {
-    std::string device;
-
-    if (FindPlatformDevice(uevent.path, &device)) {
-        // Skip /devices/platform or /devices/ if present
-        static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
-        static constexpr std::string_view devices_prefix = "/devices/";
-
-        if (StartsWith(device, devices_platform_prefix)) {
-            device = device.substr(devices_platform_prefix.length());
-        } else if (StartsWith(device, devices_prefix)) {
-            device = device.substr(devices_prefix.length());
-        }
-    } else if (FindPciDevicePrefix(uevent.path, &device)) {
-    } else if (FindVbdDevicePrefix(uevent.path, &device)) {
-    } else {
-        return false;
-    }
-
-    return boot_devices_.find(device) != boot_devices_.end();
-}
-
 std::string DeviceHandler::GetPartitionNameForDevice(const std::string& query_device) {
     static const auto partition_map = [] {
         std::vector<std::pair<std::string, std::string>> partition_map;
@@ -398,7 +376,13 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     std::string partition;
     std::string uuid;
 
-    if (FindPlatformDevice(uevent.path, &device)) {
+    if (FindDmDevice(uevent, &partition, &uuid)) {
+        std::vector<std::string> symlinks = {"/dev/block/mapper/" + partition};
+        if (!uuid.empty()) {
+            symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
+        }
+        return symlinks;
+    } else if (FindPlatformDevice(uevent.path, &device)) {
         // Skip /devices/platform or /devices/ if present
         static constexpr std::string_view devices_platform_prefix = "/devices/platform/";
         static constexpr std::string_view devices_prefix = "/devices/";
@@ -414,12 +398,6 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
         type = "pci";
     } else if (FindVbdDevicePrefix(uevent.path, &device)) {
         type = "vbd";
-    } else if (FindDmDevice(uevent, &partition, &uuid)) {
-        std::vector<std::string> symlinks = {"/dev/block/mapper/" + partition};
-        if (!uuid.empty()) {
-            symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
-        }
-        return symlinks;
     } else {
         return {};
     }
