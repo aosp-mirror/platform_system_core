@@ -55,7 +55,7 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
                 break;
             }
 
-            *source_offset = cow_op->new_block * BLOCK_SZ;
+            *source_offset = static_cast<uint64_t>(cow_op->new_block) * BLOCK_SZ;
             if (!checkOrderedOp) {
                 replace_zero_vec->push_back(cow_op);
                 if (cow_op->type() == kCowReplaceOp) {
@@ -74,7 +74,7 @@ int MergeWorker::PrepareMerge(uint64_t* source_offset, int* pending_ops,
                     break;
                 }
 
-                uint64_t next_offset = op->new_block * BLOCK_SZ;
+                uint64_t next_offset = static_cast<uint64_t>(op->new_block) * BLOCK_SZ;
                 if (next_offset != (*source_offset + nr_consecutive * BLOCK_SZ)) {
                     break;
                 }

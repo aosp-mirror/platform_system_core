@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright 2024, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,29 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_UEVENT_H
-#define _INIT_UEVENT_H
+#pragma once
 
 #include <string>
 
-namespace android {
-namespace init {
+#include <stddef.h>
 
-struct Uevent {
-    std::string action;
-    std::string path;
-    std::string subsystem;
-    std::string firmware;
-    std::string partition_name;
-    std::string partition_uuid;
-    std::string device_name;
-    std::string modalias;
-    int partition_num;
-    int major;
-    int minor;
-};
+std::string describe_tagged_addr_ctrl(long ctrl);
+std::string describe_pac_enabled_keys(long keys);
 
-}  // namespace init
-}  // namespace android
+// Number of bytes per MTE granule.
+constexpr size_t kTagGranuleSize = 16;
 
-#endif
+// Number of rows and columns to display in an MTE tag dump.
+constexpr size_t kNumTagColumns = 16;
+constexpr size_t kNumTagRows = 16;
