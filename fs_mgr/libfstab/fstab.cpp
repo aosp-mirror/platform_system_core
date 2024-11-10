@@ -262,7 +262,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!arg.empty() && arg.back() == '%') {
                 arg.pop_back();
                 int val;
-                if (ParseInt(arg, &val, 0, 100)) {
+                if (ParseInt(arg, &val, 0, 200)) {
                     entry->zram_size = CalculateZramSize(val);
                 } else {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
@@ -948,6 +948,22 @@ std::set<std::string> GetBootDevices() {
     }
 
     return ExtraBootDevices(fstab);
+}
+
+std::string GetBootPartUuid() {
+    std::string boot_part_uuid;
+
+    if (GetBootconfig("androidboot.boot_part_uuid", &boot_part_uuid)) {
+        return boot_part_uuid;
+    }
+
+    ImportKernelCmdline([&](std::string key, std::string value) {
+        if (key == "androidboot.boot_part_uuid") {
+            boot_part_uuid = value;
+        }
+    });
+
+    return boot_part_uuid;
 }
 
 std::string GetVerityDeviceName(const FstabEntry& entry) {
