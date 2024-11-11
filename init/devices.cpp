@@ -307,7 +307,8 @@ bool DeviceHandler::FindSubsystemDevice(std::string path, std::string* device_pa
     return false;
 }
 
-bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_device_path) const {
+bool DeviceHandler::FindPlatformDevice(const std::string& path,
+                                       std::string* platform_device_path) const {
     const std::set<std::string> subsystem_paths = {
             sysfs_mount_point_ + "/bus/platform",
             sysfs_mount_point_ + "/bus/amba",
@@ -316,7 +317,7 @@ bool DeviceHandler::FindPlatformDevice(std::string path, std::string* platform_d
     return FindSubsystemDevice(path, platform_device_path, subsystem_paths);
 }
 
-bool DeviceHandler::FindMmcDevice(std::string path, std::string* mmc_device_path) const {
+bool DeviceHandler::FindMmcDevice(const std::string& path, std::string* mmc_device_path) const {
     const std::set<std::string> subsystem_paths = {
             sysfs_mount_point_ + "/bus/mmc",
     };
@@ -324,7 +325,7 @@ bool DeviceHandler::FindMmcDevice(std::string path, std::string* mmc_device_path
     return FindSubsystemDevice(path, mmc_device_path, subsystem_paths);
 }
 
-bool DeviceHandler::FindScsiDevice(std::string path, std::string* scsi_device_path) const {
+bool DeviceHandler::FindScsiDevice(const std::string& path, std::string* scsi_device_path) const {
     const std::set<std::string> subsystem_paths = {
             sysfs_mount_point_ + "/bus/scsi",
     };
