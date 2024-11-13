@@ -39,6 +39,33 @@ for the node path:
      `device_id` is `uevent MINOR % 128 + 1`.
   3. All other devices are created as `/dev/<basename uevent DEVPATH>`
 
+Whether a device is considered a "boot device" is a bit complicated.
+
+ - The recommended way to specify the boot device is to provide the "partition UUID" containing the
+   kernel (or, really, any parition on the boot device) and then boot device is the block device
+   containing that partition. This is passed via `androidboot.boot_part_uuid` which can be provided
+   either via the kernel bootconfig or via the kernel commandline. As an example, you could set
+   `androidboot.boot_part_uuid=12345678-abcd-ef01-0234-6789abcdef01`.
+ - Though using `boot_part_uuid` is preferred, you can also specify the boot device via
+   `androidboot.boot_device` or `androidboot.boot_devices`. These can be passed via the kernel
+   bootconfig or the kernel command line. It is also possible to pass this via device tree by
+   creating a `boot_devices` property in the Android firmware node. In most cases the `boot_device`
+   is the sysfs path (without the `/sys/devices` or `/sys/devices/platform` prefix) to the closest
+   parent of the block device that's on the "platform" bus. As an example, if the block device is
+   `/sys/devices/platform/soc@0/7c4000.mmc/mmc_host/mmc1/mmc1:0001/block/mmcblk1` then the
+   `boot_device` is `soc@0/7c4000.mmc` since we strip off the `/sys/devices/platform` and nothing
+   past the `7c4000.mmc` directory represents a device on the "platform" bus. In the case that none
+   of the parents are on the "platform" bus there are special rules for block devices under PCI
+   and VBD (Virtual Block Device). NOTE: sysfs paths for block devices are not guaranteed to be
+   stable between kernel versions, which is one of the reasons why it is suggested to use
+   `boot_part_uuid` instead of `boot_devices`. ALSO NOTE: If more than one device matches (either
+   because multiple `boot_devices` were listed or because there was more than one block device
+   under the found sysfs directory) and these multiple matching devices provide some of the same
+   named partitions then the behavior is unspecified.
+ - There is a further fallback to determine "boot devices" via the vstab, but providing at least
+   `boot_devices` has been required since Android 12 so this further fallback will not be described
+   here.
+
 The permissions can be modified using a ueventd.rc script and a line that beings with `/dev`. These
 lines take the format of
 
