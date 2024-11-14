@@ -57,8 +57,6 @@ __BEGIN_DECLS
 
 bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 
-[[deprecated]] static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
-
 bool UsePerAppMemcg();
 
 // Drop the fd cache of cgroup path. It is used for when resource caching is enabled and a process
