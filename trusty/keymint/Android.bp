@@ -42,9 +42,10 @@ rust_binary {
     defaults: ["android.hardware.security.keymint-service.rust.trusty.default"],
     init_rc: ["android.hardware.security.keymint-service.rust.trusty.rc"],
     vintf_fragments: ["android.hardware.security.keymint-service.rust.trusty.xml"],
-    required: [
-        "android.hardware.hardware_keystore.xml",
-    ],
+    required: select(release_flag("RELEASE_AIDL_USE_UNFROZEN"), {
+        true: ["android.hardware.hardware_keystore.xml"],
+        default: ["android.hardware.hardware_keystore_V3.xml"],
+    }),
 }
 
 rust_binary {
