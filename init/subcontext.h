@@ -36,8 +36,10 @@ static constexpr const char kTestContext[] = "test-test-test";
 
 class Subcontext {
   public:
-    Subcontext(std::vector<std::string> path_prefixes, std::string_view context, bool host = false)
+    Subcontext(std::vector<std::string> path_prefixes, std::vector<std::string> partitions,
+               std::string_view context, bool host = false)
         : path_prefixes_(std::move(path_prefixes)),
+          partitions_(std::move(partitions)),
           context_(context.begin(), context.end()),
           pid_(0) {
         if (!host) {
@@ -49,6 +51,7 @@ class Subcontext {
     Result<std::vector<std::string>> ExpandArgs(const std::vector<std::string>& args);
     void Restart();
     bool PathMatchesSubcontext(const std::string& path) const;
+    bool PartitionMatchesSubcontext(const std::string& partition) const;
     void SetApexList(std::vector<std::string>&& apex_list);
 
     const std::string& context() const { return context_; }
@@ -59,6 +62,7 @@ class Subcontext {
     Result<SubcontextReply> TransmitMessage(const SubcontextCommand& subcontext_command);
 
     std::vector<std::string> path_prefixes_;
+    std::vector<std::string> partitions_;
     std::vector<std::string> apex_list_;
     std::string context_;
     pid_t pid_;

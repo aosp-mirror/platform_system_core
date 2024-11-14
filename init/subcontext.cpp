@@ -263,6 +263,10 @@ bool Subcontext::PathMatchesSubcontext(const std::string& path) const {
     return false;
 }
 
+bool Subcontext::PartitionMatchesSubcontext(const std::string& partition) const {
+    return std::find(partitions_.begin(), partitions_.end(), partition) != partitions_.end();
+}
+
 void Subcontext::SetApexList(std::vector<std::string>&& apex_list) {
     apex_list_ = std::move(apex_list);
 }
@@ -352,12 +356,13 @@ void InitializeSubcontext() {
     }
 
     if (SelinuxGetVendorAndroidVersion() >= __ANDROID_API_P__) {
-        subcontext.reset(
-                new Subcontext(std::vector<std::string>{"/vendor", "/odm"}, kVendorContext));
+        subcontext.reset(new Subcontext(std::vector<std::string>{"/vendor", "/odm"},
+                                        std::vector<std::string>{"VENDOR", "ODM"}, kVendorContext));
     }
 }
+
 void InitializeHostSubcontext(std::vector<std::string> vendor_prefixes) {
-    subcontext.reset(new Subcontext(vendor_prefixes, kVendorContext, /*host=*/true));
+    subcontext.reset(new Subcontext(vendor_prefixes, {}, kVendorContext, /*host=*/true));
 }
 
 Subcontext* GetSubcontext() {
