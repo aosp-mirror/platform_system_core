@@ -121,7 +121,7 @@ cc_binary {
         "libutils",
     ],
     required: [
-        "android.hardware.hardware_keystore.xml",
+        "android.hardware.hardware_keystore_V3.xml",
     ],
 }
 
