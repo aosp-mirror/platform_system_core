@@ -1,0 +1,62 @@
+service storageproxyd_wv_system /system_ext/bin/storageproxyd.system \
+        -d ${storageproxyd_wv_system.trusty_ipc_dev:-/dev/trusty-ipc-dev0} \
+        -r /dev/socket/rpmb_mock_wv_system \
+        -p /data/secure_storage_wv_system \
+        -t sock
+    disabled
+    class hal
+    user system
+    group system
+
+service rpmb_mock_init_wv_system /system_ext/bin/rpmb_dev.wv.system \
+        --dev /mnt/secure_storage_rpmb_wv_system/persist/RPMB_DATA --init --size 2048
+    disabled
+    user system
+    group system
+    oneshot
+
+service rpmb_mock_wv_system /system_ext/bin/rpmb_dev.wv.system \
+        --dev /mnt/secure_storage_rpmb_wv_system/persist/RPMB_DATA \
+        --sock rpmb_mock_wv_system
+    disabled
+    user system
+    group system
+    socket rpmb_mock_wv_system stream 660 system system
+
+# storageproxyd
+on boot && \
+    property:trusty.widevine_vm.nonsecure_vm_ready=1 && \
+    property:storageproxyd_wv_system.trusty_ipc_dev=*
+    wait /dev/socket/rpmb_mock_wv_system
+    enable storageproxyd_wv_system
+
+
+# RPMB Mock
+on early-boot && \
+    property:ro.hardware.security.trusty.widevine_vm.system=1 && \
+    property:trusty.widevine_vm.vm_cid=* && \
+    property:ro.boot.vendor.apex.com.android.services.widevine=\
+com.android.services.widevine.cf_guest_trusty_nonsecure
+    # Create a persistent location for the RPMB data
+    # (work around lack of RPMb block device on CF).
+    # file contexts secure_storage_rpmb_system_file
+    # (only used on Cuttlefish as this is non secure)
+    mkdir /metadata/secure_storage_rpmb_wv_system 0770 system system
+    mkdir /mnt/secure_storage_rpmb_wv_system 0770 system system
+    symlink /metadata/secure_storage_rpmb_wv_system \
+            /mnt/secure_storage_rpmb_wv_system/persist
+    # Create a system persist directory in /metadata
+    # (work around lack of dedicated system persist partition).
+    # file contexts secure_storage_persist_system_file
+    mkdir /metadata/secure_storage_persist_wv_system 0770 system system
+    mkdir /mnt/secure_storage_persist_wv_system 0770 system system
+    symlink /metadata/secure_storage_persist_wv_system \
+            /mnt/secure_storage_persist_wv_system/persist
+    # file contexts secure_storage_system_file
+    mkdir /data/secure_storage_wv_system 0770 root system
+    symlink /mnt/secure_storage_persist_wv_system/persist \
+            /data/secure_storage_wv_system/persist
+    chown root system /data/secure_storage_wv_system/persist
+    setprop storageproxyd_wv_system.trusty_ipc_dev VSOCK:${trusty.widevine_vm.vm_cid}:1
+    exec_start rpmb_mock_init_wv_system
+    start rpmb_mock_wv_system
