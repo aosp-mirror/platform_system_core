@@ -202,7 +202,7 @@ bool SnapshotHandler::WaitForMergeBegin() {
     cv.wait(lock, [this]() -> bool { return MergeInitiated() || IsMergeBeginError(io_state_); });
 
     if (IsMergeBeginError(io_state_)) {
-        SNAP_LOG(ERROR) << "WaitForMergeBegin failed with state: " << io_state_;
+        SNAP_LOG(VERBOSE) << "WaitForMergeBegin failed with state: " << io_state_;
         return false;
     }
 
@@ -276,7 +276,9 @@ bool SnapshotHandler::WaitForMergeReady() {
         if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED ||
             io_state_ == MERGE_IO_TRANSITION::MERGE_COMPLETE ||
             io_state_ == MERGE_IO_TRANSITION::IO_TERMINATED) {
-            SNAP_LOG(ERROR) << "Wait for merge ready failed: " << io_state_;
+            if (io_state_ == MERGE_IO_TRANSITION::MERGE_FAILED) {
+                SNAP_LOG(ERROR) << "Wait for merge ready failed: " << io_state_;
+            }
             return false;
         }
         return true;
