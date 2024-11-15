@@ -389,6 +389,13 @@ static DebuggerdDumpType get_dump_type(const debugger_thread_info* thread_info) 
   return kDebuggerdTombstoneProto;
 }
 
+static const char* get_unwind_type(const debugger_thread_info* thread_info) {
+  if (thread_info->siginfo->si_signo == BIONIC_SIGNAL_DEBUGGER) {
+    return "Unwind request";
+  }
+  return "Crash due to signal";
+}
+
 static int debuggerd_dispatch_pseudothread(void* arg) {
   debugger_thread_info* thread_info = static_cast<debugger_thread_info*>(arg);
 
@@ -502,8 +509,8 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
 
     execle(CRASH_DUMP_PATH, CRASH_DUMP_NAME, main_tid, pseudothread_tid, debuggerd_dump_type,
            nullptr, nullptr);
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "failed to exec crash_dump helper: %s",
-                          strerror(errno));
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "%s: failed to exec crash_dump helper: %s",
+                          get_unwind_type(thread_info), strerror(errno));
     return 1;
   }
 
@@ -524,26 +531,30 @@ static int debuggerd_dispatch_pseudothread(void* arg) {
   } else {
     // Something went wrong, log it.
     if (rc == -1) {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "read of IPC pipe failed: %s",
-                            strerror(errno));
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "%s: read of IPC pipe failed: %s",
+                            get_unwind_type(thread_info), strerror(errno));
     } else if (rc == 0) {
       async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                            "crash_dump helper failed to exec, or was killed");
+                            "%s: crash_dump helper failed to exec, or was killed",
+                            get_unwind_type(thread_info));
     } else if (rc != 1) {
       async_safe_format_log(ANDROID_LOG_FATAL, "libc",
-                            "read of IPC pipe returned unexpected value: %zd", rc);
+                            "%s: read of IPC pipe returned unexpected value: %zd",
+                            get_unwind_type(thread_info), rc);
     } else if (buf[0] != '\1') {
-      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper reported failure");
+      async_safe_format_log(ANDROID_LOG_FATAL, "libc", "%s: crash_dump helper reported failure",
+                            get_unwind_type(thread_info));
     }
   }
 
   // Don't leave a zombie child.
   int status;
   if (TEMP_FAILURE_RETRY(waitpid(crash_dump_pid, &status, 0)) == -1) {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "failed to wait for crash_dump helper: %s",
-                          strerror(errno));
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "%s: failed to wait for crash_dump helper: %s",
+                          get_unwind_type(thread_info), strerror(errno));
   } else if (WIFSTOPPED(status) || WIFSIGNALED(status)) {
-    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "crash_dump helper crashed or stopped");
+    async_safe_format_log(ANDROID_LOG_FATAL, "libc", "%s: crash_dump helper crashed or stopped",
+                          get_unwind_type(thread_info));
   }
 
   if (success) {
