@@ -193,9 +193,11 @@ BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path
     BlockDeviceInfo info;
 
     if (!boot_part_uuid_.empty()) {
-        // Only use the more specific "MMC" or "SCSI" match if a partition UUID
-        // was passed. Old bootloaders that aren't passing the partition UUID
-        // instead pass the path to the closest "platform" device. It would
+        // Only use the more specific "MMC" / "NVME" / "SCSI" match if a
+        // partition UUID was passed.
+        //
+        // Old bootloaders that aren't passing the partition UUID instead
+        // pass the path to the closest "platform" device. It would
         // break them if we chose this deeper (more specific) path.
         //
         // When we have a UUID we _want_ the more specific path since it can
@@ -204,6 +206,8 @@ BlockDeviceInfo DeviceHandler::GetBlockDeviceInfo(const std::string& uevent_path
         // classify them both the same by using the path to the USB controller.
         if (FindMmcDevice(uevent_path, &info.str)) {
             info.type = "mmc";
+        } else if (FindNvmeDevice(uevent_path, &info.str)) {
+            info.type = "nvme";
         } else if (FindScsiDevice(uevent_path, &info.str)) {
             info.type = "scsi";
         }
@@ -323,6 +327,14 @@ bool DeviceHandler::FindMmcDevice(const std::string& path, std::string* mmc_devi
     };
 
     return FindSubsystemDevice(path, mmc_device_path, subsystem_paths);
+}
+
+bool DeviceHandler::FindNvmeDevice(const std::string& path, std::string* nvme_device_path) const {
+    const std::set<std::string> subsystem_paths = {
+            sysfs_mount_point_ + "/class/nvme",
+    };
+
+    return FindSubsystemDevice(path, nvme_device_path, subsystem_paths);
 }
 
 bool DeviceHandler::FindScsiDevice(const std::string& path, std::string* scsi_device_path) const {
