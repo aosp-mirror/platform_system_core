@@ -19,9 +19,9 @@
 
 #include <inttypes.h>
 
-#include <charconv>
+#include <algorithm>
 #include <functional>
-#include <limits>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -32,6 +32,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
+#include "libdebuggerd/utility_host.h"
 #include "tombstone.pb.h"
 
 using android::base::StringAppendF;
@@ -416,27 +417,6 @@ static void print_memory_maps(CallbackType callback, const Tombstone& tombstone)
     CBS("--->Fault address falls at %s after any mapped regions",
         format_pointer(fault_address).c_str());
   }
-}
-
-static std::string oct_encode(const std::string& data) {
-  std::string oct_encoded;
-  oct_encoded.reserve(data.size());
-
-  // N.B. the unsigned here is very important, otherwise e.g. \255 would render as
-  // \-123 (and overflow our buffer).
-  for (unsigned char c : data) {
-    if (isprint(c)) {
-      oct_encoded += c;
-    } else {
-      std::string oct_digits("\\\0\0\0", 4);
-      // char is encodable in 3 oct digits
-      static_assert(std::numeric_limits<unsigned char>::max() <= 8 * 8 * 8);
-      auto [ptr, ec] = std::to_chars(oct_digits.data() + 1, oct_digits.data() + 4, c, 8);
-      oct_digits.resize(ptr - oct_digits.data());
-      oct_encoded += oct_digits;
-    }
-  }
-  return oct_encoded;
 }
 
 static void print_main_thread(CallbackType callback, SymbolizeCallbackType symbolize,
