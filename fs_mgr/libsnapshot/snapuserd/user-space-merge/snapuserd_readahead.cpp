@@ -702,7 +702,7 @@ bool ReadAhead::ReadAheadIOStart() {
     // window. If there is a crash during this time frame, merge should resume
     // based on the contents of the scratch space.
     if (!snapuserd_->WaitForMergeReady()) {
-        SNAP_LOG(ERROR) << "ReadAhead failed to wait for merge ready";
+        SNAP_LOG(VERBOSE) << "ReadAhead failed to wait for merge ready";
         return false;
     }
 
