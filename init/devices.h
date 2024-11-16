@@ -151,6 +151,7 @@ class DeviceHandler : public UeventHandler {
                              const std::set<std::string>& subsystem_paths) const;
     bool FindPlatformDevice(const std::string& path, std::string* platform_device_path) const;
     bool FindMmcDevice(const std::string& path, std::string* mmc_device_path) const;
+    bool FindNvmeDevice(const std::string& path, std::string* nvme_device_path) const;
     bool FindScsiDevice(const std::string& path, std::string* scsi_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;

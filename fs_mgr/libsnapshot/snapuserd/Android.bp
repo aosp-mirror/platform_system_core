@@ -89,7 +89,6 @@ cc_library_static {
         "libprocessgroup_util",
         "libjsoncpp",
     ],
-    include_dirs: ["bionic/libc/kernel"],
     export_include_dirs: ["include"],
     header_libs: [
         "libcutils_headers",
@@ -144,7 +143,6 @@ cc_defaults {
         "libstorage_literals_headers",
     ],
 
-    include_dirs: ["bionic/libc/kernel"],
     system_shared_libs: [],
 
     // snapuserd is started during early boot by first-stage init. At that
@@ -226,7 +224,6 @@ cc_defaults {
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [
@@ -324,7 +321,6 @@ cc_binary_host {
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [
