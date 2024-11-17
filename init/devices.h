@@ -149,9 +149,10 @@ class DeviceHandler : public UeventHandler {
     BlockDeviceInfo GetBlockDeviceInfo(const std::string& uevent_path) const;
     bool FindSubsystemDevice(std::string path, std::string* device_path,
                              const std::set<std::string>& subsystem_paths) const;
-    bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
-    bool FindMmcDevice(std::string path, std::string* mmc_device_path) const;
-    bool FindScsiDevice(std::string path, std::string* scsi_device_path) const;
+    bool FindPlatformDevice(const std::string& path, std::string* platform_device_path) const;
+    bool FindMmcDevice(const std::string& path, std::string* mmc_device_path) const;
+    bool FindNvmeDevice(const std::string& path, std::string* nvme_device_path) const;
+    bool FindScsiDevice(const std::string& path, std::string* scsi_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, bool block, int major, int minor,

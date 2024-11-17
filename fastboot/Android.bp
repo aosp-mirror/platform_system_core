@@ -201,7 +201,6 @@ cc_binary {
         "update_metadata-protos",
         "liburing",
     ],
-    include_dirs: ["bionic/libc/kernel"],
 
     header_libs: [
         "avb_headers",
