@@ -614,6 +614,9 @@ on post-fs
     mkdir /metadata/aconfig/boot 0775 root system
 
     mkdir /metadata/aconfig_test_missions 0775 root system
+
+    # See flag enable_system_aconfigd_rust, which toggles these processes.
+    exec_start system_aconfigd_platform_init
     exec_start aconfigd-platform-init
 
 on late-fs
@@ -1002,7 +1005,16 @@ on post-fs-data
     # Wait for apexd to finish activating APEXes before starting more processes.
     wait_for_prop apexd.status activated
     perform_apex_config
+
+    # See flag enable_system_aconfigd_rust, which toggles these processes.
     exec_start aconfigd-mainline-init
+    exec_start system_aconfigd_mainline_init
+
+    # system_aconfigd_socket_service is replacing aconfigd:
+    #   - A flag (enable_system_aconfigd_rust) toggles which socket executes.
+    #   - When enabled, aconfigd is a no-op, system_aconfigd_socket_service executes.
+    #   - Conversely, when disabled, aconfigd executes, and system_aconfigd_socket_service is a no-op.
+    start system_aconfigd_socket_service
     start aconfigd
 
     # Create directories for boot animation.

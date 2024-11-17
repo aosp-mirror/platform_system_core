@@ -582,7 +582,6 @@ bool MergeWorker::Run() {
     pthread_setname_np(pthread_self(), "MergeWorker");
 
     if (!snapuserd_->WaitForMergeBegin()) {
-        SNAP_LOG(ERROR) << "Merge terminated early...";
         return true;
     }
     auto merge_thread_priority = android::base::GetUintProperty<uint32_t>(
