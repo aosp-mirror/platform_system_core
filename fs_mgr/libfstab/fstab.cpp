@@ -262,7 +262,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!arg.empty() && arg.back() == '%') {
                 arg.pop_back();
                 int val;
-                if (ParseInt(arg, &val, 0, 100)) {
+                if (ParseInt(arg, &val, 0, 200)) {
                     entry->zram_size = CalculateZramSize(val);
                 } else {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
