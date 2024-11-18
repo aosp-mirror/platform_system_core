@@ -41,7 +41,7 @@ namespace init {
 
 template <typename F>
 void RunTest(F&& test_function) {
-    auto subcontext = Subcontext({"dummy_path"}, kTestContext);
+    auto subcontext = Subcontext({"dummy_path"}, {"dummy_partition"}, kTestContext);
     ASSERT_NE(0, subcontext.pid());
 
     test_function(subcontext);
@@ -174,6 +174,19 @@ TEST(subcontext, ExpandArgsFailure) {
         ASSERT_FALSE(result.ok());
         EXPECT_EQ("unexpected end of string in '" + args[1] + "', looking for }",
                   result.error().message());
+    });
+}
+
+TEST(subcontext, PartitionMatchesSubcontext) {
+    RunTest([](auto& subcontext) {
+        static auto& existent_partition = "dummy_partition";
+        static auto& non_existent_partition = "not_dummy_partition";
+
+        auto existent_result = subcontext.PartitionMatchesSubcontext(existent_partition);
+        auto non_existent_result = subcontext.PartitionMatchesSubcontext(non_existent_partition);
+
+        ASSERT_TRUE(existent_result);
+        ASSERT_FALSE(non_existent_result);
     });
 }
 
