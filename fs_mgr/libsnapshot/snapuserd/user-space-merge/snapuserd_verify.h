@@ -62,8 +62,8 @@ class UpdateVerify {
      * (/proc/pressure/{cpu,memory}; and monitoring the Inactive(file) and
      * Active(file) pages from /proc/meminfo.
      *
-     * Additionally, for low memory devices, it is advisible to use O_DIRECT
-     * fucntionality for source block device.
+     * Additionally, for low memory devices, it is advisable to use O_DIRECT
+     * functionality for source block device.
      */
     int kMinThreadsToVerify = 1;
     int kMaxThreadsToVerify = 3;
