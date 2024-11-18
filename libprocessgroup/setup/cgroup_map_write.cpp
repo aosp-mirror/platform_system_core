@@ -222,7 +222,7 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     const CgroupController* controller = descriptor.controller();
 
     if (controller->version() == 2) {
-        if (!strcmp(controller->name(), CGROUPV2_HIERARCHY_NAME)) {
+        if (controller->name() == CGROUPV2_HIERARCHY_NAME) {
             return MountV2CgroupController(descriptor);
         } else {
             return ActivateV2CgroupController(descriptor);
