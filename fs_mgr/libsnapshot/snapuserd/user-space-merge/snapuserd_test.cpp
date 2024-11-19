@@ -82,6 +82,8 @@ class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
 
     unique_fd GetCowFd() { return unique_fd{dup(cow_system_->fd)}; }
 
+    bool ShouldSkipSetUp();
+
     std::unique_ptr<ITestHarness> harness_;
     size_t size_ = 10_MiB;
     int total_base_size_ = 0;
@@ -97,11 +99,25 @@ class SnapuserdTestBase : public ::testing::TestWithParam<TestParam> {
 };
 
 void SnapuserdTestBase::SetUp() {
+    if (ShouldSkipSetUp()) {
+        GTEST_SKIP() << "snapuserd not supported on this device";
+    }
+
 #if __ANDROID__
     harness_ = std::make_unique<DmUserTestHarness>();
 #else
     harness_ = std::make_unique<HostTestHarness>();
 #endif
+}
+
+bool SnapuserdTestBase::ShouldSkipSetUp() {
+#ifdef __ANDROID__
+    if (!android::snapshot::CanUseUserspaceSnapshots() ||
+        android::snapshot::IsVendorFromAndroid12()) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 void SnapuserdTestBase::TearDown() {
@@ -302,6 +318,9 @@ class SnapuserdTest : public SnapuserdTestBase {
 };
 
 void SnapuserdTest::SetUp() {
+    if (ShouldSkipSetUp()) {
+        GTEST_SKIP() << "snapuserd not supported on this device";
+    }
     ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
     handlers_ = std::make_unique<SnapshotHandlerManager>();
 }
@@ -312,6 +331,9 @@ void SnapuserdTest::TearDown() {
 }
 
 void SnapuserdTest::Shutdown() {
+    if (!handlers_) {
+        return;
+    }
     if (dmuser_dev_) {
         ASSERT_TRUE(dmuser_dev_->Destroy());
     }
@@ -1181,6 +1203,9 @@ void SnapuserdVariableBlockSizeTest::ReadSnapshotWithVariableBlockSize() {
 }
 
 void SnapuserdVariableBlockSizeTest::SetUp() {
+    if (ShouldSkipSetUp()) {
+        GTEST_SKIP() << "snapuserd not supported on this device";
+    }
     ASSERT_NO_FATAL_FAILURE(SnapuserdTest::SetUp());
 }
 
@@ -1244,6 +1269,9 @@ void HandlerTest::InitializeDevice() {
 }
 
 void HandlerTest::SetUp() {
+    if (ShouldSkipSetUp()) {
+        GTEST_SKIP() << "snapuserd not supported on this device";
+    }
     ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
     ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
     ASSERT_NO_FATAL_FAILURE(SetUpV2Cow());
@@ -1251,6 +1279,9 @@ void HandlerTest::SetUp() {
 }
 
 void HandlerTest::TearDown() {
+    if (ShouldSkipSetUp()) {
+        return;
+    }
     ASSERT_TRUE(factory_.DeleteQueue(system_device_ctrl_name_));
     ASSERT_TRUE(handler_thread_.get());
     SnapuserdTestBase::TearDown();
@@ -1326,6 +1357,9 @@ class HandlerTestV3 : public HandlerTest {
 };
 
 void HandlerTestV3::SetUp() {
+    if (ShouldSkipSetUp()) {
+        GTEST_SKIP() << "snapuserd not supported on this device";
+    }
     ASSERT_NO_FATAL_FAILURE(SnapuserdTestBase::SetUp());
     ASSERT_NO_FATAL_FAILURE(CreateBaseDevice());
     ASSERT_NO_FATAL_FAILURE(SetUpV3Cow());
@@ -1529,14 +1563,6 @@ INSTANTIATE_TEST_SUITE_P(Io, HandlerTest, ::testing::ValuesIn(GetTestConfigs()))
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-
-#ifdef __ANDROID__
-    if (!android::snapshot::CanUseUserspaceSnapshots() ||
-        android::snapshot::IsVendorFromAndroid12()) {
-        std::cerr << "snapuserd_test not supported on this device\n";
-        return 0;
-    }
-#endif
 
     gflags::ParseCommandLineFlags(&argc, &argv, false);
 
