@@ -345,6 +345,26 @@ bool DeviceHandler::FindScsiDevice(const std::string& path, std::string* scsi_de
     return FindSubsystemDevice(path, scsi_device_path, subsystem_paths);
 }
 
+void DeviceHandler::TrackDeviceUevent(const Uevent& uevent) {
+    // No need to track any events if we won't bother handling any bind events
+    // later.
+    if (drivers_.size() == 0) return;
+
+    // Only track add, and not for block devices. We don't track remove because
+    // unbind events may arrive after remove events, so unbind will be the
+    // trigger to untrack those events.
+    if ((uevent.action != "add") || uevent.subsystem == "block" ||
+        (uevent.major < 0 || uevent.minor < 0)) {
+        return;
+    }
+
+    std::string path = sysfs_mount_point_ + uevent.path + "/device";
+    std::string device;
+    if (!Realpath(path, &device)) return;
+
+    tracked_uevents_.emplace_back(uevent, device);
+}
+
 void DeviceHandler::FixupSysPermissions(const std::string& upath,
                                         const std::string& subsystem) const {
     // upaths omit the "/sys" that paths in this list
@@ -664,10 +684,51 @@ bool DeviceHandler::CheckUeventForBootPartUuid(const Uevent& uevent) {
     return true;
 }
 
+void DeviceHandler::HandleBindInternal(std::string driver_name, std::string action,
+                                       const Uevent& uevent) {
+    if (uevent.subsystem == "block") {
+        LOG(FATAL) << "Tried to handle bind event for block device";
+    }
+
+    // Get tracked uevents for all devices that have this uevent's path as
+    // their canonical device path. Then handle those again if their driver
+    // is one of the ones we're interested in.
+    const auto driver = std::find(drivers_.cbegin(), drivers_.cend(), driver_name);
+    if (driver == drivers_.cend()) return;
+
+    std::string bind_path = sysfs_mount_point_ + uevent.path;
+    for (const TrackedUevent& tracked : tracked_uevents_) {
+        if (tracked.canonical_device_path != bind_path) continue;
+
+        LOG(VERBOSE) << "Propagating " << uevent.action << " as " << action << " for "
+                     << uevent.path;
+
+        std::string devpath = driver->ParseDevPath(tracked.uevent);
+        mkdir_recursive(Dirname(devpath), 0755);
+        HandleDevice(action, devpath, false, tracked.uevent.major, tracked.uevent.minor,
+                     std::vector<std::string>{});
+    }
+}
+
 void DeviceHandler::HandleUevent(const Uevent& uevent) {
     if (uevent.action == "add" || uevent.action == "change" || uevent.action == "bind" ||
         uevent.action == "online") {
         FixupSysPermissions(uevent.path, uevent.subsystem);
+    }
+
+    if (uevent.action == "bind") {
+        bound_drivers_[uevent.path] = uevent.driver;
+        HandleBindInternal(uevent.driver, "add", uevent);
+        return;
+    } else if (uevent.action == "unbind") {
+        if (bound_drivers_.count(uevent.path) == 0) return;
+        HandleBindInternal(bound_drivers_[uevent.path], "remove", uevent);
+
+        std::string sys_path = sysfs_mount_point_ + uevent.path;
+        std::erase_if(tracked_uevents_, [&sys_path](const TrackedUevent& tracked) {
+            return sys_path == tracked.canonical_device_path;
+        });
+        return;
     }
 
     // if it's not a /dev device, nothing to do
@@ -676,6 +737,8 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
     std::string devpath;
     std::vector<std::string> links;
     bool block = false;
+
+    TrackDeviceUevent(uevent);
 
     if (uevent.subsystem == "block") {
         block = true;
@@ -725,10 +788,12 @@ void DeviceHandler::ColdbootDone() {
 
 DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
                              std::vector<SysfsPermissions> sysfs_permissions,
-                             std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
-                             std::string boot_part_uuid, bool skip_restorecon)
+                             std::vector<Subsystem> drivers, std::vector<Subsystem> subsystems,
+                             std::set<std::string> boot_devices, std::string boot_part_uuid,
+                             bool skip_restorecon)
     : dev_permissions_(std::move(dev_permissions)),
       sysfs_permissions_(std::move(sysfs_permissions)),
+      drivers_(std::move(drivers)),
       subsystems_(std::move(subsystems)),
       boot_devices_(std::move(boot_devices)),
       boot_part_uuid_(boot_part_uuid),
@@ -744,7 +809,8 @@ DeviceHandler::DeviceHandler(std::vector<Permissions> dev_permissions,
 
 DeviceHandler::DeviceHandler()
     : DeviceHandler(std::vector<Permissions>{}, std::vector<SysfsPermissions>{},
-                    std::vector<Subsystem>{}, std::set<std::string>{}, "", false) {}
+                    std::vector<Subsystem>{}, std::vector<Subsystem>{}, std::set<std::string>{}, "",
+                    false) {}
 
 }  // namespace init
 }  // namespace android
