@@ -143,6 +143,7 @@
 #define AID_PRNG_SEEDER 1092         /* PRNG seeder daemon */
 #define AID_UPROBESTATS 1093         /* uid for uprobestats */
 #define AID_CROS_EC 1094             /* uid for accessing ChromeOS EC (cros_ec) */
+#define AID_MMD 1095                 /* uid for memory management daemon */
 // Additions to this file must be made in AOSP, *not* in internal branches.
 // You will also need to update expect_ids() in bionic/tests/grp_pwd_test.cpp.
 
