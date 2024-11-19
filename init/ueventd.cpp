@@ -364,8 +364,8 @@ int ueventd_main(int argc, char** argv) {
     std::unique_ptr<DeviceHandler> device_handler = std::make_unique<DeviceHandler>(
             std::move(ueventd_configuration.dev_permissions),
             std::move(ueventd_configuration.sysfs_permissions),
-            std::move(ueventd_configuration.subsystems), android::fs_mgr::GetBootDevices(),
-            android::fs_mgr::GetBootPartUuid(), true);
+            std::move(ueventd_configuration.drivers), std::move(ueventd_configuration.subsystems),
+            android::fs_mgr::GetBootDevices(), android::fs_mgr::GetBootPartUuid(), true);
     uevent_listener.RegenerateUevents([&](const Uevent& uevent) -> ListenerAction {
         bool uuid_check_done = device_handler->CheckUeventForBootPartUuid(uevent);
         return uuid_check_done ? ListenerAction::kStop : ListenerAction::kContinue;
