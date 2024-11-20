@@ -27,7 +27,9 @@
     },
     {
       "name": "cow_api_test"
-    },
+    }
+  ],
+  "postsubmit": [
     {
       "name": "snapuserd_test"
     }
