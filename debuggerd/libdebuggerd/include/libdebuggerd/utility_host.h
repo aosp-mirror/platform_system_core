@@ -29,3 +29,5 @@ constexpr size_t kTagGranuleSize = 16;
 // Number of rows and columns to display in an MTE tag dump.
 constexpr size_t kNumTagColumns = 16;
 constexpr size_t kNumTagRows = 16;
+
+std::string oct_encode(const std::string& data);
