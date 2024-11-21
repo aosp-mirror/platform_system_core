@@ -49,3 +49,12 @@ cc_binary {
         "rpmb_dev.system.rc",
     ],
 }
+
+cc_binary {
+    name: "rpmb_dev.wv.system",
+    defaults: ["rpmb_dev.cc_defaults"],
+    system_ext_specific: true,
+    init_rc: [
+        "rpmb_dev.wv.system.rc",
+    ],
+}

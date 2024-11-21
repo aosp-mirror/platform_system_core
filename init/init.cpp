@@ -315,8 +315,7 @@ Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& servic
         if (apex_info_list.has_value()) {
             std::vector<std::string> subcontext_apexes;
             for (const auto& info : apex_info_list->getApexInfo()) {
-                if (info.hasPreinstalledModulePath() &&
-                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                if (subcontext->PartitionMatchesSubcontext(info.getPartition())) {
                     subcontext_apexes.push_back(info.getModuleName());
                 }
             }
