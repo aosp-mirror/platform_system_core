@@ -596,6 +596,7 @@ on post-fs
     mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/watchdog 0770 root system
     mkdir /metadata/tradeinmode 0770 root system
+    mkdir /metadata/prefetch 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
@@ -781,6 +782,8 @@ on post-fs-data
     mkdir /data/misc/shared_relro 0771 shared_relro shared_relro
     mkdir /data/misc/systemkeys 0700 system system
     mkdir /data/misc/wifi 0770 wifi wifi
+    mkdir /data/misc/wifi/mainline_supplicant 0770 wifi wifi
+    mkdir /data/misc/wifi/mainline_supplicant/sockets 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0770 wifi wifi
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
     mkdir /data/misc/ethernet 0770 system system

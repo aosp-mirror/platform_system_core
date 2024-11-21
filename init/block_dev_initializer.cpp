@@ -33,7 +33,8 @@ BlockDevInitializer::BlockDevInitializer() : uevent_listener_(16 * 1024 * 1024) 
     auto boot_devices = android::fs_mgr::GetBootDevices();
     device_handler_ = std::make_unique<DeviceHandler>(
             std::vector<Permissions>{}, std::vector<SysfsPermissions>{}, std::vector<Subsystem>{},
-            std::move(boot_devices), android::fs_mgr::GetBootPartUuid(), false);
+            std::vector<Subsystem>{}, std::move(boot_devices), android::fs_mgr::GetBootPartUuid(),
+            false);
 }
 
 // If boot_part_uuid is specified, use it to set boot_devices
