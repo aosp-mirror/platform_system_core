@@ -69,6 +69,7 @@
 #include <android/avf_cc_flags.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
+#include <genfslabelsversion.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
 #include <selinux/android.h>
@@ -188,22 +189,6 @@ bool GetVendorMappingVersion(std::string* plat_vers) {
         return false;
     }
     return true;
-}
-
-int GetVendorGenfsVersion() {
-    std::string line;
-    if (!ReadFirstLine("/vendor/etc/selinux/genfs_labels_version.txt", &line)) {
-        PLOG(ERROR) << "Failed to read /vendor/etc/selinux/genfs_labels_version.txt; assuming it's "
-                       "202404";
-        return 202404;
-    }
-    int version;
-    if (!ParseInt(line, &version)) {
-        PLOG(ERROR) << "Failed to parse the genfs labels version " << line
-                    << "; assuming it's 202404";
-        return 202404;
-    }
-    return version;
 }
 
 constexpr const char plat_policy_cil_file[] = "/system/etc/selinux/plat_sepolicy.cil";
@@ -342,11 +327,14 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
 
     std::vector<std::string> genfs_cil_files;
 
-    int vendor_genfs_version = GetVendorGenfsVersion();
+    int vendor_genfs_version = get_genfs_labels_version();
     std::string genfs_cil_file =
             std::format("/system/etc/selinux/plat_sepolicy_genfs_{}.cil", vendor_genfs_version);
     if (access(genfs_cil_file.c_str(), F_OK) != 0) {
+        LOG(INFO) << "Missing " << genfs_cil_file << "; skipping";
         genfs_cil_file.clear();
+    } else {
+        LOG(INFO) << "Using " << genfs_cil_file << " for genfs labels";
     }
 
     // clang-format off
