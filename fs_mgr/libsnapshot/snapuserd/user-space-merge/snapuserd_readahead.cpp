@@ -706,24 +706,31 @@ bool ReadAhead::ReadAheadIOStart() {
         return false;
     }
 
-    // Copy the data to scratch space
-    memcpy(metadata_buffer_, ra_temp_meta_buffer_.get(), snapuserd_->GetBufferMetadataSize());
-    memcpy(read_ahead_buffer_, ra_temp_buffer_.get(), total_blocks_merged_ * BLOCK_SZ);
+    // Acquire buffer lock before doing memcpy to the scratch buffer. Although,
+    // by now snapshot-merge thread shouldn't be working on this scratch space
+    // but we take additional measure to ensure that the buffer is not being
+    // used by the merge thread at this point. see b/377819507
+    {
+        std::lock_guard<std::mutex> buffer_lock(snapuserd_->GetBufferLock());
+        // Copy the data to scratch space
+        memcpy(metadata_buffer_, ra_temp_meta_buffer_.get(), snapuserd_->GetBufferMetadataSize());
+        memcpy(read_ahead_buffer_, ra_temp_buffer_.get(), total_blocks_merged_ * BLOCK_SZ);
 
-    loff_t offset = 0;
-    std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
-    read_ahead_buffer_map.clear();
+        loff_t offset = 0;
+        std::unordered_map<uint64_t, void*>& read_ahead_buffer_map = snapuserd_->GetReadAheadMap();
+        read_ahead_buffer_map.clear();
 
-    for (size_t block_index = 0; block_index < blocks_.size(); block_index++) {
-        void* bufptr = static_cast<void*>((char*)read_ahead_buffer_ + offset);
-        uint64_t new_block = blocks_[block_index];
+        for (size_t block_index = 0; block_index < blocks_.size(); block_index++) {
+            void* bufptr = static_cast<void*>((char*)read_ahead_buffer_ + offset);
+            uint64_t new_block = blocks_[block_index];
 
-        read_ahead_buffer_map[new_block] = bufptr;
-        offset += BLOCK_SZ;
+            read_ahead_buffer_map[new_block] = bufptr;
+            offset += BLOCK_SZ;
+        }
+
+        total_ra_blocks_completed_ += total_blocks_merged_;
+        snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged_);
     }
-
-    total_ra_blocks_completed_ += total_blocks_merged_;
-    snapuserd_->SetMergedBlockCountForNextCommit(total_blocks_merged_);
 
     // Flush the scratch data - Technically, we should flush only for overlapping
     // blocks; However, since this region is mmap'ed, the dirty pages can still
