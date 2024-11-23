@@ -25,6 +25,8 @@ use std::process::exit;
 
 pub use args_internal::OutputFormat;
 pub use args_internal::ReplayArgs;
+#[cfg(target_os = "android")]
+pub use args_internal::StartArgs;
 pub use args_internal::TracerType;
 pub use args_internal::{DumpArgs, MainArgs, RecordArgs, SubCommands};
 use serde::Deserialize;
@@ -66,6 +68,8 @@ fn verify_and_fix(args: &mut MainArgs) -> Result<(), Error> {
         SubCommands::Dump(arg) => {
             ensure_path_exists(&arg.path)?;
         }
+        #[cfg(target_os = "android")]
+        SubCommands::Start(_arg) => return Ok(()),
     }
     Ok(())
 }
