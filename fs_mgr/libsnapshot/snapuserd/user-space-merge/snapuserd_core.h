@@ -186,6 +186,7 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     bool IsIouringSupported();
     bool CheckPartitionVerification();
+    std::mutex& GetBufferLock() { return buffer_lock_; }
 
   private:
     bool ReadMetadata();
@@ -215,6 +216,9 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
 
     std::mutex lock_;
     std::condition_variable cv;
+
+    // Lock the buffer used for snapshot-merge
+    std::mutex buffer_lock_;
 
     void* mapped_addr_;
     size_t total_mapped_addr_length_;
