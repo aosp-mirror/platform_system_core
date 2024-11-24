@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -128,7 +129,7 @@ class DeviceHandler : public UeventHandler {
 
     DeviceHandler();
     DeviceHandler(std::vector<Permissions> dev_permissions,
-                  std::vector<SysfsPermissions> sysfs_permissions,
+                  std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> drivers,
                   std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
                   std::string boot_part_uuid, bool skip_restorecon);
     virtual ~DeviceHandler() = default;
@@ -145,6 +146,11 @@ class DeviceHandler : public UeventHandler {
     bool IsBootDevice(const Uevent& uevent) const;
 
   private:
+    struct TrackedUevent {
+        Uevent uevent;
+        std::string canonical_device_path;
+    };
+
     void ColdbootDone() override;
     BlockDeviceInfo GetBlockDeviceInfo(const std::string& uevent_path) const;
     bool FindSubsystemDevice(std::string path, std::string* device_path,
@@ -163,14 +169,21 @@ class DeviceHandler : public UeventHandler {
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
     void HandleAshmemUevent(const Uevent& uevent);
 
+    void TrackDeviceUevent(const Uevent& uevent);
+    void HandleBindInternal(std::string driver_name, std::string action, const Uevent& uevent);
+
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
+    std::vector<Subsystem> drivers_;
     std::vector<Subsystem> subsystems_;
     std::set<std::string> boot_devices_;
     std::string boot_part_uuid_;
     bool found_boot_part_uuid_;
     bool skip_restorecon_;
     std::string sysfs_mount_point_;
+
+    std::vector<TrackedUevent> tracked_uevents_;
+    std::map<std::string, std::string> bound_drivers_;
 };
 
 // Exposed for testing
