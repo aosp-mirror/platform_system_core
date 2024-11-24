@@ -20,6 +20,10 @@ mod error;
 mod format;
 mod replay;
 mod tracer;
+#[cfg(target_os = "android")]
+mod arch {
+    pub mod android;
+}
 
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -38,6 +42,8 @@ use log::LevelFilter;
 pub use args::args_from_env;
 use args::OutputFormat;
 pub use args::ReplayArgs;
+#[cfg(target_os = "android")]
+pub use args::StartArgs;
 pub use args::{DumpArgs, MainArgs, RecordArgs, SubCommands};
 pub use error::Error;
 pub use format::FileId;
@@ -45,29 +51,11 @@ pub use format::InodeInfo;
 pub use format::Record;
 pub use format::RecordsFile;
 use log::info;
-#[cfg(target_os = "android")]
-use log::warn;
 pub use replay::Replay;
 pub use tracer::nanoseconds_since_boot;
 
 #[cfg(target_os = "android")]
-use rustutils::system_properties;
-#[cfg(target_os = "android")]
-use rustutils::system_properties::error::PropertyWatcherError;
-#[cfg(target_os = "android")]
-use rustutils::system_properties::PropertyWatcher;
-
-#[cfg(target_os = "android")]
-fn wait_for_property_true(property_name: &str) -> Result<(), PropertyWatcherError> {
-    let mut prop = PropertyWatcher::new(property_name)?;
-    loop {
-        prop.wait(None)?;
-        if system_properties::read_bool(property_name, false)? {
-            break;
-        }
-    }
-    Ok(())
-}
+pub use arch::android::*;
 
 /// Records prefetch data for the given configuration
 pub fn record(args: &RecordArgs) -> Result<(), Error> {
@@ -85,11 +73,10 @@ pub fn record(args: &RecordArgs) -> Result<(), Error> {
             thread::sleep(duration);
         } else {
             #[cfg(target_os = "android")]
-            wait_for_property_true("sys.boot_completed").unwrap_or_else(|e| {
-                warn!("failed to wait for sys.boot_completed with error: {}", e)
-            });
+            wait_for_record_stop();
         }
 
+        info!("Prefetch record exiting");
         // We want to unwrap here on failure to send this signal. Otherwise
         // tracer will continue generating huge records data.
         exit_tx.send(()).unwrap();
@@ -107,9 +94,16 @@ pub fn record(args: &RecordArgs) -> Result<(), Error> {
     std::fs::set_permissions(&args.path, std::fs::Permissions::from_mode(0o644))
         .map_err(|source| Error::Create { source, path: args.path.to_str().unwrap().to_owned() })?;
 
+    // Write the record file
     out_file
         .write_all(&rf.add_checksum_and_serialize()?)
         .map_err(|source| Error::Write { path: args.path.to_str().unwrap().to_owned(), source })?;
+    out_file.sync_all()?;
+
+    // Write build-finger-print file
+    #[cfg(target_os = "android")]
+    write_build_fingerprint(args)?;
+
     Ok(())
 }
 
