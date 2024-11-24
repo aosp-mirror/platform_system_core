@@ -27,6 +27,7 @@ namespace init {
 
 struct UeventdConfiguration {
     std::vector<Subsystem> subsystems;
+    std::vector<Subsystem> drivers;
     std::vector<SysfsPermissions> sysfs_permissions;
     std::vector<Permissions> dev_permissions;
     std::vector<std::string> firmware_directories;

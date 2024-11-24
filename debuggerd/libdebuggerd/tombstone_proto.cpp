@@ -34,10 +34,13 @@
 #include <sys/sysinfo.h>
 #include <time.h>
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <async_safe/log.h>
 
@@ -463,7 +466,8 @@ static void dump_abort_message(Tombstone* tombstone,
   }
   msg.resize(index);
 
-  tombstone->set_abort_message(msg);
+  // Make sure only UTF8 characters are present since abort_message is a string.
+  tombstone->set_abort_message(oct_encode(msg));
 }
 
 static void dump_open_fds(Tombstone* tombstone, const OpenFilesList* open_files) {
@@ -771,7 +775,8 @@ static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
       log_msg->set_tid(log_entry.entry.tid);
       log_msg->set_priority(prio);
       log_msg->set_tag(tag);
-      log_msg->set_message(msg);
+      // Make sure only UTF8 characters are present since message is a string.
+      log_msg->set_message(oct_encode(msg));
     } while ((msg = nl));
   }
   android_logger_list_free(logger_list);

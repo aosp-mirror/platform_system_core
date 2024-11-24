@@ -76,17 +76,17 @@ For example
 When `/dev/null` is created, its mode will be set to `0666`, its user to `root` and its group to
 `root`.
 
-The path can be modified using a ueventd.rc script and a `subsystem` section. There are three to set
-for a subsystem: the subsystem name, which device name to use, and which directory to place the
-device in. The section takes the below format of
+The path can be modified using a ueventd.rc script and a `subsystem` and/or `driver` section.
+There are three options to set for a subsystem or driver: the name, which device name to use,
+and which directory to place the device in. The section takes the below format of
 
     subsystem <subsystem_name>
       devname uevent_devname|uevent_devpath
       [dirname <directory>]
 
-`subsystem_name` is used to match uevent `SUBSYSTEM` value
+`subsystem_name` is used to match the uevent `SUBSYSTEM` value.
 
-`devname` takes one of three options
+`devname` takes one of three options:
   1. `uevent_devname` specifies that the name of the node will be the uevent `DEVNAME`
   2. `uevent_devpath` specifies that the name of the node will be basename uevent `DEVPATH`
   3. `sys_name` specifies that the name of the node will be the contents of `/sys/DEVPATH/name`
@@ -99,8 +99,12 @@ For example
     subsystem sound
       devname uevent_devpath
       dirname /dev/snd
-Indicates that all uevents with `SUBSYSTEM=sound` will create nodes as `/dev/snd/<basename uevent
+indicates that all uevents with `SUBSYSTEM=sound` will create nodes as `/dev/snd/<basename uevent
 DEVPATH>`.
+
+The `driver` section has the exact same structure as a `subsystem` section, but
+will instead match the `DRIVER` value in a `bind`/`unbind` uevent. However, the
+`driver` section will be ignored for block devices.
 
 ## /sys
 ----
