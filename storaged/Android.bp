@@ -24,7 +24,7 @@ cc_defaults {
     shared_libs: [
         "android.hardware.health@1.0",
         "android.hardware.health@2.0",
-        "android.hardware.health-V3-ndk",
+        "android.hardware.health-V4-ndk",
         "libbase",
         "libbinder",
         "libbinder_ndk",
@@ -47,7 +47,7 @@ cc_defaults {
         "-Wall",
         "-Werror",
         "-Wextra",
-        "-Wno-unused-parameter"
+        "-Wno-unused-parameter",
     ],
 }
 
