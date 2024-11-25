@@ -349,4 +349,18 @@ ScopedAStatus TrustyKeyMintDevice::sendRootOfTrust(const vector<uint8_t>& /* roo
     return kmError2ScopedAStatus(KM_ERROR_UNIMPLEMENTED);
 }
 
+ScopedAStatus TrustyKeyMintDevice::setAdditionalAttestationInfo(const vector<KeyParameter>& info) {
+    keymaster::SetAdditionalAttestationInfoRequest request(impl_->message_version());
+    request.info.Reinitialize(KmParamSet(info));
+
+    keymaster::SetAdditionalAttestationInfoResponse response =
+            impl_->SetAdditionalAttestationInfo(request);
+
+    if (response.error != KM_ERROR_OK) {
+        return kmError2ScopedAStatus(response.error);
+    } else {
+        return ScopedAStatus::ok();
+    }
+}
+
 }  // namespace aidl::android::hardware::security::keymint::trusty
