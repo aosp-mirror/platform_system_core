@@ -4,7 +4,10 @@ package {
 
 cc_defaults {
     name: "libbatterymonitor_defaults",
-    cflags: ["-Wall", "-Werror"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
     vendor_available: true,
     recovery_available: true,
     export_include_dirs: ["include"],
@@ -76,7 +79,7 @@ cc_library_static {
     defaults: ["libbatterymonitor_defaults"],
     srcs: ["BatteryMonitor.cpp"],
     static_libs: [
-        "android.hardware.health-V3-ndk",
+        "android.hardware.health-V4-ndk",
     ],
     whole_static_libs: [
         // Need to translate HIDL to AIDL to support legacy APIs in
@@ -165,12 +168,12 @@ cc_library_static {
     defaults: ["libhealthd_charger_ui_defaults"],
 
     static_libs: [
-        "android.hardware.health-V3-ndk",
+        "android.hardware.health-V4-ndk",
         "android.hardware.health-translate-ndk",
     ],
 
     export_static_lib_headers: [
-        "android.hardware.health-V3-ndk",
+        "android.hardware.health-V4-ndk",
     ],
 }
 
@@ -242,7 +245,7 @@ cc_defaults {
     static_libs: [
         // common
         "android.hardware.health@1.0-convert",
-        "android.hardware.health-V3-ndk",
+        "android.hardware.health-V4-ndk",
         "libbatterymonitor",
         "libcharger_sysprop",
         "libhealthd_charger_nops",
@@ -287,8 +290,8 @@ cc_binary {
                 "libminui",
                 "libsuspend",
             ],
-        }
-    }
+        },
+    },
 }
 
 cc_test {
@@ -307,7 +310,7 @@ cc_test {
     defaults: ["charger_defaults"],
     srcs: [
         "AnimationParser_test.cpp",
-        "healthd_mode_charger_test.cpp"
+        "healthd_mode_charger_test.cpp",
     ],
     static_libs: [
         "android.hardware.health@1.0",
