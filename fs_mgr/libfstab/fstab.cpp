@@ -39,10 +39,6 @@
 #include "fstab_priv.h"
 #include "logging_macros.h"
 
-#if !defined(MS_LAZYTIME)
-#define MS_LAZYTIME (1 << 25)
-#endif
-
 using android::base::EndsWith;
 using android::base::ParseByteCount;
 using android::base::ParseInt;
@@ -262,7 +258,7 @@ bool ParseFsMgrFlags(const std::string& flags, FstabEntry* entry) {
             if (!arg.empty() && arg.back() == '%') {
                 arg.pop_back();
                 int val;
-                if (ParseInt(arg, &val, 0, 100)) {
+                if (ParseInt(arg, &val, 0, 200)) {
                     entry->zram_size = CalculateZramSize(val);
                 } else {
                     LWARNING << "Warning: zramsize= flag malformed: " << arg;
@@ -948,6 +944,22 @@ std::set<std::string> GetBootDevices() {
     }
 
     return ExtraBootDevices(fstab);
+}
+
+std::string GetBootPartUuid() {
+    std::string boot_part_uuid;
+
+    if (GetBootconfig("androidboot.boot_part_uuid", &boot_part_uuid)) {
+        return boot_part_uuid;
+    }
+
+    ImportKernelCmdline([&](std::string key, std::string value) {
+        if (key == "androidboot.boot_part_uuid") {
+            boot_part_uuid = value;
+        }
+    });
+
+    return boot_part_uuid;
 }
 
 std::string GetVerityDeviceName(const FstabEntry& entry) {
