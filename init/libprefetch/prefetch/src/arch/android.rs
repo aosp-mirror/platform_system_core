@@ -11,8 +11,8 @@ use std::time::Duration;
 use rustutils::system_properties::error::PropertyWatcherError;
 use rustutils::system_properties::PropertyWatcher;
 
-const PREFETCH_RECORD_PROPERTY: &str = "ro.prefetch_boot.record";
-const PREFETCH_REPLAY_PROPERTY: &str = "ro.prefetch_boot.replay";
+const PREFETCH_RECORD_PROPERTY: &str = "prefetch_boot.record";
+const PREFETCH_REPLAY_PROPERTY: &str = "prefetch_boot.replay";
 const PREFETCH_RECORD_PROPERTY_STOP: &str = "ro.prefetch_boot.record_stop";
 
 fn wait_for_property_true(
