@@ -88,9 +88,7 @@ cc_library_static {
         "libprocessgroup",
         "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
     ],
-    include_dirs: ["bionic/libc/kernel"],
     export_include_dirs: ["include"],
     header_libs: [
         "libcutils_headers",
@@ -132,7 +130,6 @@ cc_defaults {
         "libprocessgroup",
         "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
         "libsnapuserd_client",
         "libz",
         "liblz4",
@@ -146,7 +143,6 @@ cc_defaults {
         "libstorage_literals_headers",
     ],
 
-    include_dirs: ["bionic/libc/kernel"],
     system_shared_libs: [],
 
     // snapuserd is started during early boot by first-stage init. At that
@@ -224,12 +220,10 @@ cc_defaults {
         "libprocessgroup",
         "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
         "liburing",
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [
@@ -267,6 +261,10 @@ cc_test {
             {
                 name: "force-no-test-error",
                 value: "false",
+            },
+            {
+                name: "native-test-timeout",
+                value: "15m",
             },
         ],
     },
@@ -319,12 +317,10 @@ cc_binary_host {
         "libsnapuserd",
         "libprocessgroup",
         "libjsoncpp",
-        "libcgrouprc",
         "liburing",
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [

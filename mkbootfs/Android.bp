@@ -6,7 +6,7 @@ package {
 
 cc_binary_host {
     name: "mkbootfs",
-    srcs: ["mkbootfs.c"],
+    srcs: ["mkbootfs.cpp"],
     cflags: ["-Werror"],
     static_libs: [
         "libbase",
