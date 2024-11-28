@@ -62,6 +62,7 @@ enum keymaster_command : uint32_t {
     KM_GET_ROOT_OF_TRUST            = (34 << KEYMASTER_REQ_SHIFT),
     KM_GET_HW_INFO                  = (35 << KEYMASTER_REQ_SHIFT),
     KM_GENERATE_CSR_V2              = (36 << KEYMASTER_REQ_SHIFT),
+    KM_SET_ADDITIONAL_ATTESTATION_INFO = (37 << KEYMASTER_REQ_SHIFT),
 
     // Bootloader/provisioning calls.
     KM_SET_BOOT_PARAMS = (0x1000 << KEYMASTER_REQ_SHIFT),

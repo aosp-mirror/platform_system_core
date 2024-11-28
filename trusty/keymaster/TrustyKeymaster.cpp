@@ -295,6 +295,13 @@ GetRootOfTrustResponse TrustyKeymaster::GetRootOfTrust(const GetRootOfTrustReque
     return response;
 }
 
+SetAdditionalAttestationInfoResponse TrustyKeymaster::SetAdditionalAttestationInfo(
+        const SetAdditionalAttestationInfoRequest& request) {
+    SetAdditionalAttestationInfoResponse response(message_version());
+    ForwardCommand(KM_SET_ADDITIONAL_ATTESTATION_INFO, request, &response);
+    return response;
+}
+
 GetHwInfoResponse TrustyKeymaster::GetHwInfo() {
     GetHwInfoResponse response(message_version());
     ForwardCommand(KM_GET_HW_INFO, GetHwInfoRequest(message_version()), &response);
