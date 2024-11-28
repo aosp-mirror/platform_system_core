@@ -106,11 +106,11 @@ cc_binary {
         "keymint/service.cpp",
     ],
     shared_libs: [
-        "android.hardware.security.keymint-V3-ndk",
+        "android.hardware.security.keymint-V4-ndk",
         "android.hardware.security.rkp-V3-ndk",
         "android.hardware.security.secureclock-V1-ndk",
         "android.hardware.security.sharedsecret-V1-ndk",
-        "lib_android_keymaster_keymint_utils_V3",
+        "lib_android_keymaster_keymint_utils",
         "libbase",
         "libbinder_ndk",
         "libhardware",
@@ -120,9 +120,10 @@ cc_binary {
         "libtrusty",
         "libutils",
     ],
-    required: [
-        "android.hardware.hardware_keystore_V3.xml",
-    ],
+    required: select(release_flag("RELEASE_AIDL_USE_UNFROZEN"), {
+        true: ["android.hardware.hardware_keystore.xml"],
+        default: ["android.hardware.hardware_keystore_V3.xml"],
+    }),
 }
 
 prebuilt_etc {

@@ -997,16 +997,8 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # See flag enable_system_aconfigd_rust, which toggles these processes.
-    exec_start aconfigd-mainline-init
     exec_start system_aconfigd_mainline_init
-
-    # system_aconfigd_socket_service is replacing aconfigd:
-    #   - A flag (enable_system_aconfigd_rust) toggles which socket executes.
-    #   - When enabled, aconfigd is a no-op, system_aconfigd_socket_service executes.
-    #   - Conversely, when disabled, aconfigd executes, and system_aconfigd_socket_service is a no-op.
     start system_aconfigd_socket_service
-    start aconfigd
 
     # Create directories for boot animation.
     mkdir /data/misc/bootanim 0755 system system
