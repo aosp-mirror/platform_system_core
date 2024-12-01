@@ -22,6 +22,8 @@ use prefetch_rs::dump;
 use prefetch_rs::init_logging;
 use prefetch_rs::record;
 use prefetch_rs::replay;
+#[cfg(target_os = "android")]
+use prefetch_rs::start_prefetch;
 use prefetch_rs::LogLevel;
 use prefetch_rs::MainArgs;
 use prefetch_rs::SubCommands;
@@ -33,6 +35,8 @@ fn main() {
         SubCommands::Record(args) => record(args),
         SubCommands::Replay(args) => replay(args),
         SubCommands::Dump(args) => dump(args),
+        #[cfg(target_os = "android")]
+        SubCommands::Start(args) => start_prefetch(args),
     };
 
     if let Err(err) = ret {
