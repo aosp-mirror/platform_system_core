@@ -596,6 +596,7 @@ on post-fs
     mkdir /metadata/ota/snapshots 0750 root system
     mkdir /metadata/watchdog 0770 root system
     mkdir /metadata/tradeinmode 0770 root system
+    mkdir /metadata/prefetch 0770 root system
 
     mkdir /metadata/apex 0700 root system
     mkdir /metadata/apex/sessions 0700 root system
@@ -607,17 +608,6 @@ on post-fs
     restorecon_recursive /metadata/apex
 
     mkdir /metadata/staged-install 0770 root system
-
-    mkdir /metadata/aconfig 0775 root system
-    mkdir /metadata/aconfig/flags 0770 root system
-    mkdir /metadata/aconfig/maps 0775 root system
-    mkdir /metadata/aconfig/boot 0775 root system
-
-    mkdir /metadata/aconfig_test_missions 0775 root system
-
-    # See flag enable_system_aconfigd_rust, which toggles these processes.
-    exec_start system_aconfigd_platform_init
-    exec_start aconfigd-platform-init
 
 on late-fs
     # Ensure that tracefs has the correct permissions.
@@ -735,7 +725,6 @@ on post-fs-data
     mkdir /data/apex/active 0755 root system
     mkdir /data/apex/backup 0700 root system
     mkdir /data/apex/decompressed 0755 root system encryption=Require
-    mkdir /data/apex/hashtree 0700 root system
     mkdir /data/apex/sessions 0700 root system
     mkdir /data/app-staging 0751 system system encryption=DeleteIfNecessary
     mkdir /data/apex/ota_reserved 0700 root system encryption=Require
@@ -1008,16 +997,8 @@ on post-fs-data
     wait_for_prop apexd.status activated
     perform_apex_config
 
-    # See flag enable_system_aconfigd_rust, which toggles these processes.
-    exec_start aconfigd-mainline-init
     exec_start system_aconfigd_mainline_init
-
-    # system_aconfigd_socket_service is replacing aconfigd:
-    #   - A flag (enable_system_aconfigd_rust) toggles which socket executes.
-    #   - When enabled, aconfigd is a no-op, system_aconfigd_socket_service executes.
-    #   - Conversely, when disabled, aconfigd executes, and system_aconfigd_socket_service is a no-op.
     start system_aconfigd_socket_service
-    start aconfigd
 
     # Create directories for boot animation.
     mkdir /data/misc/bootanim 0755 system system
@@ -1127,9 +1108,9 @@ on boot
 
     # System server manages zram writeback
     chown root system /sys/block/zram0/idle
-    chmod 0664 /sys/block/zram0/idle
+    chmod 0220 /sys/block/zram0/idle
     chown root system /sys/block/zram0/writeback
-    chmod 0664 /sys/block/zram0/writeback
+    chmod 0220 /sys/block/zram0/writeback
 
     # to access F2FS sysfs on dm-<num> directly
     mkdir /dev/sys/fs/by-name 0755 system system

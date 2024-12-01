@@ -37,10 +37,6 @@
 using namespace android::fs_mgr;
 using namespace testing;
 
-#if !defined(MS_LAZYTIME)
-#define MS_LAZYTIME (1 << 25)
-#endif
-
 namespace {
 
 const std::string cmdline =
