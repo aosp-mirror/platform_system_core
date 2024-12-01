@@ -85,6 +85,7 @@ class TrustyKeyMintDevice : public BnKeyMintDevice {
     ScopedAStatus getRootOfTrust(const array<uint8_t, 16>& challenge,
                                  vector<uint8_t>* rootOfTrust) override;
     ScopedAStatus sendRootOfTrust(const vector<uint8_t>& rootOfTrust) override;
+    ScopedAStatus setAdditionalAttestationInfo(const vector<KeyParameter>& info) override;
 
   protected:
     std::shared_ptr<TrustyKeymaster> impl_;
