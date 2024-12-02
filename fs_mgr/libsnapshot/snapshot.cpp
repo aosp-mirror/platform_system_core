@@ -2404,6 +2404,9 @@ bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
                 PLOG(ERROR) << "Unable to write rollback indicator: " << path;
             } else {
                 LOG(INFO) << "Rollback detected, writing rollback indicator to " << path;
+                if (device_->IsTempMetadata()) {
+                    CleanupScratchOtaMetadataIfPresent();
+                }
             }
         }
         LOG(INFO) << "Not booting from new slot. Will not mount snapshots.";
