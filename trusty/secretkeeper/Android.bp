@@ -27,17 +27,15 @@ rust_binary {
         "src/hal_main.rs",
     ],
     rustlibs: [
+        "android.hardware.security.secretkeeper-V1-rust",
         "libandroid_logger",
         "libauthgraph_hal",
         "libauthgraph_wire",
         "libbinder_rs",
         "liblibc",
         "liblog_rust",
-        "libsecretkeeper_hal",
+        "libsecretkeeper_hal_v1",
         "libtrusty-rs",
-    ],
-    defaults: [
-        "secretkeeper_use_latest_hal_aidl_rust",
     ],
     prefer_rlib: true,
 }
