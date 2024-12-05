@@ -37,10 +37,6 @@
 using namespace android::fs_mgr;
 using namespace testing;
 
-#if !defined(MS_LAZYTIME)
-#define MS_LAZYTIME (1 << 25)
-#endif
-
 namespace {
 
 const std::string cmdline =
@@ -334,6 +330,7 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
                 {"slave", MS_SLAVE},
                 {"shared", MS_SHARED},
                 {"lazytime", MS_LAZYTIME},
+                {"nosymfollow", MS_NOSYMFOLLOW},
                 {"defaults", 0},
                 {0, 0},
         };
