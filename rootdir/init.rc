@@ -1004,6 +1004,11 @@ on post-fs-data
     exec_start system_aconfigd_mainline_init
     start system_aconfigd_socket_service
 
+    # start mainline aconfigd init, after transition, the above system_aconfigd_mainline_init
+    # will be deprecated
+    exec_start mainline_aconfigd_init
+    start mainline_aconfigd_socket_service
+
     # Create directories for boot animation.
     mkdir /data/misc/bootanim 0755 system system
 
