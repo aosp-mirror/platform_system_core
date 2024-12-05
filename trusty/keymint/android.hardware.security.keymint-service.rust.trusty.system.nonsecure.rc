@@ -11,7 +11,7 @@ service system.keymint.rust-trusty.nonsecure \
 # Only starts the non-secure KeyMint HALs when the KeyMint VM feature is enabled
 # TODO(b/357821690): Start the KeyMint HALs when the KeyMint VM is ready once the Trusty VM
 # has a mechanism to notify the host.
-on late-fs && property:ro.hardware.trusty.security_vm.keymint.enabled=1 && \
+on late-fs && property:trusty.security_vm.keymint.enabled=1 && \
    property:trusty.security_vm.vm_cid=*
     setprop system.keymint.trusty_ipc_dev VSOCK:${trusty.security_vm.vm_cid}:1
     start system.keymint.rust-trusty.nonsecure
