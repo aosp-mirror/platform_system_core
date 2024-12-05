@@ -176,6 +176,7 @@ libinit_cc_defaults {
         "libxml2",
         "lib_apex_manifest_proto_lite",
         "update_metadata-protos",
+        "libgenfslabelsversion.ffi",
     ],
     shared_libs: [
         "libbase",
