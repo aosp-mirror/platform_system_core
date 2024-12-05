@@ -114,8 +114,14 @@ static bool __has_memfd_support() {
     // Check if kernel support exists, otherwise fall back to ashmem.
     // This code needs to build on old API levels, so we can't use the libc
     // wrapper.
+    //
+    // MFD_NOEXEC_SEAL is used to match the semantics of the ashmem device,
+    // which did not have executable permissions. This also seals the executable
+    // permissions of the buffer (i.e. they cannot be changed by fchmod()).
+    //
+    // MFD_NOEXEC_SEAL implies MFD_ALLOW_SEALING.
     android::base::unique_fd fd(
-            syscall(__NR_memfd_create, "test_android_memfd", MFD_CLOEXEC | MFD_ALLOW_SEALING));
+            syscall(__NR_memfd_create, "test_android_memfd", MFD_CLOEXEC | MFD_NOEXEC_SEAL));
     if (fd == -1) {
         ALOGE("memfd_create failed: %s, no memfd support.\n", strerror(errno));
         return false;
@@ -289,7 +295,13 @@ int ashmem_valid(int fd)
 static int memfd_create_region(const char* name, size_t size) {
     // This code needs to build on old API levels, so we can't use the libc
     // wrapper.
-    android::base::unique_fd fd(syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_ALLOW_SEALING));
+    //
+    // MFD_NOEXEC_SEAL to match the semantics of the ashmem device, which did
+    // not have executable permissions. This also seals the executable
+    // permissions of the buffer (i.e. they cannot be changed by fchmod()).
+    //
+    // MFD_NOEXEC_SEAL implies MFD_ALLOW_SEALING.
+    android::base::unique_fd fd(syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_NOEXEC_SEAL));
 
     if (fd == -1) {
         ALOGE("memfd_create(%s, %zd) failed: %s\n", name, size, strerror(errno));

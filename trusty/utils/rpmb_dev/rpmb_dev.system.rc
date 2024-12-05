@@ -24,7 +24,7 @@ service rpmb_mock_system /system_ext/bin/rpmb_dev.system \
 
 # storageproxyd
 on late-fs && \
-    property:trusty_vm_system_nonsecure.ready=1 && \
+    property:trusty.security_vm.nonsecure_vm_ready=1 && \
     property:storageproxyd_system.trusty_ipc_dev=*
     wait /dev/socket/rpmb_mock_system
     start storageproxyd_system
@@ -32,8 +32,8 @@ on late-fs && \
 
 # RPMB Mock
 on post-fs && \
-    property:trusty_vm_system_nonsecure.ready=1 && \
-    property:trusty_vm_system.vm_cid=*
+    property:trusty.security_vm.nonsecure_vm_ready=1 && \
+    property:trusty.security_vm.vm_cid=*
     # Create a persistent location for the RPMB data
     # (work around lack of RPMb block device on CF).
     # file contexts secure_storage_rpmb_system_file
@@ -49,12 +49,12 @@ on post-fs && \
     mkdir /mnt/secure_storage_persist_system 0770 system system
     symlink /metadata/secure_storage_persist_system \
             /mnt/secure_storage_persist_system/persist
-    setprop storageproxyd_system.trusty_ipc_dev VSOCK:${trusty_vm_system.vm_cid}:1
+    setprop storageproxyd_system.trusty_ipc_dev VSOCK:${trusty.security_vm.vm_cid}:1
     exec_start rpmb_mock_init_system
     start rpmb_mock_system
 
 on post-fs-data && \
-    property:trusty_vm_system_nonsecure.ready=1 && \
+    property:trusty.security_vm.nonsecure_vm_ready=1 && \
     property:storageproxyd_system.trusty_ipc_dev=*
     # file contexts secure_storage_system_file
     mkdir /data/secure_storage_system 0770 root system
