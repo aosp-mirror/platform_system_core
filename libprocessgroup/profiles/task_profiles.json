@@ -210,7 +210,7 @@
           "Params":
           {
             "Policy": "SCHED_FIFO",
-            "Priority": "98"
+            "Priority": "2"
           }
         }
       ]

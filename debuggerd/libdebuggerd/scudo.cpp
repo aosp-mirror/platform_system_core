@@ -18,6 +18,7 @@
 
 #include "libdebuggerd/scudo.h"
 #include "libdebuggerd/tombstone.h"
+#include "libdebuggerd/utility_host.h"
 
 #include "unwindstack/AndroidUnwinder.h"
 #include "unwindstack/Memory.h"

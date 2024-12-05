@@ -311,6 +311,11 @@ double SnapuserdClient::GetMergePercent() {
     }
     std::string response = Receivemsg();
 
+    // If server socket disconnects most likely because of device reboot,
+    // then we just return 0.
+    if (response.empty()) {
+        return 0.0;
+    }
     return std::stod(response);
 }
 
