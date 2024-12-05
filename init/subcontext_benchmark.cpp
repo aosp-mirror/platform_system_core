@@ -33,7 +33,7 @@ static void BenchmarkSuccess(benchmark::State& state) {
         return;
     }
 
-    auto subcontext = Subcontext({"path"}, context);
+    auto subcontext = Subcontext({"path"}, {"partition"}, context);
     free(context);
 
     while (state.KeepRunning()) {

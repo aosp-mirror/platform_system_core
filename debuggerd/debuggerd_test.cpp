@@ -70,6 +70,7 @@
 #include "crash_test.h"
 #include "debuggerd/handler.h"
 #include "gtest/gtest.h"
+#include "libdebuggerd/utility_host.h"
 #include "protocol.h"
 #include "tombstoned/tombstoned.h"
 #include "util.h"
@@ -741,8 +742,6 @@ TEST_F(CrasherTest, mte_multiple_causes) {
 }
 
 #if defined(__aarch64__)
-constexpr size_t kTagGranuleSize = 16;
-
 static uintptr_t CreateTagMapping() {
   // Some of the MTE tag dump tests assert that there is an inaccessible page to the left and right
   // of the PROT_MTE page, so map three pages and set the two guard pages to PROT_NONE.
@@ -3302,4 +3301,31 @@ TEST_F(CrasherTest, log_with_newline) {
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, ":\\s*This line has a newline.");
   ASSERT_MATCH(result, ":\\s*This is on the next line.");
+}
+
+TEST_F(CrasherTest, log_with_non_utf8) {
+  StartProcess([]() { LOG(FATAL) << "Invalid UTF-8: \xA0\xB0\xC0\xD0 and some other data."; });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  // Verify the abort message is sanitized properly.
+  size_t pos = result.find(
+      "Abort message: 'Invalid UTF-8: "
+      "\x5C\x32\x34\x30\x5C\x32\x36\x30\x5C\x33\x30\x30\x5C\x33\x32\x30 and some other data.'");
+  EXPECT_TRUE(pos != std::string::npos) << "Couldn't find sanitized abort message: " << result;
+
+  // Make sure that the log message is sanitized properly too.
+  EXPECT_TRUE(
+      result.find("Invalid UTF-8: \x5C\x32\x34\x30\x5C\x32\x36\x30\x5C\x33\x30\x30\x5C\x33\x32\x30 "
+                  "and some other data.",
+                  pos + 30) != std::string::npos)
+      << "Couldn't find sanitized log message: " << result;
 }

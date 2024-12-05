@@ -110,7 +110,6 @@ cc_test {
     ],
     shared_libs: [
         "libbase",
-        "libcgrouprc",
         "libprocessgroup",
     ],
     static_libs: [
