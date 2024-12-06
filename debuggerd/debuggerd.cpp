@@ -23,11 +23,11 @@
 #include <string_view>
 #include <thread>
 
-#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/unique_fd.h>
 #include <debuggerd/client.h>
+#include <processgroup/processgroup.h>
 #include <procinfo/process.h>
 #include "util.h"
 
@@ -92,13 +92,8 @@ int main(int argc, char* argv[]) {
   }
 
   // unfreeze if pid is frozen.
-  const std::string freeze_file = android::base::StringPrintf(
-      "/sys/fs/cgroup/uid_%d/pid_%d/cgroup.freeze", proc_info.uid, proc_info.pid);
-  if (std::string freeze_status;
-      android::base::ReadFileToString(freeze_file, &freeze_status) && freeze_status[0] == '1') {
-    android::base::WriteStringToFile("0", freeze_file);
-    // we don't restore the frozen state as this is considered a benign change.
-  }
+  SetProcessProfiles(proc_info.uid, proc_info.pid, {"Unfrozen"});
+  // we don't restore the frozen state as this is considered a benign change.
 
   unique_fd output_fd(fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0));
   if (output_fd.get() == -1) {
