@@ -1,4 +1,5 @@
 package {
+    default_team: "trendy_team_native_tools_libraries",
     default_applicable_licenses: ["system_core_libcutils_license"],
 }
 
@@ -18,6 +19,17 @@ license {
 filegroup {
     name: "android_filesystem_config_header",
     srcs: ["include/private/android_filesystem_config.h"],
+}
+
+rust_bindgen {
+    name: "libandroid_ids",
+    crate_name: "android_ids",
+    source_stem: "bindings",
+    wrapper_src: "rust/aid_bindings.h",
+    header_libs: ["libcutils_headers"],
+    visibility: [
+        "//system/bpf/loader",
+    ],
 }
 
 cc_defaults {
@@ -278,7 +290,6 @@ test_libraries = [
     "liblog",
     "libbase",
     "libprocessgroup",
-    "libcgrouprc",
 ]
 
 cc_test {

@@ -471,6 +471,7 @@ static struct {
     { "private",    MS_PRIVATE },
     { "slave",      MS_SLAVE },
     { "shared",     MS_SHARED },
+    { "nosymfollow", MS_NOSYMFOLLOW },
     { "defaults",   0 },
     { 0,            0 },
 };

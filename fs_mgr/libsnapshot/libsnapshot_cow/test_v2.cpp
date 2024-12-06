@@ -1487,7 +1487,7 @@ TEST_F(CowTest, InvalidMergeOrderTest) {
     writer = std::make_unique<CowWriterV2>(options, GetCowFd());
     ASSERT_TRUE(writer->Initialize());
     ASSERT_TRUE(writer->AddCopy(2, 1));
-    ASSERT_TRUE(writer->AddXorBlocks(3, &data, data.size(), 1, 1));
+    ASSERT_TRUE(writer->AddXorBlocks(3, data.data(), data.size(), 1, 1));
     ASSERT_TRUE(writer->Finalize());
     ASSERT_TRUE(reader.Parse(cow_->fd));
     ASSERT_FALSE(reader.VerifyMergeOps());

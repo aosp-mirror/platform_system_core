@@ -36,6 +36,7 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
     uevent->action.clear();
     uevent->path.clear();
     uevent->subsystem.clear();
+    uevent->driver.clear();
     uevent->firmware.clear();
     uevent->partition_name.clear();
     uevent->device_name.clear();
@@ -51,6 +52,9 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
         } else if (!strncmp(msg, "SUBSYSTEM=", 10)) {
             msg += 10;
             uevent->subsystem = msg;
+        } else if (!strncmp(msg, "DRIVER=", 7)) {
+            msg += 7;
+            uevent->driver = msg;
         } else if (!strncmp(msg, "FIRMWARE=", 9)) {
             msg += 9;
             uevent->firmware = msg;
@@ -66,6 +70,9 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
         } else if (!strncmp(msg, "PARTNAME=", 9)) {
             msg += 9;
             uevent->partition_name = msg;
+        } else if (!strncmp(msg, "PARTUUID=", 9)) {
+            msg += 9;
+            uevent->partition_uuid = msg;
         } else if (!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
@@ -82,7 +89,7 @@ static void ParseEvent(const char* msg, Uevent* uevent) {
     if (LOG_UEVENTS) {
         LOG(INFO) << "event { '" << uevent->action << "', '" << uevent->path << "', '"
                   << uevent->subsystem << "', '" << uevent->firmware << "', " << uevent->major
-                  << ", " << uevent->minor << " }";
+                  << ", " << uevent->minor << ", " << uevent->partition_uuid << " }";
     }
 }
 
