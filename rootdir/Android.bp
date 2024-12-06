@@ -47,7 +47,12 @@ prebuilt_etc {
 prebuilt_etc {
     name: "ueventd.rc",
     src: "ueventd.rc",
-    recovery_available: true,
+}
+
+prebuilt_etc {
+    name: "ueventd.rc.recovery",
+    src: "ueventd.rc",
+    recovery: true,
 }
 
 filegroup {
