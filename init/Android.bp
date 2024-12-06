@@ -163,7 +163,6 @@ libinit_cc_defaults {
         "libavb",
         "libavf_cc_flags",
         "libbootloader_message",
-        "libcgrouprc_format",
         "liblmkd_utils",
         "liblz4",
         "libzstd",
@@ -177,6 +176,7 @@ libinit_cc_defaults {
         "libxml2",
         "lib_apex_manifest_proto_lite",
         "update_metadata-protos",
+        "libgenfslabelsversion.ffi",
     ],
     shared_libs: [
         "libbase",
@@ -390,6 +390,7 @@ init_first_stage_cc_defaults {
         "libsnapshot_init",
         "update_metadata-protos",
         "libprocinfo",
+        "libbootloader_message",
     ],
 
     static_executable: true,

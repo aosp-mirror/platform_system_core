@@ -209,7 +209,8 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
 
 // Replace the vendor ramdisk as a whole.
 [[nodiscard]] Result<std::string> replace_default_vendor_ramdisk(const std::string& vendor_boot,
-                                                                 const std::string& new_ramdisk) {
+                                                                 const std::string& new_ramdisk,
+                                                                 const std::string& new_dtb) {
     if (auto res = check_vendor_boot_hdr(vendor_boot, 3); !res.ok()) return res.error();
     auto hdr = reinterpret_cast<const vendor_boot_img_hdr_v3*>(vendor_boot.data());
     auto hdr_size = get_vendor_boot_header_size(hdr);
@@ -244,8 +245,19 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
         return res.error();
     if (auto res = updater.CheckOffset(o + p, o + new_p); !res.ok()) return res.error();
 
-    // Copy DTB (Q bytes).
-    if (auto res = updater.Copy(q); !res.ok()) return res.error();
+    // Copy DTB (Q bytes). Replace if a new one was provided.
+    new_hdr->dtb_size = !new_dtb.empty() ? new_dtb.size() : hdr->dtb_size;
+    const uint32_t new_q = round_up(new_hdr->dtb_size, new_hdr->page_size);
+    if (new_dtb.empty()) {
+        if (auto res = updater.Copy(q); !res.ok()) return res.error();
+    } else {
+        if (auto res = updater.Replace(hdr->dtb_size, new_dtb); !res.ok()) return res.error();
+        if (auto res = updater.Skip(q - hdr->dtb_size, new_q - new_hdr->dtb_size); !res.ok())
+            return res.error();
+    }
+    if (auto res = updater.CheckOffset(o + p + q, o + new_p + new_q); !res.ok()) {
+        return res.error();
+    }
 
     if (new_hdr->header_version >= 4) {
         auto hdr_v4 = static_cast<const vendor_boot_img_hdr_v4*>(hdr);
@@ -256,7 +268,7 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
         auto new_hdr_v4 = static_cast<const vendor_boot_img_hdr_v4*>(new_hdr);
         auto new_r = round_up(new_hdr_v4->vendor_ramdisk_table_size, new_hdr->page_size);
         if (auto res = updater.Skip(r, new_r); !res.ok()) return res.error();
-        if (auto res = updater.CheckOffset(o + p + q + r, o + new_p + q + new_r); !res.ok())
+        if (auto res = updater.CheckOffset(o + p + q + r, o + new_p + new_q + new_r); !res.ok())
             return res.error();
 
         // Replace table with single entry representing the full ramdisk.
@@ -303,7 +315,8 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
 // replace it with the content of |new_ramdisk|.
 [[nodiscard]] Result<std::string> replace_vendor_ramdisk_fragment(const std::string& ramdisk_name,
                                                                   const std::string& vendor_boot,
-                                                                  const std::string& new_ramdisk) {
+                                                                  const std::string& new_ramdisk,
+                                                                  const std::string& new_dtb) {
     if (auto res = check_vendor_boot_hdr(vendor_boot, 4); !res.ok()) return res.error();
     auto hdr = reinterpret_cast<const vendor_boot_img_hdr_v4*>(vendor_boot.data());
     auto hdr_size = get_vendor_boot_header_size(hdr);
@@ -368,8 +381,19 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
         return res.error();
     if (auto res = updater.CheckOffset(o + p, o + new_p); !res.ok()) return res.error();
 
-    // Copy DTB (Q bytes).
-    if (auto res = updater.Copy(q); !res.ok()) return res.error();
+    // Copy DTB (Q bytes). Replace if a new one was provided.
+    new_hdr->dtb_size = !new_dtb.empty() ? new_dtb.size() : hdr->dtb_size;
+    const uint32_t new_q = round_up(new_hdr->dtb_size, new_hdr->page_size);
+    if (new_dtb.empty()) {
+        if (auto res = updater.Copy(q); !res.ok()) return res.error();
+    } else {
+        if (auto res = updater.Replace(hdr->dtb_size, new_dtb); !res.ok()) return res.error();
+        if (auto res = updater.Skip(q - hdr->dtb_size, new_q - new_hdr->dtb_size); !res.ok())
+            return res.error();
+    }
+    if (auto res = updater.CheckOffset(o + p + q, o + new_p + new_q); !res.ok()) {
+        return res.error();
+    }
 
     // Copy table, but with corresponding entries modified, including:
     // - ramdisk_size of the entry replaced
@@ -392,7 +416,7 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
                                             hdr->vendor_ramdisk_table_entry_size);
         !res.ok())
         return res.error();
-    if (auto res = updater.CheckOffset(o + p + q + r, o + new_p + q + r); !res.ok())
+    if (auto res = updater.CheckOffset(o + p + q + r, o + new_p + new_q + r); !res.ok())
         return res.error();
 
     // Copy bootconfig (S bytes).
@@ -404,11 +428,11 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
 
 }  // namespace
 
-[[nodiscard]] Result<void> replace_vendor_ramdisk(android::base::borrowed_fd vendor_boot_fd,
-                                                  uint64_t vendor_boot_size,
-                                                  const std::string& ramdisk_name,
-                                                  android::base::borrowed_fd new_ramdisk_fd,
-                                                  uint64_t new_ramdisk_size) {
+[[nodiscard]] Result<void> replace_vendor_ramdisk(
+        android::base::borrowed_fd vendor_boot_fd, uint64_t vendor_boot_size,
+        const std::string& ramdisk_name, android::base::borrowed_fd new_ramdisk_fd,
+        uint64_t new_ramdisk_size, android::base::borrowed_fd new_dtb_fd, uint64_t new_dtb_size) {
+    Result<std::string> new_dtb = {""};
     if (new_ramdisk_size > std::numeric_limits<uint32_t>::max()) {
         return Errorf("New vendor ramdisk is too big");
     }
@@ -417,12 +441,17 @@ inline uint32_t round_up(uint32_t value, uint32_t page_size) {
     if (!vendor_boot.ok()) return vendor_boot.error();
     auto new_ramdisk = load_file(new_ramdisk_fd, new_ramdisk_size, "new vendor ramdisk");
     if (!new_ramdisk.ok()) return new_ramdisk.error();
+    if (new_dtb_size > 0 && new_dtb_fd >= 0) {
+        new_dtb = load_file(new_dtb_fd, new_dtb_size, "new dtb");
+        if (!new_dtb.ok()) return new_dtb.error();
+    }
 
     Result<std::string> new_vendor_boot;
     if (ramdisk_name == "default") {
-        new_vendor_boot = replace_default_vendor_ramdisk(*vendor_boot, *new_ramdisk);
+        new_vendor_boot = replace_default_vendor_ramdisk(*vendor_boot, *new_ramdisk, *new_dtb);
     } else {
-        new_vendor_boot = replace_vendor_ramdisk_fragment(ramdisk_name, *vendor_boot, *new_ramdisk);
+        new_vendor_boot =
+                replace_vendor_ramdisk_fragment(ramdisk_name, *vendor_boot, *new_ramdisk, *new_dtb);
     }
     if (!new_vendor_boot.ok()) return new_vendor_boot.error();
     if (auto res = store_file(vendor_boot_fd, *new_vendor_boot, "new vendor boot image"); !res.ok())

@@ -43,9 +43,10 @@ phony {
     required: [
         "sh.recovery",
         "toolbox.recovery",
-        "toybox.recovery",
+        "toybox_recovery",
         "ziptool.recovery",
     ],
+    recovery: true,
 }
 
 phony {
@@ -58,6 +59,7 @@ phony {
         "toolbox_vendor",
         "toybox_vendor",
     ],
+    vendor: true,
 }
 
 // shell and utilities for first stage console. The list of binaries are

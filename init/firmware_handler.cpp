@@ -38,6 +38,8 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
+#include "exthandler/exthandler.h"
+
 using android::base::ReadFdToString;
 using android::base::Socketpair;
 using android::base::Split;
@@ -136,100 +138,6 @@ FirmwareHandler::FirmwareHandler(std::vector<std::string> firmware_directories,
     : firmware_directories_(std::move(firmware_directories)),
       external_firmware_handlers_(std::move(external_firmware_handlers)) {}
 
-Result<std::string> FirmwareHandler::RunExternalHandler(const std::string& handler, uid_t uid,
-                                                        gid_t gid, const Uevent& uevent) const {
-    unique_fd child_stdout;
-    unique_fd parent_stdout;
-    if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &child_stdout, &parent_stdout)) {
-        return ErrnoError() << "Socketpair() for stdout failed";
-    }
-
-    unique_fd child_stderr;
-    unique_fd parent_stderr;
-    if (!Socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, &child_stderr, &parent_stderr)) {
-        return ErrnoError() << "Socketpair() for stderr failed";
-    }
-
-    signal(SIGCHLD, SIG_DFL);
-
-    auto pid = fork();
-    if (pid < 0) {
-        return ErrnoError() << "fork() failed";
-    }
-
-    if (pid == 0) {
-        setenv("FIRMWARE", uevent.firmware.c_str(), 1);
-        setenv("DEVPATH", uevent.path.c_str(), 1);
-        parent_stdout.reset();
-        parent_stderr.reset();
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-        dup2(child_stdout.get(), STDOUT_FILENO);
-        dup2(child_stderr.get(), STDERR_FILENO);
-
-        auto args = Split(handler, " ");
-        std::vector<char*> c_args;
-        for (auto& arg : args) {
-            c_args.emplace_back(arg.data());
-        }
-        c_args.emplace_back(nullptr);
-
-        if (gid != 0) {
-            if (setgid(gid) != 0) {
-                fprintf(stderr, "setgid() failed: %s", strerror(errno));
-                _exit(EXIT_FAILURE);
-            }
-        }
-
-        if (setuid(uid) != 0) {
-            fprintf(stderr, "setuid() failed: %s", strerror(errno));
-            _exit(EXIT_FAILURE);
-        }
-
-        execv(c_args[0], c_args.data());
-        fprintf(stderr, "exec() failed: %s", strerror(errno));
-        _exit(EXIT_FAILURE);
-    }
-
-    child_stdout.reset();
-    child_stderr.reset();
-
-    int status;
-    pid_t waited_pid = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
-    if (waited_pid == -1) {
-        return ErrnoError() << "waitpid() failed";
-    }
-
-    std::string stdout_content;
-    if (!ReadFdToString(parent_stdout.get(), &stdout_content)) {
-        return ErrnoError() << "ReadFdToString() for stdout failed";
-    }
-
-    std::string stderr_content;
-    if (ReadFdToString(parent_stderr.get(), &stderr_content)) {
-        auto messages = Split(stderr_content, "\n");
-        for (const auto& message : messages) {
-            if (!message.empty()) {
-                LOG(ERROR) << "External Firmware Handler: " << message;
-            }
-        }
-    } else {
-        LOG(ERROR) << "ReadFdToString() for stderr failed";
-    }
-
-    if (WIFEXITED(status)) {
-        if (WEXITSTATUS(status) == EXIT_SUCCESS) {
-            return Trim(stdout_content);
-        } else {
-            return Error() << "exited with status " << WEXITSTATUS(status);
-        }
-    } else if (WIFSIGNALED(status)) {
-        return Error() << "killed by signal " << WTERMSIG(status);
-    }
-
-    return Error() << "unexpected exit status " << status;
-}
-
 std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
     for (const auto& external_handler : external_firmware_handlers_) {
         if (external_handler.match(uevent.path)) {
@@ -237,11 +145,15 @@ std::string FirmwareHandler::GetFirmwarePath(const Uevent& uevent) const {
                       << "' for devpath: '" << uevent.path << "' firmware: '" << uevent.firmware
                       << "'";
 
+            std::unordered_map<std::string, std::string> envs_map;
+            envs_map["FIRMWARE"] = uevent.firmware;
+            envs_map["DEVPATH"] = uevent.path;
+
             auto result = RunExternalHandler(external_handler.handler_path, external_handler.uid,
-                                             external_handler.gid, uevent);
+                                             external_handler.gid, envs_map);
             if (!result.ok() && NeedsRerunExternalHandler()) {
                 auto res = RunExternalHandler(external_handler.handler_path, external_handler.uid,
-                                              external_handler.gid, uevent);
+                                              external_handler.gid, envs_map);
                 result = std::move(res);
             }
             if (!result.ok()) {

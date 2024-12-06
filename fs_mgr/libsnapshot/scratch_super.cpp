@@ -98,7 +98,6 @@ bool CleanupScratchOtaMetadataIfPresent(const ISnapshotManager::IDeviceInfo* inf
     }
     const auto& opener = info->GetPartitionOpener();
     std::string slot_suffix = info->GetSlotSuffix();
-    int slot = SlotNumberForSlotSuffix(slot_suffix);
     // Walk both the slots and clean up metadata related to scratch space from
     // both the slots.
     for (auto slot : slots) {

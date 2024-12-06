@@ -463,7 +463,8 @@ void VectorImpl::_shrink(size_t where, size_t amount)
     size_t new_size;
     LOG_ALWAYS_FATAL_IF(__builtin_sub_overflow(mCount, amount, &new_size));
 
-    if (new_size < (capacity() / 2)) {
+    const size_t prev_capacity = capacity();
+    if (new_size < (prev_capacity / 2) && prev_capacity > kMinVectorCapacity) {
         // NOTE: (new_size * 2) is safe because capacity didn't overflow and
         // new_size < (capacity / 2)).
         const size_t new_capacity = max(kMinVectorCapacity, new_size * 2);

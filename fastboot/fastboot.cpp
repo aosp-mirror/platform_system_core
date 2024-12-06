@@ -552,6 +552,12 @@ static int show_help() {
             "                            Secondary images may be flashed to inactive slot.\n"
             " flash PARTITION [FILENAME] Flash given partition, using the image from\n"
             "                            $ANDROID_PRODUCT_OUT if no filename is given.\n"
+            " flash vendor_boot:RAMDISK [FILENAME]\n"
+            "                            Flash vendor_boot ramdisk, fetching the existing\n"
+            "                            vendor_boot image and repackaging it with the new\n"
+            "                            ramdisk.\n"
+            " --dtb DTB                  If set with flash vendor_boot:RAMDISK, then\n"
+            "                            update the vendor_boot image with provided DTB.\n"
             "\n"
             "basics:\n"
             " devices [-l]               List devices in bootloader (-l: with device paths).\n"
@@ -1020,6 +1026,8 @@ static uint64_t get_uint_var(const char* var_name, fastboot::IFastBootDriver* fb
 }
 
 int64_t get_sparse_limit(int64_t size, const FlashingPlan* fp) {
+    if (!fp) return 0;
+
     int64_t limit = int64_t(fp->sparse_limit);
     if (limit == 0) {
         // Unlimited, so see what the target device's limit is.
@@ -1465,6 +1473,7 @@ static void do_fetch(const std::string& partition, const std::string& slot_overr
 static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf,
                                   fastboot::IFastBootDriver* fb) {
     std::string_view pname_sv{pname};
+    struct fastboot_buffer dtb_buf = {.sz = 0, .fd = unique_fd(-1)};
 
     if (!android::base::StartsWith(pname_sv, "vendor_boot:") &&
         !android::base::StartsWith(pname_sv, "vendor_boot_a:") &&
@@ -1480,10 +1489,25 @@ static std::string repack_ramdisk(const char* pname, struct fastboot_buffer* buf
     std::string partition(pname_sv.substr(0, pname_sv.find(':')));
     std::string ramdisk(pname_sv.substr(pname_sv.find(':') + 1));
 
+    if (!g_dtb_path.empty()) {
+        if (!load_buf(g_dtb_path.c_str(), &dtb_buf, nullptr)) {
+            die("cannot load '%s': %s", g_dtb_path.c_str(), strerror(errno));
+        }
+
+        if (dtb_buf.type != FB_BUFFER_FD) {
+            die("Flashing sparse vendor ramdisk image with dtb is not supported.");
+        }
+        if (dtb_buf.sz <= 0) {
+            die("repack_ramdisk() sees invalid dtb size: %" PRId64, buf->sz);
+        }
+        verbose("Updating DTB with %s", pname_sv.data());
+    }
+
     unique_fd vendor_boot(make_temporary_fd("vendor boot repack"));
     uint64_t vendor_boot_size = fetch_partition(partition, vendor_boot, fb);
     auto repack_res = replace_vendor_ramdisk(vendor_boot, vendor_boot_size, ramdisk, buf->fd,
-                                             static_cast<uint64_t>(buf->sz));
+                                             static_cast<uint64_t>(buf->sz), dtb_buf.fd,
+                                             static_cast<uint64_t>(dtb_buf.sz));
     if (!repack_res.ok()) {
         die("%s", repack_res.error().message().c_str());
     }

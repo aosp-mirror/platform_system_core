@@ -36,7 +36,6 @@ cc_test {
     ],
     test_suites: [
         "device-tests",
-        "mts-statsd",
     ],
     test_config: "libstatssocket_lazy_test.xml",
     // TODO(b/153588990): Remove when the build system properly separates.

@@ -25,7 +25,7 @@ namespace snapshot {
 
 SnapshotMergeStats* SnapshotMergeStats::GetInstance(SnapshotManager& parent) {
     static SnapshotMergeStats g_instance(parent.GetMergeStateFilePath());
-    CHECK(g_instance.path_ == parent.GetMergeStateFilePath());
+    CHECK_EQ(g_instance.path_, parent.GetMergeStateFilePath());
     return &g_instance;
 }
 

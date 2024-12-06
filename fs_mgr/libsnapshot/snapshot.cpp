@@ -1235,8 +1235,8 @@ auto SnapshotManager::CheckMergeState(LockedFile* lock,
                 wrong_phase = true;
                 break;
             default:
-                LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": "
-                           << "\"" << result.state << "\"";
+                LOG(ERROR) << "Unknown merge status for \"" << snapshot << "\": " << "\""
+                           << result.state << "\"";
                 if (failure_code == MergeFailureCode::Ok) {
                     failure_code = MergeFailureCode::UnexpectedMergeState;
                 }
@@ -1343,10 +1343,25 @@ auto SnapshotManager::CheckTargetMergeState(LockedFile* lock, const std::string&
         }
 
         if (merge_status == "snapshot" &&
-            DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE &&
-            update_status.merge_phase() == MergePhase::FIRST_PHASE) {
-            // The snapshot is not being merged because it's in the wrong phase.
-            return MergeResult(UpdateState::None);
+            DecideMergePhase(snapshot_status) == MergePhase::SECOND_PHASE) {
+            if (update_status.merge_phase() == MergePhase::FIRST_PHASE) {
+                // The snapshot is not being merged because it's in the wrong phase.
+                return MergeResult(UpdateState::None);
+            } else {
+                // update_status is already in second phase but the
+                // snapshot_status is still not set to SnapshotState::MERGING.
+                //
+                // Resume the merge at this point. see b/374225913
+                LOG(INFO) << "SwitchSnapshotToMerge: " << name << " after resuming merge";
+                auto code = SwitchSnapshotToMerge(lock, name);
+                if (code != MergeFailureCode::Ok) {
+                    LOG(ERROR) << "Failed to switch snapshot: " << name
+                               << " to merge during second phase";
+                    return MergeResult(UpdateState::MergeFailed,
+                                       MergeFailureCode::UnknownTargetType);
+                }
+                return MergeResult(UpdateState::Merging);
+            }
         }
 
         if (merge_status == "snapshot-merge") {
@@ -1442,8 +1457,14 @@ MergeFailureCode SnapshotManager::MergeSecondPhaseSnapshots(LockedFile* lock) {
         return MergeFailureCode::WriteStatus;
     }
 
+    auto current_slot_suffix = device_->GetSlotSuffix();
     MergeFailureCode result = MergeFailureCode::Ok;
     for (const auto& snapshot : snapshots) {
+        if (!android::base::EndsWith(snapshot, current_slot_suffix)) {
+            LOG(ERROR) << "Skipping invalid snapshot: " << snapshot
+                       << " during MergeSecondPhaseSnapshots";
+            continue;
+        }
         SnapshotStatus snapshot_status;
         if (!ReadSnapshotStatus(lock, snapshot, &snapshot_status)) {
             return MergeFailureCode::ReadStatus;
@@ -1724,6 +1745,10 @@ bool SnapshotManager::PerformInitTransition(InitTransition transition,
         uint cow_op_merge_size = GetUpdateCowOpMergeSize(lock.get());
         if (cow_op_merge_size != 0) {
             snapuserd_argv->emplace_back("-cow_op_merge_size=" + std::to_string(cow_op_merge_size));
+        }
+        uint32_t worker_count = GetUpdateWorkerCount(lock.get());
+        if (worker_count != 0) {
+            snapuserd_argv->emplace_back("-worker_count=" + std::to_string(worker_count));
         }
     }
 
@@ -2152,6 +2177,11 @@ uint32_t SnapshotManager::GetUpdateCowOpMergeSize(LockedFile* lock) {
     return update_status.cow_op_merge_size();
 }
 
+uint32_t SnapshotManager::GetUpdateWorkerCount(LockedFile* lock) {
+    SnapshotUpdateStatus update_status = ReadSnapshotUpdateStatus(lock);
+    return update_status.num_worker_threads();
+}
+
 bool SnapshotManager::MarkSnapuserdFromSystem() {
     auto path = GetSnapuserdFromSystemPath();
 
@@ -2374,6 +2404,9 @@ bool SnapshotManager::NeedSnapshotsInFirstStageMount() {
                 PLOG(ERROR) << "Unable to write rollback indicator: " << path;
             } else {
                 LOG(INFO) << "Rollback detected, writing rollback indicator to " << path;
+                if (device_->IsTempMetadata()) {
+                    CleanupScratchOtaMetadataIfPresent();
+                }
             }
         }
         LOG(INFO) << "Not booting from new slot. Will not mount snapshots.";
@@ -3140,6 +3173,7 @@ bool SnapshotManager::WriteUpdateState(LockedFile* lock, UpdateState state,
         status.set_legacy_snapuserd(old_status.legacy_snapuserd());
         status.set_o_direct(old_status.o_direct());
         status.set_cow_op_merge_size(old_status.cow_op_merge_size());
+        status.set_num_worker_threads(old_status.num_worker_threads());
     }
     return WriteSnapshotUpdateStatus(lock, status);
 }
@@ -3524,6 +3558,9 @@ Return SnapshotManager::CreateUpdateSnapshots(const DeltaArchiveManifest& manife
         }
         status.set_cow_op_merge_size(
                 android::base::GetUintProperty<uint32_t>("ro.virtual_ab.cow_op_merge_size", 0));
+        status.set_num_worker_threads(
+                android::base::GetUintProperty<uint32_t>("ro.virtual_ab.num_worker_threads", 0));
+
     } else if (legacy_compression) {
         LOG(INFO) << "Virtual A/B using legacy snapuserd";
     } else {
@@ -3960,6 +3997,7 @@ bool SnapshotManager::Dump(std::ostream& os) {
     ss << "Using io_uring: " << update_status.io_uring_enabled() << std::endl;
     ss << "Using o_direct: " << update_status.o_direct() << std::endl;
     ss << "Cow op merge size (0 for uncapped): " << update_status.cow_op_merge_size() << std::endl;
+    ss << "Worker thread count: " << update_status.num_worker_threads() << std::endl;
     ss << "Using XOR compression: " << GetXorCompressionEnabledProperty() << std::endl;
     ss << "Current slot: " << device_->GetSlotSuffix() << std::endl;
     ss << "Boot indicator: booting from " << GetCurrentSlot() << " slot" << std::endl;
@@ -4576,8 +4614,7 @@ bool SnapshotManager::DeleteDeviceIfExists(const std::string& name,
         }
     }
 
-    LOG(ERROR) << "Device-mapper device " << name << "(" << full_path << ")"
-               << " still in use."
+    LOG(ERROR) << "Device-mapper device " << name << "(" << full_path << ")" << " still in use."
                << "  Probably a file descriptor was leaked or held open, or a loop device is"
                << " attached.";
     return false;

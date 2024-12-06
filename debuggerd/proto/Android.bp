@@ -38,6 +38,7 @@ cc_library_static {
     ramdisk_available: true,
     recovery_available: true,
     vendor_ramdisk_available: true,
+    host_supported: true,
 }
 
 java_library_static {

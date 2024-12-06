@@ -37,19 +37,18 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
-#include <android-base/strings.h>
 #include <cutils/android_filesystem_config.h>
 #include <processgroup/processgroup.h>
 #include <task_profiles.h>
 
 using android::base::GetBoolProperty;
-using android::base::StartsWith;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
 
@@ -255,7 +254,7 @@ static bool RemoveEmptyUidCgroups(const std::string& uid_path) {
                 continue;
             }
 
-            if (!StartsWith(dir->d_name, "pid_")) {
+            if (!std::string_view(dir->d_name).starts_with("pid_")) {
                 continue;
             }
 
@@ -296,7 +295,7 @@ void removeAllEmptyProcessGroups() {
                     continue;
                 }
 
-                if (!StartsWith(dir->d_name, "uid_")) {
+                if (!std::string_view(dir->d_name).starts_with("uid_")) {
                     continue;
                 }
 
@@ -662,10 +661,9 @@ static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string c
         return -errno;
     }
     if (activate_controllers) {
-        ret = CgroupMap::GetInstance().ActivateControllers(uid_path);
-        if (ret) {
-            LOG(ERROR) << "Failed to activate controllers in " << uid_path;
-            return ret;
+        if (!CgroupMap::GetInstance().ActivateControllers(uid_path)) {
+            PLOG(ERROR) << "Failed to activate controllers in " << uid_path;
+            return -errno;
         }
     }
 

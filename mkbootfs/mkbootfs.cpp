@@ -19,6 +19,9 @@
 #include <private/android_filesystem_config.h>
 #include <private/fs_config.h>
 
+#include <android-base/file.h>
+#include <string>
+
 /* NOTES
 **
 ** - see https://www.kernel.org/doc/Documentation/early-userspace/buffer-format.txt
@@ -75,7 +78,7 @@ static void fix_stat(const char *path, struct stat *s)
     }
 }
 
-static void _eject(struct stat *s, char *out, int olen, char *data, unsigned datasize)
+static void _eject(struct stat *s, const char *out, int olen, char *data, unsigned datasize)
 {
     // Nothing is special about this value, just picked something in the
     // approximate range that was being used already, and avoiding small
@@ -151,9 +154,10 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
     DIR* d = opendir(in);
     if (d == NULL) err(1, "cannot open directory '%s'", in);
 
+    // TODO: switch to std::vector
     int size = 32;
     int entries = 0;
-    char** names = malloc(size * sizeof(char*));
+    char** names = (char**) malloc(size * sizeof(char*));
     if (names == NULL) {
       errx(1, "failed to allocate dir names array (size %d)", size);
     }
@@ -167,7 +171,7 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
 
         if (entries >= size) {
           size *= 2;
-          names = realloc(names, size * sizeof(char*));
+          names = (char**) realloc(names, size * sizeof(char*));
           if (names == NULL) {
             errx(1, "failed to reallocate dir names array (size %d)", size);
           }
@@ -211,20 +215,12 @@ static void _archive(char *in, char *out, int ilen, int olen)
     if(lstat(in, &s)) err(1, "could not stat '%s'", in);
 
     if(S_ISREG(s.st_mode)){
-        int fd = open(in, O_RDONLY);
-        if(fd < 0) err(1, "cannot open '%s' for read", in);
-
-        char* tmp = (char*) malloc(s.st_size);
-        if(tmp == 0) errx(1, "cannot allocate %zd bytes", s.st_size);
-
-        if(read(fd, tmp, s.st_size) != s.st_size) {
-            err(1, "cannot read %zd bytes", s.st_size);
+        std::string content;
+        if (!android::base::ReadFileToString(in, &content)) {
+            err(1, "cannot read '%s'", in);
         }
 
-        _eject(&s, out, olen, tmp, s.st_size);
-
-        free(tmp);
-        close(fd);
+        _eject(&s, out, olen, content.data(), content.size());
     } else if(S_ISDIR(s.st_mode)) {
         _eject(&s, out, olen, 0, 0);
         _archive_dir(in, out, ilen, olen);
@@ -445,15 +441,12 @@ int main(int argc, char *argv[])
     int num_dirs = argc - optind;
     argv += optind;
 
-    while(num_dirs-- > 0){
+    while (num_dirs-- > 0){
         char *x = strchr(*argv, '=');
-        if(x != 0) {
-            *x++ = 0;
-        } else {
-            x = "";
+        if (x != nullptr) {
+            *x++ = '\0';
         }
-
-        archive(*argv, x);
+        archive(*argv, x ?: "");
 
         argv++;
     }
