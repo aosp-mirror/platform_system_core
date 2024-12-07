@@ -2,9 +2,8 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_binary {
-    name: "watchdogd",
-    recovery_available: true,
+cc_defaults {
+    name: "watchdogd_defaults",
     srcs: ["watchdogd.cpp"],
     cflags: [
         "-Wall",
@@ -15,4 +14,20 @@ cc_binary {
     sanitize: {
         misc_undefined: ["signed-integer-overflow"],
     },
+}
+
+cc_binary {
+    name: "watchdogd",
+    defaults: [
+        "watchdogd_defaults",
+    ],
+}
+
+cc_binary {
+    name: "watchdogd.recovery",
+    defaults: [
+        "watchdogd_defaults",
+    ],
+    recovery: true,
+    stem: "watchdogd",
 }
