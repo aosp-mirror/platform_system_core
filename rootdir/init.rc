@@ -54,6 +54,10 @@ on early-init
     mkdir /linkerconfig/bootstrap 0755
     mkdir /linkerconfig/default 0755
 
+    # Greatly extend dm-verity's Merkle tree cache timeout.  The default timeout
+    # is much too short and is unnecessary, given that there is also a shrinker.
+    write /sys/module/dm_bufio/parameters/max_age_seconds 86400
+
     # Disable dm-verity hash prefetching, since it doesn't help performance
     # Read more in b/136247322
     write /sys/module/dm_verity/parameters/prefetch_cluster 0
@@ -999,6 +1003,11 @@ on post-fs-data
 
     exec_start system_aconfigd_mainline_init
     start system_aconfigd_socket_service
+
+    # start mainline aconfigd init, after transition, the above system_aconfigd_mainline_init
+    # will be deprecated
+    exec_start mainline_aconfigd_init
+    start mainline_aconfigd_socket_service
 
     # Create directories for boot animation.
     mkdir /data/misc/bootanim 0755 system system
