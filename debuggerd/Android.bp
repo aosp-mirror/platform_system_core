@@ -505,7 +505,6 @@ cc_binary {
         "libbase",
         "libdebuggerd_client",
         "liblog",
-        "libprocessgroup",
         "libprocinfo",
     ],
 
