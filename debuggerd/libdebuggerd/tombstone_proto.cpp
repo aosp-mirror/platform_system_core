@@ -467,7 +467,7 @@ static void dump_abort_message(Tombstone* tombstone,
   msg.resize(index);
 
   // Make sure only UTF8 characters are present since abort_message is a string.
-  tombstone->set_abort_message(oct_encode(msg));
+  tombstone->set_abort_message(oct_encode_non_ascii_printable(msg));
 }
 
 static void dump_open_fds(Tombstone* tombstone, const OpenFilesList* open_files) {
@@ -776,7 +776,7 @@ static void dump_log_file(Tombstone* tombstone, const char* logger, pid_t pid) {
       log_msg->set_priority(prio);
       log_msg->set_tag(tag);
       // Make sure only UTF8 characters are present since message is a string.
-      log_msg->set_message(oct_encode(msg));
+      log_msg->set_message(oct_encode_non_ascii_printable(msg));
     } while ((msg = nl));
   }
   android_logger_list_free(logger_list);

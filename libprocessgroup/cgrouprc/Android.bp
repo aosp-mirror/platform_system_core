@@ -18,7 +18,6 @@ package {
 
 cc_library {
     name: "libcgrouprc",
-    host_supported: true,
     // Do not ever mark this as vendor_available; otherwise, vendor modules
     // that links to the static library will behave unexpectedly. All on-device
     // modules should use libprocessgroup which links to the LL-NDK library
