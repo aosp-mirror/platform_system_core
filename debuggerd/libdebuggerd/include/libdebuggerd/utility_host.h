@@ -30,4 +30,7 @@ constexpr size_t kTagGranuleSize = 16;
 constexpr size_t kNumTagColumns = 16;
 constexpr size_t kNumTagRows = 16;
 
-std::string oct_encode(const std::string& data);
+// Encode all non-ascii values and also ascii values that are not printable.
+std::string oct_encode_non_ascii_printable(const std::string& data);
+// Encode any value that fails isprint(), includes encoding chars like '\n' and '\t'.
+std::string oct_encode_non_printable(const std::string& data);
