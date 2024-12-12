@@ -3303,8 +3303,44 @@ TEST_F(CrasherTest, log_with_newline) {
   ASSERT_MATCH(result, ":\\s*This is on the next line.");
 }
 
-TEST_F(CrasherTest, log_with_non_utf8) {
-  StartProcess([]() { LOG(FATAL) << "Invalid UTF-8: \xA0\xB0\xC0\xD0 and some other data."; });
+TEST_F(CrasherTest, log_with_non_printable_ascii_verify_encoded) {
+  static const std::string kEncodedStr =
+      "\x5C\x31"
+      "\x5C\x32"
+      "\x5C\x33"
+      "\x5C\x34"
+      "\x5C\x35"
+      "\x5C\x36"
+      "\x5C\x37"
+      "\x5C\x31\x30"
+      "\x5C\x31\x36"
+      "\x5C\x31\x37"
+      "\x5C\x32\x30"
+      "\x5C\x32\x31"
+      "\x5C\x32\x32"
+      "\x5C\x32\x33"
+      "\x5C\x32\x34"
+      "\x5C\x32\x35"
+      "\x5C\x32\x36"
+      "\x5C\x32\x37"
+      "\x5C\x33\x30"
+      "\x5C\x33\x31"
+      "\x5C\x33\x32"
+      "\x5C\x33\x33"
+      "\x5C\x33\x34"
+      "\x5C\x33\x35"
+      "\x5C\x33\x36"
+      "\x5C\x33\x37"
+      "\x5C\x31\x37\x37"
+      "\x5C\x32\x34\x30"
+      "\x5C\x32\x36\x30"
+      "\x5C\x33\x30\x30"
+      "\x5C\x33\x32\x30";
+  StartProcess([]() {
+    LOG(FATAL) << "Encoded: "
+                  "\x1\x2\x3\x4\x5\x6\x7\x8\xe\xf\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b"
+                  "\x1c\x1d\x1e\x1f\x7f\xA0\xB0\xC0\xD0 after";
+  });
 
   unique_fd output_fd;
   StartIntercept(&output_fd);
@@ -3317,15 +3353,38 @@ TEST_F(CrasherTest, log_with_non_utf8) {
   std::string result;
   ConsumeFd(std::move(output_fd), &result);
   // Verify the abort message is sanitized properly.
-  size_t pos = result.find(
-      "Abort message: 'Invalid UTF-8: "
-      "\x5C\x32\x34\x30\x5C\x32\x36\x30\x5C\x33\x30\x30\x5C\x33\x32\x30 and some other data.'");
+  size_t pos = result.find(std::string("Abort message: 'Encoded: ") + kEncodedStr + " after'");
   EXPECT_TRUE(pos != std::string::npos) << "Couldn't find sanitized abort message: " << result;
 
   // Make sure that the log message is sanitized properly too.
-  EXPECT_TRUE(
-      result.find("Invalid UTF-8: \x5C\x32\x34\x30\x5C\x32\x36\x30\x5C\x33\x30\x30\x5C\x33\x32\x30 "
-                  "and some other data.",
-                  pos + 30) != std::string::npos)
+  EXPECT_TRUE(result.find(std::string("Encoded: ") + kEncodedStr + " after", pos + 1) !=
+              std::string::npos)
+      << "Couldn't find sanitized log message: " << result;
+}
+
+TEST_F(CrasherTest, log_with_with_special_printable_ascii) {
+  static const std::string kMsg = "Not encoded: \t\v\f\r\n after";
+  StartProcess([]() { LOG(FATAL) << kMsg; });
+
+  unique_fd output_fd;
+  StartIntercept(&output_fd);
+  FinishCrasher();
+  AssertDeath(SIGABRT);
+  int intercept_result;
+  FinishIntercept(&intercept_result);
+  ASSERT_EQ(1, intercept_result) << "tombstoned reported failure";
+
+  std::string result;
+  ConsumeFd(std::move(output_fd), &result);
+  // Verify the abort message does not remove characters that are UTF8 but
+  // are, technically, not printable.
+  size_t pos = result.find(std::string("Abort message: '") + kMsg + "'");
+  EXPECT_TRUE(pos != std::string::npos) << "Couldn't find abort message: " << result;
+
+  // Make sure that the log message is handled properly too.
+  // The logger automatically splits a newline message into two pieces.
+  pos = result.find("Not encoded: \t\v\f\r", pos + kMsg.size());
+  EXPECT_TRUE(pos != std::string::npos) << "Couldn't find log message: " << result;
+  EXPECT_TRUE(result.find(" after", pos + 1) != std::string::npos)
       << "Couldn't find sanitized log message: " << result;
 }
