@@ -17,6 +17,7 @@
 #include <libdebuggerd/tombstone_proto_to_text.h>
 #include <libdebuggerd/utility_host.h>
 
+#include <ctype.h>
 #include <inttypes.h>
 
 #include <algorithm>
@@ -463,8 +464,8 @@ static void print_main_thread(CallbackType callback, SymbolizeCallbackType symbo
   }
 
   for (const auto& crash_detail : tombstone.crash_details()) {
-    std::string oct_encoded_name = oct_encode(crash_detail.name());
-    std::string oct_encoded_data = oct_encode(crash_detail.data());
+    std::string oct_encoded_name = oct_encode_non_printable(crash_detail.name());
+    std::string oct_encoded_data = oct_encode_non_printable(crash_detail.data());
     CBL("Extra crash detail: %s: '%s'", oct_encoded_name.c_str(), oct_encoded_data.c_str());
   }
 

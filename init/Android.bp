@@ -268,7 +268,6 @@ phony {
 
 cc_defaults {
     name: "init_second_stage_defaults",
-    recovery_available: true,
     stem: "init",
     defaults: ["init_defaults"],
     srcs: ["main.cpp"],
@@ -280,37 +279,38 @@ cc_binary {
     defaults: ["init_second_stage_defaults"],
     static_libs: ["libinit"],
     visibility: ["//visibility:any_system_partition"],
-    target: {
-        platform: {
-            required: [
-                "init.rc",
-                "ueventd.rc",
-                "e2fsdroid",
-                "extra_free_kbytes",
-                "make_f2fs",
-                "mke2fs",
-                "sload_f2fs",
-            ],
-        },
-        recovery: {
-            cflags: ["-DRECOVERY"],
-            exclude_static_libs: [
-                "libxml2",
-            ],
-            exclude_shared_libs: [
-                "libbinder",
-                "libutils",
-            ],
-            required: [
-                "init_recovery.rc",
-                "ueventd.rc.recovery",
-                "e2fsdroid.recovery",
-                "make_f2fs.recovery",
-                "mke2fs.recovery",
-                "sload_f2fs.recovery",
-            ],
-        },
-    },
+    required: [
+        "init.rc",
+        "ueventd.rc",
+        "e2fsdroid",
+        "extra_free_kbytes",
+        "make_f2fs",
+        "mke2fs",
+        "sload_f2fs",
+    ],
+}
+
+cc_binary {
+    name: "init_second_stage.recovery",
+    defaults: ["init_second_stage_defaults"],
+    static_libs: ["libinit"],
+    recovery: true,
+    cflags: ["-DRECOVERY"],
+    exclude_static_libs: [
+        "libxml2",
+    ],
+    exclude_shared_libs: [
+        "libbinder",
+        "libutils",
+    ],
+    required: [
+        "init_recovery.rc",
+        "ueventd.rc.recovery",
+        "e2fsdroid.recovery",
+        "make_f2fs.recovery",
+        "mke2fs.recovery",
+        "sload_f2fs.recovery",
+    ],
 }
 
 cc_binary {
@@ -319,7 +319,6 @@ cc_binary {
         "avf_build_flags_cc",
         "init_second_stage_defaults",
     ],
-    recovery_available: false,
     static_libs: ["libinit.microdroid"],
     cflags: ["-DMICRODROID=1"],
     no_full_install: true,
