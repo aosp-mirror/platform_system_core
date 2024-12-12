@@ -546,10 +546,10 @@ static void ReadGuestRegisters(std::unique_ptr<unwindstack::Regs>* regs, pid_t t
 #else
     case NATIVE_BRIDGE_ARCH_ARM: {
       unwindstack::arm_user_regs arm_user_regs = {};
-      regs->reset(unwindstack::RegsArm::Read(&arm_user_regs));
       for (size_t i = 0; i < unwindstack::ARM_REG_LAST; i++) {
         arm_user_regs.regs[i] = guest_regs.regs_arm.r[i];
       }
+      regs->reset(unwindstack::RegsArm::Read(&arm_user_regs));
 
       g_guest_arch = Architecture::ARM32;
       break;
