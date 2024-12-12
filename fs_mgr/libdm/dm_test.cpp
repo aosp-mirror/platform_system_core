@@ -814,3 +814,31 @@ TEST_F(DmTest, ThinProvisioning) {
     TempDevice thin("thin", thinTable);
     ASSERT_TRUE(thin.valid());
 }
+
+TEST_F(DmTest, RedactDmCrypt) {
+    static constexpr uint64_t kImageSize = 65536;
+    unique_fd temp_file(CreateTempFile("file_1", kImageSize));
+    ASSERT_GE(temp_file, 0);
+
+    LoopDevice loop(temp_file, 10s);
+    ASSERT_TRUE(loop.valid());
+
+    static constexpr const char* kAlgorithm = "aes-cbc-essiv:sha256";
+    static constexpr const char* kKey = "0e64ef514e6a1315b1f6390cb57c9e6a";
+
+    auto target = std::make_unique<DmTargetCrypt>(0, kImageSize / 512, kAlgorithm, kKey, 0,
+                                                  loop.device(), 0);
+    target->AllowDiscards();
+
+    DmTable table;
+    table.AddTarget(std::move(target));
+
+    auto& dm = DeviceMapper::Instance();
+    std::string crypt_path;
+    ASSERT_TRUE(dm.CreateDevice(test_name_, table, &crypt_path, 10s));
+
+    std::vector<DeviceMapper::TargetInfo> targets;
+    ASSERT_TRUE(dm.GetTableInfo(test_name_, &targets));
+    ASSERT_EQ(targets.size(), 1);
+    EXPECT_EQ(targets[0].data.find(kKey), std::string::npos);
+}
