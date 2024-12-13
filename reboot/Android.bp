@@ -4,10 +4,25 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-cc_binary {
-    name: "reboot",
+cc_defaults {
+    name: "reboot_defaults",
     srcs: ["reboot.c"],
     shared_libs: ["libcutils"],
     cflags: ["-Werror"],
-    recovery_available: true,
+}
+
+cc_binary {
+    name: "reboot",
+    defaults: [
+        "reboot_defaults",
+    ],
+}
+
+cc_binary {
+    name: "reboot.recovery",
+    defaults: [
+        "reboot_defaults",
+    ],
+    recovery: true,
+    stem: "reboot",
 }
