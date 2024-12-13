@@ -36,7 +36,7 @@ message Cgroup {
 // https://developers.google.com/protocol-buffers/docs/proto3#default
     bool needs_activation = 6 [json_name = "NeedsActivation"];
     bool is_optional = 7 [json_name = "Optional"];
-    uint32 max_activation_depth = 8 [json_name = "MaxActivationDepth"];
+    optional uint32 max_activation_depth = 8 [json_name = "MaxActivationDepth"];
 }
 
 // Next: 6
