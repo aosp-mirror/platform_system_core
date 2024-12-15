@@ -746,10 +746,6 @@ bool setProcessGroupLimit(uid_t, pid_t pid, int64_t limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemLimit", limit_in_bytes);
 }
 
-bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path) {
-    return CgroupGetAttributePathForTask(attr_name, tid, path);
-}
-
 bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, pid_t pid) {
     const TaskProfile* tp = TaskProfiles::GetInstance().GetProfile(profile_name);
 

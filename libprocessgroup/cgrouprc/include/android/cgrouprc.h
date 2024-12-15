@@ -21,11 +21,6 @@
 
 __BEGIN_DECLS
 
-// For host builds, __INTRODUCED_IN is not defined.
-#ifndef __INTRODUCED_IN
-#define __INTRODUCED_IN(x)
-#endif
-
 struct ACgroupController;
 typedef struct ACgroupController ACgroupController;
 
