@@ -22,4 +22,5 @@
 PRODUCT_PACKAGES += \
 	storageproxyd.system \
 	rpmb_dev.system \
+	rpmb_dev.test.system \
 

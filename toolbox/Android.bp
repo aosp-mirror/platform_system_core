@@ -68,8 +68,14 @@ cc_defaults {
 cc_binary {
     name: "toolbox",
     defaults: ["toolbox_binary_defaults"],
-    recovery_available: true,
     vendor_ramdisk_available: true,
+}
+
+cc_binary {
+    name: "toolbox.recovery",
+    defaults: ["toolbox_binary_defaults"],
+    recovery: true,
+    stem: "toolbox",
 }
 
 cc_binary {
