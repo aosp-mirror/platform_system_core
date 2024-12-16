@@ -37,7 +37,6 @@ prebuilt_etc {
     src: "init.rc",
     sub_dir: "init/hw",
     required: [
-        "fsverity_init",
         "platform-bootclasspath",
         "init.boringssl.zygote64.rc",
         "init.boringssl.zygote64_32.rc",
