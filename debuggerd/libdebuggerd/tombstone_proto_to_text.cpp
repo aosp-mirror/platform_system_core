@@ -594,7 +594,7 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback,
   if (tombstone.page_size() != 4096) {
     CBL("Page size: %d bytes", tombstone.page_size());
   } else if (tombstone.has_been_16kb_mode()) {
-    CBL("Has been in 16kb mode: yes");
+    CBL("Has been in 16 KB mode before: yes");
   }
 
   // Process header
