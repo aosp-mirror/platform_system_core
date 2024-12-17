@@ -374,11 +374,15 @@ cc_binary {
     srcs: [
         "snapshotctl.cpp",
         "scratch_super.cpp",
+        "android/snapshot/snapshot.proto",
     ],
     static_libs: [
         "libbrotli",
         "libfstab",
         "libz",
+        "libavb",
+        "libfs_avb",
+        "libcrypto_static",
         "update_metadata-protos",
     ],
     shared_libs: [
