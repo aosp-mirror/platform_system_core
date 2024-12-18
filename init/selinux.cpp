@@ -69,6 +69,7 @@
 #include <android/avf_cc_flags.h>
 #include <fs_avb/fs_avb.h>
 #include <fs_mgr.h>
+#include <genfslabelsversion.h>
 #include <libgsi/libgsi.h>
 #include <libsnapshot/snapshot.h>
 #include <selinux/android.h>
@@ -324,6 +325,18 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
     }
     const std::string version_as_string = std::to_string(SEPOLICY_VERSION);
 
+    std::vector<std::string> genfs_cil_files;
+
+    int vendor_genfs_version = get_genfs_labels_version();
+    std::string genfs_cil_file =
+            std::format("/system/etc/selinux/plat_sepolicy_genfs_{}.cil", vendor_genfs_version);
+    if (access(genfs_cil_file.c_str(), F_OK) != 0) {
+        LOG(INFO) << "Missing " << genfs_cil_file << "; skipping";
+        genfs_cil_file.clear();
+    } else {
+        LOG(INFO) << "Using " << genfs_cil_file << " for genfs labels";
+    }
+
     // clang-format off
     std::vector<const char*> compile_args {
         "/system/bin/secilc",
@@ -363,6 +376,9 @@ bool OpenSplitPolicy(PolicyFile* policy_file) {
     }
     if (!odm_policy_cil_file.empty()) {
         compile_args.push_back(odm_policy_cil_file.c_str());
+    }
+    if (!genfs_cil_file.empty()) {
+        compile_args.push_back(genfs_cil_file.c_str());
     }
     compile_args.push_back(nullptr);
 
@@ -474,8 +490,6 @@ void SelinuxRestoreContext() {
     RestoreconIfExists(SnapshotManager::GetGlobalRollbackIndicatorPath().c_str(), 0);
     RestoreconIfExists("/metadata/gsi",
                        SELINUX_ANDROID_RESTORECON_RECURSE | SELINUX_ANDROID_RESTORECON_SKIP_SEHASH);
-
-    RestoreconIfExists("/dev/hvc1", 0);
 }
 
 int SelinuxKlogCallback(int type, const char* fmt, ...) {

@@ -20,11 +20,7 @@
 #include <cstdint>
 #include <string>
 
-namespace android {
-namespace cgrouprc {
-namespace format {
-
-// Minimal controller description to be mmapped into process address space
+// Minimal controller description
 struct CgroupController {
   public:
     CgroupController() = default;
@@ -49,7 +45,3 @@ struct CgroupController {
     char name_[CGROUP_NAME_BUF_SZ] = {};
     char path_[CGROUP_PATH_BUF_SZ] = {};
 };
-
-}  // namespace format
-}  // namespace cgrouprc
-}  // namespace android

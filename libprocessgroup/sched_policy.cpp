@@ -148,18 +148,8 @@ bool cpusets_enabled() {
     return enabled;
 }
 
-static bool schedtune_enabled() {
-    return (CgroupMap::GetInstance().FindController("schedtune").IsUsable());
-}
-
 static bool cpuctl_enabled() {
     return (CgroupMap::GetInstance().FindController("cpu").IsUsable());
-}
-
-bool schedboost_enabled() {
-    static bool enabled = schedtune_enabled() || cpuctl_enabled();
-
-    return enabled;
 }
 
 static int getCGroupSubsys(pid_t tid, const char* subsys, std::string& subgroup) {
@@ -201,9 +191,8 @@ int get_sched_policy(pid_t tid, SchedPolicy* policy) {
     }
 
     std::string group;
-    if (schedboost_enabled()) {
-        if ((getCGroupSubsys(tid, "schedtune", group) < 0) &&
-            (getCGroupSubsys(tid, "cpu", group) < 0)) {
+    if (cpuctl_enabled()) {
+        if (getCGroupSubsys(tid, "cpu", group) < 0) {
             LOG(ERROR) << "Failed to find cpu cgroup for tid " << tid;
             return -1;
         }

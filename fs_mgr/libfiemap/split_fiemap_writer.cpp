@@ -196,10 +196,13 @@ bool SplitFiemap::RemoveSplitFiles(const std::string& file_path, std::string* me
             if (access(file.c_str(), F_OK) != 0 && (errno == ENOENT || errno == ENAMETOOLONG)) {
                 continue;
             }
+            truncate(file.c_str(), 0);
             ok &= android::base::RemoveFileIfExists(file, message);
         }
     }
+    truncate(file_path.c_str(), 0);
     ok &= android::base::RemoveFileIfExists(file_path, message);
+    sync();
     return ok;
 }
 

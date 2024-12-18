@@ -1,0 +1,5 @@
+dirgroup {
+    name: "trusty_dirgroup_system_core",
+    dirs: ["."],
+    visibility: ["//trusty/vendor/google/aosp/scripts"],
+}

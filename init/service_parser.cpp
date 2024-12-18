@@ -538,12 +538,9 @@ Result<void> ServiceParser::ParseUser(std::vector<std::string>&& args) {
 // when we migrate to cgroups v2 while these hardcoded paths stay the same.
 static std::optional<const std::string> ConvertTaskFileToProfile(const std::string& file) {
     static const std::map<const std::string, const std::string> map = {
-            {"/dev/stune/top-app/tasks", "MaxPerformance"},
-            {"/dev/stune/foreground/tasks", "HighPerformance"},
             {"/dev/cpuset/camera-daemon/tasks", "CameraServiceCapacity"},
             {"/dev/cpuset/foreground/tasks", "ProcessCapacityHigh"},
             {"/dev/cpuset/system-background/tasks", "ServiceCapacityLow"},
-            {"/dev/stune/nnapi-hal/tasks", "NNApiHALPerformance"},
             {"/dev/blkio/background/tasks", "LowIoPriority"},
     };
     auto iter = map.find(file);

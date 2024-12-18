@@ -1,7 +1,5 @@
 LOCAL_PATH:= $(call my-dir)
 
-$(eval $(call declare-1p-copy-files,system/core/rootdir,))
-
 #######################################
 ifneq ($(filter address,$(SANITIZE_TARGET)),)
 ASAN_EXTRACT_FILES :=
@@ -29,7 +27,7 @@ endif
 #
 # create some directories (some are mount points) and symlinks
 LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
-    dev proc sys system data data_mirror odm oem acct config storage mnt apex bootstrap-apex debug_ramdisk \
+    dev proc sys system data data_mirror odm oem config storage mnt apex bootstrap-apex debug_ramdisk \
     linkerconfig second_stage_resources postinstall tmp $(BOARD_ROOT_EXTRA_FOLDERS)); \
     ln -sf /system/bin $(TARGET_ROOT_OUT)/bin; \
     ln -sf /system/etc $(TARGET_ROOT_OUT)/etc; \

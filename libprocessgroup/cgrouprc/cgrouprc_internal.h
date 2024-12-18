@@ -16,9 +16,6 @@
 
 #pragma once
 
-#include <android/cgrouprc.h>
+#include <processgroup/cgroup_controller.h>
 
-#include <processgroup/format/cgroup_controller.h>
-#include <processgroup/format/cgroup_file.h>
-
-struct ACgroupController : android::cgrouprc::format::CgroupController {};
+struct ACgroupController : CgroupController {};

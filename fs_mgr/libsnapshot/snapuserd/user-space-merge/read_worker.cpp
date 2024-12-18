@@ -104,6 +104,8 @@ bool ReadWorker::ProcessCopyOp(const CowOperation* cow_op, void* buffer) {
 }
 
 bool ReadWorker::ProcessXorOp(const CowOperation* cow_op, void* buffer) {
+    using WordType = std::conditional_t<sizeof(void*) == sizeof(uint64_t), uint64_t, uint32_t>;
+
     if (!ReadFromSourceDevice(cow_op, buffer)) {
         return false;
     }
@@ -120,9 +122,12 @@ bool ReadWorker::ProcessXorOp(const CowOperation* cow_op, void* buffer) {
         return false;
     }
 
-    auto xor_out = reinterpret_cast<uint8_t*>(buffer);
-    for (size_t i = 0; i < BLOCK_SZ; i++) {
-        xor_out[i] ^= xor_buffer_[i];
+    auto xor_in = reinterpret_cast<const WordType*>(xor_buffer_.data());
+    auto xor_out = reinterpret_cast<WordType*>(buffer);
+    auto num_words = BLOCK_SZ / sizeof(WordType);
+
+    for (auto i = 0; i < num_words; i++) {
+        xor_out[i] ^= xor_in[i];
     }
     return true;
 }

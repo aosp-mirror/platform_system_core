@@ -66,7 +66,11 @@ class FiemapWriterTest : public ::testing::Test {
         testfile = gTestDir + "/"s + tinfo->name();
     }
 
-    void TearDown() override { unlink(testfile.c_str()); }
+    void TearDown() override {
+        truncate(testfile.c_str(), 0);
+        unlink(testfile.c_str());
+        sync();
+    }
 
     // name of the file we use for testing
     std::string testfile;

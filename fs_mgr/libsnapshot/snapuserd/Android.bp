@@ -15,6 +15,7 @@
 //
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
@@ -85,11 +86,9 @@ cc_library_static {
         "libsnapshot_cow",
         "liburing",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
-        "libcgrouprc_format",
     ],
-    include_dirs: ["bionic/libc/kernel"],
     export_include_dirs: ["include"],
     header_libs: [
         "libcutils_headers",
@@ -129,9 +128,8 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapuserd",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
-        "libcgrouprc_format",
         "libsnapuserd_client",
         "libz",
         "liblz4",
@@ -145,7 +143,6 @@ cc_defaults {
         "libstorage_literals_headers",
     ],
 
-    include_dirs: ["bionic/libc/kernel"],
     system_shared_libs: [],
 
     // snapuserd is started during early boot by first-stage init. At that
@@ -221,14 +218,12 @@ cc_defaults {
         "libsnapshot_cow",
         "libsnapuserd",
         "libprocessgroup",
+        "libprocessgroup_util",
         "libjsoncpp",
-        "libcgrouprc",
-        "libcgrouprc_format",
         "liburing",
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [
@@ -266,6 +261,10 @@ cc_test {
             {
                 name: "force-no-test-error",
                 value: "false",
+            },
+            {
+                name: "native-test-timeout",
+                value: "15m",
             },
         ],
     },
@@ -318,13 +317,10 @@ cc_binary_host {
         "libsnapuserd",
         "libprocessgroup",
         "libjsoncpp",
-        "libcgrouprc",
-        "libcgrouprc_format",
         "liburing",
         "libz",
     ],
     include_dirs: [
-        "bionic/libc/kernel",
         ".",
     ],
     header_libs: [

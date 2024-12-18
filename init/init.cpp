@@ -315,8 +315,7 @@ Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& servic
         if (apex_info_list.has_value()) {
             std::vector<std::string> subcontext_apexes;
             for (const auto& info : apex_info_list->getApexInfo()) {
-                if (info.hasPreinstalledModulePath() &&
-                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                if (subcontext->PartitionMatchesSubcontext(info.getPartition())) {
                     subcontext_apexes.push_back(info.getModuleName());
                 }
             }
@@ -636,9 +635,6 @@ static Result<void> SetupCgroupsAction(const BuiltinArguments&) {
         LOG(INFO) << "Cgroups support in kernel is not enabled";
         return {};
     }
-    // Have to create <CGROUPS_RC_DIR> using make_dir function
-    // for appropriate sepolicy to be set for it
-    make_dir(android::base::Dirname(CGROUPS_RC_PATH), 0711);
     if (!CgroupSetup()) {
         return ErrnoError() << "Failed to setup cgroups";
     }

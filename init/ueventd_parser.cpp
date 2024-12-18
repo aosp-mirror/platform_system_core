@@ -264,6 +264,8 @@ UeventdConfiguration ParseConfig(const std::vector<std::string>& configs) {
     parser.AddSectionParser("import", std::make_unique<ImportParser>(&parser));
     parser.AddSectionParser("subsystem",
                             std::make_unique<SubsystemParser>(&ueventd_configuration.subsystems));
+    parser.AddSectionParser("driver",
+                            std::make_unique<SubsystemParser>(&ueventd_configuration.drivers));
 
     using namespace std::placeholders;
     parser.AddSingleLineParser(
