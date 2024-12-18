@@ -16,10 +16,11 @@
 
 #include <endian.h>
 
+#include <random>
+
+#include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <base/files/file_util.h>
-#include <base/rand_util.h>
-#include <base/strings/string_util.h>
 #include <libavb/libavb.h>
 
 #include "avb_util.h"
@@ -70,7 +71,7 @@ void AvbUtilTest::SetVBMetaFlags(const base::FilePath& image_path, uint32_t flag
 
     std::string image_file_name = image_path.RemoveExtension().BaseName().value();
     bool is_vbmeta_partition =
-        base::StartsWith(image_file_name, "vbmeta", base::CompareCase::INSENSITIVE_ASCII);
+        android::base::StartsWithIgnoreCase(image_file_name, "vbmeta");
 
     android::base::unique_fd fd(open(image_path.value().c_str(), O_RDWR | O_CLOEXEC));
     EXPECT_TRUE(fd > 0);
@@ -603,7 +604,7 @@ bool AvbUtilTest::CompareVBMeta(const base::FilePath& avb_image_path,
     std::string image_file_name = avb_image_path.RemoveExtension().BaseName().value();
 
     base::FilePath extracted_vbmeta_path;
-    if (base::StartsWith(image_file_name, "vbmeta", base::CompareCase::INSENSITIVE_ASCII)) {
+    if (android::base::StartsWithIgnoreCase(image_file_name, "vbmeta")) {
         extracted_vbmeta_path = avb_image_path;  // no need to extract if it's a vbmeta image.
     } else {
         extracted_vbmeta_path = ExtractVBMetaImage(avb_image_path, image_file_name + "-vbmeta.img");
@@ -727,7 +728,10 @@ void AvbUtilTest::ModifyFile(const base::FilePath& file_path, size_t offset, ssi
 
     // Introduces a new modification.
     if (length > 0) {
-        int modify_location = base::RandInt(offset, offset + length - 1);
+        // mersenne_twister_engine seeded with the default seed source.
+        static std::mt19937 gen(std::random_device{}());
+        std::uniform_int_distribution<> rand_distribution(offset, offset + length - 1);
+        int modify_location = rand_distribution(gen);
         file_content[modify_location] ^= 0x80;
         last_file_path = file_path.value();
         last_modified_location = modify_location;

@@ -21,11 +21,6 @@
 
 __BEGIN_DECLS
 
-// For host builds, __INTRODUCED_IN is not defined.
-#ifndef __INTRODUCED_IN
-#define __INTRODUCED_IN(x)
-#endif
-
 struct ACgroupController;
 typedef struct ACgroupController ACgroupController;
 
@@ -77,14 +72,6 @@ __attribute__((warn_unused_result)) uint32_t ACgroupController_getVersion(const 
  */
 __attribute__((warn_unused_result, weak)) uint32_t ACgroupController_getFlags(
         const ACgroupController*) __INTRODUCED_IN(30);
-
-/**
- * Returns the maximum activation depth of the given controller.
- * Only applicable to cgroup v2 controllers.
- * Returns UINT32_MAX if no maximum activation depth is set.
- */
-__attribute__((warn_unused_result, weak)) uint32_t ACgroupController_getMaxActivationDepth(
-        const ACgroupController* controller) __INTRODUCED_IN(36);
 
 /**
  * Returns the name of the given controller.

@@ -329,6 +329,8 @@ TEST(fs_mgr, fs_mgr_read_fstab_file_proc_mounts) {
                 {"private", MS_PRIVATE},
                 {"slave", MS_SLAVE},
                 {"shared", MS_SHARED},
+                {"lazytime", MS_LAZYTIME},
+                {"nosymfollow", MS_NOSYMFOLLOW},
                 {"defaults", 0},
                 {0, 0},
         };
@@ -705,6 +707,7 @@ source none2       swap   defaults      zramsize=blah%
 source none3       swap   defaults      zramsize=5%
 source none4       swap   defaults      zramsize=105%
 source none5       swap   defaults      zramsize=%
+source none6       swap   defaults      zramsize=210%
 )fs";
     ASSERT_TRUE(android::base::WriteStringToFile(fstab_contents, tf.path));
 
@@ -737,10 +740,15 @@ source none5       swap   defaults      zramsize=%
 
     EXPECT_EQ("none4", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
-    EXPECT_EQ(0, entry->zram_size);
+    EXPECT_NE(0, entry->zram_size);
     entry++;
 
     EXPECT_EQ("none5", entry->mount_point);
+    EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
+    EXPECT_EQ(0, entry->zram_size);
+    entry++;
+
+    EXPECT_EQ("none6", entry->mount_point);
     EXPECT_TRUE(CompareFlags(flags, entry->fs_mgr_flags));
     EXPECT_EQ(0, entry->zram_size);
 }

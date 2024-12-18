@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -116,16 +117,24 @@ class Subsystem {
     std::string dir_name_ = "/dev";
 };
 
+struct BlockDeviceInfo {
+    std::string str;
+    std::string type;
+    bool is_boot_device;
+};
+
 class DeviceHandler : public UeventHandler {
   public:
     friend class DeviceHandlerTester;
 
     DeviceHandler();
     DeviceHandler(std::vector<Permissions> dev_permissions,
-                  std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> subsystems,
-                  std::set<std::string> boot_devices, bool skip_restorecon);
+                  std::vector<SysfsPermissions> sysfs_permissions, std::vector<Subsystem> drivers,
+                  std::vector<Subsystem> subsystems, std::set<std::string> boot_devices,
+                  std::string boot_part_uuid, bool skip_restorecon);
     virtual ~DeviceHandler() = default;
 
+    bool CheckUeventForBootPartUuid(const Uevent& uevent);
     void HandleUevent(const Uevent& uevent) override;
 
     // `androidboot.partition_map` allows associating a partition name for a raw block device
@@ -133,10 +142,23 @@ class DeviceHandler : public UeventHandler {
     // `androidboot.partition_map=vdb,metadata;vdc,userdata` maps `vdb` to `metadata` and `vdc` to
     // `userdata`.
     static std::string GetPartitionNameForDevice(const std::string& device);
+    bool IsBootDeviceStrict() const;
+    bool IsBootDevice(const Uevent& uevent) const;
 
   private:
+    struct TrackedUevent {
+        Uevent uevent;
+        std::string canonical_device_path;
+    };
+
     void ColdbootDone() override;
-    bool FindPlatformDevice(std::string path, std::string* platform_device_path) const;
+    BlockDeviceInfo GetBlockDeviceInfo(const std::string& uevent_path) const;
+    bool FindSubsystemDevice(std::string path, std::string* device_path,
+                             const std::set<std::string>& subsystem_paths) const;
+    bool FindPlatformDevice(const std::string& path, std::string* platform_device_path) const;
+    bool FindMmcDevice(const std::string& path, std::string* mmc_device_path) const;
+    bool FindNvmeDevice(const std::string& path, std::string* nvme_device_path) const;
+    bool FindScsiDevice(const std::string& path, std::string* scsi_device_path) const;
     std::tuple<mode_t, uid_t, gid_t> GetDevicePermissions(
         const std::string& path, const std::vector<std::string>& links) const;
     void MakeDevice(const std::string& path, bool block, int major, int minor,
@@ -147,12 +169,21 @@ class DeviceHandler : public UeventHandler {
     void FixupSysPermissions(const std::string& upath, const std::string& subsystem) const;
     void HandleAshmemUevent(const Uevent& uevent);
 
+    void TrackDeviceUevent(const Uevent& uevent);
+    void HandleBindInternal(std::string driver_name, std::string action, const Uevent& uevent);
+
     std::vector<Permissions> dev_permissions_;
     std::vector<SysfsPermissions> sysfs_permissions_;
+    std::vector<Subsystem> drivers_;
     std::vector<Subsystem> subsystems_;
     std::set<std::string> boot_devices_;
+    std::string boot_part_uuid_;
+    bool found_boot_part_uuid_;
     bool skip_restorecon_;
     std::string sysfs_mount_point_;
+
+    std::vector<TrackedUevent> tracked_uevents_;
+    std::map<std::string, std::string> bound_drivers_;
 };
 
 // Exposed for testing

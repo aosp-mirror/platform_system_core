@@ -54,6 +54,8 @@ static const char *ssdir_name;
 /* List head for storage mapping, elements added at init, and never removed */
 static struct storage_mapping_node* storage_mapping_head;
 
+#ifdef VENDOR_FS_READY_PROPERTY
+
 /*
  * Properties set to 1 after we have opened a file under ssdir_name. The backing
  * files for both TD and TDP are currently located under /data/vendor/ss and can
@@ -75,16 +77,6 @@ static struct storage_mapping_node* storage_mapping_head;
 static bool fs_ready_set = false;
 static bool fs_ready_rw_set = false;
 
-static enum sync_state fs_state;
-static enum sync_state fd_state[FD_TBL_SIZE];
-
-static bool alternate_mode;
-
-static struct {
-   struct storage_file_read_resp hdr;
-   uint8_t data[MAX_READ_SIZE];
-}  read_rsp;
-
 static bool property_set_helper(const char* prop) {
     int rc = property_set(prop, "1");
     if (rc == 0) {
@@ -95,6 +87,18 @@ static bool property_set_helper(const char* prop) {
 
     return rc == 0;
 }
+
+#endif  // #ifdef VENDOR_FS_READY_PROPERTY
+
+static enum sync_state fs_state;
+static enum sync_state fd_state[FD_TBL_SIZE];
+
+static bool alternate_mode;
+
+static struct {
+    struct storage_file_read_resp hdr;
+    uint8_t data[MAX_READ_SIZE];
+} read_rsp;
 
 static uint32_t insert_fd(int open_flags, int fd, struct storage_mapping_node* node) {
     uint32_t handle = fd;
@@ -535,6 +539,7 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len,
     free(path);
     path = NULL;
 
+#ifdef VENDOR_FS_READY_PROPERTY
     /* a backing file has been opened, notify any waiting init steps */
     if (!fs_ready_set || !fs_ready_rw_set) {
         bool is_checkpoint_active = false;
@@ -552,6 +557,7 @@ int storage_file_open(struct storage_msg* msg, const void* r, size_t req_len,
             }
         }
     }
+#endif  // #ifdef VENDOR_FS_READY_PROPERTY
 
     return ipc_respond(msg, &resp, sizeof(resp));
 

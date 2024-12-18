@@ -95,12 +95,26 @@ enum test_message_header {
     TEST_FAILED = 1,
     TEST_MESSAGE = 2,
     TEST_TEXT = 3,
+    TEST_OPCODE_COUNT,
 };
+
+static int get_msg_len(const char* buf, int max_buf_len) {
+    int buf_len;
+    for (buf_len = 0; buf_len < max_buf_len; buf_len++) {
+        if ((unsigned char)buf[buf_len] < TEST_OPCODE_COUNT) {
+            break;
+        }
+    }
+    return buf_len;
+}
 
 static int run_trusty_unitest(const char* utapp) {
     int fd;
-    int rc;
-    char rx_buf[1024];
+    char read_buf[1024];
+    int read_len;
+    char* rx_buf;
+    int rx_buf_len;
+    int cmd = -1;
 
     /* connect to unitest app */
     fd = tipc_connect(dev_name, utapp);
@@ -110,22 +124,39 @@ static int run_trusty_unitest(const char* utapp) {
     }
 
     /* wait for test to complete */
+    rx_buf_len = 0;
     for (;;) {
-        rc = read(fd, rx_buf, sizeof(rx_buf));
-        if (rc <= 0 || rc >= (int)sizeof(rx_buf)) {
-            fprintf(stderr, "%s: Read failed: %d\n", __func__, rc);
-            tipc_close(fd);
-            return -1;
+        if (rx_buf_len == 0) {
+            read_len = read(fd, read_buf, sizeof(read_buf));
+            if (read_len <= 0 || read_len > (int)sizeof(read_buf)) {
+                fprintf(stderr, "%s: Read failed: %d, %s\n", __func__, read_len,
+                        read_len < 0 ? strerror(errno) : "");
+                tipc_close(fd);
+                return -1;
+            }
+            rx_buf = read_buf;
+            rx_buf_len = read_len;
         }
 
-        if (rx_buf[0] == TEST_PASSED) {
+        int msg_len = get_msg_len(rx_buf, rx_buf_len);
+        if (msg_len == 0) {
+            cmd = rx_buf[0];
+            rx_buf++;
+            rx_buf_len--;
+        }
+
+        if (cmd == TEST_PASSED) {
             break;
-        } else if (rx_buf[0] == TEST_FAILED) {
+        } else if (cmd == TEST_FAILED) {
             break;
-        } else if (rx_buf[0] == TEST_MESSAGE || rx_buf[0] == TEST_TEXT) {
-            write(STDOUT_FILENO, rx_buf + 1, rc - 1);
+        } else if (cmd == TEST_MESSAGE || cmd == TEST_TEXT) {
+            if (msg_len) {
+                write(STDOUT_FILENO, rx_buf, msg_len);
+                rx_buf += msg_len;
+                rx_buf_len -= msg_len;
+            }
         } else {
-            fprintf(stderr, "%s: Bad message header: %d\n", __func__, rx_buf[0]);
+            fprintf(stderr, "%s: Bad message header: %d\n", __func__, cmd);
             break;
         }
     }
@@ -133,7 +164,7 @@ static int run_trusty_unitest(const char* utapp) {
     /* close connection to unitest app */
     tipc_close(fd);
 
-    return rx_buf[0] == TEST_PASSED ? 0 : -1;
+    return cmd == TEST_PASSED ? 0 : -1;
 }
 
 int main(int argc, char** argv) {

@@ -29,6 +29,8 @@ namespace fs_mgr {
 // first match or nullptr.
 FstabEntry* GetEntryForPath(Fstab* fstab, const std::string& path);
 
+std::vector<FstabEntry*> GetEntriesForPath(Fstab* fstab, const std::string& path);
+
 // Make sure that the volume 'path' is on is mounted.
 // * If 'mount_point' is nullptr, use mount point in fstab. Caller can call
 //   fs_mgr_ensure_path_unmounted() with the same 'path' argument to unmount.
