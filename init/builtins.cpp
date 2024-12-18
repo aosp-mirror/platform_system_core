@@ -36,6 +36,7 @@
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/swap.h>
 #include <sys/syscall.h>
 #include <sys/system_properties.h>
 #include <sys/time.h>
@@ -470,6 +471,7 @@ static struct {
     { "private",    MS_PRIVATE },
     { "slave",      MS_SLAVE },
     { "shared",     MS_SHARED },
+    { "nosymfollow", MS_NOSYMFOLLOW },
     { "defaults",   0 },
     { 0,            0 },
 };
@@ -1270,6 +1272,13 @@ static Result<void> do_enter_default_mount_ns(const BuiltinArguments& args) {
     return {};
 }
 
+static Result<void> do_swapoff(const BuiltinArguments& args) {
+    if (!swapoff(args[1].c_str())) {
+        return ErrnoError() << "swapoff() failed";
+    }
+    return {};
+}
+
 // Builtin-function-map start
 const BuiltinFunctionMap& GetBuiltinFunctionMap() {
     constexpr std::size_t kMax = std::numeric_limits<std::size_t>::max();
@@ -1325,6 +1334,7 @@ const BuiltinFunctionMap& GetBuiltinFunctionMap() {
         {"start",                   {1,     1,    {false,  do_start}}},
         {"stop",                    {1,     1,    {false,  do_stop}}},
         {"swapon_all",              {0,     1,    {false,  do_swapon_all}}},
+        {"swapoff",                 {1,     1,    {false,  do_swapoff}}},
         {"enter_default_mount_ns",  {0,     0,    {false,  do_enter_default_mount_ns}}},
         {"symlink",                 {2,     2,    {true,   do_symlink}}},
         {"sysclktz",                {1,     1,    {false,  do_sysclktz}}},

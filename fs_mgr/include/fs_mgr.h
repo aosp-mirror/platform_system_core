@@ -104,6 +104,12 @@ int fs_mgr_setup_verity(android::fs_mgr::FstabEntry* fstab, bool wait_for_verity
 // returned. Otherwise, it will use the current slot.
 std::string fs_mgr_get_super_partition_name(int slot = -1);
 
+// Set readonly for the block device
+bool fs_mgr_set_blk_ro(const std::string& blockdev, bool readonly = true);
+
+// Check if the block device has ext4 filesystem
+bool fs_mgr_is_ext4(const std::string& blk_device);
+
 enum FsMgrUmountStatus : int {
     SUCCESS = 0,
     ERROR_UNKNOWN = 1 << 0,
@@ -131,3 +137,6 @@ bool fs_mgr_mount_overlayfs_fstab_entry(const android::fs_mgr::FstabEntry& entry
 // File name used to track if encryption was interrupted, leading to a known bad fs state
 std::string fs_mgr_metadata_encryption_in_progress_file_name(
         const android::fs_mgr::FstabEntry& entry);
+
+// Returns the ideal block size for make_f2fs. Returns -1 on failure.
+int fs_mgr_f2fs_ideal_block_size();

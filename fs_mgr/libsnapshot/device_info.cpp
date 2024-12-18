@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "device_info.h"
+#include "scratch_super.h"
 
 #include <android-base/logging.h>
 #include <fs_mgr.h>
@@ -37,8 +38,24 @@ constexpr bool kIsRecovery = true;
 constexpr bool kIsRecovery = false;
 #endif
 
+DeviceInfo::DeviceInfo() {
+    std::string scratch_device = android::snapshot::GetScratchOtaMetadataPartition();
+    if (!scratch_device.empty()) {
+        std::string scratch_metadata =
+                android::snapshot::MapScratchOtaMetadataPartition(scratch_device);
+        if (!scratch_metadata.empty()) {
+            SetMetadataDir(scratch_metadata);
+            SetTempMetadata();
+        }
+    }
+}
+
 std::string DeviceInfo::GetMetadataDir() const {
-    return "/metadata/ota"s;
+    return metadata_dir_;
+}
+
+void DeviceInfo::SetMetadataDir(const std::string& value) {
+    metadata_dir_ = value;
 }
 
 std::string DeviceInfo::GetSlotSuffix() const {

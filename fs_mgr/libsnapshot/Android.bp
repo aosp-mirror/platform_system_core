@@ -15,6 +15,7 @@
 //
 
 package {
+    default_team: "trendy_team_android_kernel",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
@@ -91,6 +92,7 @@ filegroup {
         "partition_cow_creator.cpp",
         "return.cpp",
         "utility.cpp",
+        "scratch_super.cpp",
     ],
 }
 
@@ -110,6 +112,9 @@ cc_library_static {
     static_libs: [
         "libfs_mgr_binder",
     ],
+    whole_static_libs: [
+        "libselinux",
+    ],
 }
 
 cc_library {
@@ -128,6 +133,9 @@ cc_library {
     static_libs: [
         "libsnapshot_cow",
     ],
+    whole_static_libs: [
+        "libselinux",
+    ],
 }
 
 cc_library_static {
@@ -142,6 +150,7 @@ cc_library_static {
     ],
     static_libs: [
         "libfs_mgr",
+        "libselinux",
     ],
 }
 
@@ -158,6 +167,9 @@ cc_library_static {
     ],
     static_libs: [
         "libfs_mgr",
+    ],
+    whole_static_libs: [
+        "libselinux",
     ],
 }
 
@@ -241,6 +253,7 @@ cc_library_static {
         "libfs_mgr",
         "libgmock",
         "libgtest",
+        "libselinux",
     ],
 }
 
@@ -283,7 +296,6 @@ cc_defaults {
     ],
     auto_gen_config: true,
     require_root: true,
-    compile_multilib: "first",
 }
 
 cc_test {
@@ -296,6 +308,15 @@ cc_test {
         "vts",
         "general-tests",
     ],
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
     test_options: {
         min_shipping_api_level: 30,
     },
@@ -313,6 +334,7 @@ cc_test {
     test_suites: [
         "general-tests",
     ],
+    compile_multilib: "64",
     test_options: {
         // Legacy VAB launched in Android R.
         min_shipping_api_level: 30,
@@ -351,6 +373,7 @@ cc_binary {
     ],
     srcs: [
         "snapshotctl.cpp",
+        "scratch_super.cpp",
     ],
     static_libs: [
         "libbrotli",

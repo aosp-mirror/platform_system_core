@@ -87,6 +87,7 @@ class UserSnapshotServer {
                                               const std::string& cow_device_path,
                                               const std::string& backing_device,
                                               const std::string& base_path_merge,
+                                              std::optional<uint32_t> num_worker_threads,
                                               bool o_direct = false,
                                               uint32_t cow_op_merge_size = 0);
     bool StartHandler(const std::string& misc_name);

@@ -48,50 +48,69 @@ using android::base::unique_fd;
 extern "C" bool __linker_enable_fallback_allocator();
 extern "C" void __linker_disable_fallback_allocator();
 
-// This is incredibly sketchy to do inside of a signal handler, especially when libbacktrace
-// uses the C++ standard library throughout, but this code runs in the linker, so we'll be using
-// the linker's malloc instead of the libc one. Switch it out for a replacement, just in case.
-//
-// This isn't the default method of dumping because it can fail in cases such as address space
-// exhaustion.
+// This file implements a fallback path for processes that do not allow the
+// normal fork and exec of crash_dump to handle crashes/unwinds.
+// The issue is that all of this happens from within a signal handler, which
+// can cause problems since this code uses the linker allocator which is not
+// thread safe. In order to avoid any problems allocating, the code calls
+// a function to switch to use a fallback allocator in the linker that will
+// only be used for the current thread. All of the libunwindstack code does
+// allocations using C++ stl, but should be fine since the code runs in the
+// linker and should use the fallback handler.
+
+// This method can still fail if the virtual space is exhausted on a 32 bit
+// process or mmap failing due to hitting the maximum number of maps (65535
+// total maps) on a 64 bit process.
+
+// Class to handle automatically turning on and off the fallback allocator.
+class ScopedUseFallbackAllocator {
+ public:
+  ScopedUseFallbackAllocator() { Enable(); }
+
+  ~ScopedUseFallbackAllocator() { Disable(); }
+
+  bool Enable() {
+    if (!enabled_) {
+      enabled_ = __linker_enable_fallback_allocator();
+      if (!enabled_) {
+        async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                              "Unable to enable fallback allocator, already in use.");
+      }
+    }
+    return enabled_;
+  }
+
+  void Disable() {
+    if (enabled_) {
+      __linker_disable_fallback_allocator();
+      enabled_ = false;
+    }
+  }
+
+  bool enabled() { return enabled_; }
+
+ private:
+  bool enabled_ = false;
+};
+
 static void debuggerd_fallback_trace(int output_fd, ucontext_t* ucontext) {
-  if (!__linker_enable_fallback_allocator()) {
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "fallback allocator already in use");
-    return;
-  }
+  std::unique_ptr<unwindstack::Regs> regs;
 
-  {
-    std::unique_ptr<unwindstack::Regs> regs;
+  ThreadInfo thread;
+  thread.pid = getpid();
+  thread.tid = gettid();
+  thread.thread_name = get_thread_name(gettid());
+  thread.registers.reset(
+      unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
 
-    ThreadInfo thread;
-    thread.pid = getpid();
-    thread.tid = gettid();
-    thread.thread_name = get_thread_name(gettid());
-    thread.registers.reset(
-        unwindstack::Regs::CreateFromUcontext(unwindstack::Regs::CurrentArch(), ucontext));
-
-    // Do not use the thread cache here because it will call pthread_key_create
-    // which doesn't work in linker code. See b/189803009.
-    // Use a normal cached object because the thread is stopped, and there
-    // is no chance of data changing between reads.
-    auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
-    // TODO: Create this once and store it in a global?
-    unwindstack::AndroidLocalUnwinder unwinder(process_memory);
-    dump_backtrace_thread(output_fd, &unwinder, thread);
-  }
-  __linker_disable_fallback_allocator();
-}
-
-static void debuggerd_fallback_tombstone(int output_fd, int proto_fd, ucontext_t* ucontext,
-                                         siginfo_t* siginfo, void* abort_message) {
-  if (!__linker_enable_fallback_allocator()) {
-    async_safe_format_log(ANDROID_LOG_ERROR, "libc", "fallback allocator already in use");
-    return;
-  }
-
-  engrave_tombstone_ucontext(output_fd, proto_fd, reinterpret_cast<uintptr_t>(abort_message),
-                             siginfo, ucontext);
-  __linker_disable_fallback_allocator();
+  // Do not use the thread cache here because it will call pthread_key_create
+  // which doesn't work in linker code. See b/189803009.
+  // Use a normal cached object because the thread is stopped, and there
+  // is no chance of data changing between reads.
+  auto process_memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
+  // TODO: Create this once and store it in a global?
+  unwindstack::AndroidLocalUnwinder unwinder(process_memory);
+  dump_backtrace_thread(output_fd, &unwinder, thread);
 }
 
 static bool forward_output(int src_fd, int dst_fd, pid_t expected_tid) {
@@ -154,6 +173,11 @@ static std::pair<pid_t, int> unpack_thread_fd(uint64_t value) {
 }
 
 static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
+  ScopedUseFallbackAllocator allocator;
+  if (!allocator.enabled()) {
+    return;
+  }
+
   static std::atomic<uint64_t> trace_output(pack_thread_fd(-1, -1));
 
   if (info->si_value.sival_ptr == kDebuggerdFallbackSivalPtrRequestDump) {
@@ -180,6 +204,11 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
     } else {
       async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to write to output fd");
     }
+
+    // Stop using the fallback allocator before the close. This will prevent
+    // a race condition where the thread backtracing all of the threads tries
+    // to re-acquire the fallback allocator.
+    allocator.Disable();
 
     close(fd);
     return;
@@ -210,10 +239,15 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
 
   // Send a signal to all of our siblings, asking them to dump their stack.
   pid_t current_tid = gettid();
-  if (!iterate_tids(current_tid, [&output_fd, &current_tid](pid_t tid) {
+  if (!iterate_tids(current_tid, [&allocator, &output_fd, &current_tid](pid_t tid) {
         if (current_tid == tid) {
           return;
         }
+
+        if (!allocator.enabled()) {
+          return;
+        }
+
         // Use a pipe, to be able to detect situations where the thread gracefully exits before
         // receiving our signal.
         unique_fd pipe_read, pipe_write;
@@ -233,22 +267,29 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
           return;
         }
 
+        // Disable our use of the fallback allocator while the target thread
+        // is getting the backtrace.
+        allocator.Disable();
+
         siginfo_t siginfo = {};
         siginfo.si_code = SI_QUEUE;
         siginfo.si_value.sival_ptr = kDebuggerdFallbackSivalPtrRequestDump;
         siginfo.si_pid = getpid();
         siginfo.si_uid = getuid();
 
-        if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, BIONIC_SIGNAL_DEBUGGER, &siginfo) != 0) {
+        if (syscall(__NR_rt_tgsigqueueinfo, getpid(), tid, BIONIC_SIGNAL_DEBUGGER, &siginfo) == 0) {
+          if (!forward_output(pipe_read.get(), output_fd.get(), tid)) {
+            async_safe_format_log(ANDROID_LOG_ERROR, "libc",
+                                  "timeout expired while waiting for thread %d to dump", tid);
+          }
+        } else {
           async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to send trace signal to %d: %s",
                                 tid, strerror(errno));
-          return;
         }
 
-        bool success = forward_output(pipe_read.get(), output_fd.get(), tid);
-        if (!success) {
-          async_safe_format_log(ANDROID_LOG_ERROR, "libc",
-                                "timeout expired while waiting for thread %d to dump", tid);
+        // The thread should be finished now, so try and re-enable the fallback allocator.
+        if (!allocator.Enable()) {
+          return;
         }
 
         // Regardless of whether the poll succeeds, check to see if the thread took fd ownership.
@@ -260,14 +301,15 @@ static void trace_handler(siginfo_t* info, ucontext_t* ucontext) {
             close(fd);
           }
         }
-
-        return;
       })) {
     async_safe_format_log(ANDROID_LOG_ERROR, "libc", "failed to open /proc/%d/task: %s",
                           current_tid, strerror(errno));
   }
 
-  dump_backtrace_footer(output_fd.get());
+  if (allocator.enabled()) {
+    dump_backtrace_footer(output_fd.get());
+  }
+
   tombstoned_notify_completion(tombstone_socket.get());
 }
 
@@ -295,7 +337,13 @@ static void crash_handler(siginfo_t* info, ucontext_t* ucontext, void* abort_mes
   unique_fd tombstone_socket, output_fd, proto_fd;
   bool tombstoned_connected = tombstoned_connect(getpid(), &tombstone_socket, &output_fd, &proto_fd,
                                                  kDebuggerdTombstoneProto);
-  debuggerd_fallback_tombstone(output_fd.get(), proto_fd.get(), ucontext, info, abort_message);
+  {
+    ScopedUseFallbackAllocator allocator;
+    if (allocator.enabled()) {
+      engrave_tombstone_ucontext(output_fd.get(), proto_fd.get(),
+                                 reinterpret_cast<uintptr_t>(abort_message), info, ucontext);
+    }
+  }
   if (tombstoned_connected) {
     tombstoned_notify_completion(tombstone_socket.get());
   }

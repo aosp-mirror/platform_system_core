@@ -15,6 +15,7 @@
  *
  */
 #include <android-base/file.h>
+#include <android-base/unique_fd.h>
 #include "fastboot.h"
 #include "socket.h"
 #include "socket_mock_fuzz.h"
@@ -25,6 +26,7 @@
 #include <fuzzer/FuzzedDataProvider.h>
 
 using namespace std;
+using android::base::unique_fd;
 
 const size_t kYearMin = 2000;
 const size_t kYearMax = 2127;
@@ -255,7 +257,7 @@ void FastbootFuzzer::InvokeVendorBootImgUtils(const uint8_t* data, size_t size) 
     uint64_t ramdisk_size =
             fdp_->ConsumeBool() ? content_ramdisk_fd.size() : fdp_->ConsumeIntegral<uint64_t>();
     (void)replace_vendor_ramdisk(vendor_boot_fd, vendor_boot_size, ramdisk_name, ramdisk_fd,
-                                 ramdisk_size);
+                                 ramdisk_size, unique_fd(-1), 0);
     close(vendor_boot_fd);
     close(ramdisk_fd);
 }

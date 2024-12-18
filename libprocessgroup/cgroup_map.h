@@ -18,15 +18,17 @@
 
 #include <sys/types.h>
 
+#include <cstdint>
 #include <string>
 
-#include <android/cgrouprc.h>
+#include <processgroup/cgroup_controller.h>
+#include <processgroup/util.h>
 
-// Convenient wrapper of an ACgroupController pointer.
+// Convenient wrapper of a CgroupController pointer.
 class CgroupControllerWrapper {
   public:
     // Does not own controller
-    explicit CgroupControllerWrapper(const ACgroupController* controller)
+    explicit CgroupControllerWrapper(const CgroupController* controller)
         : controller_(controller) {}
 
     uint32_t version() const;
@@ -47,7 +49,7 @@ class CgroupControllerWrapper {
         MISSING = 2,
     };
 
-    const ACgroupController* controller_ = nullptr;
+    const CgroupController* controller_ = nullptr; // CgroupMap owns the object behind this pointer
     ControllerState state_ = ControllerState::UNKNOWN;
 };
 
@@ -56,11 +58,12 @@ class CgroupMap {
     static CgroupMap& GetInstance();
     CgroupControllerWrapper FindController(const std::string& name) const;
     CgroupControllerWrapper FindControllerByPath(const std::string& path) const;
-    int ActivateControllers(const std::string& path) const;
+    bool ActivateControllers(const std::string& path) const;
 
   private:
     bool loaded_ = false;
+    CgroupDescriptorMap descriptors_;
     CgroupMap();
-    bool LoadRcFile();
+    bool LoadDescriptors();
     void Print() const;
 };

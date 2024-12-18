@@ -29,14 +29,6 @@ extern "C" {
  */
 extern bool cpusets_enabled();
 
-/*
- * Check if Linux kernel enables SCHEDTUNE feature (only available in Android
- * common kernel or Linaro LSK, not in mainline Linux as of v4.9)
- *
- * Return value: 1 if Linux kernel CONFIG_CGROUP_SCHEDTUNE=y; 0 otherwise.
- */
-extern bool schedboost_enabled();
-
 /* Keep in sync with THREAD_GROUP_* in frameworks/base/core/java/android/os/Process.java */
 typedef enum {
     SP_DEFAULT = -1,

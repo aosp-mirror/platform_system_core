@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <initializer_list>
 #include <span>
@@ -24,23 +23,20 @@
 #include <string_view>
 #include <vector>
 
-__BEGIN_DECLS
-
-static constexpr const char* CGROUPV2_HIERARCHY_NAME = "cgroup2";
-[[deprecated]] static constexpr const char* CGROUPV2_CONTROLLER_NAME = "cgroup2";
+static constexpr std::string CGROUPV2_HIERARCHY_NAME = "cgroup2";
 
 bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
+// Provides the path for an attribute in a specific process group
+// Returns false in case of error, true in case of success
 bool CgroupGetAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
 
 bool SetTaskProfiles(pid_t tid, const std::vector<std::string>& profiles,
                      bool use_fd_cache = false);
 bool SetProcessProfiles(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
 bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles);
-
-__END_DECLS
 
 bool SetTaskProfiles(pid_t tid, std::initializer_list<std::string_view> profiles,
                      bool use_fd_cache = false);
@@ -51,13 +47,10 @@ bool SetTaskProfiles(pid_t tid, std::span<const std::string_view> profiles,
 bool SetProcessProfiles(uid_t uid, pid_t pid, std::span<const std::string_view> profiles);
 #endif
 
-__BEGIN_DECLS
 
 #ifndef __ANDROID_VNDK__
 
 bool SetProcessProfilesCached(uid_t uid, pid_t pid, const std::vector<std::string>& profiles);
-
-static constexpr const char* CGROUPS_RC_PATH = "/dev/cgroup_info/cgroup.rc";
 
 bool UsePerAppMemcg();
 
@@ -90,14 +83,8 @@ bool setProcessGroupLimit(uid_t uid, pid_t initialPid, int64_t limitInBytes);
 
 void removeAllEmptyProcessGroups(void);
 
-// Provides the path for an attribute in a specific process group
-// Returns false in case of error, true in case of success
-bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
-
 // Check if a profile can be applied without failing.
 // Returns true if it can be applied without failing, false otherwise
 bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, pid_t pid);
 
 #endif // __ANDROID_VNDK__
-
-__END_DECLS

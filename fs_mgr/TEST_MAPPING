@@ -27,15 +27,14 @@
     },
     {
       "name": "cow_api_test"
-    },
+    }
+  ],
+  "postsubmit": [
     {
       "name": "snapuserd_test"
     }
   ],
   "kernel-presubmit": [
-    {
-      "name": "adb-remount-sh"
-    },
     {
       "name": "libdm_test"
     },

@@ -35,6 +35,7 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <fs_mgr/file_wait.h>
+#include <libdm/dm.h>
 #include <snapuserd/snapuserd_client.h>
 
 namespace android {
@@ -310,6 +311,11 @@ double SnapuserdClient::GetMergePercent() {
     }
     std::string response = Receivemsg();
 
+    // If server socket disconnects most likely because of device reboot,
+    // then we just return 0.
+    if (response.empty()) {
+        return 0.0;
+    }
     return std::stod(response);
 }
 
@@ -333,7 +339,21 @@ bool SnapuserdClient::QueryUpdateVerification() {
 }
 
 std::string SnapuserdClient::GetDaemonAliveIndicatorPath() {
-    return "/metadata/ota/" + std::string(kDaemonAliveIndicator);
+    std::string metadata_dir;
+    std::string temp_metadata_mnt = "/mnt/scratch_ota_metadata_super";
+
+    auto& dm = ::android::dm::DeviceMapper::Instance();
+    auto partition_name = android::base::Basename(temp_metadata_mnt);
+
+    bool invalid_partition = (dm.GetState(partition_name) == dm::DmDeviceState::INVALID);
+    std::string temp_device;
+    if (!invalid_partition && dm.GetDmDevicePathByName(partition_name, &temp_device)) {
+        metadata_dir = temp_metadata_mnt + "/" + "ota/";
+    } else {
+        metadata_dir = "/metadata/ota/";
+    }
+
+    return metadata_dir + std::string(kDaemonAliveIndicator);
 }
 
 bool SnapuserdClient::IsTransitionedDaemonReady() {

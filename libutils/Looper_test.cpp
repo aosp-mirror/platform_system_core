@@ -410,6 +410,52 @@ TEST_F(LooperTest, AddFd_WhenNoCallbackAndAllowNonCallbacksIsFalse_ReturnsError)
             << "addFd should return -1 because arguments were invalid";
 }
 
+class LooperCallbackStub final : public LooperCallback {
+  public:
+    LooperCallbackStub(std::function<int()> callback) : mCallback{callback} {}
+
+    int handleEvent(int /*fd*/, int /*events*/, void* /*data*/) override { return mCallback(); }
+
+  private:
+    std::function<int()> mCallback;
+};
+
+TEST_F(LooperTest, getFdStateDebug_WhenFdIsInRequests_ReturnsTrue) {
+    Pipe pipe;
+    const int fd = pipe.receiveFd;
+    constexpr int expectedIdent{Looper::POLL_CALLBACK};
+    sp<LooperCallback> expectedCallback =
+            sp<LooperCallbackStub>::make([]() constexpr -> int { return 0; });
+    void* expectedData = this;
+
+    EXPECT_EQ(1, mLooper->addFd(fd, expectedIdent, Looper::EVENT_INPUT, expectedCallback,
+                                expectedData));
+
+    int ident;
+    int events;
+    sp<LooperCallback> callback;
+    void* data;
+
+    EXPECT_TRUE(mLooper->getFdStateDebug(fd, &ident, &events, &callback, &data));
+
+    EXPECT_EQ(ident, expectedIdent);
+    EXPECT_EQ(events, Looper::EVENT_INPUT);
+    EXPECT_EQ(callback, expectedCallback);
+    EXPECT_EQ(data, expectedData);
+}
+
+TEST_F(LooperTest, getFdStateDebug_WhenFdIsNotInRequests_ReturnsFalse) {
+    Pipe pipe;
+    const int notAddedFd = pipe.receiveFd;
+
+    int ident;
+    int events;
+    sp<LooperCallback> callback;
+    void* data;
+
+    EXPECT_FALSE(mLooper->getFdStateDebug(notAddedFd, &ident, &events, &callback, &data));
+}
+
 TEST_F(LooperTest, RemoveFd_WhenCallbackNotAdded_ReturnsZero) {
     int result = mLooper->removeFd(1);
 
