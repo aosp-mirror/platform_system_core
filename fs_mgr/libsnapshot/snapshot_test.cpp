@@ -1345,6 +1345,7 @@ class SnapshotUpdateTest : public SnapshotTest {
 
 TEST_F(SnapshotUpdateTest, SuperOtaMetadataTest) {
     auto info = new TestDeviceInfo(fake_super);
+    ASSERT_TRUE(CleanupScratchOtaMetadataIfPresent(info));
     ASSERT_TRUE(CreateScratchOtaMetadataOnSuper(info));
     std::string scratch_device = GetScratchOtaMetadataPartition();
     ASSERT_NE(scratch_device, "");
