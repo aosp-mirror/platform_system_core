@@ -67,6 +67,7 @@ class ServiceParser : public SectionParser {
     Result<void> ParseRestartPeriod(std::vector<std::string>&& args);
     Result<void> ParseSeclabel(std::vector<std::string>&& args);
     Result<void> ParseSetenv(std::vector<std::string>&& args);
+    Result<void> ParseSharedKallsyms(std::vector<std::string>&& args);
     Result<void> ParseShutdown(std::vector<std::string>&& args);
     Result<void> ParseSigstop(std::vector<std::string>&& args);
     Result<void> ParseSocket(std::vector<std::string>&& args);
