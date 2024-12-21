@@ -402,6 +402,8 @@ noinline int do_action(const char* arg) {
     return EXIT_SUCCESS;
 }
 
+}  // extern "C"
+
 int main(int argc, char** argv) {
 #if defined(STATIC_CRASHER)
     debuggerd_callbacks_t callbacks = {
@@ -427,5 +429,3 @@ int main(int argc, char** argv) {
 
     return usage();
 }
-
-};
