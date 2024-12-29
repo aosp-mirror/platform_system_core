@@ -34,6 +34,7 @@
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
 #include <processgroup/processgroup.h>
 #include <selinux/selinux.h>
@@ -672,6 +673,14 @@ Result<void> Service::Start() {
         }
     }
 
+    if (shared_kallsyms_file_) {
+        if (auto result = CreateSharedKallsymsFd(); result.ok()) {
+            descriptors.emplace_back(std::move(*result));
+        } else {
+            LOG(INFO) << "Could not obtain a copy of /proc/kallsyms: " << result.error();
+        }
+    }
+
     pid_t pid = -1;
     if (namespaces_.flags) {
         pid = clone(nullptr, nullptr, namespaces_.flags | SIGCHLD, nullptr);
@@ -833,6 +842,35 @@ unique_fd Service::CreateSigchldFd() {
     }
 
     return unique_fd(signalfd(-1, &mask, SFD_CLOEXEC));
+}
+
+void Service::OpenAndSaveStaticKallsymsFd() {
+    Result<Descriptor> result = CreateSharedKallsymsFd();
+    if (!result.ok()) {
+      LOG(ERROR) << result.error();
+    }
+}
+
+// This function is designed to be called in two situations:
+// 1) early during second_stage init, to open and save the shared fd as a
+//    static (see OpenAndSaveStaticKallsymsFd).
+// 2) whenever a service requesting a copy of the fd is being started, at which
+//    point it will get a duplicated copy of the static fd.
+Result<Descriptor> Service::CreateSharedKallsymsFd() {
+    static constexpr char kallsyms_path[] = "/proc/kallsyms";
+    static int static_fd = open(kallsyms_path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (static_fd < 0) {
+        return ErrnoError() << "failed to open " << kallsyms_path;
+    }
+
+    unique_fd fd{fcntl(static_fd, F_DUPFD_CLOEXEC, /*min_fd=*/3)};
+    if (fd < 0) {
+        return ErrnoError() << "failed fcntl(F_DUPFD_CLOEXEC)";
+    }
+
+    // Use the same environment variable as if the service specified
+    // "file /proc/kallsyms r".
+    return Descriptor(std::string(ANDROID_FILE_ENV_PREFIX) + kallsyms_path, std::move(fd));
 }
 
 void Service::SetStartedInFirstStage(pid_t pid) {

@@ -3072,6 +3072,18 @@ int main(int argc, char** argv) {
     ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
     gflags::ParseCommandLineFlags(&argc, &argv, false);
 
+    // During incremental flashing, snapshot updates are in progress.
+    //
+    // When snapshot update is in-progress, snapuserd daemon
+    // will be up and running. These tests will start and stop the daemon
+    // thereby interfering with the update and snapshot-merge progress.
+    // Hence, wait until the update is complete.
+    auto sm = android::snapshot::SnapshotManager::New();
+    while (sm->IsUserspaceSnapshotUpdateInProgress()) {
+        LOG(INFO) << "Snapshot update is in progress. Waiting...";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
     bool vab_legacy = false;
     if (FLAGS_force_mode == "vab-legacy") {
         vab_legacy = true;
