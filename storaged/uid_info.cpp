@@ -23,13 +23,13 @@ using namespace android::os::storaged;
 
 status_t UidInfo::writeToParcel(Parcel* parcel) const {
     parcel->writeInt32(uid);
-    parcel->writeCString(name.c_str());
+    parcel->writeString8(String8(name.c_str()));
     parcel->write(&io, sizeof(io));
 
     parcel->writeInt32(tasks.size());
     for (const auto& task_it : tasks) {
         parcel->writeInt32(task_it.first);
-        parcel->writeCString(task_it.second.comm.c_str());
+        parcel->writeString8(String8(task_it.second.comm.c_str()));
         parcel->write(&task_it.second.io, sizeof(task_it.second.io));
     }
     return OK;
@@ -37,14 +37,14 @@ status_t UidInfo::writeToParcel(Parcel* parcel) const {
 
 status_t UidInfo::readFromParcel(const Parcel* parcel) {
     uid = parcel->readInt32();
-    name = parcel->readCString();
+    name = parcel->readString8().c_str();
     parcel->read(&io, sizeof(io));
 
     uint32_t tasks_size = parcel->readInt32();
     for (uint32_t i = 0; i < tasks_size; i++) {
         task_info task;
         task.pid = parcel->readInt32();
-        task.comm = parcel->readCString();
+        task.comm = parcel->readString8().c_str();
         parcel->read(&task.io, sizeof(task.io));
         tasks[task.pid] = task;
     }
