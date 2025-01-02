@@ -655,6 +655,23 @@ bool ImageManager::RemoveAllImages() {
     return ok && RemoveAllMetadata(metadata_dir_);
 }
 
+bool ImageManager::DisableAllImages() {
+    if (!MetadataExists(metadata_dir_)) {
+        return true;
+    }
+    auto metadata = OpenMetadata(metadata_dir_);
+    if (!metadata) {
+        return false;
+    }
+
+    bool ok = true;
+    for (const auto& partition : metadata->partitions) {
+        auto partition_name = GetPartitionName(partition);
+        ok &= DisableImage(partition_name);
+    }
+    return ok;
+}
+
 bool ImageManager::Validate() {
     auto metadata = OpenMetadata(metadata_dir_);
     if (!metadata) {
