@@ -21,6 +21,7 @@ package {
 
 cc_library_static {
     name: "libprocessgroup_util",
+    cpp_std: "gnu++23",
     vendor_available: true,
     product_available: true,
     ramdisk_available: true,
@@ -47,7 +48,6 @@ cc_library_static {
     static_libs: [
         "libjsoncpp",
     ],
-    defaults: ["libprocessgroup_build_flags_cc"],
 }
 
 cc_test {
