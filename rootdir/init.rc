@@ -569,6 +569,9 @@ on post-fs
     chown root log /proc/vmallocinfo
     chmod 0440 /proc/vmallocinfo
 
+    chown root log /proc/allocinfo
+    chmod 0440 /proc/allocinfo
+
     chown root log /proc/slabinfo
     chmod 0440 /proc/slabinfo
 
