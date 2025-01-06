@@ -150,8 +150,8 @@ static bool isSystemApp(uid_t uid) {
     return uid < AID_APP_START;
 }
 
-std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid) {
-    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation()) {
+std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid, bool v2_path) {
+    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation() && v2_path) {
         if (isSystemApp(uid))
             return StringPrintf("%s/system/uid_%u", root_cgroup_path, uid);
         else
@@ -160,14 +160,14 @@ std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid) {
     return StringPrintf("%s/uid_%u", root_cgroup_path, uid);
 }
 
-std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid) {
-    const std::string uid_path = ConvertUidToPath(root_cgroup_path, uid);
+std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid, bool v2_path) {
+    const std::string uid_path = ConvertUidToPath(root_cgroup_path, uid, v2_path);
     return StringPrintf("%s/pid_%d", uid_path.c_str(), pid);
 }
 
 bool ProfileAttribute::GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const {
     if (controller()->version() == 2) {
-        const std::string cgroup_path = ConvertUidPidToPath(controller()->path(), uid, pid);
+        const std::string cgroup_path = ConvertUidPidToPath(controller()->path(), uid, pid, true);
         *path = cgroup_path + "/" + file_name();
         return true;
     }
@@ -199,7 +199,7 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
         return true;
     }
 
-    const std::string cgroup_path = ConvertUidToPath(controller()->path(), uid);
+    const std::string cgroup_path = ConvertUidToPath(controller()->path(), uid, true);
     *path = cgroup_path + "/" + file_name();
     return true;
 }

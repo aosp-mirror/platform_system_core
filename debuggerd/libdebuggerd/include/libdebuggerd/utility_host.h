@@ -29,3 +29,8 @@ constexpr size_t kTagGranuleSize = 16;
 // Number of rows and columns to display in an MTE tag dump.
 constexpr size_t kNumTagColumns = 16;
 constexpr size_t kNumTagRows = 16;
+
+// Encode all non-ascii values and also ascii values that are not printable.
+std::string oct_encode_non_ascii_printable(const std::string& data);
+// Encode any value that fails isprint(), includes encoding chars like '\n' and '\t'.
+std::string oct_encode_non_printable(const std::string& data);

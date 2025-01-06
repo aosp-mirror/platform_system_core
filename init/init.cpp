@@ -315,8 +315,7 @@ Parser CreateApexConfigParser(ActionManager& action_manager, ServiceList& servic
         if (apex_info_list.has_value()) {
             std::vector<std::string> subcontext_apexes;
             for (const auto& info : apex_info_list->getApexInfo()) {
-                if (info.hasPreinstalledModulePath() &&
-                    subcontext->PathMatchesSubcontext(info.getPreinstalledModulePath())) {
+                if (subcontext->PartitionMatchesSubcontext(info.getPartition())) {
                     subcontext_apexes.push_back(info.getModuleName());
                 }
             }
@@ -1055,6 +1054,14 @@ int SecondStageMain(int argc, char** argv) {
             SetProperty(gsi::kDsuSlotProp, dsu_slot);
         }
     }
+
+    // This needs to happen before SetKptrRestrictAction, as we are trying to
+    // open /proc/kallsyms while still being allowed to see the full addresses
+    // (since init holds CAP_SYSLOG, and Linux boots with kptr_restrict=0). The
+    // address visibility through the saved fd (more specifically, the backing
+    // open file description) will then be remembered by the kernel for the rest
+    // of its lifetime, even after we raise the kptr_restrict.
+    Service::OpenAndSaveStaticKallsymsFd();
 
     am.QueueBuiltinAction(SetupCgroupsAction, "SetupCgroups");
     am.QueueBuiltinAction(SetKptrRestrictAction, "SetKptrRestrict");

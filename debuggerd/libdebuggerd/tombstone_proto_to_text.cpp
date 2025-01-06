@@ -17,11 +17,12 @@
 #include <libdebuggerd/tombstone_proto_to_text.h>
 #include <libdebuggerd/utility_host.h>
 
+#include <ctype.h>
 #include <inttypes.h>
 
-#include <charconv>
+#include <algorithm>
 #include <functional>
-#include <limits>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -32,6 +33,7 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
+#include "libdebuggerd/utility_host.h"
 #include "tombstone.pb.h"
 
 using android::base::StringAppendF;
@@ -418,27 +420,6 @@ static void print_memory_maps(CallbackType callback, const Tombstone& tombstone)
   }
 }
 
-static std::string oct_encode(const std::string& data) {
-  std::string oct_encoded;
-  oct_encoded.reserve(data.size());
-
-  // N.B. the unsigned here is very important, otherwise e.g. \255 would render as
-  // \-123 (and overflow our buffer).
-  for (unsigned char c : data) {
-    if (isprint(c)) {
-      oct_encoded += c;
-    } else {
-      std::string oct_digits("\\\0\0\0", 4);
-      // char is encodable in 3 oct digits
-      static_assert(std::numeric_limits<unsigned char>::max() <= 8 * 8 * 8);
-      auto [ptr, ec] = std::to_chars(oct_digits.data() + 1, oct_digits.data() + 4, c, 8);
-      oct_digits.resize(ptr - oct_digits.data());
-      oct_encoded += oct_digits;
-    }
-  }
-  return oct_encoded;
-}
-
 static void print_main_thread(CallbackType callback, SymbolizeCallbackType symbolize,
                               const Tombstone& tombstone, const Thread& thread) {
   print_thread_header(callback, tombstone, thread, true);
@@ -483,8 +464,8 @@ static void print_main_thread(CallbackType callback, SymbolizeCallbackType symbo
   }
 
   for (const auto& crash_detail : tombstone.crash_details()) {
-    std::string oct_encoded_name = oct_encode(crash_detail.name());
-    std::string oct_encoded_data = oct_encode(crash_detail.data());
+    std::string oct_encoded_name = oct_encode_non_printable(crash_detail.name());
+    std::string oct_encoded_data = oct_encode_non_printable(crash_detail.data());
     CBL("Extra crash detail: %s: '%s'", oct_encoded_name.c_str(), oct_encoded_data.c_str());
   }
 
@@ -613,7 +594,7 @@ bool tombstone_proto_to_text(const Tombstone& tombstone, CallbackType callback,
   if (tombstone.page_size() != 4096) {
     CBL("Page size: %d bytes", tombstone.page_size());
   } else if (tombstone.has_been_16kb_mode()) {
-    CBL("Has been in 16kb mode: yes");
+    CBL("Has been in 16 KB mode before: yes");
   }
 
   // Process header

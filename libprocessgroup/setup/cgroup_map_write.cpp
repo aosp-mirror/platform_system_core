@@ -27,9 +27,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <optional>
-
-#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <processgroup/cgroup_descriptor.h>
 #include <processgroup/processgroup.h>
@@ -222,7 +219,7 @@ static bool SetupCgroup(const CgroupDescriptor& descriptor) {
     const CgroupController* controller = descriptor.controller();
 
     if (controller->version() == 2) {
-        if (!strcmp(controller->name(), CGROUPV2_HIERARCHY_NAME)) {
+        if (controller->name() == CGROUPV2_HIERARCHY_NAME) {
             return MountV2CgroupController(descriptor);
         } else {
             return ActivateV2CgroupController(descriptor);
@@ -258,39 +255,6 @@ void CgroupDescriptor::set_mounted(bool mounted) {
         flags &= ~CGROUPRC_CONTROLLER_FLAG_MOUNTED;
     }
     controller_.set_flags(flags);
-}
-
-static std::optional<bool> MGLRUDisabled() {
-    const std::string file_name = "/sys/kernel/mm/lru_gen/enabled";
-    std::string content;
-    if (!android::base::ReadFileToString(file_name, &content)) {
-        PLOG(ERROR) << "Failed to read MGLRU state from " << file_name;
-        return {};
-    }
-
-    return content == "0x0000";
-}
-
-static std::optional<bool> MEMCGDisabled(const CgroupDescriptorMap& descriptors) {
-    std::string cgroup_v2_root = CGROUP_V2_ROOT_DEFAULT;
-    const auto it = descriptors.find(CGROUPV2_HIERARCHY_NAME);
-    if (it == descriptors.end()) {
-        LOG(WARNING) << "No Cgroups2 path found in cgroups.json. Vendor has modified Android, and "
-                     << "kernel memory use will be higher than intended.";
-    } else if (it->second.controller()->path() != cgroup_v2_root) {
-        cgroup_v2_root = it->second.controller()->path();
-    }
-
-    const std::string file_name = cgroup_v2_root + "/cgroup.controllers";
-    std::string content;
-    if (!android::base::ReadFileToString(file_name, &content)) {
-        PLOG(ERROR) << "Failed to read cgroup controllers from " << file_name;
-        return {};
-    }
-
-    // If we've forced memcg to v2 and it's not available, then it could only have been disabled
-    // on the kernel command line (GKI sets CONFIG_MEMCG).
-    return content.find("memory") == std::string::npos;
 }
 
 static bool CreateV2SubHierarchy(const std::string& path, const CgroupDescriptorMap& descriptors) {
@@ -332,17 +296,6 @@ bool CgroupSetup() {
         if (!SetupCgroup(descriptor)) {
             // issue a warning and proceed with the next cgroup
             LOG(WARNING) << "Failed to setup " << name << " cgroup";
-        }
-    }
-
-    if (android::libprocessgroup_flags::force_memcg_v2()) {
-        if (MGLRUDisabled().value_or(false)) {
-            LOG(WARNING) << "Memcg forced to v2 hierarchy with MGLRU disabled! "
-                         << "Global reclaim performance will suffer.";
-        }
-        if (MEMCGDisabled(descriptors).value_or(false)) {
-            LOG(WARNING) << "Memcg forced to v2 hierarchy while memcg is disabled by kernel "
-                         << "command line!";
         }
     }
 

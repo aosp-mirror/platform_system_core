@@ -39,11 +39,13 @@ TEST(init, oneshot_on) {
 
     // Bootanim exits quickly when the device is fully booted, so check that it goes back to the
     // 'restarting' state that non-oneshot services enter once they've restarted.
-    EXPECT_TRUE(WaitForProperty("init.svc.bootanim", "restarting", 10s));
+    EXPECT_TRUE(WaitForProperty("init.svc.bootanim", "restarting", 10s))
+            << "Value is: " << GetProperty("init.svc.bootanim", "");
 
     SetProperty("ctl.oneshot_on", "bootanim");
     SetProperty("ctl.start", "bootanim");
 
     // Now that oneshot is enabled again, bootanim should transition into the 'stopped' state.
-    EXPECT_TRUE(WaitForProperty("init.svc.bootanim", "stopped", 10s));
+    EXPECT_TRUE(WaitForProperty("init.svc.bootanim", "stopped", 10s))
+            << "Value is: " << GetProperty("init.svc.bootanim", "");
 }

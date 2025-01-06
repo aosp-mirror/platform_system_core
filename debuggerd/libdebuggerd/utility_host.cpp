@@ -16,8 +16,11 @@
 
 #include "libdebuggerd/utility_host.h"
 
+#include <ctype.h>
 #include <sys/prctl.h>
 
+#include <charconv>
+#include <limits>
 #include <string>
 
 #include <android-base/stringprintf.h>
@@ -98,4 +101,33 @@ std::string describe_pac_enabled_keys(long value) {
   DESCRIBE_FLAG(PR_PAC_APDBKEY);
   DESCRIBE_FLAG(PR_PAC_APGAKEY);
   return describe_end(value, desc);
+}
+
+static std::string oct_encode(const std::string& data, bool (*should_encode_func)(int)) {
+  std::string oct_encoded;
+  oct_encoded.reserve(data.size());
+
+  // N.B. the unsigned here is very important, otherwise e.g. \255 would render as
+  // \-123 (and overflow our buffer).
+  for (unsigned char c : data) {
+    if (should_encode_func(c)) {
+      std::string oct_digits("\\\0\0\0", 4);
+      // char is encodable in 3 oct digits
+      static_assert(std::numeric_limits<unsigned char>::max() <= 8 * 8 * 8);
+      auto [ptr, ec] = std::to_chars(oct_digits.data() + 1, oct_digits.data() + 4, c, 8);
+      oct_digits.resize(ptr - oct_digits.data());
+      oct_encoded += oct_digits;
+    } else {
+      oct_encoded += c;
+    }
+  }
+  return oct_encoded;
+}
+
+std::string oct_encode_non_ascii_printable(const std::string& data) {
+  return oct_encode(data, [](int c) { return !isgraph(c) && !isspace(c); });
+}
+
+std::string oct_encode_non_printable(const std::string& data) {
+  return oct_encode(data, [](int c) { return !isprint(c); });
 }

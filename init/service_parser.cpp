@@ -309,6 +309,11 @@ Result<void> ServiceParser::ParseOverride(std::vector<std::string>&& args) {
     return {};
 }
 
+Result<void> ServiceParser::ParseSharedKallsyms(std::vector<std::string>&& args) {
+    service_->shared_kallsyms_file_ = true;
+    return {};
+}
+
 Result<void> ServiceParser::ParseMemcgSwappiness(std::vector<std::string>&& args) {
     if (!ParseInt(args[1], &service_->swappiness_, 0)) {
         return Error() << "swappiness value must be equal or greater than 0";
@@ -603,6 +608,7 @@ const KeywordMap<ServiceParser::OptionParser>& ServiceParser::GetParserMap() con
         {"rlimit",                  {3,     3,    &ServiceParser::ParseProcessRlimit}},
         {"seclabel",                {1,     1,    &ServiceParser::ParseSeclabel}},
         {"setenv",                  {2,     2,    &ServiceParser::ParseSetenv}},
+        {"shared_kallsyms",         {0,     0,    &ServiceParser::ParseSharedKallsyms}},
         {"shutdown",                {1,     1,    &ServiceParser::ParseShutdown}},
         {"sigstop",                 {0,     0,    &ServiceParser::ParseSigstop}},
         {"socket",                  {3,     6,    &ServiceParser::ParseSocket}},
