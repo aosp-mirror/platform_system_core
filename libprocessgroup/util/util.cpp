@@ -111,7 +111,6 @@ void MergeCgroupToDescriptors(CgroupDescriptorMap* descriptors, const Json::Valu
 }
 
 bool ReadDescriptorsFromFile(const std::string& file_name, CgroupDescriptorMap* descriptors) {
-    static constexpr bool force_memcg_v2 = android::libprocessgroup_flags::force_memcg_v2();
     std::vector<CgroupDescriptor> result;
     std::string json_doc;
 
@@ -133,14 +132,10 @@ bool ReadDescriptorsFromFile(const std::string& file_name, CgroupDescriptorMap* 
         const Json::Value& cgroups = root["Cgroups"];
         for (Json::Value::ArrayIndex i = 0; i < cgroups.size(); ++i) {
             std::string name = cgroups[i]["Controller"].asString();
-
-            if (force_memcg_v2 && name == "memory") continue;
-
             MergeCgroupToDescriptors(descriptors, cgroups[i], name, "", 1);
         }
     }
 
-    bool memcgv2_present = false;
     std::string root_path;
     if (root.isMember("Cgroups2")) {
         const Json::Value& cgroups2 = root["Cgroups2"];
@@ -150,22 +145,8 @@ bool ReadDescriptorsFromFile(const std::string& file_name, CgroupDescriptorMap* 
         const Json::Value& childGroups = cgroups2["Controllers"];
         for (Json::Value::ArrayIndex i = 0; i < childGroups.size(); ++i) {
             std::string name = childGroups[i]["Controller"].asString();
-
-            if (force_memcg_v2 && name == "memory") memcgv2_present = true;
-
             MergeCgroupToDescriptors(descriptors, childGroups[i], name, root_path, 2);
         }
-    }
-
-    if (force_memcg_v2 && !memcgv2_present) {
-        LOG(INFO) << "Forcing memcg to v2 hierarchy";
-        Json::Value memcgv2;
-        memcgv2["Controller"] = "memory";
-        memcgv2["NeedsActivation"] = true;
-        memcgv2["Path"] = ".";
-        memcgv2["Optional"] = true;  // In case of cgroup_disabled=memory, so we can still boot
-        MergeCgroupToDescriptors(descriptors, memcgv2, "memory",
-                                 root_path.empty() ? CGROUP_V2_ROOT_DEFAULT : root_path, 2);
     }
 
     return true;
