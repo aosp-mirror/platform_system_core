@@ -1,0 +1,15 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_test {
+    name: "vts_libprocessgroup",
+    srcs: ["vts_libprocessgroup.cpp"],
+    shared_libs: ["libbase"],
+    static_libs: ["libgmock"],
+    require_root: true,
+    test_suites: [
+        "general-tests",
+        "vts",
+    ],
+}

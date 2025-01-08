@@ -37,7 +37,6 @@ prebuilt_etc {
     src: "init.rc",
     sub_dir: "init/hw",
     required: [
-        "fsverity_init",
         "platform-bootclasspath",
         "init.boringssl.zygote64.rc",
         "init.boringssl.zygote64_32.rc",
@@ -59,13 +58,6 @@ prebuilt_etc {
 filegroup {
     name: "system_linker_config_json_file",
     srcs: ["etc/linker.config.json"],
-}
-
-// TODO(b/147210213) Generate list of libraries during build and fill in at build time
-linker_config {
-    name: "system_linker_config",
-    src: ":system_linker_config_json_file",
-    installable: false,
 }
 
 // TODO(b/185211376) Scope the native APIs that microdroid will provide to the app payload
