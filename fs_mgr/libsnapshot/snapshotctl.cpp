@@ -30,12 +30,15 @@
 #include <android-base/unique_fd.h>
 
 #include <android-base/chrono_utils.h>
+#include <android-base/hex.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/scopeguard.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <android/snapshot/snapshot.pb.h>
 
+#include <fs_avb/fs_avb_util.h>
 #include <fs_mgr.h>
 #include <fs_mgr_dm_linear.h>
 #include <fstab/fstab.h>
@@ -44,8 +47,12 @@
 #include <libsnapshot/snapshot.h>
 #include <storage_literals/storage_literals.h>
 
+#include <openssl/sha.h>
+
 #include "partition_cow_creator.h"
 #include "scratch_super.h"
+
+#include "utility.h"
 
 #ifdef SNAPSHOTCTL_USERDEBUG_OR_ENG
 #include <BootControlClient.h>
@@ -89,7 +96,12 @@ int Usage() {
                  "  apply-update\n"
                  "    Apply the incremental OTA update wherein the snapshots are\n"
                  "    directly written to COW block device. This will bypass update-engine\n"
-                 "    and the device will be ready to boot from the target build.\n";
+                 "    and the device will be ready to boot from the target build.\n"
+                 "  dump-verity-hash <directory where verity merkel tree hashes are stored> "
+                 "[-verify]\n"
+                 "    Dump the verity merkel tree hashes at the specified path\n"
+                 "    -verify: Verify the dynamic partition blocks by comparing it with verity "
+                 "merkel tree\n";
     return EX_USAGE;
 }
 
@@ -631,6 +643,252 @@ bool ApplyUpdate(int argc, char** argv) {
     return true;
 }
 
+static bool GetBlockHashFromMerkelTree(android::base::borrowed_fd image_fd, uint64_t image_size,
+                                       uint32_t data_block_size, uint32_t hash_block_size,
+                                       uint64_t tree_offset,
+                                       std::vector<std::string>& out_block_hash) {
+    uint32_t padded_digest_size = 32;
+    if (image_size % data_block_size != 0) {
+        LOG(ERROR) << "Image_size: " << image_size
+                   << " not a multiple of data block size: " << data_block_size;
+        return false;
+    }
+
+    // vector of level-size and offset
+    std::vector<std::pair<uint64_t, uint64_t>> levels;
+    uint64_t data_block_count = image_size / data_block_size;
+    uint32_t digests_per_block = hash_block_size / padded_digest_size;
+    uint32_t level_block_count = data_block_count;
+    while (level_block_count > 1) {
+        uint32_t next_level_block_count =
+                (level_block_count + digests_per_block - 1) / digests_per_block;
+        levels.emplace_back(std::make_pair(next_level_block_count * hash_block_size, 0));
+        level_block_count = next_level_block_count;
+    }
+    // root digest
+    levels.emplace_back(std::make_pair(0, 0));
+    // initialize offset
+    for (auto level = std::prev(levels.end()); level != levels.begin(); level--) {
+        std::prev(level)->second = level->second + level->first;
+    }
+
+    // We just want level 0
+    auto level = levels.begin();
+    std::string hash_block(hash_block_size, '\0');
+    uint64_t block_offset = tree_offset + level->second;
+    uint64_t t_read_blocks = 0;
+    uint64_t blockidx = 0;
+    uint64_t num_hash_blocks = level->first / hash_block_size;
+    while ((t_read_blocks < num_hash_blocks) && (blockidx < data_block_count)) {
+        if (!android::base::ReadFullyAtOffset(image_fd, hash_block.data(), hash_block.size(),
+                                              block_offset)) {
+            LOG(ERROR) << "Failed to read tree block at offset: " << block_offset;
+            return false;
+        }
+
+        for (uint32_t offset = 0; offset < hash_block.size(); offset += padded_digest_size) {
+            std::string single_hash = hash_block.substr(offset, padded_digest_size);
+            out_block_hash.emplace_back(single_hash);
+
+            blockidx += 1;
+            if (blockidx >= data_block_count) {
+                break;
+            }
+        }
+
+        block_offset += hash_block_size;
+        t_read_blocks += 1;
+    }
+    return true;
+}
+
+static bool CalculateDigest(const void* buffer, size_t size, const void* salt, uint32_t salt_length,
+                            uint8_t* digest) {
+    SHA256_CTX ctx;
+    if (SHA256_Init(&ctx) != 1) {
+        return false;
+    }
+    if (SHA256_Update(&ctx, salt, salt_length) != 1) {
+        return false;
+    }
+    if (SHA256_Update(&ctx, buffer, size) != 1) {
+        return false;
+    }
+    if (SHA256_Final(digest, &ctx) != 1) {
+        return false;
+    }
+    return true;
+}
+
+bool verify_data_blocks(android::base::borrowed_fd fd, const std::vector<std::string>& block_hash,
+                        std::unique_ptr<android::fs_mgr::FsAvbHashtreeDescriptor>& descriptor,
+                        const std::vector<uint8_t>& salt) {
+    uint64_t data_block_count = descriptor->image_size / descriptor->data_block_size;
+    uint64_t foffset = 0;
+    uint64_t blk = 0;
+
+    std::string hash_block(descriptor->hash_block_size, '\0');
+    while (blk < data_block_count) {
+        if (!android::base::ReadFullyAtOffset(fd, hash_block.data(), descriptor->hash_block_size,
+                                              foffset)) {
+            LOG(ERROR) << "Failed to read from offset: " << foffset;
+            return false;
+        }
+
+        std::string digest(32, '\0');
+        CalculateDigest(hash_block.data(), descriptor->hash_block_size, salt.data(), salt.size(),
+                        reinterpret_cast<uint8_t*>(digest.data()));
+        if (digest != block_hash[blk]) {
+            LOG(ERROR) << "Hash mismatch for block: " << blk << " Expected: " << block_hash[blk]
+                       << " Received: " << digest;
+            return false;
+        }
+
+        foffset += descriptor->hash_block_size;
+        blk += 1;
+    }
+
+    return true;
+}
+
+bool DumpVerityHash(int argc, char** argv) {
+    android::base::InitLogging(argv, &android::base::KernelLogger);
+
+    if (::getuid() != 0) {
+        LOG(ERROR) << "Not running as root. Try \"adb root\" first.";
+        return EXIT_FAILURE;
+    }
+
+    if (argc < 3) {
+        std::cerr
+                << " dump-verity-hash <directory location where verity hash is saved> {-verify}\n";
+        return false;
+    }
+
+    bool verification_required = false;
+    std::string hash_file_path = argv[2];
+    bool metadata_on_super = false;
+    if (argc == 4) {
+        if (argv[3] == "-verify"s) {
+            verification_required = true;
+        }
+    }
+
+    auto& dm = android::dm::DeviceMapper::Instance();
+    auto dm_block_devices = dm.FindDmPartitions();
+    if (dm_block_devices.empty()) {
+        LOG(ERROR) << "No dm-enabled block device is found.";
+        return false;
+    }
+
+    android::fs_mgr::Fstab fstab;
+    if (!ReadDefaultFstab(&fstab)) {
+        LOG(ERROR) << "Failed to read fstab";
+        return false;
+    }
+
+    for (const auto& pair : dm_block_devices) {
+        std::string partition_name = pair.first;
+        android::fs_mgr::FstabEntry* fstab_entry =
+                GetEntryForMountPoint(&fstab, "/" + partition_name);
+        auto vbmeta = LoadAndVerifyVbmeta(*fstab_entry, "", nullptr, nullptr, nullptr);
+        if (vbmeta == nullptr) {
+            LOG(ERROR) << "LoadAndVerifyVbmetaByPath failed for partition: " << partition_name;
+            return false;
+        }
+
+        auto descriptor =
+                android::fs_mgr::GetHashtreeDescriptor(partition_name, std::move(*vbmeta));
+        if (descriptor == nullptr) {
+            LOG(ERROR) << "GetHashtreeDescriptor failed for partition: " << partition_name;
+            return false;
+        }
+
+        std::string device_path = fstab_entry->blk_device;
+        if (!dm.GetDmDevicePathByName(fstab_entry->blk_device, &device_path)) {
+            LOG(ERROR) << "Failed to resolve logical device path for: " << fstab_entry->blk_device;
+            return false;
+        }
+
+        android::base::unique_fd fd(open(device_path.c_str(), O_RDONLY));
+        if (fd < 0) {
+            LOG(ERROR) << "Failed to open file: " << device_path;
+            return false;
+        }
+        std::vector<std::string> block_hash;
+        if (!GetBlockHashFromMerkelTree(fd, descriptor->image_size, descriptor->data_block_size,
+                                        descriptor->hash_block_size, descriptor->tree_offset,
+                                        block_hash)) {
+            LOG(ERROR) << "GetBlockHashFromMerkelTree failed";
+            return false;
+        }
+
+        uint64_t dev_sz = lseek(fd, 0, SEEK_END);
+        uint64_t fec_size = dev_sz - descriptor->image_size;
+        if (fec_size % descriptor->data_block_size != 0) {
+            LOG(ERROR) << "fec_size: " << fec_size
+                       << " isn't multiple of: " << descriptor->data_block_size;
+            return false;
+        }
+
+        std::vector<uint8_t> salt;
+        const std::string& salt_str = descriptor->salt;
+        bool ok = android::base::HexToBytes(salt_str, &salt);
+        if (!ok) {
+            LOG(ERROR) << "HexToBytes conversion failed";
+            return false;
+        }
+        uint64_t file_offset = descriptor->image_size;
+        std::vector<uint8_t> hash_block(descriptor->hash_block_size, 0);
+        while (file_offset < dev_sz) {
+            if (!android::base::ReadFullyAtOffset(fd, hash_block.data(),
+                                                  descriptor->hash_block_size, file_offset)) {
+                LOG(ERROR) << "Failed to read tree block at offset: " << file_offset;
+                return false;
+            }
+            std::string digest(32, '\0');
+            CalculateDigest(hash_block.data(), descriptor->hash_block_size, salt.data(),
+                            salt.size(), reinterpret_cast<uint8_t*>(digest.data()));
+            block_hash.push_back(digest);
+            file_offset += descriptor->hash_block_size;
+            fec_size -= descriptor->hash_block_size;
+        }
+
+        if (fec_size != 0) {
+            LOG(ERROR) << "Checksum calculation pending: " << fec_size;
+            return false;
+        }
+
+        if (verification_required) {
+            if (!verify_data_blocks(fd, block_hash, descriptor, salt)) {
+                LOG(ERROR) << "verify_data_blocks failed";
+                return false;
+            }
+        }
+
+        VerityHash verity_hash;
+        verity_hash.set_partition_name(partition_name);
+        verity_hash.set_salt(salt_str);
+        for (auto hash : block_hash) {
+            verity_hash.add_block_hash(hash.data(), hash.size());
+        }
+        std::string hash_file = hash_file_path + "/" + partition_name + ".pb";
+        std::string content;
+        if (!verity_hash.SerializeToString(&content)) {
+            LOG(ERROR) << "Unable to serialize verity_hash";
+            return false;
+        }
+        if (!WriteStringToFileAtomic(content, hash_file)) {
+            PLOG(ERROR) << "Unable to write VerityHash to " << hash_file;
+            return false;
+        }
+
+        LOG(INFO) << partition_name
+                  << ": GetBlockHashFromMerkelTree success. Num Blocks: " << block_hash.size();
+    }
+    return true;
+}
+
 bool MapPrecreatedSnapshots(int argc, char** argv) {
     android::base::InitLogging(argv, &android::base::KernelLogger);
 
@@ -827,6 +1085,7 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"unmap-snapshots", UnMapPrecreatedSnapshots},
         {"delete-snapshots", DeletePrecreatedSnapshots},
         {"revert-snapshots", RemovePrecreatedSnapshots},
+        {"dump-verity-hash", DumpVerityHash},
 #endif
         {"unmap", UnmapCmdHandler},
         // clang-format on
