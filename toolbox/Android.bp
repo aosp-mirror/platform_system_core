@@ -84,3 +84,22 @@ cc_binary {
     vendor: true,
     defaults: ["toolbox_binary_defaults"],
 }
+
+// This one is installed in the generic ramdisk, and can be executed during
+// init-first-stage.
+// As there are no dynamic linker available, this must be statically linked.
+cc_binary {
+    name: "toolbox_ramdisk",
+    defaults: ["toolbox_binary_defaults"],
+    ramdisk: true,
+    static_executable: true,
+    system_shared_libs: [],
+    exclude_shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: [
+        "libbase",
+        "liblog",
+    ],
+}
