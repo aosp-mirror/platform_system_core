@@ -29,7 +29,11 @@ bool CgroupsAvailable();
 bool CgroupGetControllerPath(const std::string& cgroup_name, std::string* path);
 bool CgroupGetControllerFromPath(const std::string& path, std::string* cgroup_name);
 bool CgroupGetAttributePath(const std::string& attr_name, std::string* path);
+// Provides the path for an attribute in a specific process group
+// Returns false in case of error, true in case of success
 bool CgroupGetAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
+bool CgroupGetAttributePathForProcess(std::string_view attr_name, uid_t uid, pid_t pid,
+                                      std::string &path);
 
 bool SetTaskProfiles(pid_t tid, const std::vector<std::string>& profiles,
                      bool use_fd_cache = false);
@@ -80,10 +84,6 @@ bool setProcessGroupSoftLimit(uid_t uid, pid_t initialPid, int64_t softLimitInBy
 bool setProcessGroupLimit(uid_t uid, pid_t initialPid, int64_t limitInBytes);
 
 void removeAllEmptyProcessGroups(void);
-
-// Provides the path for an attribute in a specific process group
-// Returns false in case of error, true in case of success
-bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path);
 
 // Check if a profile can be applied without failing.
 // Returns true if it can be applied without failing, false otherwise

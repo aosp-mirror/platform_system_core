@@ -158,6 +158,7 @@ class Service {
         static int sigchld_fd = CreateSigchldFd().release();
         return sigchld_fd;
     }
+    static void OpenAndSaveStaticKallsymsFd();
 
   private:
     void NotifyStateChange(const std::string& new_state) const;
@@ -171,6 +172,7 @@ class Service {
                     InterprocessFifo setsid_finished);
     void SetMountNamespace();
     static ::android::base::unique_fd CreateSigchldFd();
+    static Result<Descriptor> CreateSharedKallsymsFd();
 
     static unsigned long next_start_order_;
     static bool is_exec_service_running_;
@@ -188,6 +190,7 @@ class Service {
     std::optional<std::string> fatal_reboot_target_;  // reboot target of fatal handler
     bool was_last_exit_ok_ =
             true;  // true if the service never exited, or exited with status code 0
+    bool shared_kallsyms_file_ = false; // pass the service a pre-opened fd to /proc/kallsyms
 
     std::optional<CapSet> capabilities_;
     ProcessAttributes proc_attr_;

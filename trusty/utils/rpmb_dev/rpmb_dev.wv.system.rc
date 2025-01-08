@@ -33,7 +33,7 @@ on boot && \
 
 # RPMB Mock
 on early-boot && \
-    property:ro.hardware.security.trusty.widevine_vm.system=1 && \
+    property:trusty.widevine_vm.enabled=1 && \
     property:trusty.widevine_vm.vm_cid=* && \
     property:ro.boot.vendor.apex.com.android.services.widevine=\
 com.android.services.widevine.cf_guest_trusty_nonsecure

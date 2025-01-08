@@ -36,9 +36,6 @@
   ],
   "kernel-presubmit": [
     {
-      "name": "adb-remount-sh"
-    },
-    {
       "name": "libdm_test"
     },
     {

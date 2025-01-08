@@ -85,7 +85,8 @@ static bool CgroupKillAvailable() {
         CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &cg_kill);
         // cgroup.kill is not on the root cgroup, so check a non-root cgroup that should always
         // exist
-        cg_kill = ConvertUidToPath(cg_kill.c_str(), AID_ROOT) + '/' + PROCESSGROUP_CGROUP_KILL_FILE;
+        cg_kill = ConvertUidToPath(cg_kill.c_str(), AID_ROOT, true) + '/' +
+            PROCESSGROUP_CGROUP_KILL_FILE;
         cgroup_kill_available = access(cg_kill.c_str(), F_OK) == 0;
     });
 
@@ -148,6 +149,23 @@ bool CgroupGetAttributePathForTask(const std::string& attr_name, pid_t tid, std:
 
     if (!attr->GetPathForTask(tid, path)) {
         LOG(ERROR) << "Failed to find cgroup for tid " << tid;
+        return false;
+    }
+
+    return true;
+}
+
+bool CgroupGetAttributePathForProcess(std::string_view attr_name, uid_t uid, pid_t pid,
+                                      std::string &path) {
+    const TaskProfiles& tp = TaskProfiles::GetInstance();
+    const IProfileAttribute* attr = tp.GetAttribute(attr_name);
+
+    if (attr == nullptr) {
+        return false;
+    }
+
+    if (!attr->GetPathForProcess(uid, pid, &path)) {
+        LOG(ERROR) << "Failed to find cgroup for uid " << uid << " pid " << pid;
         return false;
     }
 
@@ -224,14 +242,14 @@ bool SetUserProfiles(uid_t uid, const std::vector<std::string>& profiles) {
                                                        false);
 }
 
-static int RemoveCgroup(const char* cgroup, uid_t uid, pid_t pid) {
-    auto path = ConvertUidPidToPath(cgroup, uid, pid);
+static int RemoveCgroup(const char* cgroup, uid_t uid, pid_t pid, bool v2_path) {
+    auto path = ConvertUidPidToPath(cgroup, uid, pid, v2_path);
     int ret = TEMP_FAILURE_RETRY(rmdir(path.c_str()));
 
     if (!ret && uid >= AID_ISOLATED_START && uid <= AID_ISOLATED_END) {
         // Isolated UIDs are unlikely to be reused soon after removal,
         // so free up the kernel resources for the UID level cgroup.
-        path = ConvertUidToPath(cgroup, uid);
+        path = ConvertUidToPath(cgroup, uid, v2_path);
         ret = TEMP_FAILURE_RETRY(rmdir(path.c_str()));
     }
 
@@ -368,7 +386,7 @@ bool sendSignalToProcessGroup(uid_t uid, pid_t initialPid, int signal) {
     if (CgroupsAvailable()) {
         std::string hierarchy_root_path, cgroup_v2_path;
         CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &hierarchy_root_path);
-        cgroup_v2_path = ConvertUidPidToPath(hierarchy_root_path.c_str(), uid, initialPid);
+        cgroup_v2_path = ConvertUidPidToPath(hierarchy_root_path.c_str(), uid, initialPid, true);
 
         if (signal == SIGKILL && CgroupKillAvailable()) {
             LOG(VERBOSE) << "Using " << PROCESSGROUP_CGROUP_KILL_FILE << " to SIGKILL "
@@ -539,7 +557,7 @@ static int KillProcessGroup(
     CgroupGetControllerPath(CGROUPV2_HIERARCHY_NAME, &hierarchy_root_path);
 
     const std::string cgroup_v2_path =
-            ConvertUidPidToPath(hierarchy_root_path.c_str(), uid, initialPid);
+            ConvertUidPidToPath(hierarchy_root_path.c_str(), uid, initialPid, true);
 
     const std::string eventsfile = cgroup_v2_path + '/' + PROCESSGROUP_CGROUP_EVENTS_FILE;
     android::base::unique_fd events_fd(open(eventsfile.c_str(), O_RDONLY));
@@ -605,7 +623,7 @@ static int KillProcessGroup(
                          << " after " << kill_duration.count() << " ms";
         }
 
-        ret = RemoveCgroup(hierarchy_root_path.c_str(), uid, initialPid);
+        ret = RemoveCgroup(hierarchy_root_path.c_str(), uid, initialPid, true);
         if (ret)
             PLOG(ERROR) << "Unable to remove cgroup " << cgroup_v2_path;
         else
@@ -616,9 +634,9 @@ static int KillProcessGroup(
             // memcg v2.
             std::string memcg_apps_path;
             if (CgroupGetMemcgAppsPath(&memcg_apps_path) &&
-                (ret = RemoveCgroup(memcg_apps_path.c_str(), uid, initialPid)) < 0) {
+                (ret = RemoveCgroup(memcg_apps_path.c_str(), uid, initialPid, false)) < 0) {
                 const auto memcg_v1_cgroup_path =
-                        ConvertUidPidToPath(memcg_apps_path.c_str(), uid, initialPid);
+                        ConvertUidPidToPath(memcg_apps_path.c_str(), uid, initialPid, false);
                 PLOG(ERROR) << "Unable to remove memcg v1 cgroup " << memcg_v1_cgroup_path;
             }
         }
@@ -640,7 +658,7 @@ int killProcessGroupOnce(uid_t uid, pid_t initialPid, int signal) {
 
 static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string cgroup,
                                       bool activate_controllers) {
-    auto uid_path = ConvertUidToPath(cgroup.c_str(), uid);
+    auto uid_path = ConvertUidToPath(cgroup.c_str(), uid, activate_controllers);
 
     struct stat cgroup_stat;
     mode_t cgroup_mode = 0750;
@@ -667,7 +685,7 @@ static int createProcessGroupInternal(uid_t uid, pid_t initialPid, std::string c
         }
     }
 
-    auto uid_pid_path = ConvertUidPidToPath(cgroup.c_str(), uid, initialPid);
+    auto uid_pid_path = ConvertUidPidToPath(cgroup.c_str(), uid, initialPid, activate_controllers);
 
     if (!MkdirAndChown(uid_pid_path, cgroup_mode, cgroup_uid, cgroup_gid)) {
         PLOG(ERROR) << "Failed to make and chown " << uid_pid_path;
@@ -744,10 +762,6 @@ bool setProcessGroupSoftLimit(uid_t, pid_t pid, int64_t soft_limit_in_bytes) {
 
 bool setProcessGroupLimit(uid_t, pid_t pid, int64_t limit_in_bytes) {
     return SetProcessGroupValue(pid, "MemLimit", limit_in_bytes);
-}
-
-bool getAttributePathForTask(const std::string& attr_name, pid_t tid, std::string* path) {
-    return CgroupGetAttributePathForTask(attr_name, tid, path);
 }
 
 bool isProfileValidForProcess(const std::string& profile_name, uid_t uid, pid_t pid) {
