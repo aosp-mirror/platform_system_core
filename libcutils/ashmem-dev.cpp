@@ -132,6 +132,16 @@ static bool __has_memfd_support() {
         return false;
     }
 
+    /*
+     * Ensure that the kernel supports ashmem ioctl commands on memfds. If not,
+     * fall back to using ashmem.
+     */
+    if (TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_SIZE, getpagesize())) < 0) {
+        ALOGE("ioctl(ASHMEM_SET_SIZE) failed: %s, no ashmem-memfd compat support.\n",
+              strerror(errno));
+        return false;
+    }
+
     if (debug_log) {
         ALOGD("memfd: device has memfd support, using it\n");
     }
