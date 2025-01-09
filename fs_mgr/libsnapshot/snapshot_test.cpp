@@ -701,6 +701,7 @@ TEST_F(SnapshotTest, Merge) {
     }
 
     // We should not be able to cancel an update now.
+    ASSERT_EQ(sm->TryCancelUpdate(), CancelResult::NEEDS_MERGE);
     ASSERT_FALSE(sm->CancelUpdate());
 
     ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
@@ -2323,6 +2324,38 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     for (const auto& name : {"sys_b", "vnd_b", "prd_b"}) {
         ASSERT_TRUE(IsPartitionUnchanged(name)) << name;
     }
+}
+
+// Cancel an OTA in recovery.
+TEST_F(SnapshotUpdateTest, CancelInRecovery) {
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    ASSERT_TRUE(WriteSnapshots());
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_b");
+    test_device->set_recovery(true);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
+
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
+    ASSERT_FALSE(new_sm->IsCancelUpdateSafe());
+    ASSERT_TRUE(new_sm->CancelUpdate());
+
+    ASSERT_TRUE(new_sm->EnsureImageManager());
+    auto im = new_sm->image_manager();
+    ASSERT_NE(im, nullptr);
+    ASSERT_TRUE(im->IsImageDisabled("sys_b"));
+    ASSERT_TRUE(im->IsImageDisabled("vnd_b"));
+    ASSERT_TRUE(im->IsImageDisabled("prd_b"));
 }
 
 // Test update package that requests data wipe.
