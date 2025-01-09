@@ -191,14 +191,18 @@ static std::string GetSourceDeviceName(const std::string& partition_name) {
 }
 
 bool SnapshotManager::BeginUpdate() {
-    bool needs_merge = false;
-    if (!TryCancelUpdate(&needs_merge)) {
-        return false;
-    }
-    if (needs_merge) {
-        LOG(INFO) << "Wait for merge (if any) before beginning a new update.";
-        auto state = ProcessUpdateState();
-        LOG(INFO) << "Merged with state = " << state;
+    switch (TryCancelUpdate()) {
+        case CancelResult::OK:
+            break;
+        case CancelResult::NEEDS_MERGE: {
+            LOG(INFO) << "Wait for merge (if any) before beginning a new update.";
+            auto state = ProcessUpdateState();
+            LOG(INFO) << "Merged with end state: " << state;
+            break;
+        }
+        default:
+            LOG(ERROR) << "Cannot begin update, existing update cannot be cancelled.";
+            return false;
     }
 
     auto file = LockExclusive();
@@ -223,49 +227,82 @@ bool SnapshotManager::BeginUpdate() {
 }
 
 bool SnapshotManager::CancelUpdate() {
-    bool needs_merge = false;
-    if (!TryCancelUpdate(&needs_merge)) {
-        return false;
-    }
-    if (needs_merge) {
-        LOG(ERROR) << "Cannot cancel update after it has completed or started merging";
-    }
-    return !needs_merge;
+    return TryCancelUpdate() == CancelResult::OK;
 }
 
-bool SnapshotManager::TryCancelUpdate(bool* needs_merge) {
-    *needs_merge = false;
+CancelResult SnapshotManager::TryCancelUpdate() {
+    auto lock = LockExclusive();
+    if (!lock) return CancelResult::ERROR;
 
-    auto file = LockExclusive();
-    if (!file) return false;
+    UpdateState state = ReadUpdateState(lock.get());
+    CancelResult result = IsCancelUpdateSafe(state);
 
-    if (IsSnapshotWithoutSlotSwitch()) {
-        LOG(ERROR) << "Cannot cancel the snapshots as partitions are mounted off the snapshots on "
-                      "current slot.";
-        return false;
+    if (result != CancelResult::OK && device_->IsRecovery()) {
+        LOG(ERROR) << "Cancel result " << result << " will be overridden in recovery.";
+        result = CancelResult::OK;
     }
 
-    UpdateState state = ReadUpdateState(file.get());
-    if (state == UpdateState::None) {
-        RemoveInvalidSnapshots(file.get());
+    switch (result) {
+        case CancelResult::OK:
+            LOG(INFO) << "Cancelling update from state: " << state;
+            RemoveAllUpdateState(lock.get());
+            RemoveInvalidSnapshots(lock.get());
+            break;
+        case CancelResult::NEEDS_MERGE:
+            LOG(ERROR) << "Cannot cancel an update while a merge is in progress.";
+            break;
+        case CancelResult::LIVE_SNAPSHOTS:
+            LOG(ERROR) << "Cannot cancel an update while snapshots are live.";
+            break;
+        case CancelResult::ERROR:
+            // Error was already reported.
+            break;
+    }
+    return result;
+}
+
+bool SnapshotManager::IsCancelUpdateSafe() {
+    // This may be called in recovery, so ensure we have /metadata.
+    auto mount = EnsureMetadataMounted();
+    if (!mount || !mount->HasDevice()) {
         return true;
     }
 
-    if (state == UpdateState::Initiated) {
-        LOG(INFO) << "Update has been initiated, now canceling";
-        return RemoveAllUpdateState(file.get());
+    auto lock = LockExclusive();
+    if (!lock) {
+        return false;
     }
 
-    if (state == UpdateState::Unverified) {
-        // We completed an update, but it can still be canceled if we haven't booted into it.
-        auto slot = GetCurrentSlot();
-        if (slot != Slot::Target) {
-            LOG(INFO) << "Canceling previously completed updates (if any)";
-            return RemoveAllUpdateState(file.get());
-        }
+    UpdateState state = ReadUpdateState(lock.get());
+    return IsCancelUpdateSafe(state) == CancelResult::OK;
+}
+
+CancelResult SnapshotManager::IsCancelUpdateSafe(UpdateState state) {
+    if (IsSnapshotWithoutSlotSwitch()) {
+        return CancelResult::LIVE_SNAPSHOTS;
     }
-    *needs_merge = true;
-    return true;
+
+    switch (state) {
+        case UpdateState::Merging:
+        case UpdateState::MergeNeedsReboot:
+        case UpdateState::MergeFailed:
+            return CancelResult::NEEDS_MERGE;
+        case UpdateState::Unverified: {
+            // We completed an update, but it can still be canceled if we haven't booted into it.
+            auto slot = GetCurrentSlot();
+            if (slot == Slot::Target) {
+                return CancelResult::LIVE_SNAPSHOTS;
+            }
+            return CancelResult::OK;
+        }
+        case UpdateState::None:
+        case UpdateState::Initiated:
+        case UpdateState::Cancelled:
+            return CancelResult::OK;
+        default:
+            LOG(ERROR) << "Unknown state: " << state;
+            return CancelResult::ERROR;
+    }
 }
 
 std::string SnapshotManager::ReadUpdateSourceSlotSuffix() {
@@ -2054,11 +2091,22 @@ bool SnapshotManager::RemoveAllSnapshots(LockedFile* lock) {
     }
 
     if (ok || !has_mapped_cow_images) {
-        // Delete any image artifacts as a precaution, in case an update is
-        // being cancelled due to some corrupted state in an lp_metadata file.
-        // Note that we do not do this if some cow images are still mapped,
-        // since we must not remove backing storage if it's in use.
-        if (!EnsureImageManager() || !images_->RemoveAllImages()) {
+        if (!EnsureImageManager()) {
+            return false;
+        }
+
+        if (device_->IsRecovery()) {
+            // If a device is in recovery, we need to mark the snapshots for cleanup
+            // upon next reboot, since we cannot delete them here.
+            if (!images_->DisableAllImages()) {
+                LOG(ERROR) << "Could not remove all snapshot artifacts in recovery";
+                return false;
+            }
+        } else if (!images_->RemoveAllImages()) {
+            // Delete any image artifacts as a precaution, in case an update is
+            // being cancelled due to some corrupted state in an lp_metadata file.
+            // Note that we do not do this if some cow images are still mapped,
+            // since we must not remove backing storage if it's in use.
             LOG(ERROR) << "Could not remove all snapshot artifacts";
             return false;
         }
