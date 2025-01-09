@@ -283,3 +283,14 @@ message SnapshotMergeReport {
     // Size of v3 operation buffer. Needs to be determined during writer initialization
     uint64 estimated_op_count_max = 14;
 }
+
+message VerityHash {
+  // Partition name
+  string partition_name = 1;
+
+  // Salt used for verity hashes
+  string salt = 2;
+
+  // sha256 hash values of each block in the image
+  repeated bytes block_hash = 3;
+}
