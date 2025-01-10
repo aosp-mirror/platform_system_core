@@ -595,7 +595,7 @@ uint32_t HandlePropertySetNoSocket(const std::string& name, const std::string& v
 }
 
 static void handle_property_set_fd(int fd) {
-    static constexpr uint32_t kDefaultSocketTimeout = 2000; /* ms */
+    static constexpr uint32_t kDefaultSocketTimeout = 5000; /* ms */
 
     int s = accept4(fd, nullptr, nullptr, SOCK_CLOEXEC);
     if (s == -1) {

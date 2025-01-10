@@ -701,6 +701,7 @@ TEST_F(SnapshotTest, Merge) {
     }
 
     // We should not be able to cancel an update now.
+    ASSERT_EQ(sm->TryCancelUpdate(), CancelResult::NEEDS_MERGE);
     ASSERT_FALSE(sm->CancelUpdate());
 
     ASSERT_EQ(sm->ProcessUpdateState(), UpdateState::MergeCompleted);
@@ -2325,6 +2326,38 @@ TEST_F(SnapshotUpdateTest, DataWipeRequiredInPackage) {
     }
 }
 
+// Cancel an OTA in recovery.
+TEST_F(SnapshotUpdateTest, CancelInRecovery) {
+    AddOperationForPartitions();
+    // Execute the update.
+    ASSERT_TRUE(sm->BeginUpdate());
+    ASSERT_TRUE(sm->CreateUpdateSnapshots(manifest_));
+
+    // Write some data to target partitions.
+    ASSERT_TRUE(WriteSnapshots());
+
+    ASSERT_TRUE(sm->FinishedSnapshotWrites(true /* wipe */));
+
+    // Simulate shutting down the device.
+    ASSERT_TRUE(UnmapAll());
+
+    // Simulate a reboot into recovery.
+    auto test_device = new TestDeviceInfo(fake_super, "_b");
+    test_device->set_recovery(true);
+    auto new_sm = NewManagerForFirstStageMount(test_device);
+
+    EXPECT_EQ(new_sm->GetUpdateState(), UpdateState::Unverified);
+    ASSERT_FALSE(new_sm->IsCancelUpdateSafe());
+    ASSERT_TRUE(new_sm->CancelUpdate());
+
+    ASSERT_TRUE(new_sm->EnsureImageManager());
+    auto im = new_sm->image_manager();
+    ASSERT_NE(im, nullptr);
+    ASSERT_TRUE(im->IsImageDisabled("sys_b"));
+    ASSERT_TRUE(im->IsImageDisabled("vnd_b"));
+    ASSERT_TRUE(im->IsImageDisabled("prd_b"));
+}
+
 // Test update package that requests data wipe.
 TEST_F(SnapshotUpdateTest, DataWipeWithStaleSnapshots) {
     AddOperationForPartitions();
@@ -3071,6 +3104,18 @@ int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::AddGlobalTestEnvironment(new ::android::snapshot::SnapshotTestEnvironment());
     gflags::ParseCommandLineFlags(&argc, &argv, false);
+
+    // During incremental flashing, snapshot updates are in progress.
+    //
+    // When snapshot update is in-progress, snapuserd daemon
+    // will be up and running. These tests will start and stop the daemon
+    // thereby interfering with the update and snapshot-merge progress.
+    // Hence, wait until the update is complete.
+    auto sm = android::snapshot::SnapshotManager::New();
+    while (sm->IsUserspaceSnapshotUpdateInProgress()) {
+        LOG(INFO) << "Snapshot update is in progress. Waiting...";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
 
     bool vab_legacy = false;
     if (FLAGS_force_mode == "vab-legacy") {
