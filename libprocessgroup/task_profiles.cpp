@@ -20,7 +20,6 @@
 #include <task_profiles.h>
 
 #include <map>
-#include <optional>
 #include <string>
 
 #include <dirent.h>
@@ -31,6 +30,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/parseint.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
@@ -121,15 +121,6 @@ bool FdCacheHelper::IsAppDependentPath(const std::string& path) {
     return path.find("<uid>", 0) != std::string::npos || path.find("<pid>", 0) != std::string::npos;
 }
 
-std::optional<long> readLong(const std::string& str) {
-    char* end;
-    const long result = strtol(str.c_str(), &end, 10);
-    if (end > str.c_str()) {
-        return result;
-    }
-    return std::nullopt;
-}
-
 }  // namespace
 
 IProfileAttribute::~IProfileAttribute() = default;
@@ -150,8 +141,8 @@ static bool isSystemApp(uid_t uid) {
     return uid < AID_APP_START;
 }
 
-std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid) {
-    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation()) {
+std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid, bool v2_path) {
+    if (android::libprocessgroup_flags::cgroup_v2_sys_app_isolation() && v2_path) {
         if (isSystemApp(uid))
             return StringPrintf("%s/system/uid_%u", root_cgroup_path, uid);
         else
@@ -160,14 +151,14 @@ std::string ConvertUidToPath(const char* root_cgroup_path, uid_t uid) {
     return StringPrintf("%s/uid_%u", root_cgroup_path, uid);
 }
 
-std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid) {
-    const std::string uid_path = ConvertUidToPath(root_cgroup_path, uid);
+std::string ConvertUidPidToPath(const char* root_cgroup_path, uid_t uid, pid_t pid, bool v2_path) {
+    const std::string uid_path = ConvertUidToPath(root_cgroup_path, uid, v2_path);
     return StringPrintf("%s/pid_%d", uid_path.c_str(), pid);
 }
 
 bool ProfileAttribute::GetPathForProcess(uid_t uid, pid_t pid, std::string* path) const {
     if (controller()->version() == 2) {
-        const std::string cgroup_path = ConvertUidPidToPath(controller()->path(), uid, pid);
+        const std::string cgroup_path = ConvertUidPidToPath(controller()->path(), uid, pid, true);
         *path = cgroup_path + "/" + file_name();
         return true;
     }
@@ -199,7 +190,7 @@ bool ProfileAttribute::GetPathForUID(uid_t uid, std::string* path) const {
         return true;
     }
 
-    const std::string cgroup_path = ConvertUidToPath(controller()->path(), uid);
+    const std::string cgroup_path = ConvertUidToPath(controller()->path(), uid, true);
     *path = cgroup_path + "/" + file_name();
     return true;
 }
@@ -930,9 +921,8 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                 }
             } else if (action_name == "SetTimerSlack") {
                 const std::string slack_string = params_val["Slack"].asString();
-                std::optional<long> slack = readLong(slack_string);
-                if (slack && *slack >= 0) {
-                    profile->Add(std::make_unique<SetTimerSlackAction>(*slack));
+                if (long slack; android::base::ParseInt(slack_string, &slack) && slack >= 0) {
+                    profile->Add(std::make_unique<SetTimerSlackAction>(slack));
                 } else {
                     LOG(WARNING) << "SetTimerSlack: invalid parameter: " << slack_string;
                 }
@@ -994,18 +984,17 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                         // to setpriority(), since the sched_priority value must be 0 for calls to
                         // sched_setscheduler() with "normal" policies.
                         const std::string nice_string = params_val["Nice"].asString();
-                        const std::optional<int> nice = readLong(nice_string);
-
-                        if (!nice) {
+                        int nice;
+                        if (!android::base::ParseInt(nice_string, &nice)) {
                             LOG(FATAL) << "Invalid nice value specified: " << nice_string;
                         }
                         const int LINUX_MIN_NICE = -20;
                         const int LINUX_MAX_NICE = 19;
-                        if (*nice < LINUX_MIN_NICE || *nice > LINUX_MAX_NICE) {
-                            LOG(WARNING) << "SetSchedulerPolicy: Provided nice (" << *nice
+                        if (nice < LINUX_MIN_NICE || nice > LINUX_MAX_NICE) {
+                            LOG(WARNING) << "SetSchedulerPolicy: Provided nice (" << nice
                                          << ") appears out of range.";
                         }
-                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, *nice));
+                        profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy, nice));
                     } else {
                         profile->Add(std::make_unique<SetSchedulerPolicyAction>(policy));
                     }
@@ -1020,10 +1009,11 @@ bool TaskProfiles::Load(const CgroupMap& cg_map, const std::string& file_name) {
                     // [sched_get_priority_min(), sched_get_priority_max()]
 
                     const std::string priority_string = params_val["Priority"].asString();
-                    std::optional<long> virtual_priority = readLong(priority_string);
-                    if (virtual_priority && *virtual_priority > 0) {
+                    if (long virtual_priority;
+                        android::base::ParseInt(priority_string, &virtual_priority) &&
+                        virtual_priority > 0) {
                         int priority;
-                        if (SetSchedulerPolicyAction::toPriority(policy, *virtual_priority,
+                        if (SetSchedulerPolicyAction::toPriority(policy, virtual_priority,
                                                                  priority)) {
                             profile->Add(
                                     std::make_unique<SetSchedulerPolicyAction>(policy, priority));

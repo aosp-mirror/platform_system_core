@@ -29,3 +29,8 @@ python_binary_host {
         "snapshot_proto_python",
     ],
 }
+
+sh_binary_host {
+    name: "apply_update",
+    src: "apply-update.sh",
+}

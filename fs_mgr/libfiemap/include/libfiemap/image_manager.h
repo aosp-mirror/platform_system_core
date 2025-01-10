@@ -127,6 +127,10 @@ class IImageManager {
     // Find and remove all images and metadata for this manager.
     virtual bool RemoveAllImages() = 0;
 
+    // Finds and marks all images for deletion upon next reboot. This is used during recovery since
+    // we cannot mount /data
+    virtual bool DisableAllImages() = 0;
+
     virtual bool UnmapImageIfExists(const std::string& name);
 
     // Returns whether DisableImage() was called.
@@ -158,6 +162,7 @@ class ImageManager final : public IImageManager {
     bool MapImageWithDeviceMapper(const IPartitionOpener& opener, const std::string& name,
                                   std::string* dev) override;
     bool RemoveAllImages() override;
+    bool DisableAllImages() override;
     bool DisableImage(const std::string& name) override;
     bool RemoveDisabledImages() override;
     bool GetMappedImageDevice(const std::string& name, std::string* device) override;
