@@ -60,6 +60,7 @@ class SnapshotManagerStub : public ISnapshotManager {
     bool UnmapAllSnapshots() override;
     std::string ReadSourceBuildFingerprint() override;
     void SetMergeStatsFeatures(ISnapshotMergeStats* stats) override;
+    bool IsCancelUpdateSafe() override;
 };
 
 }  // namespace android::snapshot

@@ -16,6 +16,8 @@
 
 #include "trie_serializer.h"
 
+#include <algorithm>
+
 namespace android {
 namespace properties {
 

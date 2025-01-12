@@ -486,6 +486,12 @@ at three times:
    2. Any time that property a transitions to value b, while property c already equals d.
    3. Any time that property c transitions to value d, while property a already equals b.
 
+Note that, for bootloader-provided properties (ro.boot.*), their action cannot be
+auto-triggered until `boot` stage. If they need to be triggered earlier, like at `early-boot`
+stage, they should be tied to the `event`. For example:
+
+`on early-boot && property:a=b`.
+
 
 Trigger Sequence
 ----------------
