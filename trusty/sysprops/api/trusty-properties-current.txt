@@ -1,0 +1,11 @@
+props {
+  module: "android.sysprop.trusty.security_vm"
+  prop {
+    api_name: "enabled"
+    prop_name: "trusty.security_vm.enabled"
+  }
+  prop {
+    api_name: "keymint_enabled"
+    prop_name: "trusty.security_vm.keymint.enabled"
+  }
+}
