@@ -8,7 +8,7 @@ service prefetch /system/bin/prefetch start
     disabled
     oneshot
 
-on property:ro.prefetch_boot.record=true
+on property:prefetch_boot.record=true
     start prefetch_record
 
 service prefetch_record /system/bin/prefetch record --duration ${ro.prefetch_boot.duration_s:-0}
@@ -18,7 +18,7 @@ service prefetch_record /system/bin/prefetch record --duration ${ro.prefetch_boo
     disabled
     oneshot
 
-on property:ro.prefetch_boot.replay=true
+on property:prefetch_boot.replay=true
     start prefetch_replay
 
 service prefetch_replay /system/bin/prefetch replay --io-depth ${ro.prefetch_boot.io_depth:-2} --max-fds ${ro.prefetch_boot.max_fds:-128}
