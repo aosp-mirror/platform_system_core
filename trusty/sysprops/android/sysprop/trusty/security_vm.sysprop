@@ -1,0 +1,67 @@
+# Copyright (C) 2025 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This module accesses properties regarding the Trusty VM that runs apps
+# used to provide security for the system, such as Keymint or Gatekeeper.
+
+module: "android.sysprop.trusty.security_vm"
+owner: Platform
+
+# The default Context Identifier to connect to Trusty over vsock.
+prop {
+    api_name: "vm_cid"
+    prop_name: "trusty.security_vm.vm_cid"
+    type: Integer
+    scope: Internal
+    access: Readonly
+}
+
+# Signals when a nonsecure VM is ready.
+#
+# This is used to launch dependent HALs.
+#
+# Trusty security VMs come in two flavors: non-secure and secure.
+#
+# 1. Non-secure VMs run on emulated environments like Cuttlefish, which lack
+#    pVM firmware and TEE support. Consequently, KeyMint's root-of-trust data
+#    is passed into the VM from the host's HAL, and an RPMB proxy provides
+#    secure storage.
+# 2. Secure VMs run on physical devices. Here, pVM firmware handles the
+#    transfer of root-of-trust data via DeviceTree, and a TEE provides secure
+#    storage.
+prop {
+    api_name: "nonsecure_vm_ready"
+    prop_name: "trusty.security_vm.nonsecure_vm_ready"
+    type: Boolean
+    scope: Internal
+    access: Readonly
+}
+
+# The Trusty Security VM is enabled.
+prop {
+    api_name: "enabled"
+    prop_name: "trusty.security_vm.enabled"
+    type: Boolean
+    scope: Public
+    access: Readonly
+}
+
+# KeyMint is enabled in the Trusty Security VM.
+prop {
+    api_name: "keymint_enabled"
+    prop_name: "trusty.security_vm.keymint.enabled"
+    type: Boolean
+    scope: Public
+    access: Readonly
+}
