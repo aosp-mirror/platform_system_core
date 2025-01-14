@@ -18,7 +18,6 @@ package {
 
 cc_binary {
     name: "mte_crash",
-    tidy: false,
     srcs: ["mte_crash.cpp"],
     sanitize: {
         memtag_heap: true,
