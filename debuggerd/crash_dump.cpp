@@ -451,10 +451,8 @@ static bool GetGuestRegistersFromCrashedProcess(pid_t tid, NativeBridgeGuestRegs
     return false;
   }
 #elif defined(__arm__)
-  if (ptrace(PTRACE_GET_THREAD_AREA, tid, nullptr, &base) == 0) {
-    PLOG(ERROR) << "failed to get thread area for thread " << tid;
-    return false;
-  }
+  // Arm doesn't support any guest architectures yet.
+  return false;
 #elif defined(__i386__)
   struct user_regs_struct regs;
   struct iovec pt_iov = {.iov_base = &regs, .iov_len = sizeof(regs)};
