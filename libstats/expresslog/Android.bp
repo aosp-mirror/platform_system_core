@@ -51,7 +51,7 @@ cc_library {
     min_sdk_version: "33",
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
     ],
 }
 
@@ -85,7 +85,7 @@ cc_library_static {
     min_sdk_version: "33",
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
     ],
 }
 
