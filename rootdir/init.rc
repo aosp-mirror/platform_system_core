@@ -614,6 +614,9 @@ on post-fs
 
     mkdir /metadata/staged-install 0770 root system
 
+    # TODO: Revert after go/android-memcgv2-exp b/386797433
+    mkdir /metadata/libprocessgroup 0770 root system
+
 on late-fs
     # Ensure that tracefs has the correct permissions.
     # This does not work correctly if it is called in post-fs.
@@ -1318,6 +1321,9 @@ on init && property:ro.debuggable=1
 # Multi-Gen LRU Experiment
 on property:persist.device_config.mglru_native.lru_gen_config=none
   write /sys/kernel/mm/lru_gen/enabled 0
+  # Memcg v2 Experiment
+  # TODO: Revert after go/android-memcgv2-exp b/386797433
+  exec - system system -- /system/bin/memcgv2_activation_depth.sh 0
 on property:persist.device_config.mglru_native.lru_gen_config=core
   write /sys/kernel/mm/lru_gen/enabled 1
 on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
@@ -1326,6 +1332,9 @@ on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_y
   write /sys/kernel/mm/lru_gen/enabled 5
 on property:persist.device_config.mglru_native.lru_gen_config=all
   write /sys/kernel/mm/lru_gen/enabled 7
+  # Memcg v2 Experiment
+  # TODO: Revert after go/android-memcgv2-exp b/386797433
+  exec - system system -- /system/bin/memcgv2_activation_depth.sh 3
 
 # Allow other processes to run `snapshotctl` through `init`. This requires
 # `set_prop` permission on `snapshotctl_prop`.
