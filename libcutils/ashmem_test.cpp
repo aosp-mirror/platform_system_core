@@ -84,6 +84,11 @@ TEST(AshmemTest, ForkTest) {
     ASSERT_EQ(0, memcmp(region1, data.data(), size));
     EXPECT_EQ(0, munmap(region1, size));
 
+    // This part of the test forks a separate process via ASSERT_EXIT() and
+    // clears the ashmem buffer.
+    //
+    // This is to ensure that updates to the contents of the buffer are visible
+    // across processes with a reference to the buffer.
     ASSERT_EXIT(
         {
             if (!ashmem_valid(fd)) {
@@ -206,15 +211,25 @@ TEST(AshmemTest, ForkProtTest) {
     int protFlags[] = { PROT_READ, PROT_WRITE };
     for (size_t i = 0; i < arraysize(protFlags); i++) {
         ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+
+        // This part of the test forks a process via ASSERT_EXIT()
+        // and has the child process change the mapping permissions of the
+        // buffer.
+        //
+        // The intent of this is to ensure that updates to the buffer's
+        // mapping permissions are visible across processes that reference the
+        // buffer.
+        //
+        // In this case, the parent process attempts to map the buffer with a
+        // permission that is denied, which should fail.
         ASSERT_EXIT(
             {
                 if (!ashmem_valid(fd)) {
                     _exit(3);
-                } else if (ashmem_set_prot_region(fd, protFlags[i]) >= 0) {
-                    _exit(0);
-                } else {
+                } else if (ashmem_set_prot_region(fd, protFlags[i]) == -1) {
                     _exit(1);
                 }
+                _exit(0);
             },
             ::testing::ExitedWithCode(0), "");
         ASSERT_NO_FATAL_FAILURE(TestProtDenied(fd, size, protFlags[1-i]));
@@ -237,6 +252,13 @@ TEST(AshmemTest, ForkMultiRegionTest) {
         EXPECT_EQ(0, munmap(region, size));
     }
 
+    // This part of the test creates a child process via ASSERT_EXIT()
+    // that clears each of the ashmem buffers that were created earlier.
+    //
+    // The intent of this is for the parent process to check each region to make
+    // sure that the updates from the child process are visible, thereby showing
+    // that updates across multiple shared buffers are visible across multiple
+    // processes.
     ASSERT_EXIT({
         for (int i = 0; i < nRegions; i++) {
             if (!ashmem_valid(fd[i])) {
