@@ -181,20 +181,22 @@ TEST(AshmemTest, ProtTest) {
     const size_t size = getpagesize();
     void *region;
 
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ));
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_EXEC));
     TestProtDenied(fd, size, PROT_WRITE);
-    TestProtIs(fd, PROT_READ);
+    TestProtIs(fd, PROT_READ | PROT_EXEC);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ, &region));
     EXPECT_EQ(0, munmap(region, size));
 
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
-    TestProtIs(fd, PROT_READ | PROT_WRITE);
-    ASSERT_EQ(0, ashmem_set_prot_region(fd, PROT_READ));
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE |
+                                             PROT_EXEC));
+    TestProtIs(fd, PROT_READ | PROT_WRITE | PROT_EXEC);
+    ASSERT_EQ(0, ashmem_set_prot_region(fd, PROT_READ | PROT_EXEC));
     errno = 0;
-    ASSERT_EQ(-1, ashmem_set_prot_region(fd, PROT_READ | PROT_WRITE))
+    ASSERT_EQ(-1, ashmem_set_prot_region(fd, PROT_READ | PROT_WRITE |
+                                         PROT_EXEC))
         << "kernel shouldn't allow adding protection bits";
     EXPECT_EQ(EINVAL, errno);
-    TestProtIs(fd, PROT_READ);
+    TestProtIs(fd, PROT_READ | PROT_EXEC);
     TestProtDenied(fd, size, PROT_WRITE);
 }
 
