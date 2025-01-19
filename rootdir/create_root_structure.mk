@@ -41,7 +41,8 @@ ALL_ROOTDIR_SYMLINKS := \
   $(TARGET_ROOT_OUT)/etc \
   $(TARGET_ROOT_OUT)/bugreports \
   $(TARGET_ROOT_OUT)/d \
-  $(TARGET_ROOT_OUT)/sdcard
+  $(TARGET_ROOT_OUT)/sdcard \
+  $(TARGET_ROOT_OUT)/adb_keys \
 
 ifdef BOARD_USES_VENDORIMAGE
   LOCAL_POST_INSTALL_CMD += ; mkdir -p $(TARGET_ROOT_OUT)/vendor

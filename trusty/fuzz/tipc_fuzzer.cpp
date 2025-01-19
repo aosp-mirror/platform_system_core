@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <android-base/result.h>
+#include <fuzzer/FuzzedDataProvider.h>
 #include <stdlib.h>
 #include <trusty/coverage/coverage.h>
 #include <trusty/coverage/uuid.h>
@@ -23,6 +25,7 @@
 #include <iostream>
 #include <memory>
 
+using android::base::Result;
 using android::trusty::coverage::CoverageRecord;
 using android::trusty::fuzz::ExtraCounters;
 using android::trusty::fuzz::TrustyApp;
@@ -41,7 +44,12 @@ using android::trusty::fuzz::TrustyApp;
 #error "Binary file name must be parameterized using -DTRUSTY_APP_FILENAME."
 #endif
 
-static TrustyApp kTrustyApp(TIPC_DEV, TRUSTY_APP_PORT);
+#ifdef TRUSTY_APP_MAX_CONNECTIONS
+constexpr size_t MAX_CONNECTIONS = TRUSTY_APP_MAX_CONNECTIONS;
+#else
+constexpr size_t MAX_CONNECTIONS = 1;
+#endif
+
 static std::unique_ptr<CoverageRecord> record;
 
 extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
@@ -53,7 +61,8 @@ extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     }
 
     /* Make sure lazy-loaded TAs have started and connected to coverage service. */
-    auto ret = kTrustyApp.Connect();
+    TrustyApp ta(TIPC_DEV, TRUSTY_APP_PORT);
+    auto ret = ta.Connect();
     if (!ret.ok()) {
         std::cerr << ret.error() << std::endl;
         exit(-1);
@@ -73,24 +82,74 @@ extern "C" int LLVMFuzzerInitialize(int* /* argc */, char*** /* argv */) {
     return 0;
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    static uint8_t buf[TIPC_MAX_MSG_SIZE];
+void abortResult(Result<void> result) {
+    if (result.ok()) {
+        return;
+    }
+    std::cerr << result.error() << std::endl;
+    android::trusty::fuzz::Abort();
+}
 
+void testOneInput(FuzzedDataProvider& provider) {
+    std::vector<TrustyApp> trustyApps;
+
+    while (provider.remaining_bytes() > 0) {
+        static_assert(MAX_CONNECTIONS >= 1);
+
+        // Either
+        // 1. Add a new TA and connect.
+        // 2. Remove a TA.
+        // 3. Send a random message to a random TA.
+        const std::function<void()> options[] = {
+                // Add a new TA and connect.
+                [&]() {
+                    if (trustyApps.size() >= MAX_CONNECTIONS) {
+                        return;
+                    }
+                    auto& ta = trustyApps.emplace_back(TIPC_DEV, TRUSTY_APP_PORT);
+                    abortResult(ta.Connect());
+                },
+                // Remove a TA.
+                [&]() {
+                    if (trustyApps.empty()) {
+                        return;
+                    }
+                    trustyApps.pop_back();
+                },
+                // Send a random message to a random TA.
+                [&]() {
+                    if (trustyApps.empty()) {
+                        return;
+                    }
+
+                    // Choose a random TA.
+                    const auto i =
+                            provider.ConsumeIntegralInRange<size_t>(0, trustyApps.size() - 1);
+                    std::swap(trustyApps[i], trustyApps.back());
+                    auto& ta = trustyApps.back();
+
+                    // Send a random message.
+                    const auto data = provider.ConsumeRandomLengthString();
+                    abortResult(ta.Write(data.data(), data.size()));
+
+                    std::array<uint8_t, TIPC_MAX_MSG_SIZE> buf;
+                    abortResult(ta.Read(buf.data(), buf.size()));
+
+                    // Reconnect to ensure that the service is still up.
+                    ta.Disconnect();
+                    abortResult(ta.Connect());
+                },
+        };
+
+        provider.PickValueInArray(options)();
+    }
+}
+
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     ExtraCounters counters(record.get());
     counters.Reset();
 
-    auto ret = kTrustyApp.Write(data, size);
-    if (ret.ok()) {
-        ret = kTrustyApp.Read(&buf, sizeof(buf));
-    }
-
-    // Reconnect to ensure that the service is still up
-    kTrustyApp.Disconnect();
-    ret = kTrustyApp.Connect();
-    if (!ret.ok()) {
-        std::cerr << ret.error() << std::endl;
-        android::trusty::fuzz::Abort();
-    }
-
-    return ret.ok() ? 0 : -1;
+    FuzzedDataProvider provider(data, size);
+    testOneInput(provider);
+    return 0;
 }
