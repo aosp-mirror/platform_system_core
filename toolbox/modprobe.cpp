@@ -52,7 +52,7 @@ void print_usage(void) {
     LOG(INFO) << "  -h, --help: Print this help";
     LOG(INFO) << "  -l, --list: List modules matching pattern";
     LOG(INFO) << "  -r, --remove: Remove MODULE (multiple modules may be specified)";
-    LOG(INFO) << "  -s, --syslog: print to syslog also";
+    LOG(INFO) << "  -s, --syslog: print to syslog also (deprecated)";
     LOG(INFO) << "  -q, --quiet: disable messages";
     LOG(INFO) << "  -v, --verbose: enable more messages, even more with a second -v";
     LOG(INFO);
@@ -76,12 +76,10 @@ std::string stripComments(const std::string& str) {
     /* NOTREACHED */
 }
 
-auto syslog = false;
-
 void MyLogger(android::base::LogId id, android::base::LogSeverity severity, const char* tag,
               const char* file, unsigned int line, const char* message) {
     android::base::StdioLogger(id, severity, tag, file, line, message);
-    if (syslog && message[0]) {
+    if (message[0]) {
         android::base::KernelLogger(id, severity, tag, file, line, message);
     }
 }
@@ -200,7 +198,6 @@ extern "C" int modprobe_main(int argc, char** argv) {
                 mode = RemoveModulesMode;
                 break;
             case 's':
-                syslog = true;
                 break;
             case 'v':
                 if (android::base::GetMinimumLogSeverity() <= android::base::DEBUG) {
