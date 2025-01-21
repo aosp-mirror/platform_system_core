@@ -18,6 +18,8 @@
 
 #include <android/os/IStatsBootstrapAtomService.h>
 
+#include <mutex>
+
 namespace android {
 namespace os {
 namespace stats {

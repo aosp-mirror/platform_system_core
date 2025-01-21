@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include <unistd.h>
 
 #include <android-base/mapped_file.h>
