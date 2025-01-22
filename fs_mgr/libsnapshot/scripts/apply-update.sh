@@ -52,13 +52,16 @@ ensure_create_snapshot
 # Function to flash static partitions
 flash_static_partitions() {
   local wipe_flag="$1"
+  local flash_bootloader="$2"
 
-  fastboot flash bootloader "$OUT"/bootloader.img
-  fastboot reboot bootloader
-  sleep 1
-  fastboot flash radio "$OUT"/radio.img
-  fastboot reboot bootloader
-  sleep 1
+  if (( flash_bootloader )); then
+    fastboot flash bootloader "$OUT"/bootloader.img
+    fastboot reboot bootloader
+    sleep 1
+    fastboot flash radio "$OUT"/radio.img
+    fastboot reboot bootloader
+    sleep 1
+  fi
   fastboot flashall --exclude-dynamic-partitions --disable-super-optimization --skip-reboot
 
   if (( wipe_flag )); then
@@ -120,6 +123,7 @@ EOF
 }
 
 skip_static_partitions=0
+flash_bootloader=1
 wipe_flag=0
 help_flag=0
 
@@ -131,6 +135,9 @@ for arg in "$@"; do
       ;;
     --wipe)
       wipe_flag=1
+      ;;
+    --skip_bootloader)
+      flash_bootloader=0
       ;;
     --help)
       help_flag=1
@@ -214,7 +221,7 @@ else
     log_message "Rebooting device to bootloader"
     adb reboot bootloader
     log_message "Waiting to enter fastboot bootloader"
-    flash_static_partitions "$wipe_flag"
+    flash_static_partitions "$wipe_flag" "$flash_bootloader"
 fi
 
 log_message "Update completed"
