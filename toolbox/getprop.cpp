@@ -17,6 +17,7 @@
 #include <getopt.h>
 #include <sys/system_properties.h>
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
