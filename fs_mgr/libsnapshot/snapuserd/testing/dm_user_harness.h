@@ -19,12 +19,12 @@
 #include "harness.h"
 #include "temp_device.h"
 
+#include <snapuserd/dm_user_block_server.h>
+
 namespace android {
 namespace snapshot {
 
 using android::base::unique_fd;
-
-class DmUserBlockServerFactory;
 
 class DmUserDevice final : public IUserDevice {
   public:

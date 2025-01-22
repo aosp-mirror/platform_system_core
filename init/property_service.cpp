@@ -103,8 +103,6 @@ using android::properties::PropertyInfoEntry;
 namespace android {
 namespace init {
 
-class PersistWriteThread;
-
 constexpr auto FINGERPRINT_PROP = "ro.build.fingerprint";
 constexpr auto LEGACY_FINGERPRINT_PROP = "ro.build.legacy.fingerprint";
 constexpr auto ID_PROP = "ro.build.id";
@@ -121,8 +119,6 @@ static std::mutex accept_messages_lock;
 static std::mutex selinux_check_access_lock;
 static std::thread property_service_thread;
 static std::thread property_service_for_system_thread;
-
-static std::unique_ptr<PersistWriteThread> persist_write_thread;
 
 static PropertyInfoAreaFile property_info_area;
 
@@ -383,6 +379,8 @@ class PersistWriteThread {
     std::condition_variable cv_;
     std::deque<std::tuple<std::string, std::string, SocketConnection>> work_;
 };
+
+static std::unique_ptr<PersistWriteThread> persist_write_thread;
 
 static std::optional<uint32_t> PropertySet(const std::string& name, const std::string& value,
                                            SocketConnection* socket, std::string* error) {
