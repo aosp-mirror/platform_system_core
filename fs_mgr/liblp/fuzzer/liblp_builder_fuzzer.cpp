@@ -15,6 +15,7 @@
  *
  */
 
+#include <functional>
 #include <fuzzer/FuzzedDataProvider.h>
 #include <liblp/builder.h>
 #include <liblp/property_fetcher.h>

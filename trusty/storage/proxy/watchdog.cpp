@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <vector>
