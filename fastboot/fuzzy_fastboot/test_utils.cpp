@@ -28,6 +28,8 @@
 #include "test_utils.h"
 #include <fcntl.h>
 #include <termios.h>
+#include <algorithm>
+#include <iterator>
 #include <sstream>
 
 namespace fastboot {
