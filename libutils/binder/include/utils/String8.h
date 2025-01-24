@@ -18,6 +18,7 @@
 #define ANDROID_STRING8_H
 
 #include <iostream>
+#include <string>
 
 #include <utils/Errors.h>
 #include <utils/Unicode.h>
@@ -25,11 +26,6 @@
 
 #include <string.h> // for strcmp
 #include <stdarg.h>
-
-#if __has_include(<string>)
-#include <string>
-#define HAS_STRING
-#endif
 
 #if __has_include(<string_view>)
 #include <string_view>
@@ -390,7 +386,6 @@ inline String8::operator std::string_view() const
 
 // ---------------------------------------------------------------------------
 
-#undef HAS_STRING
 #undef HAS_STRING_VIEW
 
 #endif // ANDROID_STRING8_H
