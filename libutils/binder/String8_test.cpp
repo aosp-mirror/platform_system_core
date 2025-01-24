@@ -176,3 +176,11 @@ TEST_F(String8Test, comparisons) {
     EXPECT_TRUE(pair1 < pair2);
     EXPECT_FALSE(pair1 > pair2);
 }
+
+TEST_F(String8Test, SvCtor) {
+    const char* expected = "abc";
+    std::string s{expected};
+    EXPECT_STREQ(String8{s}.c_str(), expected);
+    EXPECT_STREQ(String8{std::string_view{s}}.c_str(), expected);
+    EXPECT_STREQ(String8{expected}.c_str(), expected);
+}
