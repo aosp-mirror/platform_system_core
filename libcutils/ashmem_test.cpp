@@ -31,7 +31,7 @@
 
 using android::base::unique_fd;
 
-void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
+static void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
     fd = unique_fd(ashmem_create_region(nullptr, size));
     ASSERT_TRUE(fd >= 0);
     ASSERT_TRUE(ashmem_valid(fd));
@@ -44,26 +44,26 @@ void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
     ASSERT_EQ(FD_CLOEXEC, (fcntl(fd, F_GETFD) & FD_CLOEXEC));
 }
 
-void TestMmap(const unique_fd& fd, size_t size, int prot, void** region, off_t off = 0) {
+static void TestMmap(const unique_fd& fd, size_t size, int prot, void** region, off_t off = 0) {
     ASSERT_TRUE(fd >= 0);
     ASSERT_TRUE(ashmem_valid(fd));
     *region = mmap(nullptr, size, prot, MAP_SHARED, fd, off);
     ASSERT_NE(MAP_FAILED, *region);
 }
 
-void TestProtDenied(const unique_fd &fd, size_t size, int prot) {
+static void TestProtDenied(const unique_fd &fd, size_t size, int prot) {
     ASSERT_TRUE(fd >= 0);
     ASSERT_TRUE(ashmem_valid(fd));
     EXPECT_EQ(MAP_FAILED, mmap(nullptr, size, prot, MAP_SHARED, fd, 0));
 }
 
-void TestProtIs(const unique_fd& fd, int prot) {
+static void TestProtIs(const unique_fd& fd, int prot) {
     ASSERT_TRUE(fd >= 0);
     ASSERT_TRUE(ashmem_valid(fd));
     EXPECT_EQ(prot, ioctl(fd, ASHMEM_GET_PROT_MASK));
 }
 
-void FillData(std::vector<uint8_t>& data) {
+static void FillData(std::vector<uint8_t>& data) {
     for (size_t i = 0; i < data.size(); i++) {
         data[i] = i & 0xFF;
     }
@@ -78,15 +78,11 @@ static void waitForChildProcessExit(pid_t pid) {
     ASSERT_EQ(0, WEXITSTATUS(exitStatus));
 }
 
-TEST(AshmemTest, ForkTest) {
-    const size_t size = getpagesize();
+static void ForkTest(const unique_fd &fd, size_t size) {
+    void* region1 = nullptr;
     std::vector<uint8_t> data(size);
     FillData(data);
 
-    unique_fd fd;
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
-
-    void* region1 = nullptr;
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ | PROT_WRITE, &region1));
 
     memcpy(region1, data.data(), size);
@@ -125,16 +121,12 @@ TEST(AshmemTest, ForkTest) {
     EXPECT_EQ(0, munmap(region2, size));
 }
 
-TEST(AshmemTest, FileOperationsTest) {
-    unique_fd fd;
+static void FileOperationsTest(const unique_fd &fd, size_t size) {
     void* region = nullptr;
 
-    // Allocate a 4-page buffer, but leave page-sized holes on either side
     const size_t pageSize = getpagesize();
-    const size_t size = pageSize * 4;
     const size_t dataSize = pageSize * 2;
     const size_t holeSize = pageSize;
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, dataSize, PROT_READ | PROT_WRITE, &region, holeSize));
 
     std::vector<uint8_t> data(dataSize);
@@ -187,19 +179,16 @@ TEST(AshmemTest, FileOperationsTest) {
     EXPECT_EQ(0, munmap(region, dataSize));
 }
 
-TEST(AshmemTest, ProtTest) {
-    unique_fd fd;
-    const size_t size = getpagesize();
+static void ProtTestROBuffer(const unique_fd &fd, size_t size) {
     void *region;
 
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_EXEC));
     TestProtDenied(fd, size, PROT_WRITE);
     TestProtIs(fd, PROT_READ | PROT_EXEC);
     ASSERT_NO_FATAL_FAILURE(TestMmap(fd, size, PROT_READ, &region));
     EXPECT_EQ(0, munmap(region, size));
+}
 
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE |
-                                             PROT_EXEC));
+static void ProtTestRWBuffer(const unique_fd &fd, size_t size) {
     TestProtIs(fd, PROT_READ | PROT_WRITE | PROT_EXEC);
     ASSERT_EQ(0, ashmem_set_prot_region(fd, PROT_READ | PROT_EXEC));
     errno = 0;
@@ -211,12 +200,7 @@ TEST(AshmemTest, ProtTest) {
     TestProtDenied(fd, size, PROT_WRITE);
 }
 
-TEST(AshmemTest, ForkProtTest) {
-    unique_fd fd;
-    const size_t size = getpagesize();
-
-    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
-
+static void ForkProtTest(const unique_fd &fd, size_t size) {
     pid_t pid = fork();
     if (!pid) {
         // Change buffer mapping permissions to read-only to ensure that
@@ -236,17 +220,13 @@ TEST(AshmemTest, ForkProtTest) {
     ASSERT_NO_FATAL_FAILURE(TestProtDenied(fd, size, PROT_WRITE));
 }
 
-TEST(AshmemTest, ForkMultiRegionTest) {
-    const size_t size = getpagesize();
+static void ForkMultiRegionTest(unique_fd fds[], int nRegions, size_t size) {
     std::vector<uint8_t> data(size);
     FillData(data);
 
-    constexpr int nRegions = 16;
-    unique_fd fd[nRegions];
     for (int i = 0; i < nRegions; i++) {
-        ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd[i], PROT_READ | PROT_WRITE));
         void* region = nullptr;
-        ASSERT_NO_FATAL_FAILURE(TestMmap(fd[i], size, PROT_READ | PROT_WRITE, &region));
+        ASSERT_NO_FATAL_FAILURE(TestMmap(fds[i], size, PROT_READ | PROT_WRITE, &region));
         memcpy(region, data.data(), size);
         ASSERT_EQ(0, memcmp(region, data.data(), size));
         EXPECT_EQ(0, munmap(region, size));
@@ -257,10 +237,10 @@ TEST(AshmemTest, ForkMultiRegionTest) {
         // Clear each ashmem buffer in the context of the child process to
         // ensure that the updates are visible to the parent process later.
         for (int i = 0; i < nRegions; i++) {
-            if (!ashmem_valid(fd[i])) {
+            if (!ashmem_valid(fds[i])) {
                 _exit(3);
             }
-            void *region = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd[i], 0);
+            void *region = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fds[i], 0);
             if (region == MAP_FAILED) {
                 _exit(1);
             }
@@ -280,8 +260,59 @@ TEST(AshmemTest, ForkMultiRegionTest) {
     memset(data.data(), 0, size);
     for (int i = 0; i < nRegions; i++) {
         void *region;
-        ASSERT_NO_FATAL_FAILURE(TestMmap(fd[i], size, PROT_READ | PROT_WRITE, &region));
+        ASSERT_NO_FATAL_FAILURE(TestMmap(fds[i], size, PROT_READ | PROT_WRITE, &region));
         ASSERT_EQ(0, memcmp(region, data.data(), size));
         EXPECT_EQ(0, munmap(region, size));
     }
+
+}
+
+TEST(AshmemTest, ForkTest) {
+    const size_t size = getpagesize();
+    unique_fd fd;
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    ASSERT_NO_FATAL_FAILURE(ForkTest(fd, size));
+}
+
+TEST(AshmemTest, FileOperationsTest) {
+    const size_t pageSize = getpagesize();
+    // Allocate a 4-page buffer, but leave page-sized holes on either side in
+    // the test.
+    const size_t size = pageSize * 4;
+    unique_fd fd;
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    ASSERT_NO_FATAL_FAILURE(FileOperationsTest(fd, size));
+}
+
+TEST(AshmemTest, ProtTest) {
+    unique_fd fd;
+    const size_t size = getpagesize();
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_EXEC));
+    ASSERT_NO_FATAL_FAILURE(ProtTestROBuffer(fd, size));
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE | PROT_EXEC));
+    ASSERT_NO_FATAL_FAILURE(ProtTestRWBuffer(fd, size));
+}
+
+TEST(AshmemTest, ForkProtTest) {
+    unique_fd fd;
+    const size_t size = getpagesize();
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fd, PROT_READ | PROT_WRITE));
+    ASSERT_NO_FATAL_FAILURE(ForkProtTest(fd, size));
+}
+
+TEST(AshmemTest, ForkMultiRegionTest) {
+    const size_t size = getpagesize();
+    constexpr int nRegions = 16;
+    unique_fd fds[nRegions];
+
+    for (int i = 0; i < nRegions; i++) {
+        ASSERT_NO_FATAL_FAILURE(TestCreateRegion(size, fds[i], PROT_READ | PROT_WRITE));
+    }
+
+    ASSERT_NO_FATAL_FAILURE(ForkMultiRegionTest(fds, nRegions, size));
 }
