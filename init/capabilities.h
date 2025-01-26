@@ -18,6 +18,7 @@
 #include <sys/capability.h>
 
 #include <bitset>
+#include <memory>
 #include <string>
 #include <type_traits>
 

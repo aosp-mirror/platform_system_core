@@ -17,6 +17,7 @@
 
 #include <android-base/unique_fd.h>
 #include <fcntl.h>
+#include <functional>
 #include <fuzzer/FuzzedDataProvider.h>
 #include <liblp/metadata_format.h>
 #include <liblp/super_layout_builder.h>
