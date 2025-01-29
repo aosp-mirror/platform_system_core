@@ -19,15 +19,11 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include <utils/Errors.h>
 #include <utils/String8.h>
 #include <utils/TypeHelpers.h>
-
-#if __has_include(<string_view>)
-#include <string_view>
-#define HAS_STRING_VIEW
-#endif
 
 #if __cplusplus >= 202002L
 #include <compare>
@@ -125,11 +121,9 @@ public:
 
     inline                      operator const char16_t*() const;
 
-#ifdef HAS_STRING_VIEW
     // Implicit cast to std::u16string is not implemented on purpose - u16string_view is much
     // lighter and if one needs, they can still create u16string from u16string_view.
     inline                      operator std::u16string_view() const;
-#endif
 
     // Static and non-static String16 behave the same for the users, so
     // this method isn't of much use for the users. It is public for testing.
@@ -413,7 +407,5 @@ inline String16::operator std::u16string_view() const
 }  // namespace android
 
 // ---------------------------------------------------------------------------
-
-#undef HAS_STRING_VIEW
 
 #endif // ANDROID_STRING16_H
