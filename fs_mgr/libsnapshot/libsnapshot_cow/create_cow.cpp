@@ -478,11 +478,12 @@ bool CreateSnapshot::ReadBlocks(off_t offset, const int skip_blocks, const uint6
 
             if (create_snapshot_patch_ && use_merkel_tree_) {
                 std::vector<uint8_t> digest(32, 0);
-                CalculateDigest(bufptr, BLOCK_SZ, target_salt_.data(), target_salt_.size(),
+                CalculateDigest(bufptr, BLOCK_SZ, source_salt_.data(), source_salt_.size(),
                                 digest.data());
                 std::vector<uint8_t> final_digest(32, 0);
-                CalculateDigest(digest.data(), digest.size(), source_salt_.data(),
-                                source_salt_.size(), final_digest.data());
+                CalculateDigest(digest.data(), digest.size(), target_salt_.data(),
+                                target_salt_.size(), final_digest.data());
+
                 hash = ToHexString(final_digest.data(), final_digest.size());
             } else {
                 uint8_t checksum[32];
