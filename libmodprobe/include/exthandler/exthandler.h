@@ -17,6 +17,7 @@
 #pragma once
 #include <android-base/result.h>
 #include <string>
+#include <sys/types.h>
 
 android::base::Result<std::string> RunExternalHandler(
         const std::string& handler, uid_t uid, gid_t gid,
