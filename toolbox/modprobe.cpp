@@ -23,6 +23,7 @@
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <android-base/strings.h>
 #include <android-base/stringprintf.h>
 #include <modprobe/modprobe.h>
@@ -88,6 +89,17 @@ void MyLogger(android::base::LogId id, android::base::LogSeverity severity, cons
 
 static bool ModDirMatchesKernelPageSize(const char* mod_dir) {
     static const unsigned int kernel_pgsize_kb = getpagesize() / 1024;
+    unsigned int mod_pgsize_kb = 16;  // 16k default since android15-6.6
+
+    if (mod_dir && strstr(mod_dir, "-4k") != NULL) {
+        mod_pgsize_kb = 4;
+    }
+
+    return kernel_pgsize_kb == mod_pgsize_kb;
+}
+
+static bool ModDirMatchesKernelPageSizeLegacy(const char* mod_dir) {
+    static const unsigned int kernel_pgsize_kb = getpagesize() / 1024;
     const char* mod_sfx = strrchr(mod_dir, '_');
     unsigned int mod_pgsize_kb;
     int mod_sfx_len;
@@ -102,7 +114,7 @@ static bool ModDirMatchesKernelPageSize(const char* mod_dir) {
 
 // Find directories in format of "/lib/modules/x.y.z-*".
 static int KernelVersionNameFilter(const dirent* de) {
-    unsigned int major, minor;
+    static unsigned int major, minor;
     static std::string kernel_version;
     utsname uts;
 
@@ -115,7 +127,20 @@ static int KernelVersionNameFilter(const dirent* de) {
     }
 
     if (android::base::StartsWith(de->d_name, kernel_version)) {
-        return ModDirMatchesKernelPageSize(de->d_name);
+        // Check for GKI to avoid breaking non-GKI Android devices.
+        if (UNLIKELY(strstr(de->d_name, "-android") == NULL)) {
+            // For non-GKI, just match when the major and minor versions match.
+            return 1;
+        }
+
+        // For android15-6.6 and later, GKI adds `-4k` to the UTS release
+        // string to identify 4kb page size kernels. If there is no page size
+        // suffix, then the kernel page size is 16kb.
+        if (major > 6 || (major == 6 && minor >= 6)) {
+            return ModDirMatchesKernelPageSize(de->d_name);
+        } else {
+            return ModDirMatchesKernelPageSizeLegacy(de->d_name);
+        }
     }
     return 0;
 }
