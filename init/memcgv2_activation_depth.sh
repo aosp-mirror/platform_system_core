@@ -71,10 +71,9 @@ then
     # We can deactivate memcgs which are deeper than the new depth value, however that would leave
     # behind zombie memcgs which would ruin the metrics produced from this device. The only way to
     # eliminate those zombies is to remove the entire cgroup, which we cannot do without killing
-    # all the contained processes. So the only real option we have is to reboot here.
-    # This should only happen once at the end of the experiment.
-    echo "Rebooting due to decreased memcg v2 MaxActivationDepth"
-    reboot
+    # all the contained processes. So the only real option we have is to reboot here, but that would
+    # look like a random reboot to users. So don't do anything now. Wait until the next reboot for
+    # the new setting to be applied.
 elif [ $max_activation_depth -gt $current_activation_depth ]
 then
     for d in $(seq $max_activation_depth)
