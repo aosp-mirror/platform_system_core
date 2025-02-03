@@ -47,7 +47,7 @@ void TeardownAllOverlayForMountPoint(const std::string& mount_point = {});
 // b/388912628 removes the need for override_creds
 // Once this bug is fixed and has had enough soak time, remove this variable and hard code to false
 // where it used
-constexpr bool use_override_creds = true;
+constexpr bool use_override_creds = false;
 
 }  // namespace fs_mgr
 }  // namespace android
