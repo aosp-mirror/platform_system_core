@@ -74,6 +74,7 @@ then
     # all the contained processes. So the only real option we have is to reboot here, but that would
     # look like a random reboot to users. So don't do anything now. Wait until the next reboot for
     # the new setting to be applied.
+    :
 elif [ $max_activation_depth -gt $current_activation_depth ]
 then
     for d in $(seq $max_activation_depth)
