@@ -1327,11 +1327,17 @@ on property:persist.device_config.mglru_native.lru_gen_config=none
 on property:persist.device_config.mglru_native.lru_gen_config=core
   write /sys/kernel/mm/lru_gen/enabled 1
 on property:persist.device_config.mglru_native.lru_gen_config=core_and_mm_walk
-  write /sys/kernel/mm/lru_gen/enabled 3
+  write /sys/kernel/mm/lru_gen/enabled y
+  # Memcg v2 Experiment
+  # TODO: Revert after go/android-memcgv2-exp b/386797433
+  exec - system system -- /system/bin/memcgv2_activation_depth.sh 1
 on property:persist.device_config.mglru_native.lru_gen_config=core_and_nonleaf_young
-  write /sys/kernel/mm/lru_gen/enabled 5
+  write /sys/kernel/mm/lru_gen/enabled y
+  # Memcg v2 Experiment
+  # TODO: Revert after go/android-memcgv2-exp b/386797433
+  exec - system system -- /system/bin/memcgv2_activation_depth.sh 2
 on property:persist.device_config.mglru_native.lru_gen_config=all
-  write /sys/kernel/mm/lru_gen/enabled 7
+  write /sys/kernel/mm/lru_gen/enabled y
   # Memcg v2 Experiment
   # TODO: Revert after go/android-memcgv2-exp b/386797433
   exec - system system -- /system/bin/memcgv2_activation_depth.sh 3
