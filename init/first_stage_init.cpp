@@ -402,7 +402,7 @@ int FirstStageMain(int argc, char** argv) {
 
     // /second_stage_resources is used to preserve files from first to second
     // stage init
-    CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_NODEV,
+    CHECKCALL(mount("tmpfs", kSecondStageRes, "tmpfs", MS_NOSUID | MS_NODEV,
                     "mode=0755,uid=0,gid=0"));
 
     if (IsMicrodroid() && android::virtualization::IsOpenDiceChangesFlagEnabled()) {
