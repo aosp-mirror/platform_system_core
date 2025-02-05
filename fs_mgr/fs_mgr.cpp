@@ -2335,6 +2335,11 @@ OverlayfsCheckResult CheckOverlayfs() {
     if (!fs_mgr_filesystem_available("overlay")) {
         return {.supported = false};
     }
+
+    if (!use_override_creds) {
+        return {.supported = true};
+    }
+
     struct utsname uts;
     if (uname(&uts) == -1) {
         return {.supported = false};

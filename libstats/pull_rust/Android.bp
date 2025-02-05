@@ -24,7 +24,7 @@ rust_bindgen {
     crate_name: "statspull_bindgen",
     visibility: [
         "//frameworks/proto_logging/stats/stats_log_api_gen",
-        "//packages/modules/Virtualization/libs/statslog_virtualization",
+        "//packages/modules:__subpackages__",
     ],
     source_stem: "bindings",
     bindgen_flags: [
