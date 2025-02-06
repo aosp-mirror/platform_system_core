@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <time.h>
 
+#include <algorithm>
 #include <string>
 
 #include <android-base/file.h>

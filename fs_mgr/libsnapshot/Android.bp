@@ -308,17 +308,15 @@ cc_test {
         "vts",
         "general-tests",
     ],
-    compile_multilib: "both",
-    multilib: {
-        lib32: {
-            suffix: "32",
-        },
-        lib64: {
-            suffix: "64",
-        },
-    },
+    compile_multilib: "first",
     test_options: {
         min_shipping_api_level: 30,
+        test_runner_options: [
+            {
+                name: "force-no-test-error",
+                value: "false",
+            },
+        ],
     },
 }
 
@@ -374,11 +372,15 @@ cc_binary {
     srcs: [
         "snapshotctl.cpp",
         "scratch_super.cpp",
+        "android/snapshot/snapshot.proto",
     ],
     static_libs: [
         "libbrotli",
         "libfstab",
         "libz",
+        "libavb",
+        "libfs_avb",
+        "libcrypto_static",
         "update_metadata-protos",
     ],
     shared_libs: [
@@ -488,7 +490,10 @@ cc_binary {
     host_supported: true,
     device_supported: false,
 
-    srcs: ["libsnapshot_cow/create_cow.cpp"],
+    srcs: [
+        "libsnapshot_cow/create_cow.cpp",
+        "android/snapshot/snapshot.proto",
+    ],
 
     cflags: [
         "-Wall",
@@ -498,14 +503,21 @@ cc_binary {
     static_libs: [
         "liblog",
         "libbase",
+        "libfstab",
         "libext4_utils",
         "libsnapshot_cow",
         "libcrypto",
         "libbrotli",
         "libz",
+        "libdm",
         "liblz4",
         "libzstd",
         "libgflags",
+        "libavb",
+        "libext2_uuid",
+        "libfs_avb",
+        "libcrypto",
+        "libprotobuf-cpp-lite",
     ],
     shared_libs: [
     ],

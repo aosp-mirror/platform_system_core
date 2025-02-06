@@ -3,6 +3,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 

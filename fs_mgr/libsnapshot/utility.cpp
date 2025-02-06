@@ -205,6 +205,22 @@ std::ostream& operator<<(std::ostream& os, const Now&) {
     return os << std::put_time(&now, "%Y%m%d-%H%M%S");
 }
 
+std::ostream& operator<<(std::ostream& os, CancelResult result) {
+    switch (result) {
+        case CancelResult::OK:
+            return os << "ok";
+        case CancelResult::ERROR:
+            return os << "error";
+        case CancelResult::LIVE_SNAPSHOTS:
+            return os << "live_snapshots";
+        case CancelResult::NEEDS_MERGE:
+            return os << "needs_merge";
+        default:
+            LOG(ERROR) << "Unknown cancel result: " << static_cast<uint32_t>(result);
+            return os;
+    }
+}
+
 void AppendExtent(RepeatedPtrField<chromeos_update_engine::Extent>* extents, uint64_t start_block,
                   uint64_t num_blocks) {
     if (extents->size() > 0) {

@@ -136,6 +136,8 @@ libinit_cc_defaults {
                 "-DWORLD_WRITABLE_KMSG=1",
                 "-UDUMP_ON_UMOUNT_FAILURE",
                 "-DDUMP_ON_UMOUNT_FAILURE=1",
+                "-UALLOW_REMOUNT_OVERLAYS",
+                "-DALLOW_REMOUNT_OVERLAYS=1",
             ],
         },
         eng: {
@@ -263,7 +265,10 @@ phony {
     name: "init",
     required: [
         "init_second_stage",
-    ],
+    ] + select(product_variable("debuggable"), {
+        true: ["overlay_remounter"],
+        false: [],
+    }),
 }
 
 cc_defaults {
@@ -287,6 +292,9 @@ cc_binary {
         "make_f2fs",
         "mke2fs",
         "sload_f2fs",
+
+        // TODO: Revert after go/android-memcgv2-exp b/386797433
+        "memcgv2_activation_depth",
     ],
 }
 
@@ -684,4 +692,11 @@ phony {
         true: [],
         default: ["init_first_stage"],
     }),
+}
+
+// TODO: Revert after go/android-memcgv2-exp b/386797433
+sh_binary {
+    name: "memcgv2_activation_depth",
+    src: "memcgv2_activation_depth.sh",
+    filename_from_src: true,
 }

@@ -1,5 +1,5 @@
 service storageproxyd_wv_system /system_ext/bin/storageproxyd.system \
-        -d ${storageproxyd_wv_system.trusty_ipc_dev:-/dev/trusty-ipc-dev0} \
+        -d VSOCK:${trusty.widevine_vm.vm_cid}:1 \
         -r /dev/socket/rpmb_mock_wv_system \
         -p /data/secure_storage_wv_system \
         -t sock
@@ -23,20 +23,8 @@ service rpmb_mock_wv_system /system_ext/bin/rpmb_dev.wv.system \
     group system
     socket rpmb_mock_wv_system stream 660 system system
 
-# storageproxyd
-on boot && \
-    property:trusty.widevine_vm.nonsecure_vm_ready=1 && \
-    property:storageproxyd_wv_system.trusty_ipc_dev=*
-    wait /dev/socket/rpmb_mock_wv_system
-    enable storageproxyd_wv_system
-
-
 # RPMB Mock
-on early-boot && \
-    property:trusty.widevine_vm.enabled=1 && \
-    property:trusty.widevine_vm.vm_cid=* && \
-    property:ro.boot.vendor.apex.com.android.services.widevine=\
-com.android.services.widevine.cf_guest_trusty_nonsecure
+on early-boot
     # Create a persistent location for the RPMB data
     # (work around lack of RPMb block device on CF).
     # file contexts secure_storage_rpmb_system_file
@@ -57,6 +45,5 @@ com.android.services.widevine.cf_guest_trusty_nonsecure
     symlink /mnt/secure_storage_persist_wv_system/persist \
             /data/secure_storage_wv_system/persist
     chown root system /data/secure_storage_wv_system/persist
-    setprop storageproxyd_wv_system.trusty_ipc_dev VSOCK:${trusty.widevine_vm.vm_cid}:1
     exec_start rpmb_mock_init_wv_system
     start rpmb_mock_wv_system

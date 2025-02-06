@@ -1,0 +1,15 @@
+sysprop_library {
+    name: "trusty-properties",
+    srcs: ["android/sysprop/trusty/security_vm.sysprop"],
+    property_owner: "Platform",
+    api_packages: ["android.sysprop.trusty"],
+    apex_available: [
+        "//apex_available:platform",
+    ],
+}
+
+rust_binary {
+    name: "trusty-properties-example",
+    srcs: ["example.rs"],
+    rustlibs: ["libtrusty_properties_rust"],
+}

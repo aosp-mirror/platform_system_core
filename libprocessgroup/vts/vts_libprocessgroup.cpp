@@ -15,17 +15,13 @@
  */
 
 #include <cerrno>
-#include <chrono>
 #include <cstdio>
 #include <filesystem>
-#include <future>
 #include <iostream>
 #include <optional>
 #include <random>
 #include <string>
 #include <vector>
-
-#include <unistd.h>
 
 #include <android-base/file.h>
 #include <android-base/strings.h>
@@ -83,16 +79,6 @@ std::optional<bool> checkRootSubtreeState() {
 
 }  // anonymous namespace
 
-
-class MemcgV2Test : public testing::Test {
-  protected:
-    void SetUp() override {
-        std::optional<bool> memcgV2Enabled = isMemcgV2Enabled();
-        ASSERT_NE(memcgV2Enabled, std::nullopt);
-        if (!*memcgV2Enabled) GTEST_SKIP() << "Memcg v2 not enabled";
-    }
-};
-
 class MemcgV2SubdirTest : public testing::Test {
   protected:
     std::optional<std::string> mRandDir;
@@ -149,27 +135,4 @@ class MemcgV2SubdirTest : public testing::Test {
 TEST_F(MemcgV2SubdirTest, CanActivateMemcgV2Subtree) {
     ASSERT_TRUE(WriteStringToFile("+memory", *mRandDir + "/cgroup.subtree_control"))
             << "Could not enable memcg under child cgroup subtree";
-}
-
-// Test for fix: mm: memcg: use larger batches for proactive reclaim
-// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=287d5fedb377ddc232b216b882723305b27ae31a
-TEST_F(MemcgV2Test, ProactiveReclaimDoesntTakeForever) {
-    // Not all kernels have memory.reclaim
-    const std::filesystem::path reclaim(CGROUP_V2_ROOT_PATH + "/memory.reclaim");
-    if (!std::filesystem::exists(reclaim)) GTEST_SKIP() << "memory.reclaim not found";
-
-    // Use the total device memory as the amount to reclaim
-    const long numPages = sysconf(_SC_PHYS_PAGES);
-    const long pageSize = sysconf(_SC_PAGE_SIZE);
-    ASSERT_GT(numPages, 0);
-    ASSERT_GT(pageSize, 0);
-    const unsigned long long totalMem =
-            static_cast<unsigned long long>(numPages) * static_cast<unsigned long long>(pageSize);
-
-    auto fut = std::async(std::launch::async,
-                          [&]() { WriteStringToFile(std::to_string(totalMem), reclaim); });
-
-    // This is a test for completion within the timeout. The command is likely to "fail" since we
-    // are asking to reclaim all device memory.
-    ASSERT_NE(fut.wait_for(std::chrono::seconds(20)), std::future_status::timeout);
 }
