@@ -315,6 +315,7 @@ Result<void> ServiceParser::ParseSharedKallsyms(std::vector<std::string>&& args)
 }
 
 Result<void> ServiceParser::ParseMemcgSwappiness(std::vector<std::string>&& args) {
+    LOG(WARNING) << "memcg.swappiness is unsupported with memcg v2 and will be deprecated";
     if (!ParseInt(args[1], &service_->swappiness_, 0)) {
         return Error() << "swappiness value must be equal or greater than 0";
     }

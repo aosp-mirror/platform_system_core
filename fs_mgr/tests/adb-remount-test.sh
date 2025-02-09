@@ -1360,6 +1360,14 @@ cat "${system_build_prop_original}" - <<EOF >"${system_build_prop_modified}"
 # Properties added by adb remount test
 test.adb.remount.system.build.prop=true
 EOF
+
+# Move /system/build.prop to make sure we can move and then replace files
+# Note that as of kernel 6.1 mv creates the char_file that whites out the lower
+# file with different selabels than rm does
+# See b/394290609
+adb shell mv /system/build.prop /system/build.prop.backup >/dev/null ||
+  die "adb shell rm /system/build.prop"
+
 adb push "${system_build_prop_modified}" /system/build.prop >/dev/null ||
   die "adb push /system/build.prop"
 adb pull /system/build.prop "${system_build_prop_fromdevice}" >/dev/null ||
