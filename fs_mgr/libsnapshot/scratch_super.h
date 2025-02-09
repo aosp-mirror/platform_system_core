@@ -20,7 +20,7 @@ namespace snapshot {
 constexpr char kMkExt4[] = "/system/bin/mke2fs";
 constexpr char kOtaMetadataFileContext[] = "u:object_r:ota_metadata_file:s0";
 constexpr char kOtaMetadataMount[] = "/mnt/scratch_ota_metadata_super";
-const size_t kOtaMetadataPartitionSize = uint64_t(1 * 1024 * 1024);
+const size_t kOtaMetadataPartitionSize = uint64_t(2 * 1024 * 1024);
 constexpr char kPhysicalDevice[] = "/dev/block/by-name/";
 
 bool IsScratchOtaMetadataOnSuper();
