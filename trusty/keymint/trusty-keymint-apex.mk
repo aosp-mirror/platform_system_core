@@ -22,7 +22,7 @@ PRODUCT_PACKAGES += \
     android.hardware.security.keymint-service.trusty_tee.cpp \
     android.hardware.security.keymint-service.trusty_tee \
 
-ifeq ($(findstring $(TRUSTY_SYSTEM_VM),enabled),enabled)
+ifeq ($(findstring enabled, $(TRUSTY_SYSTEM_VM)),enabled)
     PRODUCT_PACKAGES += \
         android.hardware.security.keymint-service.trusty_system_vm \
 
