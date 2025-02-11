@@ -80,13 +80,9 @@ cc_binary {
     vintf_fragments: ["4.0/android.hardware.keymaster@4.0-service.trusty.xml"],
 }
 
-cc_binary {
-    name: "android.hardware.security.keymint-service.trusty",
+cc_defaults {
+    name: "android.hardware.security.keymint-service.trusty.defaults",
     relative_install_path: "hw",
-    init_rc: ["keymint/android.hardware.security.keymint-service.trusty.rc"],
-    vintf_fragments: [
-        "keymint/android.hardware.security.keymint-service.trusty.xml",
-    ],
     vendor: true,
     cflags: [
         "-Wall",
@@ -120,10 +116,38 @@ cc_binary {
         "libtrusty",
         "libutils",
     ],
-    required: select(release_flag("RELEASE_AIDL_USE_UNFROZEN"), {
-        true: ["android.hardware.hardware_keystore.xml"],
-        default: ["android.hardware.hardware_keystore_V3.xml"],
-    }),
+}
+
+// keymint hal binary for keymint in Trusty TEE prebuilt
+cc_binary {
+    name: "android.hardware.security.keymint-service.trusty",
+    defaults: ["android.hardware.security.keymint-service.trusty.defaults"],
+    init_rc: ["keymint/android.hardware.security.keymint-service.trusty.rc"],
+    vintf_fragments: [
+        "keymint/android.hardware.security.keymint-service.trusty.xml",
+    ],
+    required: ["android.hardware.hardware_keystore.xml"],
+}
+
+// Keymint hal service in vendor, enabled by vendor apex.
+// This service is disabled by default and does not package a VINTF fragment.
+// This service can be enabled at boot via vendor apex:
+// - at boot, mount a vendor apex for module `com.android.hardware.keymint`
+// - have the vendor init.rc file enable the service when the associated
+//   apex is selected
+// - have the vendor apex package the vintf fragment and the required permissions
+cc_binary {
+    name: "android.hardware.security.keymint-service.trusty_tee.cpp",
+    defaults: ["android.hardware.security.keymint-service.trusty.defaults"],
+    init_rc: ["keymint/android.hardware.security.keymint-service.trusty_tee.cpp.rc"],
+}
+
+// vintf fragment packaged in vendor apex
+prebuilt_etc {
+    name: "android.hardware.security.keymint-service.trusty.xml",
+    sub_dir: "vintf",
+    vendor: true,
+    src: "keymint/android.hardware.security.keymint-service.trusty.xml",
 }
 
 prebuilt_etc {

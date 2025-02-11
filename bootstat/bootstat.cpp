@@ -467,8 +467,9 @@ const std::map<std::string, int32_t> kBootReasonMap = {
     {"reboot,longkey,master_dc", 235},
     {"reboot,ocp2,pmic,if", 236},
     {"reboot,ocp,pmic,if", 237},
-    {"reboot,fship", 238},
+    {"reboot,fship.*", 238},
     {"reboot,ocp,.*", 239},
+    {"reboot,ntc,pmic,sub", 240},
 };
 
 // Converts a string value representing the reason the system booted to an
@@ -912,6 +913,19 @@ const char bootloader_reboot_reason_property[] = "ro.boot.bootreason";
 void BootReasonAddToHistory(const std::string& system_boot_reason) {
   if (system_boot_reason.empty()) return;
   LOG(INFO) << "Canonical boot reason: " << system_boot_reason;
+
+  // skip system_boot_reason(factory_reset, ota) shift since device boot up from shipmode
+  const auto bootloader_boot_reason =
+      android::base::GetProperty(bootloader_reboot_reason_property, "");
+  const char reg_fship[] = ".*fship.*";
+  if (std::regex_search(bootloader_boot_reason, std::regex(reg_fship)) != 0) {
+    if (system_boot_reason == "reboot,factory_reset" || system_boot_reason == "reboot,ota") {
+      LOG(INFO) << "skip boot reason (" << system_boot_reason
+                << ") shift since device boot up from shipmode.";
+      return;
+    }
+  }
+
   auto old_system_boot_reason = android::base::GetProperty(system_reboot_reason_property, "");
   if (!android::base::SetProperty(system_reboot_reason_property, system_boot_reason)) {
     android::base::SetProperty(system_reboot_reason_property,
@@ -953,6 +967,14 @@ void BootReasonAddToHistory(const std::string& system_boot_reason) {
 std::string BootReasonStrToReason(const std::string& boot_reason) {
   auto ret = android::base::GetProperty(system_reboot_reason_property, "");
   std::string reason(boot_reason);
+
+  // skip BootReasonStrToReason() if device boot up from shipmode
+  const char reg_fship[] = ".*fship.*";
+  if (reason == ret && std::regex_search(reason, std::regex(reg_fship)) != 0) {
+    LOG(INFO) << "skip boot reason enhancement if device boot up from shipmode";
+    return ret;
+  }
+
   // If sys.boot.reason == ro.boot.bootreason, let's re-evaluate
   if (reason == ret) ret = "";
 

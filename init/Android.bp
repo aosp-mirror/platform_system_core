@@ -136,6 +136,8 @@ libinit_cc_defaults {
                 "-DWORLD_WRITABLE_KMSG=1",
                 "-UDUMP_ON_UMOUNT_FAILURE",
                 "-DDUMP_ON_UMOUNT_FAILURE=1",
+                "-UALLOW_REMOUNT_OVERLAYS",
+                "-DALLOW_REMOUNT_OVERLAYS=1",
             ],
         },
         eng: {
@@ -263,7 +265,10 @@ phony {
     name: "init",
     required: [
         "init_second_stage",
-    ],
+    ] + select(product_variable("debuggable"), {
+        true: ["overlay_remounter"],
+        false: [],
+    }),
 }
 
 cc_defaults {

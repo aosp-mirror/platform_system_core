@@ -492,7 +492,10 @@ void RefBase::decStrong(const void* id) const
 #if PRINT_REFS
     ALOGD("decStrong of %p from %p: cnt=%d\n", this, id, c);
 #endif
-    LOG_ALWAYS_FATAL_IF(BAD_STRONG(c), "decStrong() called on %p too many times",
+    LOG_ALWAYS_FATAL_IF(
+            BAD_STRONG(c),
+            "decStrong() called on %p too many times, possible memory corruption. Consider "
+            "compiling with ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION for better errors",
             refs);
     if (c == 1) {
         std::atomic_thread_fence(std::memory_order_acquire);
@@ -576,7 +579,10 @@ void RefBase::weakref_type::decWeak(const void* id)
     weakref_impl* const impl = static_cast<weakref_impl*>(this);
     impl->removeWeakRef(id);
     const int32_t c = impl->mWeak.fetch_sub(1, std::memory_order_release);
-    LOG_ALWAYS_FATAL_IF(BAD_WEAK(c), "decWeak called on %p too many times",
+    LOG_ALWAYS_FATAL_IF(
+            BAD_WEAK(c),
+            "decWeak called on %p too many times, possible memory corruption. Consider compiling "
+            "with ANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION for better errors",
             this);
     if (c != 1) return;
     atomic_thread_fence(std::memory_order_acquire);

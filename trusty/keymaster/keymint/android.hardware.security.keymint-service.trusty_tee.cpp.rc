@@ -1,0 +1,11 @@
+# service started when selecting `com.android.hardware.keymint.trusty_tee.cpp` vendor apex
+service vendor.keymint-service.trusty_tee.cpp \
+  /vendor/bin/hw/android.hardware.security.keymint-service.trusty_tee.cpp \
+    --dev ${ro.hardware.trusty_ipc_dev.keymint:-/dev/trusty-ipc-dev0}
+    disabled
+    class early_hal
+    user nobody
+    group drmrpc
+    # The keymint service is not allowed to restart.
+    # If it crashes, a device restart is required.
+    oneshot

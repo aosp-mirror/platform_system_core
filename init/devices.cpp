@@ -599,7 +599,22 @@ void DeviceHandler::HandleDevice(const std::string& action, const std::string& d
                 PLOG(ERROR) << "Failed to create directory " << Dirname(link);
             }
 
-            if (symlink(target.c_str(), link.c_str())) {
+            // Create symlink and make sure it's correctly labeled
+            std::string secontext;
+            // Passing 0 for mode should work.
+            if (SelabelLookupFileContext(link, 0, &secontext) && !secontext.empty()) {
+                setfscreatecon(secontext.c_str());
+            }
+
+            int rc = symlink(target.c_str(), link.c_str());
+
+            if (!secontext.empty()) {
+                int save_errno = errno;
+                setfscreatecon(nullptr);
+                errno = save_errno;
+            }
+
+            if (rc < 0) {
                 if (errno != EEXIST) {
                     PLOG(ERROR) << "Failed to symlink " << devpath << " to " << link;
                 } else if (std::string link_path;

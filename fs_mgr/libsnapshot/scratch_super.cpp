@@ -396,7 +396,7 @@ std::string MapScratchOtaMetadataPartition(const std::string& scratch_device) {
 }
 
 // Entry point to create a scratch device on super partition
-// This will create a 1MB space in super. The space will be
+// This will create a 2MB space in super. The space will be
 // from the current active slot. Ext4 filesystem will be created
 // on this scratch device and all the OTA related directories
 // will be created.
