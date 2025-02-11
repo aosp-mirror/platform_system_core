@@ -858,6 +858,10 @@ static int __mount(const std::string& source, const std::string& target, const F
         if (!android::base::Realpath(source, &real_source)) {
             real_source = source;
         }
+
+        // Clear errno prior to calling `mount`, to avoid clobbering with any errno that
+        // may have been set from prior calls (e.g. realpath).
+        errno = 0;
         ret = mount(real_source.c_str(), target.c_str(), entry.fs_type.c_str(), mountflags,
                     opts.c_str());
         save_errno = errno;
@@ -2331,6 +2335,11 @@ OverlayfsCheckResult CheckOverlayfs() {
     if (!fs_mgr_filesystem_available("overlay")) {
         return {.supported = false};
     }
+
+    if (!use_override_creds) {
+        return {.supported = true, ",userxattr"};
+    }
+
     struct utsname uts;
     if (uname(&uts) == -1) {
         return {.supported = false};

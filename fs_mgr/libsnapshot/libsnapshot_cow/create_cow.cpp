@@ -36,6 +36,10 @@
 
 DEFINE_string(source, "", "Source partition image");
 DEFINE_string(target, "", "Target partition image");
+DEFINE_string(
+        output_dir, "",
+        "Output directory to write the patch file to. Defaults to current working directory if "
+        "not set.");
 DEFINE_string(compression, "lz4",
               "Compression algorithm. Default is set to lz4. Available options: lz4, zstd, gz");
 DEFINE_bool(merkel_tree, false, "If true, source image hash is obtained from verity merkel tree");
@@ -474,11 +478,12 @@ bool CreateSnapshot::ReadBlocks(off_t offset, const int skip_blocks, const uint6
 
             if (create_snapshot_patch_ && use_merkel_tree_) {
                 std::vector<uint8_t> digest(32, 0);
-                CalculateDigest(bufptr, BLOCK_SZ, target_salt_.data(), target_salt_.size(),
+                CalculateDigest(bufptr, BLOCK_SZ, source_salt_.data(), source_salt_.size(),
                                 digest.data());
                 std::vector<uint8_t> final_digest(32, 0);
-                CalculateDigest(digest.data(), digest.size(), source_salt_.data(),
-                                source_salt_.size(), final_digest.data());
+                CalculateDigest(digest.data(), digest.size(), target_salt_.data(),
+                                target_salt_.size(), final_digest.data());
+
                 hash = ToHexString(final_digest.data(), final_digest.size());
             } else {
                 uint8_t checksum[32];
@@ -569,12 +574,15 @@ SYNOPSIS
 
     source.img -> Source partition image
     target.img -> Target partition image
-    compressoin -> compression algorithm. Default set to lz4. Supported types are gz, lz4, zstd.
+    compression -> compression algorithm. Default set to lz4. Supported types are gz, lz4, zstd.
+    merkel_tree -> If true, source image hash is obtained from verity merkel tree.
+    output_dir -> Output directory to write the patch file to. Defaults to current working directory if not set.
 
 EXAMPLES
 
    $ create_snapshot $SOURCE_BUILD/system.img $TARGET_BUILD/system.img
    $ create_snapshot $SOURCE_BUILD/product.img $TARGET_BUILD/product.img --compression="zstd"
+   $ create_snapshot $SOURCE_BUILD/product.img $TARGET_BUILD/product.img --merkel_tree --output_dir=/tmp/create_snapshot_output
 
 )";
 
@@ -591,6 +599,9 @@ int main(int argc, char* argv[]) {
     std::string fname = android::base::Basename(FLAGS_target.c_str());
     auto parts = android::base::Split(fname, ".");
     std::string snapshotfile = parts[0] + ".patch";
+    if (!FLAGS_output_dir.empty()) {
+        snapshotfile = FLAGS_output_dir + "/" + snapshotfile;
+    }
     android::snapshot::CreateSnapshot snapshot(FLAGS_source, FLAGS_target, snapshotfile,
                                                FLAGS_compression, FLAGS_merkel_tree);
 
