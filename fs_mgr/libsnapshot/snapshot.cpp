@@ -4687,7 +4687,17 @@ std::string SnapshotManager::ReadSourceBuildFingerprint() {
     return status.source_build_fingerprint();
 }
 
-bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
+bool SnapshotManager::PauseSnapshotMerge() {
+    auto snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
+    if (snapuserd_client) {
+        // Pause the snapshot-merge
+        return snapuserd_client->PauseMerge();
+    }
+    return false;
+}
+
+bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress(
+        std::vector<std::string>& dynamic_partitions) {
     // We cannot grab /metadata/ota lock here as this
     // is in reboot path. See b/308900853
     //
@@ -4701,18 +4711,22 @@ bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress() {
         LOG(ERROR) << "No dm-enabled block device is found.";
         return false;
     }
+
+    bool is_ota_in_progress = false;
     for (auto& partition : dm_block_devices) {
         std::string partition_name = partition.first + current_suffix;
         DeviceMapper::TargetInfo snap_target;
         if (!GetSingleTarget(partition_name, TableQuery::Status, &snap_target)) {
-            return false;
+            continue;
         }
         auto type = DeviceMapper::GetTargetType(snap_target.spec);
+        // Partition is mounted off snapshots
         if (type == "user") {
-            return true;
+            dynamic_partitions.emplace_back("/" + partition.first);
+            is_ota_in_progress = true;
         }
     }
-    return false;
+    return is_ota_in_progress;
 }
 
 bool SnapshotManager::BootFromSnapshotsWithoutSlotSwitch() {
