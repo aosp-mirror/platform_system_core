@@ -2336,10 +2336,6 @@ OverlayfsCheckResult CheckOverlayfs() {
         return {.supported = false};
     }
 
-    if (!use_override_creds) {
-        return {.supported = true, ",userxattr"};
-    }
-
     struct utsname uts;
     if (uname(&uts) == -1) {
         return {.supported = false};
@@ -2348,6 +2344,14 @@ OverlayfsCheckResult CheckOverlayfs() {
     if (sscanf(uts.release, "%d.%d", &major, &minor) != 2) {
         return {.supported = false};
     }
+
+    if (!use_override_creds) {
+        if (major > 5 || (major == 5 && minor >= 15)) {
+            return {.supported = true, ",userxattr"};
+        }
+        return {.supported = true};
+    }
+
     // Overlayfs available in the kernel, and patched for override_creds?
     if (access("/sys/module/overlay/parameters/override_creds", F_OK) == 0) {
         auto mount_flags = ",override_creds=off"s;
