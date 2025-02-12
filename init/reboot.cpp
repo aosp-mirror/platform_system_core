@@ -394,6 +394,21 @@ void RebootMonitorThread(unsigned int cmd, const std::string& reboot_target,
     }
 }
 
+static void UmountDynamicPartitions(const std::vector<std::string>& dynamic_partitions) {
+    for (auto device : dynamic_partitions) {
+        // Cannot unmount /system
+        if (device == "/system") {
+            continue;
+        }
+        int r = umount2(device.c_str(), MNT_FORCE);
+        if (r == 0) {
+            LOG(INFO) << "Umounted success: " << device;
+        } else {
+            PLOG(WARNING) << "Cannot umount: " << device;
+        }
+    }
+}
+
 /* Try umounting all emulated file systems R/W block device cfile systems.
  * This will just try umount and give it up if it fails.
  * For fs like ext4, this is ok as file system will be marked as unclean shutdown
@@ -408,14 +423,18 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
     Timer t;
     std::vector<MountEntry> block_devices;
     std::vector<MountEntry> emulated_devices;
+    std::vector<std::string> dynamic_partitions;
 
     if (run_fsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
     auto sm = snapshot::SnapshotManager::New();
     bool ota_update_in_progress = false;
-    if (sm->IsUserspaceSnapshotUpdateInProgress()) {
-        LOG(INFO) << "OTA update in progress";
+    if (sm->IsUserspaceSnapshotUpdateInProgress(dynamic_partitions)) {
+        LOG(INFO) << "OTA update in progress. Pause snapshot merge";
+        if (!sm->PauseSnapshotMerge()) {
+            LOG(ERROR) << "Snapshot-merge pause failed";
+        }
         ota_update_in_progress = true;
     }
     UmountStat stat = UmountPartitions(timeout - t.duration());
@@ -435,6 +454,7 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
         // still not doing fsck when all processes are killed.
         //
         if (ota_update_in_progress) {
+            UmountDynamicPartitions(dynamic_partitions);
             return stat;
         }
         KillAllProcesses();
