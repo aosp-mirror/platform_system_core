@@ -144,7 +144,6 @@ class CrashQueue {
   CrashArtifact create_temporary_file() const {
     CrashArtifact result;
 
-    std::optional<std::string> path;
     result.fd.reset(openat(dir_fd_, ".", O_WRONLY | O_APPEND | O_TMPFILE | O_CLOEXEC, 0660));
     if (result.fd == -1) {
       PLOG(FATAL) << "failed to create temporary tombstone in " << dir_path_;
