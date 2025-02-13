@@ -191,6 +191,9 @@ bool MergeWorker::MergeReplaceZeroOps() {
                                "down merge";
             return false;
         }
+
+        // Safe to check if there is a pause request.
+        snapuserd_->PauseMergeIfRequired();
     }
 
     // Any left over ops not flushed yet.

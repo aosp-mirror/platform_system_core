@@ -383,5 +383,25 @@ auto SnapshotHandlerManager::FindHandler(std::lock_guard<std::mutex>* proof_of_l
     return dm_users_.end();
 }
 
+void SnapshotHandlerManager::PauseMerge() {
+    std::lock_guard<std::mutex> guard(lock_);
+
+    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
+        if (!(*iter)->ThreadTerminated()) {
+            (*iter)->snapuserd()->PauseMergeThreads();
+        }
+    }
+}
+
+void SnapshotHandlerManager::ResumeMerge() {
+    std::lock_guard<std::mutex> guard(lock_);
+
+    for (auto iter = dm_users_.begin(); iter != dm_users_.end(); iter++) {
+        if (!(*iter)->ThreadTerminated()) {
+            (*iter)->snapuserd()->ResumeMergeThreads();
+        }
+    }
+}
+
 }  // namespace snapshot
 }  // namespace android

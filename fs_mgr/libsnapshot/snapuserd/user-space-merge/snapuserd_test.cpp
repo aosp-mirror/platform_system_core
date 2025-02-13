@@ -934,6 +934,26 @@ TEST_P(SnapuserdTest, Snapshot_MERGE_IO_TEST_1) {
     read_future.wait();
 }
 
+TEST_P(SnapuserdTest, Snapshot_MERGE_PAUSE_RESUME) {
+    if (!harness_->HasUserDevice()) {
+        GTEST_SKIP() << "Skipping snapshot read; not supported";
+    }
+    ASSERT_NO_FATAL_FAILURE(SetupDefault());
+    // Start the merge
+    ASSERT_TRUE(StartMerge());
+    std::this_thread::sleep_for(300ms);
+    // Pause merge
+    handlers_->PauseMerge();
+    // Issue I/O after pausing the merge and validate
+    auto read_future =
+            std::async(std::launch::async, &SnapuserdTest::ReadSnapshotDeviceAndValidate, this);
+    // Resume the merge
+    handlers_->ResumeMerge();
+    CheckMergeCompletion();
+    ValidateMerge();
+    read_future.wait();
+}
+
 TEST_P(SnapuserdTest, Snapshot_Merge_Resume) {
     ASSERT_NO_FATAL_FAILURE(SetupDefault());
     ASSERT_NO_FATAL_FAILURE(MergeInterrupt());

@@ -257,6 +257,19 @@ bool SnapshotHandler::ReadAheadIOCompleted(bool sync) {
     return true;
 }
 
+void SnapshotHandler::PauseMergeIfRequired() {
+    {
+        std::unique_lock<std::mutex> lock(pause_merge_lock_);
+        while (pause_merge_) {
+            SNAP_LOG(INFO) << "Merge thread paused";
+            pause_merge_cv_.wait(lock);
+            if (!pause_merge_) {
+                SNAP_LOG(INFO) << "Merge thread resumed";
+            }
+        }
+    }
+}
+
 // Invoked by RA thread - Waits for merge thread to finish merging
 // RA Block N - RA thread would be ready will with Block N+1 but
 // will wait to merge thread to finish Block N. Once Block N
@@ -281,8 +294,13 @@ bool SnapshotHandler::WaitForMergeReady() {
             }
             return false;
         }
-        return true;
     }
+
+    // This is a safe place to check if the RA thread should be
+    // paused. Since the scratch space isn't flushed yet, it is safe
+    // to wait here until resume is invoked.
+    PauseMergeIfRequired();
+    return true;
 }
 
 // Invoked by Merge thread - Notify RA thread about Merge completion
@@ -297,6 +315,11 @@ void SnapshotHandler::NotifyRAForMergeReady() {
     }
 
     cv.notify_all();
+
+    // This is a safe place to check if the merge thread should be
+    // paused. The data from the scratch space is merged to disk and is safe
+    // to wait.
+    PauseMergeIfRequired();
 }
 
 // The following transitions are mostly in the failure paths
@@ -391,6 +414,20 @@ void SnapshotHandler::WaitForRaThreadToStart() {
 void SnapshotHandler::MarkMergeComplete() {
     std::lock_guard<std::mutex> lock(lock_);
     merge_complete_ = true;
+}
+
+void SnapshotHandler::PauseMergeThreads() {
+    {
+        std::lock_guard<std::mutex> lock(pause_merge_lock_);
+        pause_merge_ = true;
+    }
+}
+
+void SnapshotHandler::ResumeMergeThreads() {
+    {
+        std::lock_guard<std::mutex> lock(pause_merge_lock_);
+        pause_merge_ = false;
+    }
 }
 
 std::string SnapshotHandler::GetMergeStatus() {
