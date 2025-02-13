@@ -86,6 +86,12 @@ class ISnapshotHandlerManager {
 
     // Disable partition verification
     virtual void DisableVerification() = 0;
+
+    // Pause Merge threads
+    virtual void PauseMerge() = 0;
+
+    // Resume Merge threads
+    virtual void ResumeMerge() = 0;
 };
 
 class SnapshotHandlerManager final : public ISnapshotHandlerManager {
@@ -107,6 +113,8 @@ class SnapshotHandlerManager final : public ISnapshotHandlerManager {
     double GetMergePercentage() override;
     bool GetVerificationStatus() override;
     void DisableVerification() override { perform_verification_ = false; }
+    void PauseMerge() override;
+    void ResumeMerge() override;
 
   private:
     bool StartHandler(const std::shared_ptr<HandlerThread>& handler);

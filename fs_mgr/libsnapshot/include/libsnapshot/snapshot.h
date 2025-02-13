@@ -418,9 +418,16 @@ class SnapshotManager final : public ISnapshotManager {
     // first-stage to decide whether to launch snapuserd.
     bool IsSnapuserdRequired();
 
-    // This is primarily used to device reboot. If OTA update is in progress,
-    // init will avoid killing processes
-    bool IsUserspaceSnapshotUpdateInProgress();
+    // This is primarily invoked during device reboot after an OTA update.
+    //
+    // a: Check if the partitions are mounted off snapshots.
+    //
+    // b: Store all dynamic partitions which are mounted off snapshots. This
+    // is used to unmount the partition.
+    bool IsUserspaceSnapshotUpdateInProgress(std::vector<std::string>& dynamic_partitions);
+
+    // Pause the snapshot merge.
+    bool PauseSnapshotMerge();
 
     enum class SnapshotDriver {
         DM_SNAPSHOT,

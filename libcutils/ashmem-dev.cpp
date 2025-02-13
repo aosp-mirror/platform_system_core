@@ -120,8 +120,11 @@ static bool __has_memfd_support() {
     // permissions of the buffer (i.e. they cannot be changed by fchmod()).
     //
     // MFD_NOEXEC_SEAL implies MFD_ALLOW_SEALING.
+    const char *test_buf_name = "test_android_memfd";
+    size_t buf_size = getpagesize();
+
     android::base::unique_fd fd(
-            syscall(__NR_memfd_create, "test_android_memfd", MFD_CLOEXEC | MFD_NOEXEC_SEAL));
+            syscall(__NR_memfd_create, test_buf_name, MFD_CLOEXEC | MFD_NOEXEC_SEAL));
     if (fd == -1) {
         ALOGE("memfd_create failed: %m, no memfd support");
         return false;
@@ -132,13 +135,20 @@ static bool __has_memfd_support() {
         return false;
     }
 
+    if (ftruncate(fd, buf_size) == -1) {
+        ALOGE("ftruncate(%s, %zd) failed to set memfd buffer size: %m, no memfd support",
+              test_buf_name, buf_size);
+        return false;
+    }
+
     /*
      * Ensure that the kernel supports ashmem ioctl commands on memfds. If not,
      * fall back to using ashmem.
      */
-    if (TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_SET_SIZE, getpagesize())) < 0) {
-        ALOGE("ioctl(ASHMEM_SET_SIZE, %d) failed: %m, no ashmem-memfd compat support",
-              getpagesize());
+    int ashmem_size = TEMP_FAILURE_RETRY(ioctl(fd, ASHMEM_GET_SIZE, 0));
+    if (ashmem_size != static_cast<int>(buf_size)) {
+        ALOGE("ioctl(ASHMEM_GET_SIZE): %d != buf_size: %zd , no ashmem-memfd compat support",
+              ashmem_size, buf_size);
         return false;
     }
 

@@ -108,6 +108,9 @@ class SnapuserdClient {
 
     // Notify init that snapuserd daemon is ready post selinux transition
     void NotifyTransitionDaemonIsReady();
+
+    // Pause Merge threads
+    bool PauseMerge();
 };
 
 }  // namespace snapshot
