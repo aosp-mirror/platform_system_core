@@ -394,7 +394,8 @@ void RebootMonitorThread(unsigned int cmd, const std::string& reboot_target,
     }
 }
 
-static void UmountDynamicPartitions(const std::vector<std::string>& dynamic_partitions) {
+static bool UmountDynamicPartitions(const std::vector<std::string>& dynamic_partitions) {
+    bool ret = true;
     for (auto device : dynamic_partitions) {
         // Cannot unmount /system
         if (device == "/system") {
@@ -405,8 +406,10 @@ static void UmountDynamicPartitions(const std::vector<std::string>& dynamic_part
             LOG(INFO) << "Umounted success: " << device;
         } else {
             PLOG(WARNING) << "Cannot umount: " << device;
+            ret = false;
         }
     }
+    return ret;
 }
 
 /* Try umounting all emulated file systems R/W block device cfile systems.
@@ -454,7 +457,17 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
         // still not doing fsck when all processes are killed.
         //
         if (ota_update_in_progress) {
-            UmountDynamicPartitions(dynamic_partitions);
+            bool umount_dynamic_partitions = UmountDynamicPartitions(dynamic_partitions);
+            LOG(INFO) << "Sending SIGTERM to all process";
+            // Send SIGTERM to all processes except init
+            WriteStringToFile("e", PROC_SYSRQ);
+            // Wait for processes to terminate
+            std::this_thread::sleep_for(1s);
+            // Try one more attempt to umount other partitions which failed
+            // earlier
+            if (!umount_dynamic_partitions) {
+                UmountDynamicPartitions(dynamic_partitions);
+            }
             return stat;
         }
         KillAllProcesses();
