@@ -175,6 +175,9 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     bool MergeInitiated() { return merge_initiated_; }
     bool MergeMonitored() { return merge_monitored_; }
     double GetMergePercentage() { return merge_completion_percentage_; }
+    void PauseMergeThreads();
+    void ResumeMergeThreads();
+    void PauseMergeIfRequired();
 
     // Merge Block State Transitions
     void SetMergeCompleted(size_t block_index);
@@ -255,6 +258,11 @@ class SnapshotHandler : public std::enable_shared_from_this<SnapshotHandler> {
     uint32_t cow_op_merge_size_ = 0;
     std::unique_ptr<UpdateVerify> update_verify_;
     std::shared_ptr<IBlockServerOpener> block_server_opener_;
+
+    // Pause merge threads
+    bool pause_merge_ = false;
+    std::mutex pause_merge_lock_;
+    std::condition_variable pause_merge_cv_;
 };
 
 std::ostream& operator<<(std::ostream& os, MERGE_IO_TRANSITION value);

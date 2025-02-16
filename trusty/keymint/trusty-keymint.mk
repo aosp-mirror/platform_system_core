@@ -21,19 +21,14 @@
 # Allow KeyMint HAL service implementation selection at build time. This must be
 # synchronized with the TA implementation included in Trusty. Possible values:
 #
-# - Rust implementation for Trusty VM (requires Trusty VM support):
+# - Rust implementation for Trusty TEE
 #   export TRUSTY_KEYMINT_IMPL=rust
-#   export TRUSTY_SYSTEM_VM=nonsecure
-# - Rust implementation for Trusty TEE (no Trusty VM support):
-#   export TRUSTY_KEYMINT_IMPL=rust
-# - C++ implementation (default): (any other value or unset TRUSTY_KEYMINT_IMPL)
+# - C++ implementation (default):
+#   any other value or unset TRUSTY_KEYMINT_IMPL
 
 ifeq ($(TRUSTY_KEYMINT_IMPL),rust)
-    ifeq ($(TRUSTY_SYSTEM_VM),nonsecure)
-        LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.rust.trusty.system.nonsecure
-    else
-        LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.rust.trusty
-    endif
+    LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.rust.trusty
+
 else
     # Default to the C++ implementation
     LOCAL_KEYMINT_PRODUCT_PACKAGE := android.hardware.security.keymint-service.trusty
