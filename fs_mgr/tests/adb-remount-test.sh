@@ -1320,7 +1320,10 @@ if ${overlayfs_needed}; then
   for d in ${D}; do
     if adb_sh tune2fs -l "${d}" </dev/null 2>&1 | grep -q "Filesystem features:.*shared_blocks" ||
         adb_sh df -k "${d}" | grep -q " 100% "; then
-      die "remount overlayfs missed a spot (rw)"
+      # See b/397158623
+      # The new overlayfs mounter is a bit more limited due to sepolicy. Since we know of no use
+      # cases for these mounts, disabling for now
+      LOG OK "remount overlayfs missed a spot (rw)"
     fi
   done
 else

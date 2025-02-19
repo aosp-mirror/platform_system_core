@@ -57,6 +57,13 @@ rust_binary {
     vendor: true,
     defaults: ["android.hardware.security.keymint-service.rust.trusty.default"],
     init_rc: ["android.hardware.security.keymint-service.trusty_tee.rc"],
+    features: select(soong_config_variable("trusty_system_vm", "placeholder_trusted_hal"), {
+        true: ["nonsecure"],
+        default: [],
+    }),
+    rustlibs: [
+        "libkmr_hal_nonsecure",
+    ],
 }
 
 // Keymint hal service in system_ext, interacting with the Trusty Security VM.
