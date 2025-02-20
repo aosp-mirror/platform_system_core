@@ -265,6 +265,37 @@ TEST(RefBase, AssertWeakRefExistsDeath) {
     delete foo;
 }
 
+TEST(RefBase, NoStrongCountPromoteFromWeak) {
+    bool isDeleted;
+    Foo* foo = new Foo(&isDeleted);
+
+    wp<Foo> weakFoo = wp<Foo>(foo);
+
+    EXPECT_FALSE(isDeleted);
+
+    {
+        sp<Foo> strongFoo = weakFoo.promote();
+        EXPECT_EQ(strongFoo, foo);
+    }
+
+    // this shows the justification of wp<>::fromExisting.
+    // if you construct a wp<>, for instance in a constructor, and it is
+    // accidentally promoted, that promoted sp<> will exclusively own
+    // the object. If that happens during the initialization of the
+    // object or in this scope, as you can see 'Foo* foo' is unowned,
+    // then we are left with a deleted object, and we could not put it
+    // into an sp<>.
+    //
+    // Consider the other implementation, where we disallow promoting
+    // a wp<> if there are no strong counts. If we return null, then
+    // the object would be unpromotable even though it hasn't been deleted.
+    // This is also errorprone.
+    //
+    // attemptIncStrong aborting in this case is a backwards incompatible
+    // change due to frequent use of wp<T>(this) in the constructor.
+    EXPECT_TRUE(isDeleted);
+}
+
 TEST(RefBase, DoubleOwnershipDeath) {
     bool isDeleted;
     auto foo = sp<Foo>::make(&isDeleted);
