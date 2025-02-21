@@ -4,7 +4,6 @@ service storageproxyd_wv_system /system_ext/bin/storageproxyd.system \
         -p /data/secure_storage_wv_system \
         -t sock
     disabled
-    class hal
     user system
     group system
 
@@ -47,3 +46,8 @@ on early-boot
     chown root system /data/secure_storage_wv_system/persist
     exec_start rpmb_mock_init_wv_system
     start rpmb_mock_wv_system
+
+on post-fs-data && \
+    property:trusty.widevine_vm.nonsecure_vm_ready=1 && \
+    property:trusty.widevine_vm.vm_cid=*
+    start storageproxyd_wv_system storage
