@@ -14,5 +14,30 @@
 # limitations under the License.
 #
 
+#
+# Trusty TEE packages
+#
+
+# below statement adds the singleton storage daemon in vendor,
+# storageproxyd vendor interacts with the Secure Storage TA in the
+# Trustzone Trusty TEE
 PRODUCT_PACKAGES += \
 	storageproxyd \
+
+#
+# Trusty VM packages
+#
+ifeq ($(TRUSTY_SYSTEM_VM),enabled_with_placeholder_trusted_hal)
+
+# with placeholder Trusted HALs, the Trusty VMs are standalone (i.e. they don't access
+# remote Trusted HAL services) and thus require their own secure storage.
+# (one secure storage emulation for each Trusty VM - security VM, test VM and WV VM)
+# in secure mode, the secure storage is the services by Trusty in Trustzone
+# and requires a single storageproxyd in vendor.
+PRODUCT_PACKAGES += \
+	storageproxyd.system \
+	rpmb_dev.test.system \
+	rpmb_dev.system \
+	# rpmb_dev.wv.system \
+
+endif
