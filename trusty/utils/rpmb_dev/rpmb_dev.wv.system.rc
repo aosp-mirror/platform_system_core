@@ -50,4 +50,5 @@ on early-boot
 on post-fs-data && \
     property:trusty.widevine_vm.nonsecure_vm_ready=1 && \
     property:trusty.widevine_vm.vm_cid=*
-    start storageproxyd_wv_system storage
+    start storageproxyd_wv_system
+
