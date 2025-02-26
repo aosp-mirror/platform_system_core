@@ -749,7 +749,7 @@ void SetupOverlays() {
         PLOG(FATAL) << "Failed to unlink " << or_dest;
     }
     const char* args[] = {or_dest.c_str(), nullptr};
-    fexecve(dest.get(), const_cast<char**>(args), nullptr);
+    fexecve(dest.get(), const_cast<char**>(args), environ);
 
     // execv() only returns if an error happened, in which case we
     // panic and never return from this function.
