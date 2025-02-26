@@ -351,9 +351,14 @@ bool SnapshotManager::RemoveAllUpdateState(LockedFile* lock, const std::function
 
     LOG(INFO) << "Removing all update state.";
 
-    if (!RemoveAllSnapshots(lock)) {
-        LOG(ERROR) << "Could not remove all snapshots";
-        return false;
+    if (ReadUpdateState(lock) != UpdateState::None) {
+        // Only call this if we're actually cancelling an update. It's not
+        // expected to yield anything otherwise, and firing up gsid on normal
+        // boot is expensive.
+        if (!RemoveAllSnapshots(lock)) {
+            LOG(ERROR) << "Could not remove all snapshots";
+            return false;
+        }
     }
 
     // It's okay if these fail:
