@@ -35,6 +35,8 @@ namespace fuse {
 namespace {
 
 constexpr useconds_t kRetrySleepForWriting = 1000;  // 1 ms
+// This makes the total wait time to allocate a buffer 5 seconds
+const int kNumberOfRetriesForWriting = 5000;
 
 template <typename T>
 bool CheckHeaderLength(const FuseMessage<T>* self, const char* name, size_t max_size) {
@@ -92,6 +94,7 @@ ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, co
 
     const char* const buf = reinterpret_cast<const char*>(self);
     const auto& header = static_cast<const T*>(self)->header;
+    int retry = kNumberOfRetriesForWriting;
 
     while (true) {
         int result;
@@ -110,8 +113,14 @@ ResultOrAgain WriteInternal(const FuseMessage<T>* self, int fd, int sockflag, co
                 case ENOBUFS:
                     // When returning ENOBUFS, epoll still reports the FD is writable. Just usleep
                     // and retry again.
-                    usleep(kRetrySleepForWriting);
-                    continue;
+                    if (retry > 0) {
+                        usleep(kRetrySleepForWriting);
+                        retry--;
+                        continue;
+                    } else {
+                        LOG(ERROR) << "Failed to write a FUSE message: ENOBUFS retries are failed";
+                        return ResultOrAgain::kFailure;
+                    }
                 case EAGAIN:
                     return ResultOrAgain::kAgain;
                 default:
