@@ -55,6 +55,8 @@
 "}"
 /* clang-format on */
 
+#define countof(arr) (sizeof(arr) / sizeof(arr[0]))
+
 static const char *uuid_name = "com.android.ipc-unittest.srv.uuid";
 static const char *echo_name = "com.android.ipc-unittest.srv.echo";
 static const char *ta_only_name = "com.android.ipc-unittest.srv.ta_only";
@@ -904,12 +906,14 @@ static int readv_test(const struct tipc_test_params* params) {
 
 static int send_fd_test(const struct tipc_test_params* params) {
     int ret;
-    int dma_buf = -1;
+    int dma_buf[] = {-1, -1, -1};
     int fd = -1;
-    volatile char* buf = MAP_FAILED;
+    volatile char* buf[countof(dma_buf)] = {MAP_FAILED, MAP_FAILED, MAP_FAILED};
     BufferAllocator* allocator = NULL;
+    uint i;
 
     const size_t num_chunks = 10;
+    const size_t buf_size = memref_chunk_size * num_chunks;
 
     fd = tipc_connect(params->dev_name, receiver_name);
     if (fd < 0) {
@@ -925,56 +929,86 @@ static int send_fd_test(const struct tipc_test_params* params) {
         goto cleanup;
     }
 
-    size_t buf_size = memref_chunk_size * num_chunks;
-    dma_buf = DmabufHeapAlloc(allocator, "system", buf_size, 0, 0 /* legacy align */);
-    if (dma_buf < 0) {
-        ret = dma_buf;
-        fprintf(stderr, "Failed to create dma-buf fd of size %zu err (%d)\n", buf_size, ret);
-        goto cleanup;
+    for (i = 0; i < countof(dma_buf); i++) {
+        ret = DmabufHeapAlloc(allocator, "system", buf_size, 0, 0 /* legacy align */);
+        if (ret < 0) {
+            fprintf(stderr, "Failed to create dma-buf fd of size %zu err (%d)\n", buf_size, ret);
+            goto cleanup;
+        }
+        dma_buf[i] = ret;
     }
 
-    buf = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf, 0);
-    if (buf == MAP_FAILED) {
-        fprintf(stderr, "Failed to map dma-buf: %s\n", strerror(errno));
-        ret = -1;
-        goto cleanup;
+    for (i = 0; i < countof(dma_buf); i++) {
+        buf[i] = mmap(0, buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_buf[i], 0);
+        if (buf[i] == MAP_FAILED) {
+            fprintf(stderr, "Failed to map dma-buf: %s\n", strerror(errno));
+            ret = -1;
+            goto cleanup;
+        }
+
+        strcpy((char*)buf[i], "From NS");
     }
 
-    strcpy((char*)buf, "From NS");
-
-    struct trusty_shm shm = {
-            .fd = dma_buf,
-            .transfer = TRUSTY_SHARE,
+    struct trusty_shm shm[] = {
+            {
+                    .fd = dma_buf[0],
+                    .transfer = TRUSTY_SHARE,
+            },
+            {
+                    .fd = dma_buf[0],
+                    .transfer = TRUSTY_SEND_SECURE_OR_SHARE,
+            },
+            {
+                    .fd = dma_buf[1],
+                    .transfer = TRUSTY_LEND,
+            },
+            {
+                    .fd = dma_buf[1],
+                    .transfer = TRUSTY_SEND_SECURE_OR_SHARE,
+            },
+            {
+                    .fd = dma_buf[2],
+                    .transfer = TRUSTY_SEND_SECURE_OR_SHARE,
+            },
     };
 
-    ssize_t rc = tipc_send(fd, NULL, 0, &shm, 1);
-    if (rc < 0) {
-        fprintf(stderr, "tipc_send failed: %zd\n", rc);
-        ret = rc;
-        goto cleanup;
+    for (i = 0; i < countof(shm); i++) {
+        ssize_t rc = tipc_send(fd, NULL, 0, &shm[i], 1);
+        if (rc < 0) {
+            fprintf(stderr, "tipc_send failed: %zd\n", rc);
+            ret = rc;
+            goto cleanup;
+        }
+        char c;
+        read(fd, &c, 1);
     }
-    char c;
-    read(fd, &c, 1);
-    tipc_close(fd);
 
     ret = 0;
-    for (size_t skip = 0; skip < num_chunks; skip++) {
-        int cmp = strcmp("Hello from Trusty!",
-                         (const char*)&buf[skip * memref_chunk_size]) ? (-1) : 0;
-        if (cmp)
-            fprintf(stderr, "Failed: Unexpected content at page %zu in dmabuf\n", skip);
-        ret |= cmp;
+    for (i = 0; i < countof(buf); i++) {
+        for (size_t skip = 0; skip < num_chunks; skip++) {
+            int cmp = strcmp("Hello from Trusty!", (const char*)&buf[i][skip * memref_chunk_size])
+                              ? (-1)
+                              : 0;
+            if (cmp) fprintf(stderr, "Failed: Unexpected content at page %zu in dmabuf\n", skip);
+            ret |= cmp;
+        }
     }
 
 cleanup:
-    if (buf != MAP_FAILED) {
-        munmap((char*)buf, buf_size);
+    for (i = 0; i < countof(dma_buf); i++) {
+        if (buf[i] != MAP_FAILED) {
+            munmap((char*)buf[i], buf_size);
+        }
+        if (dma_buf[i] >= 0) {
+            close(dma_buf[i]);
+        }
     }
-    close(dma_buf);
     if (allocator) {
         FreeDmabufHeapBufferAllocator(allocator);
     }
-    tipc_close(fd);
+    if (fd >= 0) {
+        tipc_close(fd);
+    }
     return ret;
 }
 
