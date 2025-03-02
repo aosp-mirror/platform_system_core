@@ -268,6 +268,19 @@ static void DumpUmountDebuggingInfo() {
 }
 
 static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
+    // Terminate (SIGTERM) the services before unmounting partitions.
+    // If the processes block the signal, then partitions will eventually fail
+    // to unmount and then we fallback to SIGKILL the services.
+    //
+    // Hence, give the services a chance for a graceful shutdown before sending SIGKILL.
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (s->IsShutdownCritical()) {
+            LOG(INFO) << "Shutdown service: " << s->name();
+            s->Terminate();
+        }
+    }
+    ReapAnyOutstandingChildren();
+
     Timer t;
     /* data partition needs all pending writes to be completed and all emulated partitions
      * umounted.If the current waiting is not good enough, give
@@ -815,6 +828,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     if (IsDataMounted("f2fs")) {
         uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
         unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
+        LOG(INFO) << "Invoking F2FS_IOC_SHUTDOWN during shutdown";
         int ret = ioctl(fd.get(), F2FS_IOC_SHUTDOWN, &flag);
         if (ret) {
             PLOG(ERROR) << "Shutdown /data: ";
