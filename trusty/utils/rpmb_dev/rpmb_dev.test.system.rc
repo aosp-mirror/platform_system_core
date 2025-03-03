@@ -1,11 +1,15 @@
-service trusty_test_vm /apex/com.android.virt/bin/vm run \
-    /data/local/tmp/TrustyTestVM_UnitTests/trusty-test_vm-config.json
+service storageproxyd_test_vm /system_ext/bin/storageproxyd.system \
+        -d VSOCK:${trusty.test_vm.vm_cid}:1 \
+        -r /dev/socket/rpmb_mock_test_system \
+        -p /data/secure_storage_test_system \
+        -t sock
     disabled
+    class hal
     user system
     group system
 
-service storageproxyd_test_system /system_ext/bin/storageproxyd.system \
-        -d VSOCK:${trusty.test_vm.vm_cid}:1 \
+service storageproxyd_test_vm_os /system_ext/bin/storageproxyd.system \
+        -d VSOCK:${trusty.test_vm_os.vm_cid}:1 \
         -r /dev/socket/rpmb_mock_test_system \
         -p /data/secure_storage_test_system \
         -t sock
