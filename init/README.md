@@ -785,6 +785,16 @@ provides the `aidl_lazy_test_1` interface.
   fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
   under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
+> swapon_all is deprecated and will do nothing if `mmd_enabled` AConfig flag
+  in `system_performance` namespace and `mmd.zram.enabled` sysprop are enabled.
+  OEMs, who decided to use mmd to manage zram, must remove zram entry from fstab
+  or remove swapon_all call from their init script.
+
+> swapon_all continues to support setting up non-zram swap devices.
+
+> swapon_all on recovery mode continues to support setting up zram because mmd
+  does not support the recovery mode.
+
 `swapoff <path>`
 > Stops swapping to the file or block device specified by path.
 
