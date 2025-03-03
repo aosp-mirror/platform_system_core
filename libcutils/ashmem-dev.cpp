@@ -182,19 +182,9 @@ static int __ashmem_open_locked() {
     }
 
     android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(ashmem_device_path.c_str(), O_RDWR | O_CLOEXEC)));
-    int errno1 = errno;
-    // fallback for APEX w/ use_vendor on Q, which would have still used /dev/ashmem
-    // TODO: remove this?
     if (!fd.ok()) {
-        fd.reset(TEMP_FAILURE_RETRY(open("/dev/ashmem", O_RDWR | O_CLOEXEC)));
-        int errno2 = errno;
-        if (!fd.ok()) {
-            /* Q launching devices and newer must not reach here since they should have been
-             * able to open ashmem_device_path */
-            ALOGE("Unable to open ashmem device %s (%s) and /dev/ashmem (%s)",
-                  ashmem_device_path.c_str(), strerror(errno1), strerror(errno2));
-            return -1;
-        }
+        ALOGE("Unable to open ashmem device: %m");
+        return -1;
     }
 
     struct stat st;
