@@ -15,8 +15,8 @@
  */
 #pragma once
 
+#include <interface/storage/storage.h>
 #include <stdint.h>
-#include <trusty/interface/storage.h>
 
 int ipc_connect(const char *device, const char *service_name);
 void ipc_disconnect(void);
