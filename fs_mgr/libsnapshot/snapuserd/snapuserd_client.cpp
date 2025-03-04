@@ -398,5 +398,13 @@ bool SnapuserdClient::PauseMerge() {
     return true;
 }
 
+bool SnapuserdClient::ResumeMerge() {
+    if (!Sendmsg("resume_merge")) {
+        LOG(ERROR) << "Failed to resume snapshot merge.";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace snapshot
 }  // namespace android

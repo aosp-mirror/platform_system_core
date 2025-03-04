@@ -83,6 +83,10 @@ int Usage() {
                  "    Deprecated.\n"
                  "  map\n"
                  "    Map all partitions at /dev/block/mapper\n"
+                 "  pause-merge\n"
+                 "    Pause snapshot merge\n"
+                 "  resume-merge\n"
+                 "    Resume snapshot merge\n"
                  "  map-snapshots <directory where snapshot patches are present>\n"
                  "    Map all snapshots based on patches present in the directory\n"
                  "  unmap-snapshots\n"
@@ -537,6 +541,16 @@ bool MapCmdHandler(int, char** argv) {
 bool UnmapCmdHandler(int, char** argv) {
     android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
     return SnapshotManager::New()->UnmapAllSnapshots();
+}
+
+bool PauseSnapshotMerge(int, char** argv) {
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
+    return SnapshotManager::New()->PauseSnapshotMerge();
+}
+
+bool ResumeSnapshotMerge(int, char** argv) {
+    android::base::InitLogging(argv, TeeLogger(LogdLogger(), &StderrLogger));
+    return SnapshotManager::New()->ResumeSnapshotMerge();
 }
 
 bool MergeCmdHandler(int /*argc*/, char** argv) {
@@ -1088,6 +1102,8 @@ static std::map<std::string, std::function<bool(int, char**)>> kCmdMap = {
         {"dump-verity-hash", DumpVerityHash},
 #endif
         {"unmap", UnmapCmdHandler},
+        {"pause-merge", PauseSnapshotMerge},
+        {"resume-merge", ResumeSnapshotMerge},
         // clang-format on
 };
 

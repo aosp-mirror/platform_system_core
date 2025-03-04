@@ -429,6 +429,9 @@ class SnapshotManager final : public ISnapshotManager {
     // Pause the snapshot merge.
     bool PauseSnapshotMerge();
 
+    // Resume the snapshot merge.
+    bool ResumeSnapshotMerge();
+
     enum class SnapshotDriver {
         DM_SNAPSHOT,
         DM_USER,
