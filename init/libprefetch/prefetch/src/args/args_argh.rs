@@ -40,12 +40,6 @@ pub enum SubCommands {
     Replay(ReplayArgs),
     /// Dump prefetch data in human readable format
     Dump(DumpArgs),
-    /// Start prefetch service if possible
-    /// If the pack file is present, then prefetch replay is started
-    /// If the pack file is absent or if the build fingerprint
-    /// of the current pack file is different, then prefetch record is started.
-    #[cfg(target_os = "android")]
-    Start(StartArgs),
 }
 
 #[cfg(target_os = "android")]
@@ -56,22 +50,6 @@ fn default_ready_path() -> PathBuf {
 #[cfg(target_os = "android")]
 fn default_build_finger_print_path() -> PathBuf {
     PathBuf::from("/metadata/prefetch/build_finger_print")
-}
-
-#[cfg(target_os = "android")]
-#[derive(Eq, PartialEq, Debug, Default, FromArgs)]
-/// Start prefetch service based on if pack file is present.
-#[argh(subcommand, name = "start")]
-pub struct StartArgs {
-    /// file path to check if prefetch_ready is present.
-    ///
-    /// A new file is created at the given path if it's not present.
-    #[argh(option, default = "default_ready_path()")]
-    pub path: PathBuf,
-
-    /// file path where build fingerprint is stored
-    #[argh(option, default = "default_build_finger_print_path()")]
-    pub build_fingerprint_path: PathBuf,
 }
 
 impl Default for SubCommands {

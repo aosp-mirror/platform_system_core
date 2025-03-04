@@ -42,8 +42,6 @@ use log::LevelFilter;
 pub use args::args_from_env;
 use args::OutputFormat;
 pub use args::ReplayArgs;
-#[cfg(target_os = "android")]
-pub use args::StartArgs;
 pub use args::{DumpArgs, MainArgs, RecordArgs, SubCommands};
 pub use error::Error;
 pub use format::FileId;
