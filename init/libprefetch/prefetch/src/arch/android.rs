@@ -6,6 +6,7 @@ use log::warn;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 
 use rustutils::system_properties::error::PropertyWatcherError;
@@ -39,6 +40,43 @@ fn start_prefetch_service(property_name: &str) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+/// Checks if we can perform replay phase.
+/// Ensure that the pack file exists and is up-to-date, returns false otherwise.
+pub fn can_perform_replay(pack_path: &Path, fingerprint_path: &Path) -> Result<bool, Error> {
+    if !pack_path.exists() || !fingerprint_path.exists() {
+        return Ok(false);
+    }
+
+    let saved_fingerprint = std::fs::read_to_string(fingerprint_path)?;
+
+    let current_device_fingerprint = rustutils::system_properties::read("ro.build.fingerprint")
+        .map_err(|e| Error::Custom {
+            error: format!("Failed to read ro.build.fingerprint: {}", e),
+        })?;
+
+    Ok(current_device_fingerprint.is_some_and(|fp| fp == saved_fingerprint.trim()))
+}
+
+/// Checks if we can perform record phase.
+/// Ensure that following conditions hold:
+///   - File specified in ready_path exists. otherwise, create a new file and return false.
+///   - can_perform_replay is false.
+pub fn ensure_record_is_ready(
+    ready_path: &Path,
+    pack_path: &Path,
+    fingerprint_path: &Path,
+) -> Result<bool, Error> {
+    if !ready_path.exists() {
+        File::create(ready_path)
+            .map_err(|_| Error::Custom { error: "File Creation failed".to_string() })?;
+
+        return Ok(false);
+    }
+
+    let can_replay = can_perform_replay(pack_path, fingerprint_path)?;
+    Ok(!can_replay)
 }
 
 /// Start prefetch service

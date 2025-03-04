@@ -147,6 +147,13 @@ pub struct RecordArgs {
     /// store build_finger_print to tie the pack format
     #[argh(option, default = "default_build_finger_print_path()")]
     pub build_fingerprint_path: PathBuf,
+
+    #[cfg(target_os = "android")]
+    /// file path to check if prefetch_ready is present.
+    ///
+    /// A new file is created at the given path if it's not present.
+    #[argh(option, default = "default_ready_path()")]
+    pub ready_path: PathBuf,
 }
 
 /// Type of tracing subsystem to use.
@@ -204,6 +211,11 @@ pub struct ReplayArgs {
     /// file path from where the prefetch config file will be read
     #[argh(option, default = "PathBuf::new()")]
     pub config_path: PathBuf,
+
+    #[cfg(target_os = "android")]
+    /// store build_finger_print to tie the pack format
+    #[argh(option, default = "default_build_finger_print_path()")]
+    pub build_fingerprint_path: PathBuf,
 }
 
 /// dump records file in given format
