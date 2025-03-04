@@ -4696,6 +4696,15 @@ bool SnapshotManager::PauseSnapshotMerge() {
     return false;
 }
 
+bool SnapshotManager::ResumeSnapshotMerge() {
+    auto snapuserd_client = SnapuserdClient::TryConnect(kSnapuserdSocket, 5s);
+    if (snapuserd_client) {
+        // Resume the snapshot-merge
+        return snapuserd_client->ResumeMerge();
+    }
+    return false;
+}
+
 bool SnapshotManager::IsUserspaceSnapshotUpdateInProgress(
         std::vector<std::string>& dynamic_partitions) {
     // We cannot grab /metadata/ota lock here as this
