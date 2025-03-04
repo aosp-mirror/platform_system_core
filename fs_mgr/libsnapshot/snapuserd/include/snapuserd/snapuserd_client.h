@@ -111,6 +111,9 @@ class SnapuserdClient {
 
     // Pause Merge threads
     bool PauseMerge();
+
+    // Resume Merge threads
+    bool ResumeMerge();
 };
 
 }  // namespace snapshot
