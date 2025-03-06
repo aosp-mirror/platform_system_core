@@ -88,6 +88,7 @@ cc_library_static {
         "libprocessgroup",
         "libprocessgroup_util",
         "libjsoncpp",
+        "liburing_cpp",
     ],
     export_include_dirs: ["include"],
     header_libs: [
@@ -136,6 +137,7 @@ cc_defaults {
         "libext4_utils",
         "liburing",
         "libzstd",
+        "liburing_cpp",
     ],
 
     header_libs: [
@@ -222,6 +224,7 @@ cc_defaults {
         "libjsoncpp",
         "liburing",
         "libz",
+        "liburing_cpp",
     ],
     include_dirs: [
         ".",
@@ -319,6 +322,7 @@ cc_binary_host {
         "libjsoncpp",
         "liburing",
         "libz",
+        "liburing_cpp",
     ],
     include_dirs: [
         ".",
