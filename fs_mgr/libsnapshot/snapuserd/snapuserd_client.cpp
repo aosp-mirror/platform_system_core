@@ -395,7 +395,8 @@ bool SnapuserdClient::PauseMerge() {
         LOG(ERROR) << "Failed to pause snapshot merge.";
         return false;
     }
-    return true;
+    std::string response = Receivemsg();
+    return response == "success";
 }
 
 bool SnapuserdClient::ResumeMerge() {
@@ -403,7 +404,8 @@ bool SnapuserdClient::ResumeMerge() {
         LOG(ERROR) << "Failed to resume snapshot merge.";
         return false;
     }
-    return true;
+    std::string response = Receivemsg();
+    return response == "success";
 }
 
 }  // namespace snapshot
