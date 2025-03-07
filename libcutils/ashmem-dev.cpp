@@ -44,6 +44,8 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 
+#include "ashmem-internal.h"
+
 /* ashmem identity */
 static dev_t __ashmem_rdev;
 /*
@@ -149,7 +151,7 @@ static bool __has_memfd_support() {
     return true;
 }
 
-static bool has_memfd_support() {
+bool has_memfd_support() {
     static bool memfd_supported = __has_memfd_support();
     return memfd_supported;
 }

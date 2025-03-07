@@ -29,6 +29,8 @@
 #include <cutils/ashmem.h>
 #include <gtest/gtest.h>
 
+#include "ashmem-internal.h"
+
 using android::base::unique_fd;
 
 static void TestCreateRegion(size_t size, unique_fd &fd, int prot) {
@@ -315,4 +317,120 @@ TEST(AshmemTest, ForkMultiRegionTest) {
     }
 
     ASSERT_NO_FATAL_FAILURE(ForkMultiRegionTest(fds, nRegions, size));
+}
+
+class AshmemTestMemfdAshmemCompat : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    if (!has_memfd_support()){
+        GTEST_SKIP() << "No memfd support; skipping memfd-ashmem compat tests";
+    }
+  }
+};
+
+TEST_F(AshmemTestMemfdAshmemCompat, SetNameTest) {
+    unique_fd fd;
+
+    // ioctl() should fail, since memfd names cannot be changed after the buffer has been created.
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+    ASSERT_LT(ioctl(fd, ASHMEM_SET_NAME, "invalid-command"), 0);
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, GetNameTest) {
+    unique_fd fd;
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+
+    char testBuf[ASHMEM_NAME_LEN];
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_GET_NAME, &testBuf));
+    // ashmem_create_region(nullptr, ...) creates memfds with the name "none".
+    ASSERT_STREQ(testBuf, "none");
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, SetSizeTest) {
+    unique_fd fd;
+
+    // ioctl() should fail, since libcutils sets and seals the buffer size after creating it.
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+    ASSERT_LT(ioctl(fd, ASHMEM_SET_SIZE, 2 * getpagesize()), 0);
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, GetSizeTest) {
+    unique_fd fd;
+    size_t bufSize = getpagesize();
+
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(bufSize, fd, PROT_READ | PROT_WRITE | PROT_EXEC));
+    ASSERT_EQ(static_cast<int>(bufSize), ioctl(fd, ASHMEM_GET_SIZE, 0));
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, ProtMaskTest) {
+    unique_fd fd;
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+
+    // We can only change PROT_WRITE for memfds since memfd implements ashmem's prot_mask through
+    // file seals, and only write seals exist.
+    //
+    // All memfd files start off as being writable (i.e. PROT_WRITE is part of the prot_mask).
+    // Test to ensure that the implementation only clears the PROT_WRITE bit when requested.
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_SET_PROT_MASK, PROT_READ | PROT_WRITE | PROT_EXEC));
+    int prot = ioctl(fd, ASHMEM_GET_PROT_MASK, 0);
+    ASSERT_NE(prot, -1);
+    ASSERT_TRUE(prot & PROT_WRITE) << prot;
+
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_SET_PROT_MASK, PROT_READ | PROT_EXEC));
+    prot = ioctl(fd, ASHMEM_GET_PROT_MASK, 0);
+    ASSERT_NE(prot, -1);
+    ASSERT_TRUE(!(prot & PROT_WRITE)) << prot;
+
+    // The shim layer should implement clearing PROT_WRITE via file seals, so check the file
+    // seals to ensure that F_SEAL_FUTURE_WRITE is set.
+    int seals = fcntl(fd, F_GET_SEALS, 0);
+    ASSERT_NE(seals, -1);
+    ASSERT_TRUE(seals & F_SEAL_FUTURE_WRITE) << seals;
+
+    // Similarly, ensure that file seals affect prot_mask
+    unique_fd fd2;
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd2, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+    ASSERT_EQ(0, fcntl(fd2, F_ADD_SEALS, F_SEAL_FUTURE_WRITE));
+    prot = ioctl(fd2, ASHMEM_GET_PROT_MASK, 0);
+    ASSERT_NE(prot, -1);
+    ASSERT_TRUE(!(prot & PROT_WRITE)) << prot;
+
+    // And finally, ensure that adding back permissions fails
+    ASSERT_LT(ioctl(fd2, ASHMEM_SET_PROT_MASK, PROT_READ | PROT_WRITE | PROT_EXEC), 0);
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, FileIDTest) {
+    unique_fd fd;
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+
+    unsigned long ino;
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_GET_FILE_ID, &ino));
+    struct stat st;
+    ASSERT_EQ(0, fstat(fd, &st));
+    ASSERT_EQ(ino, st.st_ino);
+}
+
+TEST_F(AshmemTestMemfdAshmemCompat, UnpinningTest) {
+    unique_fd fd;
+    size_t bufSize = getpagesize();
+    ASSERT_NO_FATAL_FAILURE(TestCreateRegion(getpagesize(), fd, PROT_READ | PROT_WRITE |
+                                                                PROT_EXEC));
+
+    struct ashmem_pin pin = {
+        .offset = 0,
+        .len = static_cast<uint32_t>(bufSize),
+    };
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_UNPIN, &pin));
+    // ASHMEM_UNPIN should just be a nop
+    ASSERT_EQ(ASHMEM_IS_PINNED, ioctl(fd, ASHMEM_GET_PIN_STATUS, 0));
+
+    // This shouldn't do anything; when we pin the page, it shouldn't have been purged.
+    ASSERT_EQ(0, ioctl(fd, ASHMEM_PURGE_ALL_CACHES, 0));
+    ASSERT_EQ(ASHMEM_NOT_PURGED, ioctl(fd, ASHMEM_PIN, &pin));
 }
