@@ -30,7 +30,7 @@ service prefetch_record /system/bin/prefetch record --duration ${ro.prefetch_boo
     disabled
     oneshot
 
-service prefetch_replay /system/bin/prefetch replay --io-depth ${ro.prefetch_boot.io_depth:-2} --max-fds ${ro.prefetch_boot.max_fds:-128}
+service prefetch_replay /system/bin/prefetch replay --io-depth ${ro.prefetch_boot.io_depth:-2} --max-fds ${ro.prefetch_boot.max_fds:-1024}
     user root
     group root system
     disabled
