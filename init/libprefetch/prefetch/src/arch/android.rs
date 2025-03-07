@@ -12,6 +12,12 @@ use rustutils::system_properties::PropertyWatcher;
 
 const PREFETCH_RECORD_PROPERTY_STOP: &str = "prefetch_boot.record_stop";
 
+fn is_prefetch_enabled() -> Result<bool, Error> {
+    rustutils::system_properties::read_bool("ro.prefetch_boot.enabled", false).map_err(|e| {
+        Error::Custom { error: format!("Failed to read ro.prefetch_boot.enabled: {}", e) }
+    })
+}
+
 fn wait_for_property_true(
     property_name: &str,
     timeout: Option<Duration>,
@@ -31,6 +37,10 @@ pub fn wait_for_record_stop() {
 /// Checks if we can perform replay phase.
 /// Ensure that the pack file exists and is up-to-date, returns false otherwise.
 pub fn can_perform_replay(pack_path: &Path, fingerprint_path: &Path) -> Result<bool, Error> {
+    if !is_prefetch_enabled()? {
+        return Ok(false);
+    }
+
     if !pack_path.exists() || !fingerprint_path.exists() {
         return Ok(false);
     }
@@ -54,6 +64,10 @@ pub fn ensure_record_is_ready(
     pack_path: &Path,
     fingerprint_path: &Path,
 ) -> Result<bool, Error> {
+    if !is_prefetch_enabled()? {
+        return Ok(false);
+    }
+
     if !ready_path.exists() {
         File::create(ready_path)
             .map_err(|_| Error::Custom { error: "File Creation failed".to_string() })?;
