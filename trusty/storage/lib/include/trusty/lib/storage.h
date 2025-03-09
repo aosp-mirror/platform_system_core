@@ -16,8 +16,8 @@
 
 #pragma once
 
+#include <interface/storage/storage.h>
 #include <stdint.h>
-#include <trusty/interface/storage.h>
 
 #define STORAGE_MAX_NAME_LENGTH_BYTES 159
 

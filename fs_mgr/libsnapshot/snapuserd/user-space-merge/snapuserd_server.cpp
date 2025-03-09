@@ -229,7 +229,10 @@ bool UserSnapshotServer::Receivemsg(android::base::borrowed_fd fd, const std::st
         return Sendmsg(fd, "success");
     } else if (cmd == "pause_merge") {
         handlers_->PauseMerge();
-        return true;
+        return Sendmsg(fd, "success");
+    } else if (cmd == "resume_merge") {
+        handlers_->ResumeMerge();
+        return Sendmsg(fd, "success");
     } else {
         LOG(ERROR) << "Received unknown message type from client";
         Sendmsg(fd, "fail");
