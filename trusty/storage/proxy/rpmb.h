@@ -15,8 +15,8 @@
  */
 #pragma once
 
+#include <interface/storage/storage.h>
 #include <stdint.h>
-#include <trusty/interface/storage.h>
 
 #include "watchdog.h"
 
