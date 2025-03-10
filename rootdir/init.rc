@@ -994,8 +994,11 @@ on post-fs-data
     mkdir /data/misc/stats-service/ 0770 statsd system
     mkdir /data/misc/train-info/ 0770 statsd system
 
-    # Wait for apexd to finish activating APEXes before starting more processes.
+    # TODO(b/369375199): Remove once attest modules flagging is removed.
     wait_for_prop apexd.status activated
+    # Wait for KeyMints to receive APEX module info before starting code from updateable APEXes.
+    # This is to prevent APEX modules from interfering in module measurement.
+    wait_for_prop keystore.module_hash.sent true
     perform_apex_config
 
     exec_start system_aconfigd_mainline_init
