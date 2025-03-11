@@ -97,48 +97,47 @@ void testOneInput(FuzzedDataProvider& provider) {
         static_assert(MAX_CONNECTIONS >= 1);
 
         // Either
-        // 1. Add a new TA and connect.
-        // 2. Remove a TA.
-        // 3. Send a random message to a random TA.
+        // 1. (20%) Add a new TA and connect.
+        // 2. (20%) Remove a TA.
+        // 3. (60%) Send a random message to a random TA.
+        auto add_ta = [&]() {
+            if (trustyApps.size() >= MAX_CONNECTIONS) {
+                return;
+            }
+            auto& ta = trustyApps.emplace_back(TIPC_DEV, TRUSTY_APP_PORT);
+            abortResult(ta.Connect());
+        };
+        auto remove_ta = [&]() {
+            if (trustyApps.empty()) {
+                return;
+            }
+            trustyApps.pop_back();
+        };
+        auto send_message = [&]() {
+            if (trustyApps.empty()) {
+                return;
+            }
+
+            // Choose a random TA.
+            const auto i = provider.ConsumeIntegralInRange<size_t>(0, trustyApps.size() - 1);
+            std::swap(trustyApps[i], trustyApps.back());
+            auto& ta = trustyApps.back();
+
+            // Send a random message.
+            const auto data = provider.ConsumeRandomLengthString();
+            abortResult(ta.Write(data.data(), data.size()));
+
+            std::array<uint8_t, TIPC_MAX_MSG_SIZE> buf;
+            abortResult(ta.Read(buf.data(), buf.size()));
+
+            // Reconnect to ensure that the service is still up.
+            ta.Disconnect();
+            abortResult(ta.Connect());
+        };
         const std::function<void()> options[] = {
-                // Add a new TA and connect.
-                [&]() {
-                    if (trustyApps.size() >= MAX_CONNECTIONS) {
-                        return;
-                    }
-                    auto& ta = trustyApps.emplace_back(TIPC_DEV, TRUSTY_APP_PORT);
-                    abortResult(ta.Connect());
-                },
-                // Remove a TA.
-                [&]() {
-                    if (trustyApps.empty()) {
-                        return;
-                    }
-                    trustyApps.pop_back();
-                },
-                // Send a random message to a random TA.
-                [&]() {
-                    if (trustyApps.empty()) {
-                        return;
-                    }
-
-                    // Choose a random TA.
-                    const auto i =
-                            provider.ConsumeIntegralInRange<size_t>(0, trustyApps.size() - 1);
-                    std::swap(trustyApps[i], trustyApps.back());
-                    auto& ta = trustyApps.back();
-
-                    // Send a random message.
-                    const auto data = provider.ConsumeRandomLengthString();
-                    abortResult(ta.Write(data.data(), data.size()));
-
-                    std::array<uint8_t, TIPC_MAX_MSG_SIZE> buf;
-                    abortResult(ta.Read(buf.data(), buf.size()));
-
-                    // Reconnect to ensure that the service is still up.
-                    ta.Disconnect();
-                    abortResult(ta.Connect());
-                },
+                add_ta,                                    // 1x: 20%
+                remove_ta,                                 // 1x: 20%
+                send_message, send_message, send_message,  // 3x: 60%
         };
 
         provider.PickValueInArray(options)();

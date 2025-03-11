@@ -1,0 +1,19 @@
+on property:sys.boot_completed=1
+    # When mmd package is not included in the image, we need to initialize
+    # `mmd.enabled_aconfig` sysprop instead of `mmd --set-property`.
+    #
+    # This is because of the consideration for devices in Trunkfood and Nextfood
+    # under mmd being launched via AConfig flag. The devices set up zram with
+    # mmd if `mmd_enabled` AConfig flag is enabled, otherwise set up zram with
+    # swapon_all init command. Since AConfig does not support any init script
+    # integration, we use `mmd.enabled_aconfig` copied by `mmd --set-property`
+    # instead of AConfig flag itself and we need mmd.enabled_aconfig to be empty
+    # by default, to let swapon_all command wait until aconfig flag value is
+    # loaded to the system property.
+    # Devices in Trunkfood and Nextfood needs to execute swapon_all command on
+    # `on property:mmd.enabled_aconfig=*` trigger. So initializing
+    # `mmd.enabled_aconfig` sysprop is required on images without mmd package.
+    #
+    # Note that this init file must not be in the image if mmd is built into the
+    # image.
+    setprop mmd.enabled_aconfig false

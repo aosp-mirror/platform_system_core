@@ -27,6 +27,7 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
+#include <fstab/fstab.h>
 #include <selinux/selinux.h>
 #include <sys/signalfd.h>
 #include "lmkd_service.h"
@@ -279,6 +280,75 @@ service $name /system/bin/yes
 }
 
 INSTANTIATE_TEST_SUITE_P(service, ServiceStopTest, testing::Values(false, true));
+
+// Entering a network namespace requires remounting sysfs to update contents of
+// /sys/class/net whose contents depend on the network namespace of the process
+// that mounted it rather than the effective network namespace of the reading
+// process.
+//
+// A side effect of the remounting is unmounting all filesystems mounted under
+// /sys, like tracefs. Verify that init doesn't leave them unmounted by
+// accident.
+TEST(service, enter_namespace_net_preserves_mounts) {
+    if (getuid() != 0) {
+        GTEST_SKIP() << "Must be run as root.";
+        return;
+    }
+
+    struct ScopedNetNs {
+        std::string name;
+        ScopedNetNs(std::string n) : name(n) {
+            EXPECT_EQ(system(("/system/bin/ip netns add " + name).c_str()), 0);
+        }
+        ~ScopedNetNs() { EXPECT_EQ(system(("/system/bin/ip netns delete " + name).c_str()), 0); }
+    };
+    const ScopedNetNs netns("test_ns");
+
+    static constexpr std::string_view kServiceName = "ServiceA";
+    static constexpr std::string_view kScriptTemplate = R"init(
+service $name /system/bin/yes
+    user shell
+    group shell
+    seclabel $selabel
+    enter_namespace net /mnt/run/$ns_name
+)init";
+
+    std::string script = StringReplace(kScriptTemplate, "$name", kServiceName, false);
+    script = StringReplace(script, "$selabel", GetSecurityContext(), false);
+    script = StringReplace(script, "$ns_name", netns.name, false);
+
+    ServiceList& service_list = ServiceList::GetInstance();
+    Parser parser;
+    parser.AddSectionParser("service", std::make_unique<ServiceParser>(&service_list, nullptr));
+
+    TemporaryFile tf;
+    ASSERT_GE(tf.fd, 0);
+    ASSERT_TRUE(WriteStringToFd(script, tf.fd));
+    ASSERT_TRUE(parser.ParseConfig(tf.path));
+
+    Service* const service = ServiceList::GetInstance().FindService(kServiceName);
+    ASSERT_NE(service, nullptr);
+    ASSERT_RESULT_OK(service->Start());
+    ASSERT_TRUE(service->IsRunning());
+
+    android::fs_mgr::Fstab root_mounts;
+    ASSERT_TRUE(ReadFstabFromFile("/proc/mounts", &root_mounts));
+
+    android::fs_mgr::Fstab ns_mounts;
+    ASSERT_TRUE(ReadFstabFromFile(StringReplace("/proc/$pid/mounts", "$pid",
+                                                std::to_string(service->pid()), /*all=*/false),
+                                  &ns_mounts));
+
+    for (const auto& expected_mount : root_mounts) {
+        auto it = std::find_if(ns_mounts.begin(), ns_mounts.end(), [&](const auto& ns_mount) {
+            return ns_mount.mount_point == expected_mount.mount_point;
+        });
+        EXPECT_TRUE(it != ns_mounts.end()) << StringPrintf(
+                "entering network namespace unmounted %s", expected_mount.mount_point.c_str());
+    }
+
+    ServiceList::GetInstance().RemoveService(*service);
+}
 
 }  // namespace init
 }  // namespace android
