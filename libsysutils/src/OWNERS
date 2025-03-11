@@ -1,2 +1,1 @@
-per-file OWNERS,Netlink* = codewiz@google.com, jchalard@google.com, lorenzo@google.com, satk@google.com
-
+per-file OWNERS,Netlink* = file:platform/packages/modules/Connectivity:main:/OWNERS_core_networking

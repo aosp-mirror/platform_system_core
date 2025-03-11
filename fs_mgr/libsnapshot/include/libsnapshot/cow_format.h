@@ -329,6 +329,16 @@ struct BufferState {
     uint8_t read_ahead_state;
 } __attribute__((packed));
 
+constexpr size_t GetCowOpSize(size_t version) {
+    if (version == 3) {
+        return sizeof(CowOperationV3);
+    } else if (version == 2 || version == 1) {
+        return sizeof(CowOperationV2);
+    } else {
+        return 0;
+    }
+}
+
 // 2MB Scratch space used for read-ahead
 static constexpr uint64_t BUFFER_REGION_DEFAULT_SIZE = (1ULL << 21);
 

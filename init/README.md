@@ -454,44 +454,66 @@ runs the service.
 
 Triggers
 --------
-Triggers are strings which can be used to match certain kinds of
-events and used to cause an action to occur.
+Triggers of an action specifies one or more conditions when satisfied
+execute the commands in the action. A trigger encodes a single atomic
+condition, and multiple triggers can be combined using the `&&`
+operator to form a bigger AND condition.
 
-Triggers are subdivided into event triggers and property triggers.
-
-Event triggers are strings triggered by the 'trigger' command or by
-the QueueEventTrigger() function within the init executable.  These
-take the form of a simple string such as 'boot' or 'late-init'.
-
-Property triggers are strings triggered when a named property changes
-value to a given new value or when a named property changes value to
-any new value.  These take the form of 'property:<name>=<value>' and
-'property:<name>=\*' respectively.  Property triggers are additionally
-evaluated and triggered accordingly during the initial boot phase of
-init.
-
-An Action can have multiple property triggers but may only have one
+There are two types of triggers: event triggers and action triggers.
+An action can have multiple property triggers but may have only one
 event trigger.
 
-For example:
-`on boot && property:a=b` defines an action that is only executed when
-the 'boot' event trigger happens and the property a equals b at the moment. This
-will NOT be executed when the property a transitions to value b after the `boot`
-event was triggered.
+An event trigger takes the simple form of `<event>` where `<event>` is
+the name of a boot stage like `early-init` or `boot`. This trigger
+is satisfied when init reaches the stage via the `trigger` command or
+by the `QueueEventTrigger()` function in the init executable.
 
-`on property:a=b && property:c=d` defines an action that is executed
-at three times:
+A property trigger takes the form of `property:<name>=<value>`. This
+trigger is satisfied when the property of name `<name>` is found to
+have the value of `<value>` when the check is made. The `<value>` part
+can be `\*` to match with any value.
 
-   1. During initial boot if property a=b and property c=d.
-   2. Any time that property a transitions to value b, while property c already equals d.
-   3. Any time that property c transitions to value d, while property a already equals b.
+The check for property trigger is made in the following cases:
 
-Note that, for bootloader-provided properties (ro.boot.*), their action cannot be
-auto-triggered until `boot` stage. If they need to be triggered earlier, like at `early-boot`
-stage, they should be tied to the `event`. For example:
+* All property triggers get checked at least once when the `boot`
+  event is finished (i.e. when the last command under `on boot ...` is
+finished).
 
-`on early-boot && property:a=b`.
+* After the one-time check, `property:a=b` is checked when property `a`
+  is newly created, or when the property is set to a new value.
 
+* Property triggers are also checked when other triggers in the same
+  action are checked. For example, `property:a=b && property:c=d` is
+checked not only when property `a` gets a new value, but also when
+property `c` gets a new value (and of course when the one-time check
+is made).
+
+* Before the one-time check, `property:a=b` without an event trigger
+  is NOT checked, even if property `a` gets a new value. Care must be
+taken since this is a non-intuitive behavior, which unfortunately
+can't be changed due to compatibility concerns.
+
+Some examples:
+
+`on property:a=b` is executed in two cases:
+
+1. during the one-time check if property `a` is `b` at the moment.
+2. if property `a` is set to or changed to `b` after the one-time
+   check, but not before then.
+
+`on property:a=b && property:c=d` is executed in three cases:
+
+1. during the one-time check if property `a` is `b` and property `c`
+   is `d` at the moment.
+2. (after the one-time check) property `a` becomes `b` while property
+   `c` already equals to `d`.
+3. (after the one-time check) property `c` becomes `d` while property
+   `a` already equals to `b`.
+
+`on property:a=b && post-fs` is executed in one case only:
+
+1. `post-fs` is triggered while property `a` already equals to `b`.
+   This is NOT executed when property `a` becomes `b` AFTER `post-fs`.
 
 Trigger Sequence
 ----------------
@@ -763,6 +785,16 @@ provides the `aidl_lazy_test_1` interface.
   fstab.${ro.hardware} or fstab.${ro.hardware.platform} will be scanned for
   under /odm/etc, /vendor/etc, or / at runtime, in that order.
 
+> swapon_all is deprecated and will do nothing if `mmd_enabled` AConfig flag
+  in `system_performance` namespace and `mmd.zram.enabled` sysprop are enabled.
+  OEMs, who decided to use mmd to manage zram, must remove zram entry from fstab
+  or remove swapon_all call from their init script.
+
+> swapon_all continues to support setting up non-zram swap devices.
+
+> swapon_all on recovery mode continues to support setting up zram because mmd
+  does not support the recovery mode.
+
 `swapoff <path>`
 > Stops swapping to the file or block device specified by path.
 
@@ -939,25 +971,12 @@ Init records some boot timing information in system properties.
 
 Bootcharting
 ------------
-This version of init contains code to perform "bootcharting": generating log
-files that can be later processed by the tools provided by <http://www.bootchart.org/>.
+Bootchart provides CPU and I/O load breakdown of all processes for the whole system.
+Refer to the instructions at
+ <https://source.android.com/docs/core/perf/boot-times#bootchart>.
 
 On the emulator, use the -bootchart _timeout_ option to boot with bootcharting
 activated for _timeout_ seconds.
-
-On a device:
-
-    adb shell 'touch /data/bootchart/enabled'
-
-Don't forget to delete this file when you're done collecting data!
-
-The log files are written to /data/bootchart/. A script is provided to
-retrieve them and create a bootchart.tgz file that can be used with the
-bootchart command-line utility:
-
-    sudo apt-get install pybootchartgui
-    # grab-bootchart.sh uses $ANDROID_SERIAL.
-    $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
 
 One thing to watch for is that the bootchart will show init as if it started
 running at 0s. You'll have to look at dmesg to work out when the kernel

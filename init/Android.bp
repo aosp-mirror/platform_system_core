@@ -599,6 +599,7 @@ cc_defaults {
     ],
     static_libs: [
         "libbase",
+        "libfstab",
         "libselinux",
         "libpropertyinfoserializer",
         "libpropertyinfoparser",

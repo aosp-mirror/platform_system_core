@@ -268,6 +268,19 @@ static void DumpUmountDebuggingInfo() {
 }
 
 static UmountStat UmountPartitions(std::chrono::milliseconds timeout) {
+    // Terminate (SIGTERM) the services before unmounting partitions.
+    // If the processes block the signal, then partitions will eventually fail
+    // to unmount and then we fallback to SIGKILL the services.
+    //
+    // Hence, give the services a chance for a graceful shutdown before sending SIGKILL.
+    for (const auto& s : ServiceList::GetInstance()) {
+        if (s->IsShutdownCritical()) {
+            LOG(INFO) << "Shutdown service: " << s->name();
+            s->Terminate();
+        }
+    }
+    ReapAnyOutstandingChildren();
+
     Timer t;
     /* data partition needs all pending writes to be completed and all emulated partitions
      * umounted.If the current waiting is not good enough, give
@@ -394,6 +407,24 @@ void RebootMonitorThread(unsigned int cmd, const std::string& reboot_target,
     }
 }
 
+static bool UmountDynamicPartitions(const std::vector<std::string>& dynamic_partitions) {
+    bool ret = true;
+    for (auto device : dynamic_partitions) {
+        // Cannot unmount /system
+        if (device == "/system") {
+            continue;
+        }
+        int r = umount2(device.c_str(), MNT_FORCE);
+        if (r == 0) {
+            LOG(INFO) << "Umounted success: " << device;
+        } else {
+            PLOG(WARNING) << "Cannot umount: " << device;
+            ret = false;
+        }
+    }
+    return ret;
+}
+
 /* Try umounting all emulated file systems R/W block device cfile systems.
  * This will just try umount and give it up if it fails.
  * For fs like ext4, this is ok as file system will be marked as unclean shutdown
@@ -408,14 +439,18 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
     Timer t;
     std::vector<MountEntry> block_devices;
     std::vector<MountEntry> emulated_devices;
+    std::vector<std::string> dynamic_partitions;
 
     if (run_fsck && !FindPartitionsToUmount(&block_devices, &emulated_devices, false)) {
         return UMOUNT_STAT_ERROR;
     }
     auto sm = snapshot::SnapshotManager::New();
     bool ota_update_in_progress = false;
-    if (sm->IsUserspaceSnapshotUpdateInProgress()) {
-        LOG(INFO) << "OTA update in progress";
+    if (sm->IsUserspaceSnapshotUpdateInProgress(dynamic_partitions)) {
+        LOG(INFO) << "OTA update in progress. Pause snapshot merge";
+        if (!sm->PauseSnapshotMerge()) {
+            LOG(ERROR) << "Snapshot-merge pause failed";
+        }
         ota_update_in_progress = true;
     }
     UmountStat stat = UmountPartitions(timeout - t.duration());
@@ -435,6 +470,17 @@ static UmountStat TryUmountAndFsck(unsigned int cmd, bool run_fsck,
         // still not doing fsck when all processes are killed.
         //
         if (ota_update_in_progress) {
+            bool umount_dynamic_partitions = UmountDynamicPartitions(dynamic_partitions);
+            LOG(INFO) << "Sending SIGTERM to all process";
+            // Send SIGTERM to all processes except init
+            WriteStringToFile("e", PROC_SYSRQ);
+            // Wait for processes to terminate
+            std::this_thread::sleep_for(1s);
+            // Try one more attempt to umount other partitions which failed
+            // earlier
+            if (!umount_dynamic_partitions) {
+                UmountDynamicPartitions(dynamic_partitions);
+            }
             return stat;
         }
         KillAllProcesses();
@@ -782,6 +828,7 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
     if (IsDataMounted("f2fs")) {
         uint32_t flag = F2FS_GOING_DOWN_FULLSYNC;
         unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
+        LOG(INFO) << "Invoking F2FS_IOC_SHUTDOWN during shutdown";
         int ret = ioctl(fd.get(), F2FS_IOC_SHUTDOWN, &flag);
         if (ret) {
             PLOG(ERROR) << "Shutdown /data: ";

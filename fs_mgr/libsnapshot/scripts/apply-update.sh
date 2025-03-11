@@ -99,6 +99,8 @@ Options:
                             Now, the script can safely use this flag for update purpose.
 
   --wipe                   Wipe user data during the update.
+  --boot_snapshot          Boot the device off snapshots - No data wipe is supported
+                              To revert back to original state - `adb shell snapshotctl revert-snapshots`
   --help                   Display this help message.
 
 Environment Variables:
@@ -123,6 +125,7 @@ EOF
 }
 
 skip_static_partitions=0
+boot_snapshot=0
 flash_bootloader=1
 wipe_flag=0
 help_flag=0
@@ -138,6 +141,9 @@ for arg in "$@"; do
       ;;
     --skip_bootloader)
       flash_bootloader=0
+      ;;
+    --boot_snapshot)
+      boot_snapshot=1
       ;;
     --help)
       help_flag=1
@@ -208,7 +214,9 @@ adb push -q $HOST_PATH/*.patch $DEVICE_PATH
 
 log_message "Applying update"
 
-if (( wipe_flag )); then
+if (( boot_snapshot)); then
+  adb shell snapshotctl map-snapshots $DEVICE_PATH
+elif (( wipe_flag )); then
   adb shell snapshotctl apply-update $DEVICE_PATH -w
 else
   adb shell snapshotctl apply-update $DEVICE_PATH

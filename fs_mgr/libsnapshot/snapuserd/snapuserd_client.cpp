@@ -52,6 +52,7 @@ bool EnsureSnapuserdStarted() {
             return false;
         }
     }
+
     if (!android::base::WaitForProperty("snapuserd.ready", "true", 10s)) {
         LOG(ERROR) << "Timed out waiting for snapuserd to be ready.";
         return false;
@@ -387,6 +388,24 @@ void SnapuserdClient::NotifyTransitionDaemonIsReady() {
         PLOG(ERROR) << "Unable to write daemon alive indicator path: "
                     << GetDaemonAliveIndicatorPath();
     }
+}
+
+bool SnapuserdClient::PauseMerge() {
+    if (!Sendmsg("pause_merge")) {
+        LOG(ERROR) << "Failed to pause snapshot merge.";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
+}
+
+bool SnapuserdClient::ResumeMerge() {
+    if (!Sendmsg("resume_merge")) {
+        LOG(ERROR) << "Failed to resume snapshot merge.";
+        return false;
+    }
+    std::string response = Receivemsg();
+    return response == "success";
 }
 
 }  // namespace snapshot

@@ -175,3 +175,8 @@ TEST_F(TombstoneProtoToTextTest, symbolize) {
   ProtoToString();
   EXPECT_MATCH(text_, "\\(BuildId: 0123456789abcdef\\)\\nSYMBOLIZE 0123456789abcdef 12345\\n");
 }
+
+TEST_F(TombstoneProtoToTextTest, uid) {
+  ProtoToString();
+  EXPECT_MATCH(text_, "\\nLOG uid: 0\\n");
+}

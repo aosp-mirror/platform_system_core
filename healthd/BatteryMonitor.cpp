@@ -131,6 +131,7 @@ static void initHealthInfo(HealthInfo* health_info) {
                     (int64_t)HealthInfo::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED,
             .batteryStatus = BatteryStatus::UNKNOWN,
             .batteryHealth = BatteryHealth::UNKNOWN,
+            .batteryHealthData = std::nullopt,
     };
 }
 
@@ -360,6 +361,14 @@ static bool isScopedPowerSupply(const char* name) {
     return (readFromFile(path, &scope) > 0 && scope == kScopeDevice);
 }
 
+static BatteryHealthData *ensureBatteryHealthData(HealthInfo *info) {
+    if (!info->batteryHealthData.has_value()) {
+        return &info->batteryHealthData.emplace();
+    }
+
+    return &info->batteryHealthData.value();
+}
+
 void BatteryMonitor::updateValues(void) {
     initHealthInfo(mHealthInfo.get());
 
@@ -402,15 +411,15 @@ void BatteryMonitor::updateValues(void) {
         mBatteryHealthStatus = getIntField(mHealthdConfig->batteryHealthStatusPath);
 
     if (!mHealthdConfig->batteryStateOfHealthPath.empty())
-        mHealthInfo->batteryHealthData->batteryStateOfHealth =
+        ensureBatteryHealthData(mHealthInfo.get())->batteryStateOfHealth =
                 getIntField(mHealthdConfig->batteryStateOfHealthPath);
 
     if (!mHealthdConfig->batteryManufacturingDatePath.empty())
-        mHealthInfo->batteryHealthData->batteryManufacturingDateSeconds =
+        ensureBatteryHealthData(mHealthInfo.get())->batteryManufacturingDateSeconds =
                 getIntField(mHealthdConfig->batteryManufacturingDatePath);
 
     if (!mHealthdConfig->batteryFirstUsageDatePath.empty())
-        mHealthInfo->batteryHealthData->batteryFirstUsageSeconds =
+        ensureBatteryHealthData(mHealthInfo.get())->batteryFirstUsageSeconds =
                 getIntField(mHealthdConfig->batteryFirstUsageDatePath);
 
     mHealthInfo->batteryTemperatureTenthsCelsius =
