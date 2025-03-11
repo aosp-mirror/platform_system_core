@@ -31,6 +31,7 @@ class Modprobe {
     enum LoadParallelMode {
       NONE = 0,
       NORMAL,
+      PERFORMANCE,
     };
 
     Modprobe(const std::vector<std::string>&, const std::string load_file = "modules.load",
