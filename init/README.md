@@ -971,25 +971,12 @@ Init records some boot timing information in system properties.
 
 Bootcharting
 ------------
-This version of init contains code to perform "bootcharting": generating log
-files that can be later processed by the tools provided by <http://www.bootchart.org/>.
+Bootchart provides CPU and I/O load breakdown of all processes for the whole system.
+Refer to the instructions at
+ <https://source.android.com/docs/core/perf/boot-times#bootchart>.
 
 On the emulator, use the -bootchart _timeout_ option to boot with bootcharting
 activated for _timeout_ seconds.
-
-On a device:
-
-    adb shell 'touch /data/bootchart/enabled'
-
-Don't forget to delete this file when you're done collecting data!
-
-The log files are written to /data/bootchart/. A script is provided to
-retrieve them and create a bootchart.tgz file that can be used with the
-bootchart command-line utility:
-
-    sudo apt-get install pybootchartgui
-    # grab-bootchart.sh uses $ANDROID_SERIAL.
-    $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
 
 One thing to watch for is that the bootchart will show init as if it started
 running at 0s. You'll have to look at dmesg to work out when the kernel

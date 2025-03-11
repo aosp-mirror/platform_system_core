@@ -42,8 +42,6 @@ use log::LevelFilter;
 pub use args::args_from_env;
 use args::OutputFormat;
 pub use args::ReplayArgs;
-#[cfg(target_os = "android")]
-pub use args::StartArgs;
 pub use args::{DumpArgs, MainArgs, RecordArgs, SubCommands};
 pub use error::Error;
 pub use format::FileId;
@@ -59,6 +57,13 @@ pub use arch::android::*;
 
 /// Records prefetch data for the given configuration
 pub fn record(args: &RecordArgs) -> Result<(), Error> {
+    #[cfg(target_os = "android")]
+    if !ensure_record_is_ready(&args.ready_path, &args.path, &args.build_fingerprint_path)? {
+        info!("Cannot perform record -- skipping");
+        return Ok(());
+    }
+
+    info!("Starting record.");
     let (mut tracer, exit_tx) = tracer::Tracer::create(
         args.trace_buffer_size_kib,
         args.tracing_subsystem.clone(),
@@ -109,6 +114,13 @@ pub fn record(args: &RecordArgs) -> Result<(), Error> {
 
 /// Replays prefetch data for the given configuration
 pub fn replay(args: &ReplayArgs) -> Result<(), Error> {
+    #[cfg(target_os = "android")]
+    if !can_perform_replay(&args.path, &args.build_fingerprint_path)? {
+        info!("Cannot perform replay -- exiting.");
+        return Ok(());
+    }
+
+    info!("Starting replay.");
     let replay = Replay::new(args)?;
     replay.replay()
 }

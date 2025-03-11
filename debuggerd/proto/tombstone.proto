@@ -15,6 +15,15 @@ option java_outer_classname = "TombstoneProtos";
 // NOTE TO OEMS:
 // If you add custom fields to this proto, do not use numbers in the reserved range.
 
+// NOTE TO CONSUMERS:
+// With proto3 -- unlike proto2 -- HasValue is unreliable for any field
+// where the default value for that type is also a valid value for the field.
+// This means, for example, that a boolean that is false or an integer that
+// is zero will appear to be missing --- but because they're not actually
+// marked as `optional` in this schema, consumers should just use values
+// without first checking whether or not they're "present".
+// https://protobuf.dev/programming-guides/proto3/#default
+
 message CrashDetail {
   bytes name = 1;
   bytes data = 2;
