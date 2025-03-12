@@ -47,7 +47,7 @@ jiffy_to_wallclock = {
 def analyze_process_maps(process_map1, process_map2, jiffy_record):
     # List interesting processes here
     processes_of_interest = [
-        '/init',
+        '/system/bin/init',
         '/system/bin/surfaceflinger',
         '/system/bin/bootanimation',
         'zygote64',

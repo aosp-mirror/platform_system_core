@@ -1,28 +1,36 @@
-on init && property:ro.prefetch_boot.enabled=true
-    start prefetch
-
-service prefetch /system/bin/prefetch start
-    class main
-    user root
-    group root system
-    disabled
-    oneshot
-
-on property:prefetch_boot.record=true
-    start prefetch_record
+# Reads data from disk in advance and populates page cache
+# to speed up subsequent disk access.
+#
+# Record:
+#   start by `start prefetch_record` at appropriate timing.
+#   stop by setting `prefetch_boot.record_stop` to 1.
+#   set --duration to only capture for a certain duration instead.
+#
+# Replay:
+#   start by `start prefetch_replay` at appropriate timing.
+#   it will depend on several files generated from record.
+#
+#   replay is I/O intensive. make sure you pick appropriate
+#   timing to run each, so that you can maximize the page cache
+#   hit for subsequent disk access.
+#
+# Example:
+#   on early-init && property:ro.prefetch_boot.enabled=true
+#     start prefetch_replay
+#
+#   on init && property:ro.prefetch_boot.enabled=true
+#     start prefetch_record
+#
+#   on property:sys.boot_completed=1 && property:ro.prefetch_boot.enabled=true
+#     setprop prefetch_boot.record_stop 1
 
 service prefetch_record /system/bin/prefetch record --duration ${ro.prefetch_boot.duration_s:-0}
-    class main
     user root
     group root system
     disabled
     oneshot
 
-on property:prefetch_boot.replay=true
-    start prefetch_replay
-
-service prefetch_replay /system/bin/prefetch replay --io-depth ${ro.prefetch_boot.io_depth:-2} --max-fds ${ro.prefetch_boot.max_fds:-128}
-    class main
+service prefetch_replay /system/bin/prefetch replay --io-depth ${ro.prefetch_boot.io_depth:-2} --max-fds ${ro.prefetch_boot.max_fds:-1024}
     user root
     group root system
     disabled
