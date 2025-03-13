@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <liburing.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -22,6 +23,7 @@
 #include <mutex>
 #include <string>
 
+#include <liburing_cpp/IoUring.h>
 #include <snapuserd/snapuserd_kernel.h>
 #include <storage_literals/storage_literals.h>
 
@@ -48,27 +50,23 @@ class UpdateVerify {
     std::mutex m_lock_;
     std::condition_variable m_cv_;
 
+    int kMinThreadsToVerify = 1;
+    int kMaxThreadsToVerify = 3;
+
     /*
-     * Scanning of partitions is an expensive operation both in terms of memory
-     * and CPU usage. The goal here is to scan the partitions fast enough without
-     * significant increase in the boot time.
-     *
-     * Partitions such as system, product which may be huge and may need multiple
-     * threads to speed up the verification process. Using multiple threads for
-     * all partitions may increase CPU usage significantly. Hence, limit that to
-     * 1 thread per partition.
+     * To optimize partition scanning speed without significantly impacting boot time,
+     * we employ O_DIRECT, bypassing the page-cache. However, O_DIRECT's memory
+     * allocation from CMA can be problematic on devices with restricted CMA space.
+     * To address this, io_uring_register_buffers() pre-registers I/O buffers,
+     * preventing CMA usage. See b/401952955 for more details.
      *
      * These numbers were derived by monitoring the memory and CPU pressure
      * (/proc/pressure/{cpu,memory}; and monitoring the Inactive(file) and
      * Active(file) pages from /proc/meminfo.
-     *
-     * Additionally, for low memory devices, it is advisable to use O_DIRECT
-     * functionality for source block device.
      */
-    int kMinThreadsToVerify = 1;
-    int kMaxThreadsToVerify = 3;
-    uint64_t kThresholdSize = 750_MiB;
-    uint64_t kBlockSizeVerify = 2_MiB;
+    uint64_t verify_block_size_ = 1_MiB;
+    uint64_t threshold_size_ = 2_GiB;
+    int queue_depth_ = 4;
 
     bool IsBlockAligned(uint64_t read_size) { return ((read_size & (BLOCK_SZ - 1)) == 0); }
     void UpdatePartitionVerificationState(UpdateVerifyState state);
