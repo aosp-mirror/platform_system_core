@@ -18,6 +18,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/ext4.h>
 #include <linux/f2fs.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
@@ -830,6 +831,15 @@ static void DoReboot(unsigned int cmd, const std::string& reason, const std::str
         unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
         LOG(INFO) << "Invoking F2FS_IOC_SHUTDOWN during shutdown";
         int ret = ioctl(fd.get(), F2FS_IOC_SHUTDOWN, &flag);
+        if (ret) {
+            PLOG(ERROR) << "Shutdown /data: ";
+        } else {
+            LOG(INFO) << "Shutdown /data";
+        }
+    } else if (IsDataMounted("ext4")) {
+        uint32_t flag = EXT4_GOING_FLAGS_DEFAULT;
+        unique_fd fd(TEMP_FAILURE_RETRY(open("/data", O_RDONLY)));
+        int ret = ioctl(fd.get(), EXT4_IOC_SHUTDOWN, &flag);
         if (ret) {
             PLOG(ERROR) << "Shutdown /data: ";
         } else {
