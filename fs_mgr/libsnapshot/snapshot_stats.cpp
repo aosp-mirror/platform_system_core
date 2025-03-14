@@ -24,9 +24,12 @@ namespace android {
 namespace snapshot {
 
 SnapshotMergeStats* SnapshotMergeStats::GetInstance(SnapshotManager& parent) {
-    static SnapshotMergeStats g_instance(parent.GetMergeStateFilePath());
-    CHECK_EQ(g_instance.path_, parent.GetMergeStateFilePath());
-    return &g_instance;
+    static std::unique_ptr<SnapshotMergeStats> g_instance;
+
+    if (!g_instance || g_instance->path_ != parent.GetMergeStateFilePath()) {
+        g_instance = std::make_unique<SnapshotMergeStats>(parent.GetMergeStateFilePath());
+    }
+    return g_instance.get();
 }
 
 SnapshotMergeStats::SnapshotMergeStats(const std::string& path) : path_(path), running_(false) {}
