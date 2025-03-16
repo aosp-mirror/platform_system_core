@@ -335,7 +335,7 @@ TEST_F(CrasherTest, smoke) {
   ConsumeFd(std::move(output_fd), &result);
   ASSERT_MATCH(result, R"(signal 11 \(SIGSEGV\), code 1 \(SEGV_MAPERR\), fault addr 0x0+dead)");
 
-  if (mte_supported()) {
+  if (mte_supported() && mte_enabled()) {
     // Test that the default TAGGED_ADDR_CTRL value is set.
     ASSERT_MATCH(result, R"(tagged_addr_ctrl: 000000000007fff3)"
                          R"( \(PR_TAGGED_ADDR_ENABLE, PR_MTE_TCF_SYNC, mask 0xfffe\))");
@@ -443,7 +443,7 @@ INSTANTIATE_TEST_SUITE_P(Sizes, SizeParamCrasherTest, testing::Values(0, 16, 131
 
 TEST_P(SizeParamCrasherTest, mte_uaf) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -490,7 +490,7 @@ TEST_P(SizeParamCrasherTest, mte_uaf) {
 
 TEST_P(SizeParamCrasherTest, mte_oob_uaf) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -522,7 +522,7 @@ TEST_P(SizeParamCrasherTest, mte_oob_uaf) {
 
 TEST_P(SizeParamCrasherTest, mte_overflow) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -565,7 +565,7 @@ TEST_P(SizeParamCrasherTest, mte_overflow) {
 
 TEST_P(SizeParamCrasherTest, mte_underflow) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -614,7 +614,7 @@ TEST_F(CrasherTest, DISABLED_mte_illegal_setjmp) {
   //     unsubtle chaos is sure to result.
   // https://man7.org/linux/man-pages/man3/longjmp.3.html
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -648,7 +648,7 @@ TEST_F(CrasherTest, DISABLED_mte_illegal_setjmp) {
 
 TEST_F(CrasherTest, mte_async) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -678,7 +678,7 @@ TEST_F(CrasherTest, mte_async) {
 
 TEST_F(CrasherTest, mte_multiple_causes) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -764,7 +764,7 @@ static uintptr_t CreateTagMapping() {
 
 TEST_F(CrasherTest, mte_register_tag_dump) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -797,7 +797,7 @@ TEST_F(CrasherTest, mte_register_tag_dump) {
 
 TEST_F(CrasherTest, mte_fault_tag_dump_front_truncated) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -828,7 +828,7 @@ TEST_F(CrasherTest, mte_fault_tag_dump_front_truncated) {
 
 TEST_F(CrasherTest, mte_fault_tag_dump) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 
@@ -862,7 +862,7 @@ TEST_F(CrasherTest, mte_fault_tag_dump) {
 
 TEST_F(CrasherTest, mte_fault_tag_dump_rear_truncated) {
 #if defined(__aarch64__)
-  if (!mte_supported()) {
+  if (!mte_supported() || !mte_enabled()) {
     GTEST_SKIP() << "Requires MTE";
   }
 

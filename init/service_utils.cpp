@@ -18,11 +18,11 @@
 
 #include <fcntl.h>
 #include <grp.h>
-#include <map>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <map>
 
 #include <android-base/file.h>
 #include <android-base/logging.h>
@@ -31,6 +31,7 @@
 #include <android-base/strings.h>
 #include <cutils/android_get_control_file.h>
 #include <cutils/sockets.h>
+#include <fstab/fstab.h>
 #include <processgroup/processgroup.h>
 
 #include "mount_namespace.h"
@@ -82,11 +83,38 @@ Result<void> SetUpMountNamespace(bool remount_proc, bool remount_sys) {
         }
     }
     if (remount_sys) {
+        android::fs_mgr::Fstab mounts;
+        if (!ReadFstabFromFile("/proc/mounts", &mounts)) {
+            LOG(ERROR) << "Could not read /proc/mounts";
+        }
         if (umount2("/sys", MNT_DETACH) == -1) {
             return ErrnoError() << "Could not umount(/sys)";
         }
-        if (mount("", "/sys", "sysfs", kSafeFlags, "") == -1) {
+        if (mount("sysfs", "/sys", "sysfs", kSafeFlags, "") == -1) {
             return ErrnoError() << "Could not mount(/sys)";
+        }
+        // Unmounting /sys also unmounts all nested mounts like tracefs.
+        //
+        // Look up the filesystems that were mounted under /sys before we wiped
+        // it and attempt to restore them.
+        for (const auto& entry : mounts) {
+            // Never mount /sys/kernel/debug/tracing. This is the *one* mount
+            // that is special within Linux kernel: for backward compatibility
+            // tracefs gets auto-mounted there whenever one mounts debugfs [1].
+            //
+            // Attempting to mount the filesystem here will cause SELinux
+            // denials, because unlike *all other* filesystems in Android, it's
+            // not init who mounted it so there's no policy that would allow it.
+            //
+            // [1] https://lore.kernel.org/lkml/20150204143755.694479564@goodmis.org/
+            if (entry.mount_point.starts_with("/sys/") &&
+                entry.mount_point != "/sys/kernel/debug/tracing") {
+                if (mount(entry.blk_device.c_str(), entry.mount_point.c_str(),
+                          entry.fs_type.c_str(), entry.flags, "")) {
+                    LOG(WARNING) << "Could not mount(" << entry.mount_point
+                                 << ") after switching netns: " << ErrnoError().str();
+                }
+            }
         }
     }
     return {};
