@@ -551,6 +551,17 @@ bool DeviceMapper::GetTableInfo(const std::string& name, std::vector<TargetInfo>
     return GetTable(name, DM_STATUS_TABLE_FLAG, table);
 }
 
+void RedactTableInfo(const struct dm_target_spec& spec, std::string* data) {
+    if (DeviceMapper::GetTargetType(spec) == "crypt") {
+        auto parts = android::base::Split(*data, " ");
+        if (parts.size() < 2) {
+            return;
+        }
+        parts[1] = "redacted";
+        *data = android::base::Join(parts, " ");
+    }
+}
+
 // private methods of DeviceMapper
 bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
                             std::vector<TargetInfo>* table) {
@@ -588,6 +599,9 @@ bool DeviceMapper::GetTable(const std::string& name, uint32_t flags,
         if (next_cursor > data_offset) {
             // Note: we use c_str() to eliminate any extra trailing 0s.
             data = std::string(&buffer[data_offset], next_cursor - data_offset).c_str();
+        }
+        if (flags & DM_STATUS_TABLE_FLAG) {
+            RedactTableInfo(*spec, &data);
         }
         table->emplace_back(*spec, data);
         cursor = next_cursor;
