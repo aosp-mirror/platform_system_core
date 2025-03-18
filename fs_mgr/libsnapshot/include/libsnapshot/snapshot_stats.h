@@ -64,6 +64,7 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
   public:
     // Not thread safe.
     static SnapshotMergeStats* GetInstance(SnapshotManager& manager);
+    SnapshotMergeStats(const std::string& path);
 
     // ISnapshotMergeStats overrides
     bool Start() override;
@@ -88,7 +89,6 @@ class SnapshotMergeStats : public ISnapshotMergeStats {
   private:
     bool ReadState();
     bool DeleteState();
-    SnapshotMergeStats(const std::string& path);
 
     std::string path_;
     SnapshotMergeReport report_;
