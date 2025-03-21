@@ -36,7 +36,7 @@
         "Controller": "memory",
         "Path": ".",
         "NeedsActivation": true,
-        "MaxActivationDepth": 0,
+        "MaxActivationDepth": 3,
         "Optional": true
       }
     ]
