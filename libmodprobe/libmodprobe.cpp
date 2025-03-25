@@ -595,9 +595,7 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
                 break;
             }
 
-            if (mods_loading.find(cnd_last) == mods_loading.end()) {
-                mods_loading.insert(cnd_last);
-
+            if (mods_loading.insert(cnd_last).second) {
                 if (IsLoadSequential(cnd_last))
                     sequential_modules.emplace_back(cnd_last);
                 else
