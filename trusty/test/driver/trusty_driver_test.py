@@ -77,8 +77,10 @@ class TrustyDriverTest(unittest.TestCase):
         self.assertTrue(ver.startswith("Project:"))
 
     def testUntaintedLinux(self):
-        tainted = ReadFile("/proc/sys/kernel/tainted")
-        self.assertEqual(tainted, "0")
+        tainted = int(ReadFile("/proc/sys/kernel/tainted"))
+        # Filter out the out-of-tree and unsigned module bits
+        tainted &= ~0x3000
+        self.assertEqual(tainted, 0)
 
     # stdcall test with shared memory buffers.
     # Each test run takes up to 4 arguments:
