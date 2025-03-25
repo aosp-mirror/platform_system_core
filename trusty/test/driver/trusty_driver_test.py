@@ -31,30 +31,49 @@ def WriteFile(file_path, s):
 def IsTrustySupported():
     return os.path.exists("/dev/trusty-ipc-dev0")
 
+def MatchTrustyDevice(de: os.DirEntry, suffix: str):
+    for core in ["-core", ""]:
+        candidate = f":trusty{core}{suffix}"
+        if de.name == candidate[1:]:
+            return de
+        if de.name.endswith(candidate):
+            return de
+
+    return None
+
+def FindTrustyDevice(suffix: str):
+    with os.scandir("/sys/bus/platform/devices") as it:
+        candidates = (MatchTrustyDevice(de, suffix) for de in it)
+        final = (de.name for de in candidates if de is not None)
+        return next(final)
+
 @unittest.skipIf(not IsTrustySupported(), "Device does not support Trusty")
 class TrustyDriverTest(unittest.TestCase):
     def testIrqDriverBinding(self):
-        WriteFile("/sys/bus/platform/drivers/trusty-irq/unbind", "trusty:irq")
-        WriteFile("/sys/bus/platform/drivers/trusty-irq/bind", "trusty:irq")
+        dev = FindTrustyDevice(":irq")
+        WriteFile("/sys/bus/platform/drivers/trusty-irq/unbind", dev)
+        WriteFile("/sys/bus/platform/drivers/trusty-irq/bind", dev)
 
     def testLogDriverBinding(self):
-        WriteFile("/sys/bus/platform/drivers/trusty-log/unbind", "trusty:log")
-        WriteFile("/sys/bus/platform/drivers/trusty-log/bind", "trusty:log")
+        dev = FindTrustyDevice(":log")
+        WriteFile("/sys/bus/platform/drivers/trusty-log/unbind", dev)
+        WriteFile("/sys/bus/platform/drivers/trusty-log/bind", dev)
 
     @unittest.skip("TODO(b/142275662): virtio remove currently hangs")
     def testVirtioDriverBinding(self):
-        WriteFile("/sys/bus/platform/drivers/trusty-virtio/unbind",
-                  "trusty:virtio")
-        WriteFile("/sys/bus/platform/drivers/trusty-virtio/bind",
-                  "trusty:virtio")
+        dev = FindTrustyDevice(":virtio")
+        WriteFile("/sys/bus/platform/drivers/trusty-virtio/unbind", dev)
+        WriteFile("/sys/bus/platform/drivers/trusty-virtio/bind", dev)
 
     @unittest.skip("TODO(b/142275662): virtio remove currently hangs")
     def testTrustyDriverBinding(self):
-        WriteFile("/sys/bus/platform/drivers/trusty/unbind", "trusty")
-        WriteFile("/sys/bus/platform/drivers/trusty/bind", "trusty")
+        dev = FindTrustyDevice("")
+        WriteFile("/sys/bus/platform/drivers/trusty/unbind", dev)
+        WriteFile("/sys/bus/platform/drivers/trusty/bind", dev)
 
     def testTrustyDriverVersion(self):
-        ver = ReadFile("/sys/bus/platform/devices/trusty/trusty_version")
+        dev = FindTrustyDevice("")
+        ver = ReadFile(f"/sys/bus/platform/devices/{dev}/trusty_version")
         self.assertTrue(ver.startswith("Project:"))
 
     def testUntaintedLinux(self):
@@ -73,7 +92,8 @@ class TrustyDriverTest(unittest.TestCase):
     # Test 10 4K shared memory objects, shared 10 times, each accessed
     # 10 times.
     def testStdCall(self):
-        test = "/sys/devices/platform/trusty/trusty:test/trusty_test_run"
+        dev = FindTrustyDevice(":test")
+        test = f"/sys/bus/platform/devices/{dev}/trusty_test_run"
         args = "0x1000 0x800000,10,2,2 0x800000,2,100,0 0x1000,10,10,10"
         WriteFile(test, args)
 
