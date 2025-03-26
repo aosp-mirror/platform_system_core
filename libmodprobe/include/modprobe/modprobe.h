@@ -32,7 +32,6 @@ class Modprobe {
       NONE = 0,
       NORMAL,
       PERFORMANCE,
-      CONSERVATIVE,
     };
 
     Modprobe(const std::vector<std::string>&, const std::string load_file = "modules.load",

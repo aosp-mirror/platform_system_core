@@ -548,7 +548,7 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
 
                 if (mode == LoadParallelMode::PERFORMANCE)
                     cv_update_module.notify_one();
-                else if (sleeping_threads == num_threads)
+                else if (mode == LoadParallelMode::NORMAL && sleeping_threads == num_threads)
                     cv_update_module.notify_one();
 
                 cv_load_module.wait(lock, [&](){
@@ -603,10 +603,6 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
                 else
                     parallel_modules.emplace_back(cnd_last);
             }
-
-            if (mode == LoadParallelMode::CONSERVATIVE &&
-                parallel_modules.size() >= num_threads)
-                break;
         }
 
         cv_load_module.notify_all();
