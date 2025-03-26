@@ -442,9 +442,6 @@ int FirstStageMain(int argc, char** argv) {
     if (bootconfig.find("androidboot.load_modules_parallel = \"true\"")
         != std::string::npos)
         want_parallel_mode = Modprobe::LoadParallelMode::NORMAL;
-    else if (bootconfig.find("androidboot.load_modules_parallel_mode = \"performance\"")
-        != std::string::npos)
-        want_parallel_mode = Modprobe::LoadParallelMode::PERFORMANCE;
 
     boot_clock::time_point module_start_time = boot_clock::now();
     int module_count = 0;

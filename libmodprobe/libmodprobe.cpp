@@ -546,9 +546,7 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
             if (sequential_modules.empty() && parallel_modules.empty()) {
                 sleeping_threads++;
 
-                if (mode == LoadParallelMode::PERFORMANCE)
-                    cv_update_module.notify_one();
-                else if (mode == LoadParallelMode::NORMAL && sleeping_threads == num_threads)
+                if (mode == LoadParallelMode::NORMAL && sleeping_threads == num_threads)
                     cv_update_module.notify_one();
 
                 cv_load_module.wait(lock, [&](){
