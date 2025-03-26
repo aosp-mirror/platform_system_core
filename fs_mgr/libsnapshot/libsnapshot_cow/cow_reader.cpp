@@ -468,7 +468,7 @@ bool CowReader::VerifyMergeOps() {
         if (overwritten_blocks.count(block)) {
             overwrite = overwritten_blocks[block];
             LOG(ERROR) << "Invalid Sequence! Block needed for op:\n"
-                       << op << "\noverwritten by previously merged op:\n"
+                       << *op << "\noverwritten by previously merged op:\n"
                        << *overwrite;
         }
         if (misaligned && overwritten_blocks.count(block + 1)) {
