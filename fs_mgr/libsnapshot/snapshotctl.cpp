@@ -649,6 +649,12 @@ bool ApplyUpdate(int argc, char** argv) {
             metadata_on_super = true;
         }
     }
+
+    if (!std::filesystem::exists(path) || std::filesystem::is_empty(path)) {
+        LOG(ERROR) << path << " doesn't exist";
+        return false;
+    }
+
     MapSnapshots cow(path, metadata_on_super);
     if (!cow.ApplyUpdate()) {
         return false;
@@ -920,6 +926,11 @@ bool MapPrecreatedSnapshots(int argc, char** argv) {
 
     std::string path = std::string(argv[2]);
     std::vector<std::string> patchfiles;
+
+    if (!std::filesystem::exists(path) || std::filesystem::is_empty(path)) {
+        LOG(ERROR) << path << " doesn't exist";
+        return false;
+    }
 
     for (const auto& entry : std::filesystem::directory_iterator(path)) {
         if (android::base::EndsWith(entry.path().generic_string(), ".patch")) {
