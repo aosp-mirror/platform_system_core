@@ -24,7 +24,6 @@
 #include <sys/wait.h>
 
 #include <algorithm>
-#include <condition_variable>
 #include <map>
 #include <set>
 #include <string>
@@ -507,18 +506,9 @@ bool Modprobe::IsBlocklisted(const std::string& module_name) {
 // repeat these steps until all modules are loaded.
 // Discard all blocklist.
 // Softdeps are taken care in InsmodWithDeps().
-bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
-    std::map<std::string, std::vector<std::string>> mods_with_deps;
-    std::unordered_set<std::string> mods_loading;
-    std::vector<std::string> parallel_modules, sequential_modules;
-    std::vector<std::thread> threads;
-    std::atomic<bool> ret(true);
-    std::atomic<bool> finish(false);
-    std::mutex mods_to_load_lock;
-    std::condition_variable cv_update_module, cv_load_module;
-    int sleeping_threads = 0;
-
-    LOG(INFO) << "LoadParallelMode:" << mode;
+bool Modprobe::LoadModulesParallel(int num_threads) {
+    bool ret = true;
+    std::map<std::string, std::vector<std::string>> mod_with_deps;
 
     // Get dependencies
     for (const auto& module : module_load_) {
@@ -527,61 +517,22 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
             LOG(VERBOSE) << "LMP: Blocklist: Module " << module << " skipping...";
             continue;
         }
-
         auto dependencies = GetDependencies(MakeCanonical(module));
         if (dependencies.empty()) {
             LOG(ERROR) << "LMP: Hard-dep: Module " << module
                        << " not in .dep file";
             return false;
         }
-
-        mods_with_deps[MakeCanonical(module)] = dependencies;
+        mod_with_deps[MakeCanonical(module)] = dependencies;
     }
 
-    // Consumers load modules in parallel or sequentially
-    auto thread_function = [&] {
-        while (!mods_with_deps.empty() && ret.load()) {
-            std::unique_lock<std::mutex> lock(mods_to_load_lock);
+    while (!mod_with_deps.empty()) {
+        std::vector<std::thread> threads;
+        std::vector<std::string> mods_path_to_load;
+        std::mutex vector_lock;
 
-            if (sequential_modules.empty() && parallel_modules.empty()) {
-                sleeping_threads++;
-
-                if (mode == LoadParallelMode::PERFORMANCE)
-                    cv_update_module.notify_one();
-                else if (sleeping_threads == num_threads)
-                    cv_update_module.notify_one();
-
-                cv_load_module.wait(lock, [&](){
-                    return !parallel_modules.empty() ||
-                           !sequential_modules.empty() ||
-                           finish.load(); });
-
-                sleeping_threads--;
-            }
-
-            while (!sequential_modules.empty()) {
-                auto mod_to_load = std::move(sequential_modules.back());
-                sequential_modules.pop_back();
-                ret.store(ret.load() && LoadWithAliases(mod_to_load, true));
-            }
-
-            if (!parallel_modules.empty()) {
-                auto mod_to_load = std::move(parallel_modules.back());
-                parallel_modules.pop_back();
-
-                lock.unlock();
-                ret.store(ret.load() && LoadWithAliases(mod_to_load, true));
-            }
-        }
-    };
-
-    std::generate_n(std::back_inserter(threads), num_threads,
-        [&] { return std::thread(thread_function); });
-
-    // Producer check there's any independent module
-    while (!mods_with_deps.empty()) {
-        std::unique_lock<std::mutex> lock(mods_to_load_lock);
-        for (const auto& [it_mod, it_dep] : mods_with_deps) {
+        // Find independent modules
+        for (const auto& [it_mod, it_dep] : mod_with_deps) {
             auto itd_last = it_dep.rbegin();
             if (itd_last == it_dep.rend())
                 continue;
@@ -591,53 +542,69 @@ bool Modprobe::LoadModulesParallel(int num_threads, int mode) {
             if (IsBlocklisted(cnd_last)) {
                 LOG(ERROR) << "LMP: Blocklist: Module-dep " << cnd_last
                            << " : failed to load module " << it_mod;
-                ret.store(0);
-                break;
+                return false;
             }
 
-            if (mods_loading.insert(cnd_last).second) {
-                if (IsLoadSequential(cnd_last))
-                    sequential_modules.emplace_back(cnd_last);
-                else
-                    parallel_modules.emplace_back(cnd_last);
-            }
+            std::string str = "load_sequential=1";
+            auto it = module_options_[cnd_last].find(str);
+            if (it != std::string::npos) {
+                module_options_[cnd_last].erase(it, it + str.size());
 
-            if (mode == LoadParallelMode::CONSERVATIVE &&
-                parallel_modules.size() >= num_threads)
-                break;
+                if (!LoadWithAliases(cnd_last, true)) {
+                    return false;
+                }
+            } else {
+                if (std::find(mods_path_to_load.begin(), mods_path_to_load.end(),
+                            cnd_last) == mods_path_to_load.end()) {
+                    mods_path_to_load.emplace_back(cnd_last);
+                }
+            }
         }
 
-        cv_load_module.notify_all();
-        cv_update_module.wait(lock, [&](){
-            return parallel_modules.empty() &&
-                   sequential_modules.empty(); });
+        // Load independent modules in parallel
+        auto thread_function = [&] {
+            std::unique_lock lk(vector_lock);
+            while (!mods_path_to_load.empty()) {
+                auto ret_load = true;
+                auto mod_to_load = std::move(mods_path_to_load.back());
+                mods_path_to_load.pop_back();
 
-        if (!ret.load())
-            break;
+                lk.unlock();
+                ret_load &= LoadWithAliases(mod_to_load, true);
+                lk.lock();
+                if (!ret_load) {
+                    ret &= ret_load;
+                }
+            }
+        };
+
+        std::generate_n(std::back_inserter(threads), num_threads,
+                        [&] { return std::thread(thread_function); });
+
+        // Wait for the threads.
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        if (!ret) return ret;
 
         std::lock_guard guard(module_loaded_lock_);
-        // Remove loaded module from mods_with_deps
+        // Remove loaded module form mod_with_deps and soft dependencies of other modules
         for (const auto& module_loaded : module_loaded_)
-            mods_with_deps.erase(module_loaded);
+            mod_with_deps.erase(module_loaded);
 
-        // Remove loaded module from dependency list
+        // Remove loaded module form dependencies of other modules which are not loaded yet
         for (const auto& module_loaded_path : module_loaded_paths_) {
-            for (auto& [mod, deps] : mods_with_deps) {
+            for (auto& [mod, deps] : mod_with_deps) {
                 auto it = std::find(deps.begin(), deps.end(), module_loaded_path);
-                if (it != deps.end())
+                if (it != deps.end()) {
                     deps.erase(it);
+                }
             }
         }
     }
 
-    finish.store(true);
-    cv_load_module.notify_all();
-
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    return ret.load();
+    return ret;
 }
 
 bool Modprobe::LoadListedModules(bool strict) {
@@ -672,19 +639,6 @@ std::vector<std::string> Modprobe::ListModules(const std::string& pattern) {
         }
     }
     return rv;
-}
-
-bool Modprobe::IsLoadSequential(const std::string& module)
-{
-    std::string str = "load_sequential=1";
-    auto it = module_options_[module].find(str);
-
-    if (it != std::string::npos) {
-        module_options_[module].erase(it, it + str.size());
-        return true;
-    }
-
-    return false;
 }
 
 bool Modprobe::GetAllDependencies(const std::string& module,
